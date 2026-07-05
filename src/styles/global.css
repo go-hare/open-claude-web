@@ -1,0 +1,81 @@
+/*
+ * 真实样式来自 public/assets/v1/*.css（直接从 ion-dist 拷贝）。
+ * 这里仅保留 React 转正层需要的少量桥接 class，避免再手写整套皮肤。
+ */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.claude-rebuild-logo {
+  color: hsl(var(--accent-brand));
+  line-height: 1;
+}
+
+.claude-rebuild-logo-img {
+  display: block;
+  object-fit: contain;
+}
+
+.claude-rebuild-session-dot {
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid currentColor;
+  border-radius: 9999px;
+  color: hsl(var(--text-500));
+}
+
+.claude-rebuild-composer textarea {
+  min-height: var(--h8, 72px);
+}
+
+.claude-rebuild-composer textarea:focus {
+  outline: none;
+}
+
+.claude-rebuild-settings-topbar {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid hsl(var(--border-300) / 0.45);
+  padding: 0 72px;
+}
+
+.claude-rebuild-settings-back {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: hsl(var(--text-300));
+  font-size: 20px;
+  line-height: 1;
+}
+
+.claude-rebuild-settings-back:hover {
+  background: hsl(var(--bg-200));
+  color: hsl(var(--text-100));
+}
+
+.claude-rebuild-settings-topbar h1 {
+  margin: 0;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
