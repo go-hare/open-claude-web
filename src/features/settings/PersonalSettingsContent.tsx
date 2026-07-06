@@ -35,6 +35,7 @@ const defaultPreferences: DesktopPreferences = {
   autoCreatePullRequests: false,
   autoUpdateExtensions: true,
   bypassPermissionsModeEnabled: false,
+  ccAutoArchiveOnPrClose: false,
   ccBranchPrefix: "claude",
   chillingSlothLocation: "default",
   coworkSpaceContextEnabled: false,
@@ -95,6 +96,74 @@ function useDesktopPreferences() {
   }, []);
 
   return [preferences, setPreference] as const;
+}
+
+function useDesktopNativeSettings() {
+  const [state, setState] = useState({
+    error: "",
+    globalShortcut: "",
+    isLoading: true,
+    menuBarEnabled: true,
+    startupOnLogin: false,
+  });
+
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([
+      desktopBridge.Preferences.isStartupOnLoginEnabled?.() ?? Promise.resolve(false),
+      desktopBridge.Preferences.isMenuBarEnabled?.() ?? Promise.resolve(true),
+      desktopBridge.Preferences.getGlobalShortcut?.() ?? Promise.resolve(null),
+    ]).then(([startupOnLogin, menuBarEnabled, globalShortcut]) => {
+      if (!alive) return;
+      setState({
+        error: "",
+        globalShortcut: globalShortcut ?? "",
+        isLoading: false,
+        menuBarEnabled,
+        startupOnLogin,
+      });
+    }).catch((error) => {
+      if (!alive) return;
+      setState((current) => ({ ...current, error: error instanceof Error ? error.message : "Failed to load desktop settings", isLoading: false }));
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const setStartupOnLogin = useCallback((enabled: boolean) => {
+    setState((current) => ({ ...current, error: "", startupOnLogin: enabled }));
+    void desktopBridge.Preferences.setStartupOnLoginEnabled?.(enabled).then((ok) => {
+      if (ok === false) setState((current) => ({ ...current, error: "Failed to update startup setting.", startupOnLogin: !enabled }));
+    }).catch((error) => {
+      setState((current) => ({ ...current, error: error instanceof Error ? error.message : "Failed to update startup setting.", startupOnLogin: !enabled }));
+    });
+  }, []);
+
+  const setMenuBarEnabled = useCallback((enabled: boolean) => {
+    setState((current) => ({ ...current, error: "", menuBarEnabled: enabled }));
+    void desktopBridge.Preferences.setMenuBarEnabled?.(enabled).then((ok) => {
+      if (ok === false) setState((current) => ({ ...current, error: "Failed to update menu bar setting.", menuBarEnabled: !enabled }));
+    }).catch((error) => {
+      setState((current) => ({ ...current, error: error instanceof Error ? error.message : "Failed to update menu bar setting.", menuBarEnabled: !enabled }));
+    });
+  }, []);
+
+  const setGlobalShortcut = useCallback((accelerator: string) => {
+    const next = accelerator.trim();
+    let previous = "";
+    setState((current) => {
+      previous = current.globalShortcut;
+      return { ...current, error: "", globalShortcut: next };
+    });
+    void desktopBridge.Preferences.setGlobalShortcut?.(next || null).then((ok) => {
+      if (ok === false) setState((current) => ({ ...current, error: "Invalid shortcut.", globalShortcut: previous }));
+    }).catch((error) => {
+      setState((current) => ({ ...current, error: error instanceof Error ? error.message : "Invalid shortcut.", globalShortcut: previous }));
+    });
+  }, []);
+
+  return [state, { setGlobalShortcut, setMenuBarEnabled, setStartupOnLogin }] as const;
 }
 
 function GeneralSettings() {
@@ -528,6 +597,7 @@ function ClaudeCodeSettings() {
       </SettingsSection>
       <SettingsSection title="拉取请求">
         <SettingsRow description="When Claude pushes changes to a branch, it automatically opens a pull request without asking first. Applies to remote sessions only." label="自动创建拉取请求" control={<Switch checked={!!preferences.autoCreatePullRequests} onCheckedChange={(checked) => setPreference("autoCreatePullRequests", checked)} />} />
+        <SettingsRow description="当自动创建的 PR 关闭后，自动归档对应的本地会话。" label="自动归档已关闭的 PR 会话" control={<Switch checked={!!preferences.ccAutoArchiveOnPrClose} onCheckedChange={(checked) => setPreference("ccAutoArchiveOnPrClose", checked)} />} />
       </SettingsSection>
     </main>
   );
@@ -535,13 +605,15 @@ function ClaudeCodeSettings() {
 
 function DesktopSettings() {
   const [preferences, setPreference] = useDesktopPreferences();
+  const [nativeSettings, nativeActions] = useDesktopNativeSettings();
   return (
     <main className="flex flex-col">
       <SettingsSection title="桌面端通用设置">
-        <SettingsRow description="登录电脑后自动启动 Claude" label="开机启动" control={<Switch checked={!!preferences.launchEnabled} onCheckedChange={(checked) => setPreference("launchEnabled", checked)} />} />
-        <SettingsRow description="Quickly open Claude from anywhere" label="Quick Entry 快捷键" control={<ShortcutControl onChange={(value) => setPreference("quickEntryShortcut", value)} value={preferences.quickEntryShortcut ?? ""} />} />
-        <SettingsRow description="在 Menu bar 中显示 Claude" label="Menu bar" control={<Switch checked={!!preferences.menuBarEnabled} onCheckedChange={(checked) => setPreference("menuBarEnabled", checked)} />} />
+        <SettingsRow description="登录电脑后自动启动 Claude" label="开机启动" control={<Switch checked={nativeSettings.startupOnLogin} disabled={nativeSettings.isLoading} onCheckedChange={nativeActions.setStartupOnLogin} />} />
+        <SettingsRow description="Quickly open Claude from anywhere" label="Quick Entry 快捷键" control={<ShortcutControl onChange={nativeActions.setGlobalShortcut} value={nativeSettings.globalShortcut} />} />
+        <SettingsRow description="在 Menu bar 中显示 Claude" label="Menu bar" control={<Switch checked={nativeSettings.menuBarEnabled} disabled={nativeSettings.isLoading} onCheckedChange={nativeActions.setMenuBarEnabled} />} />
         <SettingsRow description="当 Claude 打开时，防止电脑因空闲而休眠，以便定时任务继续运行。显示器仍可关闭，合上笔记本盖后仍会进入睡眠。" label="保持电脑唤醒" control={<Switch checked={!!preferences.keepAwakeEnabled} onCheckedChange={(checked) => setPreference("keepAwakeEnabled", checked)} />} />
+        {nativeSettings.error ? <p className="py-sm text-footnote text-danger-000" role="status">{nativeSettings.error}</p> : null}
       </SettingsSection>
     </main>
   );
@@ -677,12 +749,21 @@ function BranchInput({ onChange, value }: { onChange: (value: string) => void; v
 }
 
 function ShortcutControl({ onChange, value }: { onChange: (value: string) => void; value: string }) {
-  const display = value || "Set shortcut";
+  const display = value ? formatAccelerator(value) : "Set shortcut";
   return (
     <div className="w-[220px]">
-      <button className="outline outline-1 outline-border-300/25 bg-bg-200 text-text-100 font-medium text-sm h-7 leading-7 px-2 box-border text-center min-w-[120px] rounded-md select-none relative focus-within:outline-2 focus-within:outline-brand-200 focus-within:shadow-[inset_0_1px_4px_2px_hsl(var(--always-black)/12%)] flex items-center justify-center" onClick={() => onChange(value ? "" : "⌘⇧Space")} type="button">
+      <button className="outline outline-1 outline-border-300/25 bg-bg-200 text-text-100 font-medium text-sm h-7 leading-7 px-2 box-border text-center min-w-[120px] rounded-md select-none relative focus-within:outline-2 focus-within:outline-brand-200 focus-within:shadow-[inset_0_1px_4px_2px_hsl(var(--always-black)/12%)] flex items-center justify-center" onClick={() => onChange(value ? "" : "CommandOrControl+Shift+Space")} type="button">
         <span className={value ? "text-text-100" : "text-text-500 placeholder"}>{display}</span>
       </button>
     </div>
   );
+}
+
+function formatAccelerator(value: string) {
+  return value
+    .replace(/CommandOrControl|CmdOrCtrl|Command|Cmd/g, "⌘")
+    .replace(/Control|Ctrl/g, "⌃")
+    .replace(/Alt|Option/g, "⌥")
+    .replace(/Shift/g, "⇧")
+    .replace(/\+/g, "");
 }

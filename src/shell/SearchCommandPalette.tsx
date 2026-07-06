@@ -110,8 +110,8 @@ export function SearchCommandPalette({ isOpen, mode, onClose, onNavigate }: Sear
 
 async function loadSearchItems(mode: FrameMode, text: ShellText): Promise<SearchItem[]> {
   const [code, cowork] = await Promise.all([
-    desktopBridge.LocalAgentModeSessions.list(),
     desktopBridge.LocalSessions.list(),
+    desktopBridge.LocalAgentModeSessions.list(),
   ]);
   const primary = mode === "code" ? code : cowork;
   const secondary = mode === "code" ? cowork : code;

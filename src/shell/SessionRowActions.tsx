@@ -58,5 +58,5 @@ export function SessionRowActions({ frame, onAction, onCreateGroup, onOpenSplit,
 }
 
 function sessionSource(session: SessionSummary) {
-  return session.kind === "code" ? desktopBridge.LocalAgentModeSessions : desktopBridge.LocalSessions;
+  return session.kind === "code" ? desktopBridge.LocalSessions : desktopBridge.LocalAgentModeSessions;
 }

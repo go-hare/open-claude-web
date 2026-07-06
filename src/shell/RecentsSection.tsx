@@ -31,7 +31,7 @@ export function RecentsSection({ frame, mode, onNavigate }: RecentsSectionProps)
 
   useEffect(() => {
     let mounted = true;
-    const source = mode === "code" ? desktopBridge.LocalAgentModeSessions : desktopBridge.LocalSessions;
+    const source = mode === "code" ? desktopBridge.LocalSessions : desktopBridge.LocalAgentModeSessions;
     const loadSessions = () => source.list().then((items) => {
       if (mounted) setSessions([...items].sort(byNewest));
     });

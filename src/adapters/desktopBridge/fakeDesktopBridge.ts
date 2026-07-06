@@ -9,6 +9,49 @@ import type {
 
 const now = Date.now();
 
+type FakeSessionKind = "code" | "epitaxy";
+type FakeEventListener = (event: unknown) => void;
+
+const fakeSessionEvents: Record<FakeSessionKind, {
+  events: Set<FakeEventListener>;
+  permissionRequests: Set<FakeEventListener>;
+}> = {
+  code: { events: new Set(), permissionRequests: new Set() },
+  epitaxy: { events: new Set(), permissionRequests: new Set() },
+};
+
+const fakePermissionSessionByRequestId = new Map<string, string>();
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function notifyFakeListeners(listeners: Set<FakeEventListener>, event: unknown) {
+  for (const listener of Array.from(listeners)) listener(event);
+}
+
+export function emitFakeLocalSessionEvent(event: unknown, kind: FakeSessionKind = "code") {
+  notifyFakeListeners(fakeSessionEvents[kind].events, event);
+}
+
+export function emitFakeToolPermissionRequest(event: unknown, kind: FakeSessionKind = "code") {
+  const raw = asRecord(event);
+  const request = asRecord(raw.request);
+  const requestId = stringValue(request.requestId) ?? stringValue(request.request_id) ?? stringValue(raw.requestId);
+  const sessionId = stringValue(request.sessionId) ?? stringValue(request.session_id) ?? stringValue(raw.sessionId);
+  if (requestId && sessionId) fakePermissionSessionByRequestId.set(requestId, sessionId);
+  notifyFakeListeners(fakeSessionEvents[kind].permissionRequests, event);
+  notifyFakeListeners(fakeSessionEvents[kind].events, event);
+}
+
+function fakeSessionKind(targetKind: SessionSummary["kind"]): FakeSessionKind {
+  return targetKind === "epitaxy" ? "epitaxy" : "code";
+}
+
 const sessions: SessionSummary[] = [
   {
     id: "cowork_downloads",
@@ -66,16 +109,76 @@ const sessions: SessionSummary[] = [
     isPinned: false,
     isRunning: false,
     isUnread: false,
-    messages: [
+    messages: index === 0 ? buildFakeTranscript(index) : [
       {
         id: `code_m_${index}`,
         role: "user",
         text: "General coding session",
         createdAt: "今天",
+        raw: { type: "user", timestamp: new Date(now - 1000 * 60 * (index + 1) * 13).toISOString(), message: { content: "General coding session" } },
       },
     ],
   })),
 ];
+
+
+function buildFakeTranscript(index: number) {
+  const timestamp = new Date(now - 1000 * 60 * (index + 1) * 13).toISOString();
+  return [
+    {
+      id: `code_m_${index}_user`,
+      role: "user" as const,
+      text: "General coding session",
+      createdAt: "今天",
+      raw: { type: "user", timestamp, message: { content: "General coding session" } },
+    },
+    {
+      id: `code_m_${index}_task`,
+      role: "system" as const,
+      text: "",
+      createdAt: timestamp,
+      raw: {
+        type: "system",
+        subtype: "task_notification",
+        task_id: `fake-task-${index}`,
+        task_type: "local_bash",
+        description: "Run project checks",
+        status: "completed",
+        summary: "Verified the local shell bridge and side pane wiring.",
+        last_tool_name: "Bash",
+        usage: { duration_ms: 4200, total_tokens: 1280, tool_uses: 2 },
+        timestamp,
+      },
+    },
+    {
+      id: `code_m_${index}_assistant`,
+      role: "assistant" as const,
+      text: "Proposed plan",
+      createdAt: timestamp,
+      raw: {
+        type: "assistant",
+        timestamp,
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              name: "Write",
+              input: {
+                file_path: "/Users/apple/Downloads/Claude code 汉化mac桌面版/claude-ion-react-workbench/claude-deepseek-react-shell/.claude/plans/fake-plan.md",
+                content: "# Plan\n\n- Inspect official JS\n- Port the same bridge methods\n- Verify in the desktop shell",
+              },
+            },
+            {
+              type: "tool_use",
+              name: "ExitPlanMode",
+              input: { plan: "# Plan\n\n- Inspect official JS\n- Port the same bridge methods\n- Verify in the desktop shell" },
+            },
+          ],
+        },
+      },
+    },
+  ];
+}
 
 const scheduledTasks: ScheduledTaskSummary[] = [];
 
@@ -85,6 +188,7 @@ let preferences: DesktopPreferences = {
   autoCreatePullRequests: false,
   autoUpdateExtensions: true,
   bypassPermissionsModeEnabled: false,
+  ccAutoArchiveOnPrClose: false,
   ccBranchPrefix: "claude",
   chillingSlothLocation: "default",
   coworkSpaceContextEnabled: false,
@@ -97,6 +201,9 @@ let preferences: DesktopPreferences = {
   quickEntryShortcut: "",
   useBuiltInNodeForMcp: true,
 };
+let fakeGlobalShortcut: string | null = null;
+let fakeMenuBarEnabled = true;
+let fakeStartupOnLoginEnabled = false;
 
 const emitPreferences = () => {
   const snapshot = { ...preferences };
@@ -107,7 +214,7 @@ const workspace: WorkspaceContext = {
   mode: "local",
   projectName: "claude-desktop",
   branchName: "main",
-  hasWorktree: true,
+  hasWorktree: false,
   cwd: "/Users/apple/work-py/hare-code/claude-code",
 };
 
@@ -120,14 +227,95 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   list: async () => sessions.filter((session) => session.kind === targetKind),
   getSession: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind) ?? null,
   getTranscript: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind)?.messages ?? [],
+  addFolderToSession: async (id, folder) => {
+    const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
+    if (index < 0) return null;
+    const folders = [...new Set([...(sessions[index].folders ?? []), folder])];
+    sessions[index] = { ...sessions[index], cwd: sessions[index].cwd ?? folder, folders };
+    return sessions[index];
+  },
+  getCodeStats: async () => buildFakeCodeStats(),
+  getDefaultEffort: async () => "medium",
+  getDefaultPermissionMode: async () => "default",
+  getDiffFileContent: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
+  getEffort: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind)?.effort ?? "medium",
+  getGitInfo: async (idOrCwd) => ({
+    cwd: idOrCwd,
+    root: idOrCwd,
+    branch: workspace.branchName,
+  }),
   getGitDiff: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
   getGitDiffStats: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
+  openInEditor: async () => true,
+  getPermissionMode: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind)?.permissionMode ?? "default",
+  getSupportedCommands: async () => [
+    "start",
+    "sendMessage",
+    "stop",
+    "readFileAtCwd",
+    "writeSessionFile",
+    "getGitInfo",
+    "getGitDiff",
+    "getGitDiffStats",
+    "getDiffFileContent",
+    "startShellPty",
+    "stopShellPty",
+    "writeShellPty",
+    "resizeShellPty",
+    "getShellPtyBuffer",
+  ],
   getWorkingTreeStatus: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
+  readFileAtCwd: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
+  readSessionFile: async (_id, filePath) => `Preview for ${filePath}\n\nThis is fake desktop bridge content.`,
+  readSessionImageAsDataUrl: async () => null,
+  pickSessionFile: async () => "/tmp/preview.txt",
+  pickFileAtCwd: async () => "/tmp/preview.txt",
+  respondToToolPermission: async (requestId, decision, updatedInput) => {
+    const sessionId = fakePermissionSessionByRequestId.get(requestId);
+    fakePermissionSessionByRequestId.delete(requestId);
+    emitFakeLocalSessionEvent({
+      type: "tool_permission_resolved",
+      sessionId,
+      request: { decision, input: updatedInput, requestId },
+    }, fakeSessionKind(targetKind));
+    return { decision, ok: true, requestId };
+  },
+  setEffort: async (id, effort) => {
+    const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
+    if (index < 0) return null;
+    sessions[index] = { ...sessions[index], effort };
+    return sessions[index];
+  },
+  setModel: async (id, model) => {
+    const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
+    if (index < 0) return null;
+    sessions[index] = { ...sessions[index], model };
+    return sessions[index];
+  },
+  setPermissionMode: async (id, permissionMode) => {
+    const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
+    if (index < 0) return null;
+    sessions[index] = { ...sessions[index], permissionMode };
+    return sessions[index];
+  },
   startShellPty: async () => ({ ok: true, buffered: "" }),
+  stop: async (id) => {
+    const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
+    if (index >= 0) sessions[index] = { ...sessions[index], isRunning: false };
+    return true;
+  },
   stopShellPty: async () => {},
+  stopTask: async (sessionId, taskId) => {
+    const session = sessions.find((item) => item.id === sessionId && item.kind === targetKind);
+    const message = session?.messages?.find((item) => item.raw && typeof item.raw === "object" && (item.raw as { task_id?: string }).task_id === taskId);
+    if (message?.raw && typeof message.raw === "object") {
+      (message.raw as { status?: string }).status = "stopped";
+    }
+  },
   writeShellPty: async () => {},
   resizeShellPty: async () => {},
   getShellPtyBuffer: async () => "",
+  getTranscriptFeedback: async () => [],
   onShellPtyEvent: () => () => {},
   start: async (input: StartSessionInput) => {
     const created: SessionSummary = {
@@ -138,6 +326,11 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
       kind: targetKind,
       sessionKind: targetKind === "epitaxy" ? "cowork" : "code",
       cwd: input.workspace.cwd,
+      effort: input.effort,
+      model: input.model,
+      permissionMode: input.permissionMode,
+      scheduledTaskId: input.scheduledTaskId,
+      origin: input.origin,
       repo: {
         name: input.workspace.projectName,
         branch: input.workspace.branchName,
@@ -160,6 +353,39 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     };
     sessions.unshift(created);
     return created;
+  },
+  forkSession: async (id, messageId) => {
+    const source = sessions.find((session) => session.id === id && session.kind === targetKind);
+    const messages = source?.messages ? sliceFakeMessagesThroughId(source.messages, messageId) : [];
+    const forked: SessionSummary = {
+      ...(source ?? {
+        title: "Forked session",
+        updatedAt: "刚刚",
+        updatedAtMs: Date.now(),
+        kind: targetKind,
+        sessionKind: targetKind === "epitaxy" ? "cowork" : "code",
+      }),
+      id: `${targetKind}_fork_${Date.now()}`,
+      title: source ? `${source.title} fork` : "Forked session",
+      updatedAt: "刚刚",
+      updatedAtMs: Date.now(),
+      isRunning: false,
+      messages,
+    };
+    sessions.unshift(forked);
+    return forked;
+  },
+  rewind: async (id, messageId) => {
+    const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
+    if (index < 0) return false;
+    sessions[index] = {
+      ...sessions[index],
+      isRunning: false,
+      messages: sliceFakeMessagesThroughId(sessions[index].messages ?? [], messageId),
+      updatedAt: "刚刚",
+      updatedAtMs: Date.now(),
+    };
+    return true;
   },
   sendMessage: async (id, text) => {
     const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
@@ -195,11 +421,55 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     if (index >= 0) sessions.splice(index, 1);
   },
   setFocusedSession: async () => {},
+  submitTranscriptFeedback: async (_sessionIdOrInput, input) => ({
+    ...(input && typeof input === "object" ? input : {}),
+    createdAt: new Date().toISOString(),
+  }),
+  onEvent: (listener) => {
+    const bucket = fakeSessionEvents[fakeSessionKind(targetKind)].events;
+    bucket.add(listener);
+    return () => bucket.delete(listener);
+  },
+  onToolPermissionRequest: (listener) => {
+    const bucket = fakeSessionEvents[fakeSessionKind(targetKind)].permissionRequests;
+    bucket.add(listener);
+    return () => bucket.delete(listener);
+  },
 });
 
+function buildFakeCodeStats() {
+  const today = new Date().toISOString().slice(0, 10);
+  const codeSessions = sessions.filter((session) => session.kind === "code");
+  const messageCount = codeSessions.reduce((total, session) => total + (session.messages?.length ?? 0), 0);
+  const tokenEstimate = Math.max(0, messageCount * 128);
+  return {
+    dailyActivity: [{ date: today, messageCount, sessionCount: codeSessions.length, toolCallCount: 0 }],
+    dailyModelTokens: [{ date: today, tokensByModel: { "opus-4": tokenEstimate } }],
+    modelUsage: {
+      "opus-4": { cacheCreationInputTokens: 0, cacheReadInputTokens: 0, inputTokens: tokenEstimate, outputTokens: 0 },
+    },
+    peakActivityHour: new Date().getHours(),
+    streaks: { currentStreak: codeSessions.length > 0 ? 1 : 0, longestStreak: codeSessions.length > 0 ? 1 : 0 },
+  };
+}
+
+function sliceFakeMessagesThroughId(messages: NonNullable<SessionSummary["messages"]>, messageId?: string) {
+  if (!messageId) return [...messages];
+  const index = messages.findIndex((message) => {
+    const raw = typeof message.raw === "object" && message.raw !== null ? message.raw as Record<string, unknown> : {};
+    const nested = typeof raw.message === "object" && raw.message !== null ? raw.message as Record<string, unknown> : {};
+    return message.id === messageId
+      || raw.id === messageId
+      || raw.uuid === messageId
+      || nested.id === messageId
+      || nested.uuid === messageId;
+  });
+  return index < 0 ? [...messages] : messages.slice(0, index + 1);
+}
+
 export const fakeDesktopBridge: DesktopBridge = {
-  LocalSessions: createSessionBridge("epitaxy"),
-  LocalAgentModeSessions: createSessionBridge("code"),
+  LocalSessions: createSessionBridge("code"),
+  LocalAgentModeSessions: createSessionBridge("epitaxy"),
   CCDScheduledTasks: {
     list: async () => scheduledTasks.slice(),
     get: async (id) => scheduledTasks.find((task) => task.id === id) ?? null,
@@ -246,6 +516,21 @@ export const fakeDesktopBridge: DesktopBridge = {
       return () => preferencesListeners.delete(listener);
     },
     getDirectoryPath: async () => [workspace.cwd ?? "/Users/apple/work-py/hare-code/claude-code"],
+    isStartupOnLoginEnabled: async () => fakeStartupOnLoginEnabled,
+    setStartupOnLoginEnabled: async (enabled) => {
+      fakeStartupOnLoginEnabled = enabled;
+      return true;
+    },
+    isMenuBarEnabled: async () => fakeMenuBarEnabled,
+    setMenuBarEnabled: async (enabled) => {
+      fakeMenuBarEnabled = enabled;
+      return true;
+    },
+    getGlobalShortcut: async () => fakeGlobalShortcut,
+    setGlobalShortcut: async (accelerator) => {
+      fakeGlobalShortcut = accelerator && accelerator.length > 0 ? accelerator : null;
+      return true;
+    },
   },
   Window: {
     close: async () => {},

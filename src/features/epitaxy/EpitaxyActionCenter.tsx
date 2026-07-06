@@ -16,7 +16,7 @@ export function EpitaxyActionCenter({ onNavigate }: EpitaxyActionCenterProps) {
 
   useEffect(() => {
     let mounted = true;
-    void desktopBridge.LocalSessions.list().then((items) => {
+    void desktopBridge.LocalAgentModeSessions.list().then((items) => {
       if (mounted) setSessions(items.sort(compareSessions));
     });
     return () => {

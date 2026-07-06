@@ -1,0 +1,348 @@
+#!/usr/bin/env node
+import { spawn } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import net from "node:net";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const chromeDefaultPath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const screenshotPath = path.join(tmpdir(), "open-claude-web-epitaxy-runtime-smoke.png");
+const sessionId = "code_demo_0";
+const streamText = "Runtime stream smoke phrase";
+const composerText = "runtime composer submit";
+
+const checks = [];
+let viteProcess;
+let chromeProcess;
+let chromeProfileDir;
+
+function pass(group, name) {
+  checks.push({ group, name, status: "PASS" });
+  console.log(`PASS [${group}] ${name}`);
+}
+
+function fail(group, name, detail) {
+  checks.push({ group, name, status: "FAIL", detail });
+  console.error(`FAIL [${group}] ${name}${detail ? `: ${detail}` : ""}`);
+}
+
+function assertCheck(group, name, condition, detail) {
+  if (condition) pass(group, name);
+  else fail(group, name, detail);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+async function waitForHttp(url, timeoutMs = 15_000) {
+  const started = Date.now();
+  let lastError;
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return response;
+      lastError = new Error(`${url} -> ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await delay(100);
+  }
+  throw lastError ?? new Error(`Timed out waiting for ${url}`);
+}
+
+function spawnLogged(command, args, options = {}) {
+  const child = spawn(command, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"], ...options });
+  child.stdout.on("data", (chunk) => process.stdout.write(chunk));
+  child.stderr.on("data", (chunk) => process.stderr.write(chunk));
+  return child;
+}
+
+async function startVite(port) {
+  const viteBin = path.join(root, "node_modules/vite/bin/vite.js");
+  viteProcess = spawnLogged(process.execPath, [viteBin, "--host", "127.0.0.1", "--port", String(port), "--strictPort"]);
+  await waitForHttp(`http://127.0.0.1:${port}/epitaxy/${sessionId}`);
+}
+
+async function startChrome(debugPort, appUrl) {
+  const chromePath = process.env.CHROME_BIN || chromeDefaultPath;
+  chromeProfileDir = await mkdtemp(path.join(tmpdir(), "open-claude-runtime-chrome-"));
+  chromeProcess = spawn(chromePath, [
+    "--headless=new",
+    "--disable-gpu",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-background-networking",
+    "--remote-allow-origins=*",
+    `--remote-debugging-port=${debugPort}`,
+    `--user-data-dir=${chromeProfileDir}`,
+    "about:blank",
+  ], { stdio: ["ignore", "ignore", "pipe"] });
+  chromeProcess.stderr.on("data", (chunk) => process.stderr.write(chunk));
+  await waitForHttp(`http://127.0.0.1:${debugPort}/json/version`);
+  let targetResponse = await fetch(`http://127.0.0.1:${debugPort}/json/new?${encodeURIComponent(appUrl)}`, { method: "PUT" });
+  if (!targetResponse.ok) {
+    targetResponse = await fetch(`http://127.0.0.1:${debugPort}/json/new?${encodeURIComponent(appUrl)}`);
+  }
+  if (!targetResponse.ok) throw new Error(`Unable to create Chrome target: ${targetResponse.status}`);
+  return targetResponse.json();
+}
+
+class CdpClient {
+  constructor(wsUrl) {
+    this.nextId = 1;
+    this.pending = new Map();
+    this.events = new Map();
+    this.ws = new WebSocket(wsUrl);
+  }
+
+  async open() {
+    await new Promise((resolve, reject) => {
+      this.ws.addEventListener("open", resolve, { once: true });
+      this.ws.addEventListener("error", reject, { once: true });
+    });
+    this.ws.addEventListener("message", (event) => this.handleMessage(event));
+  }
+
+  handleMessage(event) {
+    const payload = JSON.parse(event.data);
+    if (payload.id) {
+      const pending = this.pending.get(payload.id);
+      if (!pending) return;
+      this.pending.delete(payload.id);
+      if (payload.error) pending.reject(new Error(payload.error.message ?? JSON.stringify(payload.error)));
+      else pending.resolve(payload.result);
+      return;
+    }
+    const listeners = this.events.get(payload.method);
+    if (listeners) for (const listener of listeners) listener(payload.params ?? {});
+  }
+
+  on(method, listener) {
+    const listeners = this.events.get(method) ?? new Set();
+    listeners.add(listener);
+    this.events.set(method, listeners);
+    return () => listeners.delete(listener);
+  }
+
+  send(method, params = {}) {
+    const id = this.nextId++;
+    this.ws.send(JSON.stringify({ id, method, params }));
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+    });
+  }
+
+  async evaluate(fn, ...args) {
+    const expression = `(${fn})(...${JSON.stringify(args)})`;
+    const result = await this.send("Runtime.evaluate", {
+      awaitPromise: true,
+      expression,
+      returnByValue: true,
+      userGesture: true,
+    });
+    if (result.exceptionDetails) {
+      throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? "Runtime.evaluate failed");
+    }
+    return result.result?.value;
+  }
+
+  close() {
+    this.ws.close();
+  }
+}
+
+async function waitFor(cdp, group, name, predicate, timeoutMs = 8_000) {
+  const started = Date.now();
+  let lastValue;
+  while (Date.now() - started < timeoutMs) {
+    lastValue = await cdp.evaluate(predicate);
+    if (lastValue === true) {
+      pass(group, name);
+      return;
+    }
+    await delay(120);
+  }
+  fail(group, name, `timed out; last=${JSON.stringify(lastValue)}`);
+}
+
+function clickElementByText(selector, ...values) {
+  const element = Array.from(document.querySelectorAll(selector)).find((item) => values.every((value) => item.innerText.includes(value)));
+  if (!element) return false;
+  element.click();
+  return true;
+}
+
+function clickButtonByLabel(label) {
+  const element = Array.from(document.querySelectorAll("button")).find((item) => item.getAttribute("aria-label") === label || item.innerText.trim() === label);
+  if (!element) return false;
+  element.click();
+  return true;
+}
+
+async function key(cdp, keyName, code, modifiers = 0) {
+  const windowsVirtualKeyCode = keyName === "Enter" ? 13 : keyName === "Escape" ? 27 : 0;
+  await cdp.send("Input.dispatchKeyEvent", { code, key: keyName, modifiers, type: "keyDown", windowsVirtualKeyCode });
+  if (keyName === "Enter" && (modifiers & 8) !== 0) {
+    await cdp.send("Input.dispatchKeyEvent", { key: keyName, modifiers, text: "\r", type: "char", unmodifiedText: "\r", windowsVirtualKeyCode });
+  }
+  await cdp.send("Input.dispatchKeyEvent", { code, key: keyName, modifiers, type: "keyUp", windowsVirtualKeyCode });
+}
+
+async function insertText(cdp, text) {
+  await cdp.send("Input.insertText", { text });
+}
+
+async function run() {
+  const vitePort = await freePort();
+  const debugPort = await freePort();
+  const appUrl = `http://127.0.0.1:${vitePort}/epitaxy/${sessionId}`;
+  await startVite(vitePort);
+  const target = await startChrome(debugPort, appUrl);
+  const cdp = new CdpClient(target.webSocketDebuggerUrl);
+  await cdp.open();
+  await cdp.send("Page.enable");
+  await cdp.send("Runtime.enable");
+  await cdp.send("Input.setIgnoreInputEvents", { ignore: false });
+  await cdp.evaluate(() => {
+    window.__epitaxyRuntime = {
+      bodyExcludes: (...values) => {
+        const text = document.body.innerText;
+        return values.every((value) => !text.includes(value));
+      },
+      bodyIncludes: (...values) => {
+        const text = document.body.innerText;
+        return values.every((value) => text.includes(value));
+      },
+    };
+    return true;
+  });
+  await waitFor(cdp, "运行时加载", "session page renders without connecting flash", () => document.readyState === "complete" && window.__epitaxyRuntime.bodyIncludes("claude-desktop", "General coding session") && window.__epitaxyRuntime.bodyExcludes("Connecting to session"));
+
+  const initial = await cdp.evaluate(() => ({
+    actionButtons: ["Copy message", "Rewind to here", "Fork from here", "Good response", "Bad response"].every((label) => document.querySelector(`button[aria-label="${label}"]`)),
+    composerControls: Boolean(document.querySelector('[contenteditable="true"][aria-label="Prompt"].tiptap'))
+      && ["Permission mode", "Add", "Workspace", "Model", "Send"].every((label) => document.querySelector(`[aria-label="${label}"]`)),
+    toolRows: window.__epitaxyRuntime.bodyIncludes("Creating", "fake-plan.md", "Proposing plan"),
+  }));
+  assertCheck("小细节按钮", "copy/rewind/fork/thumb buttons exist in real DOM", initial.actionButtons, JSON.stringify(initial));
+  assertCheck("底部输入框", "official TipTap composer and control buttons exist in real DOM", initial.composerControls, JSON.stringify(initial));
+  assertCheck("工具块", "collapsed tool rows render from transcript", initial.toolRows, JSON.stringify(initial));
+
+  await cdp.evaluate(() => {
+    const editor = document.querySelector('[contenteditable="true"][aria-label="Prompt"]');
+    editor?.focus();
+    return Boolean(editor);
+  });
+  await insertText(cdp, "first line");
+  await key(cdp, "Enter", "Enter", 8);
+  await insertText(cdp, "second line");
+  const multiline = await cdp.evaluate(() => {
+    const text = document.querySelector('[contenteditable="true"][aria-label="Prompt"]')?.innerText ?? "";
+    return text.includes("first line") && text.includes("second line") && text.includes("\n");
+  });
+  assertCheck("底部输入框", "Shift+Enter keeps newline instead of submitting", multiline);
+  await cdp.evaluate(() => {
+    const editor = document.querySelector('[contenteditable="true"][aria-label="Prompt"]');
+    if (!editor) return false;
+    editor.focus();
+    document.execCommand("selectAll");
+    document.execCommand("delete");
+    return true;
+  });
+  await insertText(cdp, "!echo runtime");
+  await waitFor(cdp, "底部输入框", "bash escape mode turns on", () => window.__epitaxyRuntime.bodyIncludes("Bash mode"));
+  await key(cdp, "Escape", "Escape");
+  await waitFor(cdp, "底部输入框", "Escape exits bash mode and clears input", () => window.__epitaxyRuntime.bodyIncludes("Chat mode") && (document.querySelector('[contenteditable="true"][aria-label="Prompt"]')?.innerText ?? "").trim() === "");
+  await cdp.evaluate(() => document.querySelector('[contenteditable="true"][aria-label="Prompt"]')?.focus());
+  await insertText(cdp, composerText);
+  await key(cdp, "Enter", "Enter");
+  await waitFor(cdp, "底部输入框", "Enter submits through session bridge and reloads transcript", () => window.__epitaxyRuntime.bodyIncludes("runtime composer submit"));
+
+  const toolClicked = await cdp.evaluate(clickElementByText, "[role='button']", "Creating", "fake-plan.md");
+  assertCheck("文件预览", "tool row can be expanded by click", toolClicked);
+  await waitFor(cdp, "文件预览", "expanded tool details show file_path and content", () => window.__epitaxyRuntime.bodyIncludes("file_path:", "fake-plan.md", "Inspect official JS"));
+  const filePathClicked = await cdp.evaluate(() => {
+    const button = Array.from(document.querySelectorAll("button")).find((item) => item.innerText.includes("fake-plan.md"));
+    if (!button) return false;
+    button.click();
+    return true;
+  });
+  assertCheck("文件预览", "file path button can be clicked", filePathClicked);
+  await waitFor(cdp, "文件预览", "file pane opens and reads session file", () => window.__epitaxyRuntime.bodyIncludes("Preview for", "fake-plan.md"));
+
+  await cdp.evaluate(async (activeSessionId) => {
+    const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    bridge.emitFakeToolPermissionRequest({
+      type: "tool_permission_request",
+      sessionId: activeSessionId,
+      request: {
+        description: "Runtime approval smoke",
+        input: { command: "echo approval" },
+        requestId: "runtime-approval-smoke",
+        toolName: "Bash",
+      },
+    }, "code");
+    return true;
+  }, sessionId);
+  await waitFor(cdp, "权限审批", "permission request card appears from bridge event", () => window.__epitaxyRuntime.bodyIncludes("Claude wants to use Bash", "Runtime approval smoke", "Allow once"));
+  const allowClicked = await cdp.evaluate(clickButtonByLabel, "Allow once");
+  assertCheck("权限审批", "Allow once button is clickable", allowClicked);
+  await waitFor(cdp, "权限审批", "permission card resolves and disappears", () => window.__epitaxyRuntime.bodyExcludes("Claude wants to use Bash"));
+
+  await cdp.evaluate(async (activeSessionId, text) => {
+    const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    const emit = (event) => bridge.emitFakeLocalSessionEvent({ sessionId: activeSessionId, type: "stream_event", uuid: "runtime-stream-smoke", event }, "code");
+    emit({ type: "message_start", message: { id: "runtime-stream-smoke" } });
+    emit({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+    emit({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text } });
+    return true;
+  }, sessionId, streamText);
+  await waitFor(cdp, "对话流渲染", "stream delta is rendered through smoother", () => window.__epitaxyRuntime.bodyIncludes("Runtime stream smoke phrase"));
+  await cdp.evaluate(async (activeSessionId) => {
+    const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    bridge.emitFakeLocalSessionEvent({ sessionId: activeSessionId, type: "message", message: { type: "result" } }, "code");
+    return true;
+  }, sessionId);
+  await waitFor(cdp, "对话流渲染", "stream finalization keeps page mounted without connecting flash", () => window.__epitaxyRuntime.bodyIncludes("General coding session") && window.__epitaxyRuntime.bodyExcludes("Connecting to session") && Boolean(document.querySelector('[contenteditable="true"][aria-label="Prompt"]')));
+
+  const screenshot = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+  await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
+  console.log(`Screenshot: ${screenshotPath}`);
+  cdp.close();
+}
+
+async function cleanup() {
+  if (chromeProcess && !chromeProcess.killed) chromeProcess.kill("SIGTERM");
+  if (viteProcess && !viteProcess.killed) viteProcess.kill("SIGTERM");
+  if (chromeProfileDir) await rm(chromeProfileDir, { force: true, recursive: true }).catch(() => {});
+}
+
+try {
+  await run();
+} catch (error) {
+  fail("运行时验证", "script execution", error instanceof Error ? error.message : String(error));
+} finally {
+  await cleanup();
+}
+
+const failed = checks.filter((check) => check.status === "FAIL");
+if (failed.length > 0) {
+  console.error(`\nRuntime verification failed: ${failed.length} failure(s).`);
+  process.exit(1);
+}
+console.log("\nRuntime verification passed.");

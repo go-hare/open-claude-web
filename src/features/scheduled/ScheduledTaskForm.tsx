@@ -91,6 +91,7 @@ async function createTask(input: CreateTaskInput) {
     description: input.description.trim(),
     prompt: input.prompt.trim(),
     cwd: input.cwd,
+    userSelectedFolders: [input.cwd],
     cronExpression: cronForSchedule(input.frequency, hour, minute, 1),
     permissionMode: "default",
   });
@@ -113,6 +114,11 @@ function TextField({ label, required, value, error, onChange, placeholder }: { l
 
 function InstructionsField({ form }: { form: ReturnType<typeof useLocalRoutineForm> }) {
   const chooseFolder = async () => {
+    const paths = await desktopBridge.Preferences.getDirectoryPath?.(false).catch(() => null);
+    if (paths?.[0]) {
+      form.setCwd(paths[0]);
+      return;
+    }
     const workspace = await desktopBridge.Preferences.getWorkspaceContext();
     form.setCwd(workspace.cwd ?? "");
   };

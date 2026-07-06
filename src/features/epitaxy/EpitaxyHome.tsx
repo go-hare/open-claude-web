@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Tabs } from "@base-ui-components/react/tabs";
-import { desktopBridge, type WorkspaceContext } from "../../adapters/desktopBridge";
+import { desktopBridge, type CodeStats, type EffortLevel, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
 import { useFrameContext } from "../../stores/frameContext";
 import { Icon } from "../../shell/icons";
 import { EpitaxyRouteFrame, EpitaxySessionLoading } from "./EpitaxyFrameSurface";
+import {
+  OfficialComposerPill,
+  OfficialComposerSplitPill,
+  OfficialDropdownButton,
+  type OfficialDropdownItem,
+} from "./OfficialEpitaxyComponents";
 
 type PromptSuggestion = {
   id: string;
@@ -38,27 +44,27 @@ const coworkSuggestions: PromptSuggestion[] = [
   },
 ];
 
-const codeStats = {
-  sessions: "109",
-  messages: "3,238",
-  tokens: "315.6M",
-  activeDays: "19",
-  currentStreak: "0d",
-  longestStreak: "6d",
-  peakHour: "23时",
-  favoriteModel: "Opus 4.8",
-  tokenBook: "The Lord of the Rings",
-  tokenTimes: "547",
-};
+const codeModelOptions = [
+  { label: "Default", value: "default" },
+  { label: "Sonnet", value: "sonnet" },
+  { label: "Opus", value: "opus" },
+];
 
-const codeHeatmapActive = new Map<number, number>([
-  [130, 72], [131, 72], [132, 72], [133, 72],
-  [137, 70], [138, 70], [139, 70], [140, 70],
-  [144, 64], [147, 68], [148, 68],
-  [150, 74], [151, 74], [154, 70], [155, 70],
-  [158, 58], [159, 54], [160, 62],
-  [164, 70], [165, 70], [168, 68], [174, 72],
-]);
+const permissionModeOptions: Array<{ label: string; value: PermissionMode }> = [
+  { label: "默认", value: "default" },
+  { label: "接受编辑", value: "acceptEdits" },
+  { label: "自动", value: "auto" },
+  { label: "计划", value: "plan" },
+  { label: "绕过权限", value: "bypassPermissions" },
+];
+
+const effortOptions: Array<{ label: string; value: EffortLevel }> = [
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High", value: "high" },
+  { label: "Extra high", value: "xhigh" },
+  { label: "Max", value: "max" },
+];
 
 export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
@@ -94,7 +100,7 @@ function CoworkNewTaskPage({ onNavigate, workspace }: { onNavigate: (path: strin
     if (!normalized || busy) return;
     setBusy(true);
     try {
-      const session = await desktopBridge.LocalSessions.start({
+      const session = await desktopBridge.LocalAgentModeSessions.start({
         kind: "epitaxy",
         prompt: normalized,
         workspace,
@@ -132,23 +138,48 @@ function CoworkNewTaskPage({ onNavigate, workspace }: { onNavigate: (path: strin
 function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: string) => void; workspace: WorkspaceContext }) {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
+  const [model, setModel] = useState("default");
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>("default");
+  const [effort, setEffort] = useState<EffortLevel>("medium");
+  const [composerWorkspace, setComposerWorkspace] = useState(workspace);
+
+  useEffect(() => {
+    setComposerWorkspace(workspace);
+  }, [workspace]);
+
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([
+      desktopBridge.LocalSessions.getDefaultEffort?.(),
+      desktopBridge.LocalSessions.getDefaultPermissionMode?.(composerWorkspace.cwd),
+    ]).then(([nextEffort, nextPermissionMode]) => {
+      if (!alive) return;
+      if (nextEffort) setEffort(nextEffort);
+      setPermissionMode(normalizePermissionMode(nextPermissionMode));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [composerWorkspace.cwd]);
 
   const submit = useCallback(async () => {
     const normalized = prompt.trim();
     if (!normalized || busy) return;
     setBusy(true);
     try {
-      const session = await desktopBridge.LocalAgentModeSessions.start({
+      const session = await desktopBridge.LocalSessions.start({
         kind: "code",
+        effort,
+        model,
         prompt: normalized,
-        workspace,
-        permissionMode: "default",
+        workspace: composerWorkspace,
+        permissionMode,
       });
       onNavigate(`/epitaxy/${encodeURIComponent(session.id)}`);
     } finally {
       setBusy(false);
     }
-  }, [busy, onNavigate, prompt, workspace]);
+  }, [busy, composerWorkspace, effort, model, onNavigate, permissionMode, prompt]);
 
   return (
     <EpitaxyRouteFrame>
@@ -170,7 +201,20 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
               </div>
             </div>
             <div className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]">
-              <CodeComposer busy={busy} onSubmit={() => void submit()} prompt={prompt} setPrompt={setPrompt} workspace={workspace} />
+              <CodeComposer
+                busy={busy}
+                effort={effort}
+                model={model}
+                onEffortChange={setEffort}
+                onModelChange={setModel}
+                onPermissionModeChange={setPermissionMode}
+                onSubmit={() => void submit()}
+                onWorkspaceChange={setComposerWorkspace}
+                permissionMode={permissionMode}
+                prompt={prompt}
+                setPrompt={setPrompt}
+                workspace={composerWorkspace}
+              />
             </div>
           </div>
         </div>
@@ -294,47 +338,153 @@ function CodeGreeting({ workspace }: { workspace: WorkspaceContext }) {
 }
 
 function CodeStatsCard() {
+  const [stats, setStats] = useState<CodeStats | null>(null);
+  const [isLoading, setLoading] = useState(true);
+  const [view, setView] = useState<"overview" | "models">("overview");
+  const [range, setRange] = useState<"all" | "30d" | "7d">("all");
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    void desktopBridge.LocalSessions.getCodeStats?.().then((nextStats) => {
+      if (alive) setStats(nextStats);
+    }).finally(() => {
+      if (alive) setLoading(false);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const display = useMemo(() => buildCodeStatsDisplay(stats, range), [range, stats]);
+
+  if (isLoading || !stats) {
+    return <CodeStatsSkeletonCard />;
+  }
+
   return (
     <div className="flex flex-col gap-[20px] p-[12px] pt-[8px] rounded-r6 bg-t1 max-w-[480px]">
       <div className="flex items-center gap-g4 min-w-0">
-        <SegmentedTabs labels={["概览", "模型"]} selectedIndex={0} />
+        <SegmentedTabs
+          items={[{ label: "概览", value: "overview" }, { label: "模型", value: "models" }]}
+          onValueChange={(value) => setView(value === "models" ? "models" : "overview")}
+          value={view}
+        />
         <span className="flex-1" />
-        <SegmentedTabs labels={["全部", "30天", "7天"]} selectedIndex={0} />
+        <SegmentedTabs
+          items={[{ label: "全部", value: "all" }, { label: "30天", value: "30d" }, { label: "7天", value: "7d" }]}
+          onValueChange={(value) => setRange(value === "7d" ? "7d" : value === "30d" ? "30d" : "all")}
+          value={range}
+        />
       </div>
       <div className="flex flex-col gap-g5">
-        <div className="grid grid-cols-4 gap-g3">
-          <StatTile label="会话数" value={codeStats.sessions} />
-          <StatTile label="消息数" value={codeStats.messages} />
-          <StatTile label="总 Tokens" value={codeStats.tokens} />
-          <StatTile label="活跃天数" value={codeStats.activeDays} />
-          <StatTile label="当前连续天数" value={codeStats.currentStreak} />
-          <StatTile label="最长连续天数" value={codeStats.longestStreak} />
-          <StatTile label="高峰时段" value={codeStats.peakHour} />
-          <StatTile label="最常用模型" value={codeStats.favoriteModel} small />
-        </div>
-        <Heatmap />
-        <span className="text-caption text-t6 pt-[4px]">你使用的 Tokens 大约是 {codeStats.tokenBook} 的 {codeStats.tokenTimes} 倍。</span>
+        {view === "models" ? (
+          <ModelUsagePanel modelUsage={display.modelUsage} />
+        ) : (
+          <CodeStatsOverview display={display} />
+        )}
       </div>
     </div>
   );
 }
 
-function CodeComposer({ busy, onSubmit, prompt, setPrompt, workspace }: { busy: boolean; onSubmit: () => void; prompt: string; setPrompt: (value: string) => void; workspace: WorkspaceContext }) {
+function CodeStatsSkeletonCard() {
+  return (
+    <div className="flex flex-col gap-[20px] p-[12px] pt-[8px] rounded-r6 bg-t1 max-w-[480px] animate-pulse" aria-busy="true">
+      <div className="flex items-center gap-g4 min-w-0">
+        <div className="h-small w-[120px] rounded-r3 bg-t2" />
+        <span className="flex-1" />
+        <div className="h-small w-[100px] rounded-r3 bg-t2" />
+      </div>
+      <div className="flex flex-col gap-g5">
+        <div className="grid grid-cols-4 gap-g3">
+          {Array.from({ length: 8 }, (_, index) => <div className="h-[44px] rounded-r4 bg-t2" key={index} />)}
+        </div>
+        <div className="h-[120px] rounded-r1 bg-t2" />
+        <div className="h-[12px] w-[240px] rounded-r2 bg-t2 mt-[4px]" />
+      </div>
+    </div>
+  );
+}
+
+function CodeComposer({
+  busy,
+  effort,
+  model,
+  onEffortChange,
+  onModelChange,
+  onPermissionModeChange,
+  onSubmit,
+  onWorkspaceChange,
+  permissionMode,
+  prompt,
+  setPrompt,
+  workspace,
+}: {
+  busy: boolean;
+  effort: EffortLevel;
+  model: string;
+  onEffortChange: (value: EffortLevel) => void;
+  onModelChange: (value: string) => void;
+  onPermissionModeChange: (value: PermissionMode) => void;
+  onSubmit: () => void;
+  onWorkspaceChange: (workspace: WorkspaceContext) => void;
+  permissionMode: PermissionMode;
+  prompt: string;
+  setPrompt: (value: string) => void;
+  workspace: WorkspaceContext;
+}) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const permissionItems: OfficialDropdownItem[] = permissionModeOptions.map((option) => ({
+    checked: option.value === permissionMode,
+    label: option.label,
+    onSelect: () => onPermissionModeChange(option.value),
+  }));
+  const modelItems: OfficialDropdownItem[] = codeModelOptions.map((option) => ({
+    checked: option.value === model,
+    label: option.label,
+    onSelect: () => onModelChange(option.value),
+  }));
+  const effortItems: OfficialDropdownItem[] = effortOptions.map((option) => ({
+    checked: option.value === effort,
+    label: option.label,
+    onSelect: () => onEffortChange(option.value),
+  }));
+  const chooseWorkspace = useCallback(async () => {
+    const selectedPaths = await desktopBridge.Preferences.getDirectoryPath?.(false);
+    const selectedPath = selectedPaths?.[0];
+    if (!selectedPath) return;
+
+    const gitInfo = await desktopBridge.LocalSessions.getGitInfo?.(selectedPath).catch(() => null);
+    const git = asRecord(gitInfo);
+    const root = stringValue(git.root);
+    const branch = stringValue(git.branch);
+    onWorkspaceChange({
+      mode: "local",
+      projectName: basename(root) ?? basename(selectedPath) ?? selectedPath,
+      branchName: branch ?? workspace.branchName,
+      hasWorktree: hasWorktreeInfo(git),
+      cwd: selectedPath,
+    });
+  }, [onWorkspaceChange, workspace.branchName]);
 
   return (
     <div className="flex flex-col gap-g5">
       <div className="flex flex-wrap gap-g5 pb-p3 pr-[96px]">
-        <ComposerChip icon="Laptop" label="本地" />
-        <ComposerChip icon="Folder" label={workspace.projectName} />
+        <OfficialComposerPill icon="SystemComputerLaptopMacbook">
+          <span className="truncate max-w-[200px]">本地</span>
+        </OfficialComposerPill>
+        <OfficialComposerPill ariaLabel="Choose workspace folder" icon="Folder1" onClick={() => void chooseWorkspace()} title={workspace.cwd}>
+          <span className="truncate max-w-[200px]">{workspace.projectName}</span>
+        </OfficialComposerPill>
         <div className="group/split inline-flex rounded-r5 bg-fill-contained-default effect-contained-default has-[[aria-expanded=true]]:bg-[var(--fill-contained-selected)]">
-          <button className={`${composerSplitPillClass} gap-g5 px-p5`} type="button">
+          <OfficialComposerSplitPill className="gap-g5 px-p5">
             <Icon name="GitBranch" size="sm" />
             <span className="truncate">{workspace.branchName}</span>
-          </button>
+          </OfficialComposerSplitPill>
           {workspace.hasWorktree ? <span aria-hidden="true" className="w-px my-[7px] bg-t3 transition-opacity group-hover/split:opacity-0 group-focus-within/split:opacity-0" /> : null}
           {workspace.hasWorktree ? (
-            <button className={`${composerSplitPillClass} group/cb gap-g2 pl-p4 pr-p5`} type="button">
+            <OfficialComposerSplitPill className="group/cb gap-g2 pl-p4 pr-p5">
               <span className="inline-flex items-center justify-center size-[16px] shrink-0 p-[2.4px]">
                 <span className="flex items-center justify-center size-full rounded-[2.4px] bg-[var(--accent)]">
                   <svg width="6" height="5" viewBox="0 0 5.875 5.375" fill="none" aria-hidden="true" className="text-[var(--core-white)]">
@@ -343,12 +493,10 @@ function CodeComposer({ busy, onSubmit, prompt, setPrompt, workspace }: { busy: 
                 </span>
               </span>
               <span>worktree</span>
-            </button>
+            </OfficialComposerSplitPill>
           ) : null}
         </div>
-        <button className={composerPillClass} type="button" aria-label="Add another folder">
-          <Icon name="FolderPlus" customSize={16} />
-        </button>
+        <OfficialComposerPill ariaLabel="Add another folder" icon="FolderAddRight" onClick={() => void chooseWorkspace()} />
       </div>
       <DraftClawd />
       <div
@@ -393,20 +541,44 @@ function CodeComposer({ busy, onSubmit, prompt, setPrompt, workspace }: { busy: 
       </div>
       <div className="w-full flex items-center gap-g5 py-[4px]">
         <div className="flex items-center gap-g5 min-w-0">
-          <button className={composerDropdownButtonClass} type="button">
-            <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-[var(--fill-uncontained-default)] group-hover/dd:bg-[var(--fill-uncontained-hover)]" />
-            <span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap text-extended-yellow">绕过权限</span>
-          </button>
-          <button className={composerIconDropdownButtonClass} type="button" aria-label="Add">
-            <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-[var(--fill-uncontained-default)] group-hover/dd:bg-[var(--fill-uncontained-hover)]" />
-            <Icon name="Add" customSize={16} />
-          </button>
+          <OfficialDropdownButton
+            ariaLabel="Permission mode"
+            disabled={busy}
+            items={permissionItems}
+            label={<span className={permissionMode === "bypassPermissions" ? "text-extended-yellow" : undefined}>{permissionModeLabel(permissionMode)}</span>}
+            mode="text"
+            side="top"
+            variant="uncontained"
+          />
+          <OfficialDropdownButton
+            ariaLabel="Add"
+            disabled={busy}
+            icon="Add"
+            items={[{ icon: "Folder1", label: "Add folder", onSelect: () => void chooseWorkspace() }]}
+            revealChevron="never"
+            side="top"
+            variant="uncontained"
+          />
         </div>
         <div className="ml-auto flex items-center gap-g4">
-          <button className={composerDropdownButtonClass} type="button">
-            <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-[var(--fill-uncontained-default)] group-hover/dd:bg-[var(--fill-uncontained-hover)]" />
-            <span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap">Opus 4</span>
-          </button>
+          <OfficialDropdownButton
+            ariaLabel="Effort"
+            disabled={busy}
+            items={effortItems}
+            label={effortLabel(effort)}
+            mode="text"
+            side="top"
+            variant="uncontained"
+          />
+          <OfficialDropdownButton
+            ariaLabel="Model"
+            disabled={busy}
+            items={modelItems}
+            label={modelLabel(model)}
+            mode="text"
+            side="top"
+            variant="uncontained"
+          />
           <button className={`${composerIconButtonClass} h-small text-footnote rounded-small shrink-0`} type="button" aria-label="Usage">
             <span aria-hidden="true" className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)] group-hover/btn:bg-[var(--fill-uncontained-hover)]" />
             <span className="size-[12px] rounded-full border-2 border-border-400" aria-hidden="true" />
@@ -482,30 +654,15 @@ function CcProTrialSurfaces({ daysRemaining, state }: { daysRemaining: number | 
 
 const officialDraftClawdClass = "absolute right-[-16px] bottom-[-13px] w-[80px] h-[80px] -scale-x-100";
 const officialDraftClawdWithTrialClass = "absolute right-[140px] bottom-[-13px] w-[80px] h-[80px] -scale-x-100";
-const composerPillClass = "relative inline-flex items-center gap-g5 h-[24px] px-p5 rounded-r5 bg-fill-contained-default text-contained-default text-body effect-contained-default hover:bg-fill-contained-hover hover:text-contained-hover disabled:bg-fill-contained-disabled disabled:text-contained-disabled aria-[expanded=true]:bg-[var(--fill-contained-selected)] aria-[expanded=true]:text-[var(--text-contained-selected)] aria-[expanded=true]:hover:bg-[var(--fill-contained-selected)] aria-[expanded=true]:hover:text-[var(--text-contained-selected)] cursor-default select-none border-0 outline-none hide-focus-ring ring-focus";
-const composerSplitPillClass = "relative inline-flex items-center h-[24px] bg-transparent text-contained-default text-body hover:bg-fill-contained-hover hover:text-contained-hover disabled:text-contained-disabled aria-[expanded=true]:text-[var(--text-contained-selected)] aria-[expanded=true]:hover:bg-transparent aria-[expanded=true]:hover:text-[var(--text-contained-selected)] cursor-default select-none border-0 outline-none hide-focus-ring ring-focus rounded-[inherit]";
-const composerDropdownButtonClass = "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled aria-[expanded=true]:text-[var(--text-uncontained-selected)] aria-[expanded=true]:hover:text-[var(--text-uncontained-selected)] h-small rounded-small text-footnote justify-between pl-p5 pr-p2";
 const composerIconDropdownButtonClass = "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled aria-[expanded=true]:text-[var(--text-uncontained-selected)] aria-[expanded=true]:hover:text-[var(--text-uncontained-selected)] h-small rounded-small text-footnote justify-between pl-p3 pr-p2 shrink-0";
 const composerIconButtonClass = "group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled busy:text-uncontained-busy pressed:text-uncontained-selected pressed:hover:text-uncontained-selected ring-focus h-base text-body rounded-base justify-center aspect-square px-p3";
 
-function ComposerChip({ icon, label }: { icon?: string; label: string }) {
+function SegmentedTabs<T extends string>({ items, onValueChange, value }: { items: Array<{ label: string; value: T }>; onValueChange: (value: T) => void; value: T }) {
   return (
-    <button className={composerPillClass} type="button">
-      {icon ? <Icon name={icon} size="sm" /> : null}
-      <span className="truncate max-w-[200px]">{label}</span>
-    </button>
-  );
-}
-
-function SegmentedTabs({ labels, selectedIndex }: { labels: string[]; selectedIndex: number }) {
-  const items = labels.map((label) => ({ label, value: label }));
-  const selectedValue = items[selectedIndex]?.value ?? items[0]?.value;
-
-  return (
-    <Tabs.Root value={selectedValue} onValueChange={() => undefined}>
-      <Tabs.List aria-label={labels.join(" / ")} className="inline-flex items-center gap-g1">
+    <Tabs.Root value={value} onValueChange={(nextValue) => onValueChange(nextValue as T)}>
+      <Tabs.List aria-label={items.map((item) => item.label).join(" / ")} className="inline-flex items-center gap-g1">
         {items.map((item) => {
-          const selected = item.value === selectedValue;
+          const selected = item.value === value;
           return (
             <Tabs.Tab
               className="group/tab relative isolate inline-flex items-center justify-center border-0 outline-none bg-transparent cursor-default select-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled data-[selected]:text-[var(--text-uncontained-selected)] h-small px-p6 gap-g3 rounded-r3 text-footnote"
@@ -533,20 +690,257 @@ function StatTile({ label, value, small }: { label: string; value: string; small
   );
 }
 
-function Heatmap() {
-  const weeks = useMemo(() => Array.from({ length: 26 }, (_, week) => Array.from({ length: 7 }, (_, day) => week * 7 + day)), []);
+type CodeStatsDisplay = ReturnType<typeof buildCodeStatsDisplay>;
+
+function CodeStatsOverview({ display }: { display: CodeStatsDisplay }) {
+  return (
+    <>
+      <div className="grid grid-cols-4 gap-g3">
+        <StatTile label="会话数" value={display.sessions} />
+        <StatTile label="消息数" value={display.messages} />
+        <StatTile label="总 Tokens" value={display.tokens} />
+        <StatTile label="活跃天数" value={display.activeDays} />
+        <StatTile label="当前连续天数" value={display.currentStreak} />
+        <StatTile label="最长连续天数" value={display.longestStreak} />
+        <StatTile label="高峰时段" value={display.peakHour} />
+        <StatTile label="最常用模型" value={display.favoriteModel} small />
+      </div>
+      <Heatmap dailyActivity={display.dailyActivity} />
+      <TokenReferenceText totalTokens={display.totalTokens} />
+    </>
+  );
+}
+
+function Heatmap({ dailyActivity }: { dailyActivity: CodeStats["dailyActivity"] }) {
+  const activityByDate = useMemo(() => new Map(dailyActivity.map((entry) => [entry.date, entry.messageCount])), [dailyActivity]);
+  const maxActivity = Math.max(0, ...activityByDate.values());
+  const weeks = useMemo(() => buildHeatmapDates(), []);
   return (
     <div role="img" aria-label="Daily activity heatmap" className="flex gap-[3px] w-full">
       {weeks.map((week, weekIndex) => (
         <div className="flex flex-col gap-[3px] flex-1 min-w-0" key={weekIndex}>
-          {week.map((index) => {
-            const lightness = codeHeatmapActive.get(index);
-            return <div className="aspect-square rounded-r1 bg-t2" key={index} style={lightness ? { backgroundColor: `hsl(217 70% ${lightness}%)` } : undefined} />;
+          {week.map(({ date, future }) => {
+            if (future) return <div className="aspect-square rounded-r1" key={date} />;
+            const activity = activityByDate.get(date) ?? 0;
+            const ratio = maxActivity === 0 ? 0 : activity / maxActivity;
+            const lightness = ratio === 0 ? null : 80 - Math.ceil(ratio * 4) * 8;
+            return <div className="aspect-square rounded-r1 bg-t2" key={date} style={lightness === null ? undefined : { backgroundColor: `hsl(217 70% ${lightness}%)` }} />;
           })}
         </div>
       ))}
     </div>
   );
+}
+
+type CodeStatsRange = "all" | "30d" | "7d";
+type ModelUsageDisplay = Array<{ input: string; model: string; output: string; tokens: string; totalTokens: number }>;
+
+function ModelUsagePanel({ modelUsage }: { modelUsage: ModelUsageDisplay }) {
+  if (modelUsage.length === 0) {
+    return <div className="flex min-h-[128px] items-center justify-center rounded-r4 bg-t2 text-body text-t6">No model usage yet.</div>;
+  }
+
+  return (
+    <div className="flex flex-col gap-g3">
+      {modelUsage.map((usage) => (
+        <div className="grid grid-cols-[1fr_auto] gap-g4 rounded-r4 bg-t2 p-p3" key={usage.model}>
+          <span className="truncate text-body text-t9">{modelLabel(usage.model)}</span>
+          <span className="tabular-nums text-body-semibold text-t9">{usage.tokens}</span>
+          <span className="text-footnote text-t6">Input {usage.input}</span>
+          <span className="text-footnote text-t6">Output {usage.output}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function buildCodeStatsDisplay(stats: CodeStats | null, range: CodeStatsRange) {
+  const dailyActivity = filterStatsByRange(stats?.dailyActivity ?? [], range);
+  const dailyModelTokens = filterStatsByRange(stats?.dailyModelTokens ?? [], range);
+  const modelTotals = modelTokensFromDaily(dailyModelTokens);
+  const rawModelUsage = stats?.modelUsage ?? {};
+  const modelUsage = Object.entries(rawModelUsage)
+    .map(([model, usage]) => {
+      const totalTokens = usage.inputTokens + usage.outputTokens + usage.cacheReadInputTokens + usage.cacheCreationInputTokens;
+      return {
+        input: formatCompactNumber(usage.inputTokens + usage.cacheReadInputTokens + usage.cacheCreationInputTokens),
+        model,
+        output: formatCompactNumber(usage.outputTokens),
+        tokens: formatCompactNumber(totalTokens),
+        totalTokens,
+      };
+    })
+    .filter((usage) => usage.totalTokens > 0)
+    .sort((left, right) => right.totalTokens - left.totalTokens);
+  const fallbackTotalTokens = modelUsage.reduce((total, usage) => total + usage.totalTokens, 0);
+  const totalTokens = sumRecordValues(modelTotals) || fallbackTotalTokens;
+  const favoriteModel = topModelLabel(modelTotals) ?? modelLabel(modelUsage[0]?.model ?? "-");
+  const tokenReference = tokenReferenceFor(totalTokens);
+
+  return {
+    activeDays: formatNumber(dailyActivity.length),
+    currentStreak: `${stats?.streaks.currentStreak ?? 0}d`,
+    dailyActivity,
+    favoriteModel,
+    longestStreak: `${stats?.streaks.longestStreak ?? 0}d`,
+    messages: formatNumber(dailyActivity.reduce((total, entry) => total + entry.messageCount, 0)),
+    modelUsage,
+    peakHour: typeof stats?.peakActivityHour === "number" ? `${stats.peakActivityHour}时` : "-",
+    sessions: formatNumber(dailyActivity.reduce((total, entry) => total + entry.sessionCount, 0)),
+    totalTokens,
+    tokenBook: tokenReference?.title ?? "",
+    tokens: formatCompactNumber(totalTokens),
+    tokenTimes: tokenReference ? formatMultiplier(totalTokens, tokenReference.tokens) : "0",
+  };
+}
+
+function filterStatsByRange<T extends { date: string }>(items: T[], range: CodeStatsRange): T[] {
+  if (range === "all") return items;
+  const days = range === "7d" ? 7 : 30;
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+  return items.filter((item) => {
+    const value = new Date(`${item.date}T00:00:00`);
+    return !Number.isNaN(value.getTime()) && value >= cutoff;
+  });
+}
+
+function modelTokensFromDaily(items: CodeStats["dailyModelTokens"]): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const item of items) {
+    for (const [model, tokens] of Object.entries(item.tokensByModel)) {
+      totals[model] = (totals[model] ?? 0) + tokens;
+    }
+  }
+  return totals;
+}
+
+function topModelLabel(modelTotals: Record<string, number>) {
+  const top = Object.entries(modelTotals).sort((left, right) => right[1] - left[1])[0]?.[0];
+  return top ? modelLabel(top) : null;
+}
+
+function sumRecordValues(record: Record<string, number>) {
+  return Object.values(record).reduce((total, value) => total + value, 0);
+}
+
+function buildHeatmapDates() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(today);
+  end.setDate(today.getDate() + (6 - today.getDay()));
+  const start = new Date(end);
+  start.setDate(end.getDate() - 181);
+  return Array.from({ length: 26 }, (_, week) => Array.from({ length: 7 }, (_, day) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + week * 7 + day);
+    return { date: toDateKey(date), future: date > today };
+  }));
+}
+
+function toDateKey(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat().format(value);
+}
+
+function formatCompactNumber(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0";
+  if (value >= 1_000_000) return `${trimFixed(value / 1_000_000)}M`;
+  if (value >= 1_000) return `${trimFixed(value / 1_000)}K`;
+  return formatNumber(Math.round(value));
+}
+
+function trimFixed(value: number) {
+  return value.toFixed(value >= 10 ? 1 : 2).replace(/\.0+$/, "").replace(/(\.\d)0$/, "$1");
+}
+
+function tokenReferenceFor(totalTokens: number) {
+  const references = [
+    { title: "The Little Prince", tokens: 22_000 },
+    { title: "Animal Farm", tokens: 39_000 },
+    { title: "The Great Gatsby", tokens: 62_000 },
+    { title: "Harry Potter and the Philosopher's Stone", tokens: 103_000 },
+    { title: "The Hobbit", tokens: 123_000 },
+    { title: "Pride and Prejudice", tokens: 156_000 },
+    { title: "Dune", tokens: 244_000 },
+    { title: "Moby-Dick", tokens: 268_000 },
+    { title: "The Lord of the Rings", tokens: 576_000 },
+    { title: "War and Peace", tokens: 730_000 },
+  ];
+  const eligible = references.filter((reference) => totalTokens >= reference.tokens);
+  return eligible[eligible.length - 1] ?? null;
+}
+
+function formatMultiplier(totalTokens: number, referenceTokens: number) {
+  if (totalTokens <= 0) return "0";
+  return formatNumber(Math.max(1, Math.round(totalTokens / referenceTokens)));
+}
+
+function TokenReferenceText({ totalTokens }: { totalTokens: number }) {
+  const reference = useMemo(() => tokenReferenceFor(totalTokens), [totalTokens]);
+  if (!reference) return null;
+  const times = Math.floor(totalTokens / reference.tokens);
+  return (
+    <span className="text-caption text-t6 pt-[4px]">
+      {times >= 2
+        ? <>你使用的 Tokens 大约是 {reference.title} 的 {formatNumber(times)} 倍。</>
+        : <>你使用的 Tokens 大约和 {reference.title} 一样多。</>}
+    </span>
+  );
+}
+
+function modelLabel(value: string) {
+  const normalized = normalizeCodeModelValue(value);
+  return codeModelOptions.find((option) => option.value === normalized)?.label ?? formatClaudeModelLabel(value);
+}
+
+function normalizeCodeModelValue(value?: string) {
+  if (!value || value === "opus-4") return "default";
+  if (value === "sonnet-4") return "sonnet";
+  return value;
+}
+
+function formatClaudeModelLabel(value: string) {
+  const match = value.match(/^claude-([a-z]+)-(\d+)(?:-(\d+))?/i);
+  if (!match) return value;
+  const family = `${match[1].charAt(0).toUpperCase()}${match[1].slice(1)}`;
+  return `${family} ${match[2]}${match[3] ? `.${match[3]}` : ""}`;
+}
+
+function permissionModeLabel(value: PermissionMode) {
+  return permissionModeOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function effortLabel(value: EffortLevel) {
+  return effortOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function normalizePermissionMode(value: unknown): PermissionMode {
+  return permissionModeOptions.find((option) => option.value === value)?.value ?? "default";
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function basename(value?: string): string | undefined {
+  return value?.split(/[\\/]/).filter(Boolean).at(-1);
+}
+
+function hasWorktreeInfo(gitInfo: Record<string, unknown>): boolean {
+  if (typeof gitInfo.hasWorktree === "boolean") return gitInfo.hasWorktree;
+  if (typeof gitInfo.useWorktree === "boolean") return gitInfo.useWorktree;
+  return Boolean(stringValue(gitInfo.worktreeName) ?? stringValue(gitInfo.worktreePath));
 }
 
 function FragmentWithSeparator({ children, isLast }: { children: ReactNode; isLast: boolean }) {

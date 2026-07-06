@@ -54,20 +54,17 @@ const tileWrapStyle: CSSProperties = {
   minWidth: 100,
   minHeight: 100,
   overflow: "visible",
-  flex: "1 1 0px",
-  transform: "none",
-  opacity: 1,
+  flexGrow: 1,
+  flexShrink: 1,
+  flexBasis: 0,
 };
 
 const tileShellStyle: CSSProperties = {
   width: "100%",
   height: "100%",
   transformStyle: "preserve-3d",
-  position: "absolute",
-  top: 0,
-  bottom: 0,
-  left: 0,
-  minWidth: 320,
+  transform: "translateZ(1px)",
+  zIndex: 1,
 };
 
 const dropdownButtonClass = "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled aria-[expanded=true]:text-[var(--text-uncontained-selected)] aria-[expanded=true]:hover:text-[var(--text-uncontained-selected)] h-small rounded-small text-footnote justify-between pl-p5 pr-p2 ";

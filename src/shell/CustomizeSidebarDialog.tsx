@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useEffect, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { primaryButtonClass } from "../features/shared/buttonClasses";
 import { type ShellText, useShellText } from "../i18n/shellMessages";
@@ -13,7 +13,10 @@ type CustomizeSidebarDialogProps = {
   onToggle: (key: string) => void;
 };
 
-const overlayClassName = "fixed inset-0 z-modal bg-always-black/50 backdrop-brightness-75 draggable-none grid items-center justify-items-center overflow-y-auto md:p-10 p-4 data-[state=\"open\"]:[animation:fade_var(--modal-animation-duration,250ms)_ease-out_forwards] data-[state=\"closed\"]:[animation:fade_var(--modal-close-duration,125ms)_ease-in_reverse_forwards]";
+// 官方 c5f4e1303 Modal Overlay/Content class：
+// - Overlay: fixed z-modal inset-0 grid items-center ... backdrop-blur-[2px]
+// - Content: flex flex-col focus:outline-none ... rounded-2xl md:p-6 p-4
+const overlayClassName = "fixed z-modal inset-0 grid items-center justify-items-center bg-always-black overflow-y-auto md:p-10 p-4 [background-color:hsl(var(--always-black)/var(--modal-overlay-opacity,0.5))] backdrop-blur-[2px] data-[state=\"open\"]:[animation:fade_var(--modal-animation-duration,250ms)_ease-out_forwards] data-[state=\"closed\"]:[animation:fade_var(--modal-close-duration,125ms)_ease-in_reverse_forwards] draggable-none";
 const contentClassName = "flex flex-col focus:outline-none relative text-text-100 text-left shadow-xl border-0.5 border-border-300 rounded-2xl md:p-6 p-4 align-middle data-[state=\"open\"]:[animation:zoom_var(--modal-animation-duration,250ms)_ease-out_forwards] data-[state=\"closed\"]:[animation:zoom_var(--modal-close-duration,125ms)_ease-in_reverse_forwards] min-w-0 w-full max-w-sm bg-bg-100";
 const modalVars = {
   "--modal-animation-duration": "250ms",
@@ -23,6 +26,15 @@ const modalVars = {
 
 export function CustomizeSidebarDialog({ isOpen, isPinned, items, onClose, onToggle }: CustomizeSidebarDialogProps) {
   const text = useShellText();
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
   return createPortal(
     <div className="epitaxy-root">

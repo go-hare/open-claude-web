@@ -21,20 +21,36 @@ export type MessageDescriptor = { defaultMessage: string; id: string };
 export type MessageDescriptors = Record<string, MessageDescriptor>;
 export const LOCALE_STORAGE_KEY = "claude-rebuild-locale";
 
-export const FOOTER_LANGUAGE_OPTIONS = [
-  { locale: "zh-CN", localName: "中文（中国）" },
-  { locale: "en-US", localName: "English (United States)" },
-  { locale: "fr-FR", localName: "français (France)" },
-  { locale: "de-DE", localName: "Deutsch (Deutschland)" },
-  { locale: "hi-IN", localName: "हिन्दी (भारत)" },
-  { locale: "id-ID", localName: "Indonesia (Indonesia)" },
-  { locale: "it-IT", localName: "italiano (Italia)" },
-  { locale: "ja-JP", localName: "日本語" },
-  { locale: "ko-KR", localName: "한국어" },
-  { locale: "pt-BR", localName: "português (Brasil)" },
-  { locale: "es-419", localName: "español (Latinoamérica)" },
-  { locale: "es-ES", localName: "español (España)" },
-] as const;
+const DEFAULT_LOCALE = "en-US" satisfies SupportedLocale;
+const FALLBACK_APP_LOCALE = "zh-CN" satisfies SupportedLocale;
+const LANGUAGE_DISPLAY_OPTIONS = { type: "language", languageDisplay: "standard" } as const;
+
+function buildSupportedLocaleLookup() {
+  const lookup = new Map<string, SupportedLocale>();
+  for (const locale of SUPPORTED_LOCALES) {
+    const normalized = locale.toLowerCase();
+    lookup.set(normalized, locale);
+    const language = normalized.split("-")[0];
+    if (language && !lookup.has(language)) lookup.set(language, locale);
+  }
+  return lookup;
+}
+
+const supportedLocaleLookup = buildSupportedLocaleLookup();
+
+function getDisplayName(locale: SupportedLocale, displayLocale: string) {
+  return new Intl.DisplayNames(displayLocale, LANGUAGE_DISPLAY_OPTIONS).of(locale) ?? locale;
+}
+
+// 官方 Hns：n_.map(locale => DisplayNames(en-US/local)).sort(Intl.Collator(en-US))
+export const FOOTER_LANGUAGE_OPTIONS = SUPPORTED_LOCALES
+  .map(locale => ({
+    locale,
+    name: getDisplayName(locale, DEFAULT_LOCALE),
+    localName: getDisplayName(locale, locale),
+  }))
+  .slice()
+  .sort((left, right) => new Intl.Collator(DEFAULT_LOCALE).compare(left.name, right.name));
 
 const FOOTER_MENU_MESSAGES = {
   about: { defaultMessage: "About Anthropic", id: "Cm+OGj8nZs" },
@@ -74,14 +90,16 @@ const resourceCache = new Map<string, I18nMessages>();
 declare global {
   interface Window {
     electronIntl?: {
-      requestLocaleChange?: (locale: string) => void;
+      getInitialLocale?: () => Promise<string | { locale?: string; messages?: I18nMessages }>;
+      requestLocaleChange?: (locale: string) => Promise<unknown> | void;
+      localeChanged?: (callback: (locale: string | { locale?: string }) => void) => () => void;
     };
   }
 }
 
 export function getInitialLocale() {
-  if (typeof window === "undefined") return "zh-CN";
-  return normalizeLocale(window.localStorage.getItem(LOCALE_STORAGE_KEY) ?? "zh-CN");
+  if (typeof window === "undefined") return FALLBACK_APP_LOCALE;
+  return normalizeLocale(window.localStorage.getItem(LOCALE_STORAGE_KEY) ?? navigator.language ?? FALLBACK_APP_LOCALE);
 }
 
 export function applyLocaleOverride(locale: string) {
@@ -89,7 +107,7 @@ export function applyLocaleOverride(locale: string) {
   const normalized = normalizeLocale(locale);
   window.localStorage.setItem(LOCALE_STORAGE_KEY, normalized);
   document.documentElement.lang = normalized;
-  window.electronIntl?.requestLocaleChange?.(normalized);
+  void window.electronIntl?.requestLocaleChange?.(normalized)?.catch?.(() => {});
   window.dispatchEvent(new CustomEvent("claude:locale-change", { detail: { locale: normalized } }));
 }
 
@@ -97,16 +115,28 @@ export function useCurrentLocale() {
   const [locale, setLocale] = useState(getInitialLocale);
 
   useEffect(() => {
+    let cancelled = false;
+    const applyNextLocale = (next: string | { locale?: string } | undefined) => {
+      const value = typeof next === "string" ? next : next?.locale;
+      if (value && !cancelled) setLocale(normalizeLocale(value));
+    };
     const onLocaleChange = (event: Event) => {
-      const next = (event as CustomEvent<{ locale?: string }>).detail?.locale;
-      if (next) setLocale(normalizeLocale(next));
+      applyNextLocale((event as CustomEvent<{ locale?: string }>).detail?.locale);
     };
     const onStorage = (event: StorageEvent) => {
-      if (event.key === LOCALE_STORAGE_KEY && event.newValue) setLocale(normalizeLocale(event.newValue));
+      if (event.key === LOCALE_STORAGE_KEY && event.newValue) applyNextLocale(event.newValue);
     };
+
+    if (!window.localStorage.getItem(LOCALE_STORAGE_KEY)) {
+      void window.electronIntl?.getInitialLocale?.().then(applyNextLocale).catch(() => {});
+    }
+
+    const unsubscribeDesktopLocale = window.electronIntl?.localeChanged?.(applyNextLocale);
     window.addEventListener("claude:locale-change", onLocaleChange);
     window.addEventListener("storage", onStorage);
     return () => {
+      cancelled = true;
+      unsubscribeDesktopLocale?.();
       window.removeEventListener("claude:locale-change", onLocaleChange);
       window.removeEventListener("storage", onStorage);
     };
@@ -193,6 +223,8 @@ function mergeKnownOverrides(base: I18nMessages, overrides: I18nMessages) {
   return next;
 }
 
-export function normalizeLocale(locale: string) {
-  return SUPPORTED_LOCALES.find(item => item.toLowerCase() === locale.toLowerCase()) ?? "en-US";
+export function normalizeLocale(locale: string | null | undefined): SupportedLocale {
+  if (!locale) return DEFAULT_LOCALE;
+  const normalized = locale.toLowerCase();
+  return supportedLocaleLookup.get(normalized) ?? DEFAULT_LOCALE;
 }

@@ -1,28 +1,28 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { AppRoute } from "../app/routes";
+import { desktopBridge } from "../adapters/desktopBridge";
 import { useShellText } from "../i18n/shellMessages";
 import { SIDEBAR_WIDTH_BOUNDS, type FrameStore } from "../stores/frameStore";
 import { ModePill } from "./ModePill";
 import { RecentsSection } from "./RecentsSection";
 import { SidebarNav } from "./SidebarNav";
-import { Icon } from "./icons";
 import { SidebarFooter } from "./SidebarFooter";
 import { CustomizeSidebarDialog } from "./CustomizeSidebarDialog";
-import { SearchCommandPalette } from "./SearchCommandPalette";
+import { Icon } from "./icons";
 import { primaryNavItems } from "./sidebarData";
 
 type FrameSidebarProps = {
   currentRoute: AppRoute;
   frame: FrameStore;
   onNavigate: (path: string) => void;
+  onSearch: () => void;
 };
 
-export function FrameSidebar({ currentRoute, frame, onNavigate }: FrameSidebarProps) {
+export function FrameSidebar({ currentRoute, frame, onNavigate, onSearch }: FrameSidebarProps) {
   const customization = useSidebarCustomization(frame.mode, frame);
-  const [searchOpen, setSearchOpen] = useState(false);
   const peekHandlers = useSidebarPeek(frame);
 
-  useSidebarShortcuts(frame, () => setSearchOpen(true), onNavigate);
+  useSidebarShortcuts(frame, onSearch, onNavigate);
 
   return (
     <aside
@@ -37,7 +37,8 @@ export function FrameSidebar({ currentRoute, frame, onNavigate }: FrameSidebarPr
         Skip to content
       </a>
       <SidebarResizeHandle frame={frame} />
-      <SidebarChromeControls collapsed={frame.sidebarCollapsed} onCollapse={frame.toggleSidebar} onSearch={() => setSearchOpen(true)} />
+      <SidebarCollapsedTrigger frame={frame} />
+      <SidebarMacChrome frame={frame} onSearch={onSearch} />
       <SidebarContent
         currentRoute={currentRoute}
         customization={customization}
@@ -51,9 +52,127 @@ export function FrameSidebar({ currentRoute, frame, onNavigate }: FrameSidebarPr
         onClose={customization.closeCustomize}
         onToggle={customization.togglePinned}
       />
-      <SearchCommandPalette isOpen={searchOpen} mode={frame.mode} onClose={() => setSearchOpen(false)} onNavigate={onNavigate} />
     </aside>
   );
+}
+
+function SidebarCollapsedTrigger({ frame }: { frame: FrameStore }) {
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const isPeeked = frame.sidebarHovering;
+
+  useEffect(() => {
+    if (!frame.sidebarCollapsed || !isMacDesktopFrame()) return;
+    const root = triggerRef.current?.closest(".dframe-root") as HTMLElement | null;
+    if (!root || !triggerRef.current) return;
+    const right = Math.round(triggerRef.current.getBoundingClientRect().right);
+    root.style.setProperty("--df-trigger-right", `${right}px`);
+    return () => {
+      root.style.removeProperty("--df-trigger-right");
+    };
+  }, [frame.sidebarCollapsed]);
+
+  if (!frame.sidebarCollapsed || !isMacDesktopFrame()) return null;
+
+  return (
+    <button
+      ref={triggerRef}
+      type="button"
+      onClick={frame.toggleSidebar}
+      aria-expanded={isPeeked}
+      aria-controls="frame-peek-popover"
+      aria-label="Open sidebar"
+      className={[
+        "draggable-none flex items-center justify-center size-7 rounded-[9px] transition-colors",
+        isPeeked ? "bg-bg-300" : "",
+      ].join(" ")}
+    >
+      <span className="flex items-center justify-center text-text-300">
+        {isPeeked ? <Icon name="Sidebar" customSize={16} /> : <CollapsedPeekIcon />}
+      </span>
+    </button>
+  );
+}
+
+function CollapsedPeekIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" aria-hidden="true">
+      <path d="M3 4.5h7M3 8h10M3 11.5h5" />
+    </svg>
+  );
+}
+
+function SidebarMacChrome({ frame, onSearch }: { frame: FrameStore; onSearch: () => void }) {
+  const text = useShellText();
+  const trafficLightPadding = useTrafficLightPadding();
+
+  if (!isMacDesktopFrame() || frame.sidebarCollapsed) return null;
+
+  const spacerStyle = trafficLightPadding.needsPadding
+    ? ({ width: `${trafficLightPadding.spacerWidth}px` } as CSSProperties)
+    : undefined;
+
+  return (
+    <div className="draggable h-11 shrink-0 flex items-center px-2">
+      {spacerStyle ? <div className="shrink-0" style={spacerStyle} /> : null}
+      <div className="draggable-none -mt-[10px] ml-0.5 flex items-center gap-1">
+        <SidebarChromeButton ariaLabel={text.collapseSidebar} onClick={frame.toggleSidebar}>
+          <Icon name="Sidebar" customSize={16} />
+        </SidebarChromeButton>
+        <SidebarChromeButton ariaLabel={text.search} onClick={onSearch}>
+          <Icon name="Search" customSize={16} />
+        </SidebarChromeButton>
+      </div>
+    </div>
+  );
+}
+
+function SidebarChromeButton({ ariaLabel, children, onClick }: { ariaLabel: string; children: ReactNode; onClick: () => void }) {
+  return (
+    <button
+      aria-label={ariaLabel}
+      className="df-chrome-btn opacity-80 draggable-none flex items-center justify-center size-7 rounded-[9px] border-0 bg-transparent transition-colors"
+      onClick={onClick}
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
+function useTrafficLightPadding() {
+  const [state, setState] = useState({ isFullscreen: false, zoomFactor: 1 });
+
+  useEffect(() => {
+    if (!isMacDesktopFrame()) return;
+
+    let disposed = false;
+    void Promise.all([
+      desktopBridge.Window.getFullscreen().catch(() => false),
+      desktopBridge.Window.getZoomFactor().catch(() => 1),
+    ]).then(([isFullscreen, zoomFactor]) => {
+      if (disposed) return;
+      setState({
+        isFullscreen,
+        zoomFactor: Number.isFinite(zoomFactor) && zoomFactor > 0 ? zoomFactor : 1,
+      });
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  const needsPadding = !state.isFullscreen;
+  const spacerWidth = needsPadding ? Math.round(74 / Math.min(state.zoomFactor, 1)) : 0;
+  return { needsPadding, spacerWidth };
+}
+
+function isMacDesktopFrame() {
+  if (typeof navigator === "undefined") return false;
+  const isMac = /\bMacintosh\b|\bMac OS\b/.test(navigator.userAgent);
+  const isDesktop = Boolean(window["claude.web"]) || /\bElectron\//.test(navigator.userAgent);
+  const isWindows = /\bWindows\b/.test(navigator.userAgent);
+  return isMac && isDesktop && !isWindows;
 }
 
 function SidebarResizeHandle({ frame }: { frame: FrameStore }) {
@@ -339,34 +458,7 @@ function focusAdjacentSidebarRow(mode: FrameStore["mode"], direction: number, on
   rows[nextIndex - 1]?.click();
 }
 
-function SidebarChromeControls({ collapsed, onCollapse, onSearch }: { collapsed: boolean; onCollapse: () => void; onSearch: () => void }) {
-  const text = useShellText();
-  return (
-    <div className="draggable h-11 shrink-0 flex items-center px-2">
-      <div className="draggable-none ml-auto flex items-center gap-1">
-        <button
-          className="df-chrome-btn opacity-80 inline-flex h-7 w-7 items-center justify-center rounded-md border-0 bg-transparent text-text-500 hover:bg-bg-200 hover:text-text-100"
-          onClick={onCollapse}
-          type="button"
-          aria-label={collapsed ? text.expandSidebar : text.collapseSidebar}
-          aria-pressed={collapsed}
-        >
-          <Icon name="sidebar" />
-        </button>
-        <button
-          className="df-chrome-btn opacity-80 inline-flex h-7 w-7 items-center justify-center rounded-md border-0 bg-transparent text-text-500 hover:bg-bg-200 hover:text-text-100"
-          onClick={onSearch}
-          type="button"
-          aria-label={text.search}
-        >
-          <Icon name="search" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function SidebarContent({ currentRoute, customization, frame, onNavigate }: FrameSidebarProps & { customization: SidebarCustomization }) {
+function SidebarContent({ currentRoute, customization, frame, onNavigate }: Omit<FrameSidebarProps, "onSearch"> & { customization: SidebarCustomization }) {
   const handleModeChange = useCallback((mode: FrameStore["mode"]) => {
     frame.setMode(mode);
     onNavigate(mode === "cowork" ? "/task/new" : "/epitaxy");

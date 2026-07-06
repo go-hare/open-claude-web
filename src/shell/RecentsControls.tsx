@@ -112,8 +112,12 @@ function RecentsFilterMenu({ mode, sessions, text, value, onChange }: { mode: Fr
   const projectOptions = useMemo(() => makeProjectOptions(sessions), [sessions]);
   const rows = makeRows(mode, value, text);
   const active = isFilterActive(value);
-  const reset = () => onChange(defaultRecentsFilter);
-  const update = (key: Exclude<MenuKey, "selectedProjects">, next: string) => onChange({ ...value, [key]: next } as RecentsFilterState);
+  const reset = () => onChange({ ...value, status: "active", selectedProjects: [], environment: "all", activityDays: "0" });
+  const update = (key: Exclude<MenuKey, "selectedProjects">, next: string) => onChange({
+    ...value,
+    [key]: next,
+    ...(key === "groupBy" && next === "state" ? { status: "active" as const } : {}),
+  } as RecentsFilterState);
 
   return (
     <>
@@ -159,8 +163,8 @@ function ProjectSubmenu({ options, selectedProjects, text, onChange }: { options
       popupSideOffset={-4}
       trigger={<span className="flex w-full items-center gap-sm"><span className="flex-1 truncate">{text.project}</span><span className={`shrink-0 text-footnote max-w-[100px] truncate ${selectedProjects.length > 0 ? "text-accent" : "text-muted"}`}>{summary}</span></span>}
     >
-      <BaseMenuItem checked={selectedProjects.length === 0} onClick={() => onChange([])}>{text.allProjects}</BaseMenuItem>
-      {options.map((option) => <BaseMenuItem checked={selected.has(option.value)} key={option.value} onClick={() => toggle(option.value)}>{option.label}</BaseMenuItem>)}
+      <BaseMenuItem checked={selectedProjects.length === 0} keepOpen onClick={() => onChange([])}>{text.allProjects}</BaseMenuItem>
+      {options.map((option) => <BaseMenuItem checked={selected.has(option.value)} keepOpen key={option.value} onClick={() => toggle(option.value)}>{option.label}</BaseMenuItem>)}
     </BaseSubmenu>
   );
 }
@@ -255,5 +259,5 @@ function dateLabel(updatedAtMs: number, text?: ShellText) {
 }
 
 function isFilterActive(value: RecentsFilterState) {
-  return value.status !== "active" || value.selectedProjects.length > 0 || value.environment !== "all" || value.activityDays !== "0" || value.groupBy !== "none" || value.sortBy !== "recency";
+  return value.status !== "active" || value.selectedProjects.length > 0 || value.environment !== "all" || value.activityDays !== "0";
 }

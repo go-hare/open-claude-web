@@ -1,5 +1,5 @@
 import { Menu } from "@base-ui-components/react/menu";
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useReducer, useState, type CSSProperties, type ReactNode } from "react";
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
 
@@ -71,7 +71,7 @@ type OfficialSessionHeaderProps = {
   title: string;
 };
 
-export type OfficialViewPane = "preview" | "diff" | "terminal" | "tasks" | "plan";
+export type OfficialViewPane = "preview" | "diff" | "terminal" | "tasks" | "plan" | "file";
 
 type OfficialTranscriptProps = {
   children: ReactNode;
@@ -155,6 +155,8 @@ const officialMenuPopupClass = "epitaxy-popup relative isolate min-w-[130px] max
 const officialMenuScrollClass = "flex-1 min-h-0 flex flex-col overflow-y-auto";
 const officialMenuItemBaseClass = "relative isolate flex items-center min-h-[var(--h4)] shrink-0 px-p8 text-body select-none cursor-default outline-none hide-focus-ring before:content-[''] before:absolute before:-z-[1] before:inset-y-0 before:left-[6px] before:right-[6px] before:rounded-r5 data-[disabled]:opacity-50 data-[disabled]:pointer-events-none text-[var(--menu-item-color,var(--t8))] data-[highlighted]:before:bg-fill-uncontained-hover hover:before:bg-fill-uncontained-hover focus-visible:before:bg-fill-uncontained-hover";
 const officialMenuIconStyle = { "--class-base-icon": "14px" } as CSSProperties;
+export const officialComposerPillClass = "relative inline-flex items-center gap-g5 h-[24px] px-p5 rounded-r5 bg-fill-contained-default text-contained-default text-body effect-contained-default hover:bg-fill-contained-hover hover:text-contained-hover disabled:bg-fill-contained-disabled disabled:text-contained-disabled aria-[expanded=true]:bg-[var(--fill-contained-selected)] aria-[expanded=true]:text-[var(--text-contained-selected)] aria-[expanded=true]:hover:bg-[var(--fill-contained-selected)] aria-[expanded=true]:hover:text-[var(--text-contained-selected)] cursor-default select-none border-0 outline-none hide-focus-ring ring-focus";
+export const officialComposerSplitPillClass = "relative inline-flex items-center h-[24px] bg-transparent text-contained-default text-body hover:bg-fill-contained-hover hover:text-contained-hover disabled:text-contained-disabled aria-[expanded=true]:text-[var(--text-contained-selected)] aria-[expanded=true]:hover:bg-transparent aria-[expanded=true]:hover:text-[var(--text-contained-selected)] cursor-default select-none border-0 outline-none hide-focus-ring ring-focus rounded-[inherit]";
 
 export function OfficialButton({
   ariaLabel,
@@ -318,7 +320,7 @@ export function OfficialTranscript({ children, scrollRef }: OfficialTranscriptPr
   return (
     <div ref={scrollRef} data-testid="epitaxy-virtual-transcript" className="h-full overflow-y-auto overflow-x-hidden [contain:strict]">
       <div className="relative epitaxy-chat-column">
-        <div className="w-full">
+        <div className="w-full pt-[48px] pb-[48px]">
           {children}
         </div>
       </div>
@@ -326,42 +328,184 @@ export function OfficialTranscript({ children, scrollRef }: OfficialTranscriptPr
   );
 }
 
-export function OfficialTranscriptRow({ children, last = false }: { children: ReactNode; last?: boolean }) {
+export function OfficialTranscriptRows({ children }: { children: ReactNode }) {
   return (
-    <div>
-      <div className={last ? "epitaxy-chat-size" : "epitaxy-chat-size pb-[var(--chat-turn-gap)] empty:pb-0"}>
-        {children}
-      </div>
+    <div className="w-full">
+      {children}
     </div>
   );
 }
 
-export function OfficialUserMessage({ children, createdAt, isQueued = false }: { children: ReactNode; createdAt?: string; isQueued?: boolean }) {
+export function OfficialTranscriptRow({ children }: { children: ReactNode; last?: boolean }) {
+  return (
+    <div className="epitaxy-chat-size pb-[var(--chat-turn-gap)] last:pb-0 empty:pb-0 [content-visibility:auto] [contain-intrinsic-size:auto_400px] empty:hidden">
+      {children}
+    </div>
+  );
+}
+
+export function OfficialUserMessage({
+  children,
+  copyText,
+  createdAt,
+  isQueued = false,
+  onFork,
+  onRewind,
+}: {
+  children: ReactNode;
+  copyText?: string;
+  createdAt?: string;
+  isQueued?: boolean;
+  onFork?: () => void;
+  onRewind?: () => void;
+}) {
   return (
     <div className={"group/msg flex justify-start items-start gap-g3 w-full transition-opacity duration-200 " + (isQueued ? "opacity-50 hover:opacity-80" : "")}>
       <div className="flex flex-col items-start gap-g6 max-w-[75%] min-w-0">
         <div className={`${userMessageClass} max-w-full`}>
           {children}
         </div>
-        {!isQueued && createdAt ? <OfficialMessageActions timestamp={createdAt} className="-mt-[8px]" /> : null}
+        {!isQueued && (copyText !== undefined || createdAt || onFork || onRewind) ? (
+          <OfficialMessageActions buttonVariant="link" copyText={copyText} onFork={onFork} onRewind={onRewind} timestamp={createdAt} className="-mt-[8px]" />
+        ) : null}
       </div>
     </div>
   );
 }
 
-function OfficialMessageActions({ className = "", timestamp }: { className?: string; timestamp?: string }) {
+type OfficialMessageRating = "negative" | "positive";
+
+function OfficialMessageActions({
+  buttonVariant = "muted",
+  className = "",
+  copyText,
+  isPinned = false,
+  onFork,
+  onPinChapter,
+  onRateMessage,
+  onRewind,
+  rateMessageUuid,
+  rating,
+  showBranchActions = false,
+  showPinAction = false,
+  timestamp,
+}: {
+  buttonVariant?: "link" | "muted";
+  className?: string;
+  copyText?: string;
+  isPinned?: boolean;
+  onFork?: () => void;
+  onPinChapter?: () => void;
+  onRateMessage?: (messageUuid: string, rating: OfficialMessageRating) => void;
+  onRewind?: () => void;
+  rateMessageUuid?: string;
+  rating?: OfficialMessageRating;
+  showBranchActions?: boolean;
+  showPinAction?: boolean;
+  timestamp?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [localPinned, setLocalPinned] = useState(isPinned);
+  const [localRating, setLocalRating] = useState<OfficialMessageRating | undefined>(rating);
+  const pinned = onPinChapter ? isPinned : localPinned;
+  const currentRating = rating ?? localRating;
+  const copyMessage = () => {
+    if (copyText === undefined) return;
+    void navigator.clipboard?.writeText(copyText).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    });
+  };
+  const pinMessage = () => {
+    if (onPinChapter) {
+      onPinChapter();
+      return;
+    }
+    setLocalPinned((value) => !value);
+  };
+  const rateMessage = (nextRating: OfficialMessageRating) => {
+    if (rateMessageUuid && onRateMessage) {
+      onRateMessage(rateMessageUuid, nextRating);
+      setLocalRating(nextRating);
+      return;
+    }
+    setLocalRating((value) => value === nextRating ? undefined : nextRating);
+  };
+  const shouldShowRewind = Boolean(onRewind) || showBranchActions;
+  const shouldShowFork = Boolean(onFork) || showBranchActions;
+  const shouldShowRating = Boolean(rateMessageUuid && onRateMessage);
   return (
     <div className={`flex gap-g2 pt-[4px] opacity-0 pointer-events-none group-hover/msg:opacity-100 group-hover/msg:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto ${className}`}>
-      {timestamp ? <span className="text-footnote text-assistant-secondary tabular-nums self-center pl-p1" title={timestamp}>You · {timestamp}</span> : null}
+      {copyText !== undefined ? <OfficialButton ariaLabel={copied ? "Copied" : "Copy message"} icon={copied ? "CheckSelection" : "CopySquareBehind"} onClick={copyMessage} size="small" variant={buttonVariant} /> : null}
+      {showPinAction ? <OfficialButton ariaLabel={pinned ? "Unpin chapter" : "Pin as chapter"} icon={pinned ? "Unpin" : "Pin"} onClick={pinMessage} pressed={pinned} size="small" variant={buttonVariant} /> : null}
+      {shouldShowRewind ? <OfficialButton ariaLabel="Rewind to here" icon="ArrowUndoUp" onClick={onRewind} size="small" variant={buttonVariant} /> : null}
+      {shouldShowFork ? <OfficialButton ariaLabel="Fork from here" icon="GitBranch" onClick={onFork} size="small" variant={buttonVariant} /> : null}
+      {shouldShowRating ? (
+        <>
+          <OfficialButton ariaLabel="Good response" customIcon={<ThumbFeedbackIcon direction="up" />} onClick={() => rateMessage("positive")} pressed={currentRating === "positive"} size="small" variant={buttonVariant} />
+          <OfficialButton ariaLabel="Bad response" customIcon={<ThumbFeedbackIcon direction="down" />} onClick={() => rateMessage("negative")} pressed={currentRating === "negative"} size="small" variant={buttonVariant} />
+        </>
+      ) : null}
+      {timestamp ? <OfficialRelativeTimestamp timestamp={timestamp} /> : null}
     </div>
   );
 }
 
-export function OfficialAssistantMessage({ children, createdAt }: { children: ReactNode; createdAt?: string }) {
+function OfficialRelativeTimestamp({ timestamp }: { timestamp: string }) {
+  const [, forceUpdate] = useReducer((value: number) => value + 1, 0);
+
+  useEffect(() => {
+    const tick = () => {
+      if (typeof document === "undefined" || !document.hidden) forceUpdate();
+    };
+    const timer = window.setInterval(tick, 30_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, []);
+
   return (
-    <article className="group/msg flex flex-col gap-g3 w-full select-text">
-      {createdAt ? <div className="text-footnote text-t6 select-none">Claude · {createdAt}</div> : null}
-      <div className="epitaxy-markdown text-body text-t8 whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty">{children}</div>
+    <span className="text-footnote text-assistant-secondary tabular-nums self-center pl-p1" title={formatTranscriptTimestampTitle(timestamp)}>
+      {formatTranscriptTimestamp(timestamp)}
+    </span>
+  );
+}
+
+function ThumbFeedbackIcon({ direction }: { direction: "down" | "up" }) {
+  return <Icon name={direction === "up" ? "ThumbsUp" : "ThumbsDown"} customSize={12} />;
+}
+
+export function OfficialAssistantMessage({
+  children,
+  copyText,
+  createdAt,
+  onFork,
+  onRateMessage,
+  onRewind,
+  rateMessageUuid,
+  rating,
+  showPinAction = true,
+}: {
+  children: ReactNode;
+  copyText?: string;
+  createdAt?: string;
+  onFork?: () => void;
+  onRateMessage?: (messageUuid: string, rating: OfficialMessageRating) => void;
+  onRewind?: () => void;
+  rateMessageUuid?: string;
+  rating?: OfficialMessageRating;
+  showPinAction?: boolean;
+}) {
+  return (
+    <article className="group/msg relative flex flex-col w-full">
+      <div className="flex flex-col gap-[var(--chat-item-gap)] select-text">
+        {children}
+      </div>
+      {(copyText !== undefined || createdAt || showPinAction || onFork || onRewind || (rateMessageUuid && onRateMessage)) ? (
+        <OfficialMessageActions copyText={copyText} onFork={onFork} onRateMessage={onRateMessage} onRewind={onRewind} rateMessageUuid={rateMessageUuid} rating={rating} showPinAction={showPinAction} timestamp={createdAt} />
+      ) : null}
     </article>
   );
 }
@@ -388,6 +532,45 @@ export function OfficialComposerDropdown({
     <button className="group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled aria-[expanded=true]:text-[var(--text-uncontained-selected)] aria-[expanded=true]:hover:text-[var(--text-uncontained-selected)] h-small rounded-small text-footnote justify-between pl-p5 pr-p2" type="button">
       <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-[var(--fill-uncontained-default)] group-hover/dd:bg-[var(--fill-uncontained-hover)]" />
       <span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap">{children}</span>
+    </button>
+  );
+}
+
+export function OfficialComposerPill({
+  ariaLabel,
+  children,
+  className = "",
+  icon,
+  onClick,
+  title,
+}: {
+  ariaLabel?: string;
+  children?: ReactNode;
+  className?: string;
+  icon?: string;
+  onClick?: () => void;
+  title?: string;
+}) {
+  return (
+    <button aria-label={ariaLabel} className={`${officialComposerPillClass} ${className}`} onClick={onClick} title={title} type="button">
+      {icon ? <Icon name={icon} size="sm" /> : null}
+      {children}
+    </button>
+  );
+}
+
+export function OfficialComposerSplitPill({
+  children,
+  className = "",
+  onClick,
+}: {
+  children: ReactNode;
+  className?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button className={`${officialComposerSplitPillClass} ${className}`} onClick={onClick} type="button">
+      {children}
     </button>
   );
 }
@@ -487,6 +670,28 @@ function sourceAriaLabel(kind: OfficialSessionSourceKind) {
   }
 }
 
+function formatTranscriptTimestamp(value: string) {
+  const time = Date.parse(value);
+  if (Number.isNaN(time)) return value;
+  const diffSeconds = Math.max(0, Math.round((Date.now() - time) / 1000));
+  if (diffSeconds < 60) return "just now";
+  const diffMinutes = Math.round(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.round(diffHours / 24);
+  if (diffDays < 30) return `${diffDays}d ago`;
+  const diffMonths = Math.round(diffDays / 30);
+  if (diffMonths < 12) return `${diffMonths}mo ago`;
+  return `${Math.round(diffMonths / 12)}y ago`;
+}
+
+function formatTranscriptTimestampTitle(value: string) {
+  const time = Date.parse(value);
+  if (Number.isNaN(time)) return value;
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(new Date(time));
+}
+
 function OfficialSessionTitle({ paneIndex, title }: { paneIndex: number; title: string }) {
   const actions: OfficialDropdownItem[] = [
     { label: "Rename" },
@@ -521,11 +726,38 @@ function OfficialSessionTitle({ paneIndex, title }: { paneIndex: number; title: 
 }
 
 function OfficialTranscriptViewButton({ hideSummary }: { hideSummary: boolean }) {
+  const [textSize, setTextSize] = useState<"s" | "m" | "l">("m");
+  useEffect(() => {
+    document.documentElement.dataset.chatTextSize = textSize;
+    return () => {
+      delete document.documentElement.dataset.chatTextSize;
+    };
+  }, [textSize]);
+
   const items: OfficialDropdownItem[] = [
     { label: "Normal", checked: true },
     { label: "Thinking", checked: false },
     { label: "Verbose", checked: false },
     ...(hideSummary ? [] : [{ label: "Summary", checked: false } satisfies OfficialDropdownItem]),
+    {
+      keepOpen: true,
+      label: null,
+      trailing: (
+        <div role="group" aria-label="Text size" className="flex items-stretch gap-g3 pt-p6 pb-p2 -ml-[2px] -mr-[2px]">
+          {(["s", "m", "l"] as const).map((size) => (
+            <OfficialButton
+              ariaLabel={size === "s" ? "Small text" : size === "m" ? "Medium text" : "Large text"}
+              className="flex-1 aspect-auto"
+              customIcon={<Icon name="TitleCaseFontSize" size={size === "s" ? "xs" : size === "m" ? "sm" : "md"} />}
+              key={size}
+              onClick={() => setTextSize(size)}
+              pressed={textSize === size}
+              variant="contained"
+            />
+          ))}
+        </div>
+      ),
+    },
   ];
   return <OfficialDropdownButton ariaLabel="Transcript view mode" header="Transcript view" icon="NoteSquareLines" items={items} revealChevron="never" />;
 }
