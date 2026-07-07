@@ -1,13 +1,15 @@
-import { createContext, createElement, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { createContext, createElement, forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type Ref } from "react";
+import { Popover } from "@base-ui-components/react/popover";
+import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { EditorContent, useEditor } from "@tiptap/react";
+import type { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { desktopBridge, type SessionSummary } from "../../adapters/desktopBridge";
+import { desktopBridge, type ContextUsage, type SessionSummary } from "../../adapters/desktopBridge";
 import type { ChatMessage, LocalSessionsBridge } from "../../adapters/desktopBridge/types";
 import { Icon } from "../../shell/icons";
 import type { PaneSlot } from "../../stores/paneStore";
@@ -18,11 +20,17 @@ import {
   OfficialChatTileShell,
   OfficialDropdownButton,
   OfficialSessionHeader,
+  OfficialSessionSource,
   OfficialUserMessage,
   type OfficialDropdownItem,
   type OfficialViewPane,
 } from "./OfficialEpitaxyComponents";
+import { OfficialEpitaxyBranchRows } from "./OfficialEpitaxyBranchRows";
 import { createOfficialSessionStreamSmoother, type OfficialStreamSnapshot } from "./officialStreamSmoother";
+import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
+import { OfficialSkillChip } from "./slash/OfficialSkillChip";
+import { OfficialSlashCommandSuggestion } from "./slash/OfficialSlashCommandSuggestion";
+import type { OfficialSlashCommandMenuProps } from "./slash/OfficialSlashTypes";
 
 type EpitaxySessionType = "local" | "remote" | "bridge";
 type SessionSource = "code" | "epitaxy";
@@ -32,6 +40,8 @@ type EpitaxyTranscriptActionContextValue = {
   bridge: LocalSessionsBridge;
   openFile: (target: OfficialFileViewTarget) => void;
   openPreview: (target: OfficialPreviewTarget) => void;
+  openSubagent: (target: OfficialSubagentTarget) => void;
+  openTasks: () => void;
   onNavigate: (path: string) => void;
   reload: () => Promise<void>;
   sessionId?: string;
@@ -52,6 +62,11 @@ type OfficialFileViewTarget = {
   title?: string;
 };
 
+type OfficialSubagentTarget = {
+  description: string;
+  toolUseId: string;
+};
+
 type OfficialSparkAnimation = {
   frameCount: number;
   height: number;
@@ -64,6 +79,32 @@ type EpitaxySessionRef = {
   id: string;
   type: EpitaxySessionType;
 };
+
+type OfficialTranscriptScrollBehavior = ScrollBehavior | "instant";
+
+type OfficialTranscriptHandle = {
+  scrollToBottom: (behavior?: OfficialTranscriptScrollBehavior) => void;
+  scrollToEntry: (entryId: string) => void;
+};
+
+type OfficialTranscriptScrollState = {
+  showBottomFade: boolean;
+  showScrollButton: boolean;
+};
+
+function scrollElementToBottom(node: HTMLElement, behavior?: OfficialTranscriptScrollBehavior) {
+  node.scrollTo({ top: node.scrollHeight, behavior: (behavior ?? "instant") as ScrollBehavior });
+  node.dispatchEvent(new Event("scroll", { bubbles: true }));
+  if (behavior === "smooth") {
+    window.setTimeout(() => {
+      const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+      if (distanceFromBottom > 8) {
+        node.scrollTo({ top: node.scrollHeight, behavior: "auto" });
+      }
+      node.dispatchEvent(new Event("scroll", { bubbles: true }));
+    }, 450);
+  }
+}
 
 type EpitaxyFramePageProps = {
   hideComposer?: boolean;
@@ -211,13 +252,17 @@ function EpitaxyChatPanel({
   sessionType = "local",
   slot,
 }: EpitaxyChatPanelProps) {
-  const { entries, error, isLoading, isResponding, isSessionNotFound, messages, pendingTurnStartedAt, reload, session, source } = useEpitaxySessionData(initialSessionId);
+  const { entries, error, isLoading, isResponding, isSessionNotFound, messages, pendingTurnStartedAt, reload, session, source, streamTokenEstimate } = useEpitaxySessionData(initialSessionId);
   const [activeView, setActiveView] = useState<OfficialViewPane | undefined>(undefined);
   const [fileView, setFileView] = useState<OfficialFileViewTarget | null>(null);
   const [previewTarget, setPreviewTarget] = useState<OfficialPreviewTarget | null>(null);
+  const [subagentView, setSubagentView] = useState<OfficialSubagentTarget | null>(null);
+  const [sidePaneWidth, setSidePaneWidth] = useState<number | undefined>(undefined);
   const title = officialSessionHeaderTitle(session, initialSessionId);
   const effectiveSessionRef = sessionRef ?? (initialSessionId ? { id: initialSessionId, type: sessionType } : null);
   const bridge = bridgeForSource(source, session);
+  const tasks = useMemo(() => parseOfficialTasks(messages), [messages]);
+  const hasRunningTasks = useMemo(() => tasks.some((task) => task.status === "running"), [tasks]);
   const openFile = useCallback((target: OfficialFileViewTarget) => {
     setFileView({ ...target, scrollNonce: Date.now() });
     setActiveView("file");
@@ -226,14 +271,42 @@ function EpitaxyChatPanel({
     setPreviewTarget(target);
     setActiveView("preview");
   }, []);
+  const openSubagent = useCallback((target: OfficialSubagentTarget) => {
+    setSubagentView(target);
+    setActiveView("subagent");
+  }, []);
+  const openTasks = useCallback(() => {
+    setActiveView("tasks");
+  }, []);
+  const openDiff = useCallback(() => {
+    setActiveView("diff");
+  }, []);
+  const transcriptRef = useRef<OfficialTranscriptHandle | null>(null);
+  const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [showBottomFade, setShowBottomFade] = useState(false);
+  const updateTranscriptScrollState = useCallback((state: OfficialTranscriptScrollState) => {
+    setShowScrollButton((current) => current === state.showScrollButton ? current : state.showScrollButton);
+    setShowBottomFade((current) => current === state.showBottomFade ? current : state.showBottomFade);
+  }, []);
+  const scrollTranscriptToBottom = useCallback((behavior?: OfficialTranscriptScrollBehavior) => {
+    if (transcriptRef.current) {
+      transcriptRef.current.scrollToBottom(behavior);
+      return;
+    }
+    const node = transcriptScrollRef.current;
+    if (node) scrollElementToBottom(node, behavior);
+  }, []);
   const transcriptActionContext = useMemo(() => ({
     bridge,
     openFile,
     openPreview,
+    openSubagent,
+    openTasks,
     onNavigate,
     reload,
     sessionId: initialSessionId,
-  }), [bridge, initialSessionId, onNavigate, openFile, openPreview, reload]);
+  }), [bridge, initialSessionId, onNavigate, openFile, openPreview, openSubagent, openTasks, reload]);
   const selectView = useCallback((view: OfficialViewPane) => {
     setActiveView((current) => current === view ? undefined : view);
   }, []);
@@ -242,10 +315,42 @@ function EpitaxyChatPanel({
   useEffect(() => {
     setFileView(null);
     setPreviewTarget(null);
+    setSubagentView(null);
     if (!initialSessionId) {
       setActiveView(undefined);
     }
   }, [initialSessionId]);
+  useEffect(() => {
+    if (!initialSessionId || (entries.length === 0 && !isResponding)) {
+      updateTranscriptScrollState({ showScrollButton: false, showBottomFade: false });
+    }
+  }, [entries.length, initialSessionId, isResponding, updateTranscriptScrollState]);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!initialSessionId) return;
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const isMac = /Mac|iPhone|iPad|iPod/.test(window.navigator.platform);
+      const primaryPressed = isMac ? event.metaKey : event.ctrlKey;
+      const secondaryPressed = isMac ? event.ctrlKey : event.metaKey;
+      if (!primaryPressed || secondaryPressed || event.shiftKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tagName = target.tagName;
+        if (tagName === "INPUT" || tagName === "TEXTAREA" || target.isContentEditable) return;
+      }
+      const node = transcriptScrollRef.current;
+      if (!node) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "ArrowDown") {
+        scrollTranscriptToBottom();
+      } else {
+        node.scrollTop = 0;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [initialSessionId, scrollTranscriptToBottom]);
 
   const chatBody = (
     <>
@@ -253,9 +358,9 @@ function EpitaxyChatPanel({
       <div className="contents">
         <div className="flex-1 min-h-0 relative isolate [--epitaxy-scrim-inset-end:16px]">
           <div aria-hidden="true" className="epitaxy-top-scrim" />
-          <div aria-hidden="true" className="epitaxy-bottom-scrim" style={{ opacity: entries.length > 0 ? 1 : 0 }} />
+          <div aria-hidden="true" className="epitaxy-bottom-scrim" style={{ opacity: showBottomFade ? 1 : 0 }} />
           <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
-            {renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, pendingTurnStartedAt, reload, session })}
+            {renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState: updateTranscriptScrollState, pendingTurnStartedAt, ref: transcriptRef, reload, scrollRef: transcriptScrollRef, session, streamTokenEstimate, tasks })}
           </EpitaxyTranscriptActionContext.Provider>
         </div>
         {!hideComposer && initialSessionId && !isSessionNotFound ? (
@@ -263,6 +368,7 @@ function EpitaxyChatPanel({
             bridge={bridge}
             disabled={isLoading || Boolean(error)}
             isResponding={isResponding}
+            onOpenDiff={openDiff}
             onSubmit={async (text) => {
               await sendMessageToSession(source, initialSessionId, text);
               await reload();
@@ -270,6 +376,8 @@ function EpitaxyChatPanel({
             reload={reload}
             session={session}
             sessionRef={effectiveSessionRef}
+            showScrollButton={showScrollButton}
+            onScrollToBottom={() => scrollTranscriptToBottom("smooth")}
           />
         ) : null}
       </div>
@@ -277,11 +385,13 @@ function EpitaxyChatPanel({
   );
 
   return (
+    <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
     <div className="relative h-full min-w-0 flex">
       <div className="relative h-full min-w-0 flex flex-col flex-1">
         <EpitaxyChatHeader
           activeView={activeView}
           dragHandle={dragHandle}
+          hasRunningTasks={hasRunningTasks}
           isTitleLoading={isLoading && !session}
           isTopLeft={isTopLeft}
           onClose={onClose}
@@ -295,18 +405,22 @@ function EpitaxyChatPanel({
         {chatBody}
       </div>
       {activeView ? (
-          <EpitaxySidePaneTile
-            activeView={activeView}
-            fileView={fileView}
-            isTopLeft={isTopLeft}
-            onClose={() => setActiveView(undefined)}
-            previewTarget={previewTarget}
-            session={session}
-            sessionRef={effectiveSessionRef}
-            source={source}
-          />
+        <EpitaxySidePaneTile
+          activeView={activeView}
+          fileView={fileView}
+          isTopLeft={isTopLeft}
+          onClose={() => setActiveView(undefined)}
+          previewTarget={previewTarget}
+          session={session}
+          sessionRef={effectiveSessionRef}
+          sidePaneWidth={sidePaneWidth}
+          source={source}
+          subagentView={subagentView}
+          onSidePaneWidthChange={setSidePaneWidth}
+        />
       ) : null}
     </div>
+    </EpitaxyTranscriptActionContext.Provider>
   );
 }
 
@@ -319,9 +433,10 @@ function officialSessionHeaderTitle(session: SessionSummary | null, initialSessi
   return title;
 }
 
-function EpitaxyChatHeader({ activeView, dragHandle, isTitleLoading, isTopLeft, onClose, onSessionRemoved, onViewSelect, paneIndex, session, sessionRef, title }: {
+function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, isTitleLoading, isTopLeft, onClose, onSessionRemoved, onViewSelect, paneIndex, session, sessionRef, title }: {
   activeView?: OfficialViewPane;
   dragHandle?: ReactNode;
+  hasRunningTasks?: boolean;
   isTitleLoading: boolean;
   isTopLeft?: boolean;
   onClose?: () => void;
@@ -336,6 +451,7 @@ function EpitaxyChatHeader({ activeView, dragHandle, isTitleLoading, isTopLeft, 
     <OfficialSessionHeader
       activeView={activeView}
       dragHandle={dragHandle}
+      hasRunningTasks={hasRunningTasks}
       isTitleLoading={isTitleLoading}
       isTopLeft={isTopLeft}
       onSessionRemoved={onSessionRemoved}
@@ -372,24 +488,86 @@ function useEpitaxyViewShortcuts(onSelect: (view: OfficialViewPane) => void) {
   }, [onSelect]);
 }
 
+const sidePaneMinWidth = 320;
+const sidePaneMaxWidth = 760;
+const sidePaneMinMainWidth = 360;
+const sidePaneResizeStep = 24;
+const sidePaneResizeHandleSize = 12;
+const sidePaneDefaultRatio = 0.42;
+
+const sidePaneBoundaryHandleStyle: CSSProperties = {
+  position: "relative",
+  zIndex: 1,
+  transform: "translateZ(2px)",
+  padding: 0,
+  outline: "none",
+  border: 0,
+  background: "transparent",
+  touchAction: "none",
+  flex: "none",
+  cursor: "col-resize",
+  alignSelf: "stretch",
+  width: sidePaneResizeHandleSize,
+};
+
+const sidePaneBoundaryAffordanceStyle: CSSProperties = {
+  position: "absolute",
+  left: "50%",
+  top: "50%",
+  borderRadius: 999,
+  transform: "translate(-50%, -50%)",
+  transition: "opacity 120ms ease",
+  width: "var(--tile-resize-thickness)",
+  height: "var(--tile-resize-length)",
+};
+
+function clampSidePaneWidth(width: number, maxWidth = sidePaneMaxWidth) {
+  return Math.max(sidePaneMinWidth, Math.min(maxWidth, Math.round(width)));
+}
+
+function getSidePaneMaxWidth(containerWidth?: number) {
+  const viewportWidth = typeof window === "undefined" ? sidePaneMaxWidth + sidePaneMinMainWidth : window.innerWidth;
+  const usableWidth = Math.max(sidePaneMinWidth, (containerWidth ?? viewportWidth) - sidePaneMinMainWidth);
+  return Math.max(sidePaneMinWidth, Math.min(sidePaneMaxWidth, usableWidth));
+}
+
+function getDefaultSidePaneWidth(containerWidth?: number) {
+  const viewportWidth = typeof window === "undefined" ? sidePaneMaxWidth + sidePaneMinMainWidth : window.innerWidth;
+  const baseWidth = (containerWidth ?? viewportWidth) * sidePaneDefaultRatio;
+  return clampSidePaneWidth(baseWidth, getSidePaneMaxWidth(containerWidth));
+}
+
+function sidePaneWidthToAriaValue(width: number | undefined) {
+  if (width === undefined) return Math.round(sidePaneDefaultRatio * 100);
+  const maxWidth = getSidePaneMaxWidth();
+  const range = Math.max(1, maxWidth - sidePaneMinWidth);
+  return Math.max(0, Math.min(100, Math.round(((width - sidePaneMinWidth) / range) * 100)));
+}
+
 function EpitaxySidePaneTile({
   activeView,
   fileView,
   isTopLeft,
   onClose,
+  onSidePaneWidthChange,
   previewTarget,
   session,
   sessionRef,
+  sidePaneWidth,
   source,
+  subagentView,
 }: {
   activeView: OfficialViewPane;
   fileView: OfficialFileViewTarget | null;
   isTopLeft?: boolean;
   onClose: () => void;
+  onSidePaneWidthChange: (width: number) => void;
   previewTarget: OfficialPreviewTarget | null;
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef | null;
+  sidePaneWidth?: number;
   source: SessionSource | null;
+  subagentView: OfficialSubagentTarget | null;
 }) {
   const codeSurface = activeView === "terminal" || activeView === "diff";
   const bridge = bridgeForSource(source, session);
@@ -437,15 +615,107 @@ function EpitaxySidePaneTile({
   }, []);
 
   const activeTerminalTab = terminalTabs.tabs.find((tab) => tab.id === terminalTabs.activeId) ?? terminalTabs.tabs[0];
+  const asideRef = useRef<HTMLElement | null>(null);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+  const [isResizingSidePane, setIsResizingSidePane] = useState(false);
+  const ariaValueNow = sidePaneWidthToAriaValue(sidePaneWidth);
+  const renderedSidePaneMaxWidth = getSidePaneMaxWidth();
+  const sidePaneStyle = useMemo<CSSProperties>(() => ({
+    height: "100%",
+    maxWidth: renderedSidePaneMaxWidth,
+    minWidth: sidePaneMinWidth,
+    width: sidePaneWidth === undefined ? "42%" : `${sidePaneWidth}px`,
+  }), [renderedSidePaneMaxWidth, sidePaneWidth]);
+  const commitSidePaneWidth = useCallback((width: number, maxWidth?: number) => {
+    onSidePaneWidthChange(clampSidePaneWidth(width, maxWidth));
+  }, [onSidePaneWidthChange]);
+  const readSidePaneWidth = useCallback((containerWidth?: number) => {
+    return sidePaneWidth ?? asideRef.current?.getBoundingClientRect().width ?? getDefaultSidePaneWidth(containerWidth);
+  }, [sidePaneWidth]);
+  const stopResizeListeners = useCallback(() => {
+    resizeCleanupRef.current?.();
+    resizeCleanupRef.current = null;
+    setIsResizingSidePane(false);
+  }, []);
+  const startSidePaneResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    resizeCleanupRef.current?.();
+    const handle = event.currentTarget;
+    const pointerId = event.pointerId;
+    const containerWidth = handle.parentElement?.getBoundingClientRect().width;
+    const maxWidth = getSidePaneMaxWidth(containerWidth);
+    const startX = event.clientX;
+    const startWidth = clampSidePaneWidth(readSidePaneWidth(containerWidth), maxWidth);
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+    try {
+      handle.setPointerCapture(pointerId);
+    } catch {
+      // Pointer capture can fail if the pointer was already released.
+    }
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
+      commitSidePaneWidth(startWidth - (moveEvent.clientX - startX), maxWidth);
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+      document.body.style.userSelect = previousUserSelect;
+      try {
+        handle.releasePointerCapture(pointerId);
+      } catch {
+        // Ignore stale pointer capture after pointerup/cancel.
+      }
+      resizeCleanupRef.current = null;
+      setIsResizingSidePane(false);
+    };
+    resizeCleanupRef.current = handlePointerUp;
+    setIsResizingSidePane(true);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+  }, [commitSidePaneWidth, readSidePaneWidth]);
+  const handleSidePaneResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const containerWidth = event.currentTarget.parentElement?.getBoundingClientRect().width;
+    const maxWidth = getSidePaneMaxWidth(containerWidth);
+    const currentWidth = clampSidePaneWidth(readSidePaneWidth(containerWidth), maxWidth);
+    if (event.key === "Home") {
+      commitSidePaneWidth(sidePaneMinWidth, maxWidth);
+      return;
+    }
+    if (event.key === "End") {
+      commitSidePaneWidth(maxWidth, maxWidth);
+      return;
+    }
+    commitSidePaneWidth(currentWidth + (event.key === "ArrowLeft" ? sidePaneResizeStep : -sidePaneResizeStep), maxWidth);
+  }, [commitSidePaneWidth, readSidePaneWidth]);
+
+  useEffect(() => () => stopResizeListeners(), [stopResizeListeners]);
 
   return (
     <>
-      <div aria-hidden="true" className="relative w-[8px] shrink-0 cursor-col-resize">
-        <div className="absolute inset-y-[8px] left-1/2 w-px -translate-x-1/2 rounded-full bg-t2" />
+      <div
+        aria-label="Resize"
+        aria-orientation="vertical"
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={ariaValueNow}
+        className={`tiles-handle draggable-none hide-focus-ring ${isResizingSidePane ? "is-active" : ""}`}
+        onKeyDown={handleSidePaneResizeKeyDown}
+        onPointerDown={startSidePaneResize}
+        role="separator"
+        style={sidePaneBoundaryHandleStyle}
+        tabIndex={0}
+      >
+        <span aria-hidden="true" className="tiles-handle-affordance" style={sidePaneBoundaryAffordanceStyle} />
       </div>
       <aside
+        ref={asideRef}
         className={`min-w-0 shrink-0 relative isolate flex flex-col rounded-r6${codeSurface ? " epitaxy-code-surface" : ""}`}
-        style={{ height: "100%", maxWidth: 560, minWidth: 320, width: "42%" }}
+        style={sidePaneStyle}
       >
         <div aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated" data-surface="sidebar" />
         <div data-top-left={isTopLeft || undefined} className="relative flex items-center justify-between gap-g6 h-[32px] pl-[8px] pr-[4px] shrink-0">
@@ -456,6 +726,7 @@ function EpitaxySidePaneTile({
               fileView,
               onDiffShowTreeChange: setDiffShowTree,
               onAddTab: addTerminalTab,
+              subagentView,
             onCloseTab: closeTerminalTab,
             onRenameTab: renameTerminalTab,
             onSelectTab: selectTerminalTab,
@@ -467,7 +738,7 @@ function EpitaxySidePaneTile({
           </div>
         </div>
         <div className="flex-1 min-h-0 overflow-hidden rounded-b-r6">
-          <ViewPaneBody activeTerminalTab={activeTerminalTab} activeView={activeView} bridge={bridge} diffShowTree={diffShowTree} fileView={fileView} previewTarget={previewTarget} session={session} sessionRef={sessionRef} />
+          <ViewPaneBody activeTerminalTab={activeTerminalTab} activeView={activeView} bridge={bridge} diffShowTree={diffShowTree} fileView={fileView} previewTarget={previewTarget} session={session} sessionRef={sessionRef} subagentView={subagentView} />
         </div>
       </aside>
     </>
@@ -481,6 +752,7 @@ const viewPaneConfig: Record<OfficialViewPane, { icon: string; label: string }> 
   tasks: { icon: "Blocks", label: "任务" },
   plan: { icon: "CheckList", label: "Plan" },
   file: { icon: "NoteSquareLines", label: "File" },
+  subagent: { icon: "Agent", label: "Agent" },
 };
 
 type TerminalTab = {
@@ -504,6 +776,7 @@ type TerminalTitleState = {
   onCloseTab: (tabId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onSelectTab: (tabId: string) => void;
+  subagentView?: OfficialSubagentTarget | null;
   tabs: TerminalTab[];
 };
 
@@ -569,6 +842,10 @@ function renderSidePaneTitle(activeView: OfficialViewPane, session: SessionSumma
         <span className="text-body text-t7 select-none truncate">{fileTitle}</span>
       </div>
     );
+  }
+
+  if (activeView === "subagent" && terminalState?.subagentView) {
+    return <span className="text-body text-t7 select-none truncate draggable-none pl-[1px] relative z-[1]">{terminalState.subagentView.description}</span>;
   }
 
   const label = activeView === "preview" && session?.title ? "预览" : viewPaneConfig[activeView].label;
@@ -711,7 +988,7 @@ function OfficialPlanHeaderActions({ bridge, plan, session }: { bridge: LocalSes
   );
 }
 
-function ViewPaneBody({ activeTerminalTab, activeView, bridge, diffShowTree, fileView, previewTarget, session, sessionRef }: { activeTerminalTab?: TerminalTab; activeView: OfficialViewPane; bridge: LocalSessionsBridge; diffShowTree: boolean; fileView: OfficialFileViewTarget | null; previewTarget: OfficialPreviewTarget | null; session: SessionSummary | null; sessionRef: EpitaxySessionRef | null }) {
+function ViewPaneBody({ activeTerminalTab, activeView, bridge, diffShowTree, fileView, previewTarget, session, sessionRef, subagentView }: { activeTerminalTab?: TerminalTab; activeView: OfficialViewPane; bridge: LocalSessionsBridge; diffShowTree: boolean; fileView: OfficialFileViewTarget | null; previewTarget: OfficialPreviewTarget | null; session: SessionSummary | null; sessionRef: EpitaxySessionRef | null; subagentView: OfficialSubagentTarget | null }) {
   switch (activeView) {
     case "preview":
       return <OfficialPreviewPane bridge={bridge} previewTarget={previewTarget} session={session} sessionRef={sessionRef} />;
@@ -725,7 +1002,54 @@ function ViewPaneBody({ activeTerminalTab, activeView, bridge, diffShowTree, fil
       return sessionRef ? <OfficialTasksPane bridge={bridge} session={session} sessionRef={sessionRef} /> : null;
     case "plan":
       return sessionRef ? <OfficialPlanPane session={session} /> : null;
+    case "subagent":
+      return sessionRef && subagentView ? <OfficialSubagentPane session={session} subagentView={subagentView} /> : null;
   }
+}
+
+function OfficialSubagentPane({ session, subagentView }: { session: SessionSummary | null; subagentView: OfficialSubagentTarget }) {
+  const messages = session?.messages ?? [];
+  const entries = useMemo(() => parseOfficialSubagentTranscriptEntries(messages, subagentView.toolUseId), [messages, subagentView.toolUseId]);
+  const task = useMemo(() => parseOfficialTasks(messages).find((item) => item.toolUseId === subagentView.toolUseId), [messages, subagentView.toolUseId]);
+  const isRunning = task?.status === "running";
+
+  if (entries.length === 0 && task && (task.prompt || task.result)) {
+    return (
+      <div className="h-full overflow-y-auto px-p8 py-p6 select-text">
+        <div className="epitaxy-chat-column flex flex-col gap-[var(--chat-turn-gap)]">
+          {task.prompt ? <OfficialUserEntryMessage entry={{ author: "user", id: `${subagentView.toolUseId}-prompt`, items: [{ id: `${subagentView.toolUseId}-prompt-t`, kind: "text", text: task.prompt }] }} /> : null}
+          {task.result ? (
+            <div className="epitaxy-markdown">
+              <MarkdownContent text={task.result} />
+            </div>
+          ) : task.status === "failed" || task.status === "stopped" ? (
+            <p className="text-body text-t6">No result — task {task.status}.</p>
+          ) : (
+            <div className="flex items-center h-h3"><OfficialSparkSpinner size="m" /></div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (entries.length !== 0 || isRunning) {
+    return (
+      <div className="h-full overflow-y-auto px-p8 py-p6">
+        <div className="epitaxy-chat-column flex flex-col gap-[var(--chat-turn-gap)]">
+          {entries.map((entry, index) => entry.author === "user"
+            ? <OfficialUserEntryMessage entry={entry} key={entry.id} />
+            : <OfficialAssistantEntryMessage entry={entry} isStreaming={isRunning && index === entries.length - 1} key={entry.id} />)}
+          <div className="flex items-center h-h3"><OfficialSparkSpinner isWorking={isRunning} size="m" /></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-center h-full p-p8">
+      <p className="text-body text-t6 text-pretty max-w-[40ch]">No activity yet.</p>
+    </div>
+  );
 }
 
 type OfficialTaskStatus = "completed" | "failed" | "running" | "stopped";
@@ -759,8 +1083,9 @@ type OfficialBackgroundTask = {
 
 function OfficialTasksPane({ bridge, session, sessionRef }: { bridge: LocalSessionsBridge; session: SessionSummary | null; sessionRef: EpitaxySessionRef }) {
   const tasks = useMemo(() => parseOfficialTasks(session?.messages ?? []), [session?.messages]);
-  const running = useMemo(() => tasks.filter((task) => task.status === "running").sort((left, right) => (left.startedAt ?? Infinity) - (right.startedAt ?? Infinity) || left.index - right.index), [tasks]);
-  const finished = useMemo(() => tasks.filter((task) => task.status !== "running").sort((left, right) => (right.completedAt ?? -Infinity) - (left.completedAt ?? -Infinity) || left.index - right.index), [tasks]);
+  const visibleTasks = useMemo(() => tasks.filter((task) => task.taskType !== "dream"), [tasks]);
+  const running = useMemo(() => visibleTasks.filter((task) => task.status === "running").sort((left, right) => (left.startedAt ?? Infinity) - (right.startedAt ?? Infinity) || left.index - right.index), [visibleTasks]);
+  const finished = useMemo(() => visibleTasks.filter((task) => task.status !== "running").sort((left, right) => (right.completedAt ?? -Infinity) - (left.completedAt ?? -Infinity) || left.index - right.index), [visibleTasks]);
   const stopTask = useCallback((taskId: string) => {
     void bridge.stopTask?.(sessionRef.id, taskId);
   }, [bridge, sessionRef.id]);
@@ -780,36 +1105,53 @@ function OfficialTasksPane({ bridge, session, sessionRef }: { bridge: LocalSessi
 
 function OfficialTasksEmpty() {
   return (
-    <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-g3 text-center text-t6">
+    <div className="flex flex-col items-center justify-center gap-g4 py-[64px] text-body text-t5">
       <Icon name="Blocks" size="lg" />
-      <div className="text-body">No tasks.</div>
+      <span>No tasks.</span>
     </div>
   );
 }
 
-function OfficialTaskSection({ heading, onStop, tasks }: { heading: string; onStop?: (taskId: string) => void; tasks: OfficialBackgroundTask[] }) {
+const OfficialTaskSection = memo(function OfficialTaskSection({ heading, onStop, tasks }: { heading: string; onStop?: (taskId: string) => void; tasks: OfficialBackgroundTask[] }) {
   if (tasks.length === 0) return null;
   return (
-    <section className="flex flex-col gap-g3">
+    <motion.section className="flex flex-col gap-g3" layout="position" transition={officialTaskLayoutTransition}>
       <h3 className="text-footnote text-t6">{heading}</h3>
-      {tasks.map((task) => <OfficialTaskCard key={task.taskId} onStop={onStop} task={task} />)}
-    </section>
+      {tasks.map((task) => (
+        <motion.div key={task.taskId} layout="position" transition={officialTaskLayoutTransition}>
+          <OfficialTaskCard onStop={onStop} task={task} />
+        </motion.div>
+      ))}
+    </motion.section>
   );
-}
+});
 
-function OfficialTaskCard({ onStop, task }: { onStop?: (taskId: string) => void; task: OfficialBackgroundTask }) {
+const officialTaskLayoutTransition = { type: "spring", stiffness: 500, damping: 40 } as const;
+const officialTaskSeparator = " · ";
+
+const OfficialTaskCard = memo(function OfficialTaskCard({ onStop, task }: { onStop?: (taskId: string) => void; task: OfficialBackgroundTask }) {
+  const actions = useContext(EpitaxyTranscriptActionContext);
   const [expanded, setExpanded] = useState(false);
   const kind = officialTaskKind(task.taskType);
-  const usage = task.usage ? [formatDuration(task.usage.durationMs), formatTokens(task.usage.totalTokens), `${task.usage.toolUses} ${task.usage.toolUses === 1 ? "tool use" : "tool uses"}`].join(" · ") : null;
-  const canExpand = Boolean(task.summary || task.workflowProgress?.length);
+  const usage = task.usage ? [formatDuration(task.usage.durationMs), formatTokens(task.usage.totalTokens), `${task.usage.toolUses} ${task.usage.toolUses === 1 ? "tool use" : "tool uses"}`].join(officialTaskSeparator) : null;
+  const canOpenSubagent = kind.kind === "agent" && Boolean(task.toolUseId && actions?.openSubagent);
+  const canExpand = !canOpenSubagent && Boolean(task.summary || task.workflowProgress?.length);
+  const canActivate = canOpenSubagent || canExpand;
   const canStop = task.status === "running" && Boolean(onStop);
+  const activate = () => {
+    if (canOpenSubagent && task.toolUseId && actions?.openSubagent) {
+      actions.openSubagent({ description: task.description, toolUseId: task.toolUseId });
+      return;
+    }
+    if (canExpand) setExpanded((value) => !value);
+  };
   return (
-    <div className={`group flex flex-col rounded-r6 bg-t1 ${canExpand ? "hover:bg-t2 focus-within:bg-t2" : ""}`}>
+    <div className={`group flex flex-col rounded-r6 bg-t1 ${canActivate ? "hover:bg-t2 focus-within:bg-t2" : ""}`}>
       <div className="flex items-center gap-g6 pl-p6 pr-p8 py-p6">
         <button
           type="button"
-          onClick={() => canExpand && setExpanded((value) => !value)}
-          disabled={!canExpand}
+          onClick={activate}
+          disabled={!canActivate}
           aria-expanded={canExpand ? expanded : undefined}
           aria-label={`Background task: ${task.description}`}
           className="flex-1 min-w-0 flex items-start gap-g6 text-left outline-none hide-focus-ring ring-focus disabled:cursor-default"
@@ -820,18 +1162,18 @@ function OfficialTaskCard({ onStop, task }: { onStop?: (taskId: string) => void;
           <span className="flex-1 min-w-0 flex flex-col gap-g4 pb-p2">
             <span className="min-w-0 flex items-center gap-g2 text-body text-t9">
               <span className="truncate">{task.description}</span>
-              {canExpand ? <Icon name={expanded ? "ChevronDownMedium" : "ChevronRightMedium"} size="sm" className="shrink-0 text-t6" /> : null}
+              {canActivate ? <Icon name={canExpand && expanded ? "ChevronDownMedium" : "ChevronRightMedium"} size="sm" className="shrink-0 text-t6" /> : null}
             </span>
             <span className="text-footnote text-t6 truncate">
               <span className="text-t7">{kind.label}</span>
-              <span> · </span>
+              <span>{officialTaskSeparator}</span>
               <OfficialTaskStatusLabel task={task} />
-              {usage ? <><span> · </span>{usage}</> : null}
+              {usage ? <><span>{officialTaskSeparator}</span>{usage}</> : null}
             </span>
           </span>
         </button>
         {canStop ? (
-          <OfficialButton ariaLabel="Stop this task" onClick={() => onStop?.(task.taskId)} size="small" variant="contained">Stop</OfficialButton>
+          <OfficialButton ariaLabel="Stop this task" className="min-w-[44px] justify-center" onClick={() => onStop?.(task.taskId)} size="small" variant="contained">Stop</OfficialButton>
         ) : null}
       </div>
       {expanded && canExpand ? (
@@ -842,12 +1184,12 @@ function OfficialTaskCard({ onStop, task }: { onStop?: (taskId: string) => void;
       ) : null}
     </div>
   );
-}
+});
 
 function OfficialTaskStatusIcon({ status }: { status: OfficialTaskStatus }) {
-  if (status === "completed") return <Icon name="CircleCheck" size="sm" />;
-  if (status === "failed") return <Icon name="XCrossCloseMedium" size="sm" className="text-extended-pink" />;
-  if (status === "stopped") return <Icon name="Stop" size="sm" />;
+  if (status === "completed") return <Icon name="CircleCheck" size="md" className="text-t6" />;
+  if (status === "failed") return <Icon name="XCrossCloseMedium" size="md" className="text-extended-pink" />;
+  if (status === "stopped") return <Icon name="Hand4FingerStop" size="md" className="text-t6" />;
   return <OfficialSpinner />;
 }
 
@@ -866,7 +1208,7 @@ function OfficialWorkflowProgress({ progress }: { progress: NonNullable<Official
       ) : (
         <li className="-ml-[calc(12px+var(--g3))] flex items-center gap-g3 text-footnote text-t6" key={`agent-${item.index}`}>
           <span className="flex w-[12px] shrink-0 translate-y-px justify-center">
-            {item.state === "done" ? <Icon name="CircleCheck" size="sm" /> : item.state === "error" ? <Icon name="XCrossCloseMedium" size="sm" className="text-extended-pink" /> : <OfficialSpinner />}
+            {item.state === "done" ? <Icon name="CircleCheck" size="xs" /> : item.state === "error" ? <Icon name="XCrossCloseMedium" size="xs" className="text-extended-pink" /> : <OfficialSpinner animate={item.state !== "start"} size="m" />}
           </span>
           <span className="truncate">{item.label}</span>
         </li>
@@ -1275,159 +1617,239 @@ function DiffCodeLine({ line, lineNumber, muted, variant }: { line: string; line
   );
 }
 
+type OfficialShellTerminalEntry = {
+  closed: boolean;
+  fitAddon: FitAddon;
+  fitted: boolean;
+  host: HTMLDivElement;
+  pendingReplay?: string;
+  ptyStarted: boolean;
+  terminal: Terminal;
+  transport: LocalSessionsBridge;
+};
+
+const officialShellTerminalCache = new Map<string, OfficialShellTerminalEntry>();
+const officialShellSubscribedBridges = new WeakSet<LocalSessionsBridge>();
+const officialShellTerminalCacheLimit = 16;
+
+function ensureOfficialShellBridgeSubscription(bridge: LocalSessionsBridge) {
+  if (officialShellSubscribedBridges.has(bridge)) return;
+  officialShellSubscribedBridges.add(bridge);
+  bridge.onShellPtyEvent?.((event) => {
+    const entry = officialShellTerminalCache.get(event.sessionId);
+    if (!entry) return;
+    if (event.type === "shell_pty_data" && event.data) {
+      if (entry.fitted) entry.terminal.write(event.data);
+      else entry.pendingReplay = (entry.pendingReplay ?? "") + event.data;
+      return;
+    }
+    if (event.type === "shell_pty_close") {
+      entry.closed = true;
+      entry.terminal.dispose();
+      officialShellTerminalCache.delete(event.sessionId);
+    }
+  });
+}
+
+function disposeOfficialShellTerminal(ptyKey: string, stopPty = false) {
+  const entry = officialShellTerminalCache.get(ptyKey);
+  if (!entry) return;
+  if (stopPty && entry.ptyStarted) void entry.transport.stopShellPty?.(ptyKey);
+  entry.terminal.dispose();
+  entry.host.remove();
+  officialShellTerminalCache.delete(ptyKey);
+}
+
+function replayOfficialShellBuffer(entry: OfficialShellTerminalEntry, buffered: string | undefined) {
+  if (buffered === undefined) return;
+  entry.terminal.write(terminalReconnectReplay + buffered);
+}
+
+async function ensureOfficialShellTerminal(ptyKey: string, bridge: LocalSessionsBridge): Promise<OfficialShellTerminalEntry> {
+  ensureOfficialShellBridgeSubscription(bridge);
+  const cached = officialShellTerminalCache.get(ptyKey);
+  if (cached && !cached.closed) {
+    officialShellTerminalCache.delete(ptyKey);
+    officialShellTerminalCache.set(ptyKey, cached);
+    return cached;
+  }
+  if (cached) disposeOfficialShellTerminal(ptyKey);
+  if (officialShellTerminalCache.size >= officialShellTerminalCacheLimit) {
+    const oldestKey = officialShellTerminalCache.keys().next().value;
+    if (oldestKey !== undefined) disposeOfficialShellTerminal(oldestKey, true);
+  }
+
+  const host = document.createElement("div");
+  host.style.height = "100%";
+  host.style.width = "100%";
+  const terminal = new Terminal({
+    cursorBlink: true,
+    fontFamily: "\"SF Mono\", Menlo, Monaco, \"Courier New\", monospace",
+    fontSize: 12,
+    scrollback: 1000,
+    theme: officialLightTerminalTheme,
+  });
+  terminal.attachCustomKeyEventHandler((event) => {
+    if (event.type !== "keydown") return true;
+    if (event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.code === "Backquote") return false;
+    if (event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && (event.code === "BracketLeft" || event.code === "BracketRight")) {
+      event.preventDefault();
+      if (!event.repeat) {
+        if (event.code === "BracketLeft") window.history.back();
+        else window.history.forward();
+      }
+      return false;
+    }
+    if ((event.metaKey || (event.ctrlKey && event.shiftKey)) && event.code === "KeyC" && terminal.hasSelection()) {
+      event.preventDefault();
+      void navigator.clipboard.writeText(terminal.getSelection()).catch(() => {});
+      return false;
+    }
+    return true;
+  });
+  const fitAddon = new FitAddon();
+  terminal.loadAddon(fitAddon);
+  terminal.open(host);
+  try {
+    const webglAddon = new WebglAddon();
+    webglAddon.onContextLoss(() => webglAddon.dispose());
+    terminal.loadAddon(webglAddon);
+  } catch (error) {
+    console.warn("WebGL terminal renderer unavailable, using DOM", error);
+  }
+  terminal.onData((data) => {
+    void bridge.writeShellPty?.(ptyKey, data);
+  });
+  const entry: OfficialShellTerminalEntry = { closed: false, fitAddon, fitted: false, host, ptyStarted: false, terminal, transport: bridge };
+  officialShellTerminalCache.set(ptyKey, entry);
+  return entry;
+}
+
+function officialShellPtyError(error: string | undefined, ptyKey: string, sessionId: string) {
+  return ptyKey !== sessionId && error === "Session not found"
+    ? "Additional terminal tabs require a newer Claude desktop app. Restart Claude to update."
+    : error ?? "Failed to start shell";
+}
+
 function OfficialShellPtyPane({ bridge, ptyKey, sessionRef }: { bridge: LocalSessionsBridge; ptyKey: string; sessionRef: EpitaxySessionRef }) {
+  const [closed, setClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [restartNonce, setRestartNonce] = useState(0);
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const terminalRef = useRef<{ fitAddon: FitAddon; terminal: Terminal } | null>(null);
-  const bufferRef = useRef("");
+  const terminalRef = useRef<OfficialShellTerminalEntry | null>(null);
 
   useEffect(() => {
     let alive = true;
-    let started = false;
     let resizeFrame = 0;
     let resizeObserver: ResizeObserver | null = null;
-    let pollTimer = 0;
-    let dataDisposable: { dispose: () => void } | undefined;
+    let selectionDisposable: { dispose: () => void } | undefined;
+    setClosed(false);
     setError(null);
-
-    bufferRef.current = "";
     hostRef.current?.replaceChildren();
 
-    const terminal = new Terminal({
-      cursorBlink: true,
-      fontFamily: "\"SF Mono\", Menlo, Monaco, \"Courier New\", monospace",
-      fontSize: 12,
-      scrollback: 1000,
-      theme: officialLightTerminalTheme,
-    });
-    terminal.attachCustomKeyEventHandler((event) => {
-      if (event.type !== "keydown") return true;
-      if (event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.code === "Backquote") return false;
-      if (event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && (event.code === "BracketLeft" || event.code === "BracketRight")) {
-        event.preventDefault();
-        if (!event.repeat) {
-          if (event.code === "BracketLeft") window.history.back();
-          else window.history.forward();
-        }
-        return false;
-      }
-      if ((event.metaKey || (event.ctrlKey && event.shiftKey)) && event.code === "KeyC" && terminal.hasSelection()) {
-        event.preventDefault();
-        void navigator.clipboard.writeText(terminal.getSelection()).catch(() => {});
-        return false;
-      }
-      return true;
-    });
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    try {
-      const webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => webglAddon.dispose());
-      terminal.loadAddon(webglAddon);
-    } catch (error) {
-      console.warn("WebGL terminal renderer unavailable, using DOM", error);
-    }
-    terminalRef.current = { fitAddon, terminal };
-
-    if (hostRef.current) terminal.open(hostRef.current);
-    dataDisposable = terminal.onData((data) => {
-      void bridge.writeShellPty?.(ptyKey, data);
+    const closeUnsubscribe = bridge.onShellPtyEvent?.((event) => {
+      if (event.sessionId === ptyKey && event.type === "shell_pty_close") setClosed(true);
     });
 
-    const unsubscribe = bridge.onShellPtyEvent?.((event) => {
-      if (event.sessionId !== ptyKey) return;
-      if (event.type === "shell_pty_data" && event.data) {
-        bufferRef.current += event.data;
-        terminal.write(event.data);
-      }
-      if (event.type === "shell_pty_close") setError("Shell exited.");
-    });
-
-    const replayBufferedOutput = (nextBuffer?: string) => {
-      if (!nextBuffer || nextBuffer === bufferRef.current) return;
-      if (nextBuffer.startsWith(bufferRef.current)) {
-        terminal.write(nextBuffer.slice(bufferRef.current.length));
-      } else {
-        terminal.write(terminalReconnectReplay + nextBuffer);
-      }
-      bufferRef.current = nextBuffer;
-    };
-
-    const syncBuffer = () => {
-      void bridge.getShellPtyBuffer?.(ptyKey).then((nextBuffer) => {
-        if (alive) replayBufferedOutput(nextBuffer);
-      }).catch(() => {});
-    };
-
-    const startPty = () => {
-      if (started) return;
-      started = true;
-      try {
-        fitAddon.fit();
-      } catch {
-        // xterm cannot fit before layout is available; ResizeObserver will retry.
-      }
-      const { cols, rows } = terminal;
-      void bridge.startShellPty?.(ptyKey, Math.max(cols, 80), Math.max(rows, 24)).then((result) => {
-        if (!alive) return;
-        if (!result?.ok) {
-          setError(result?.error ?? "Failed to start shell");
-          return;
-        }
-        replayBufferedOutput(result.buffered);
-        requestAnimationFrame(() => terminal.focus());
-      }).catch((err) => {
-        if (alive) setError(err instanceof Error ? err.message : "Failed to start shell");
-      });
-    };
-
-    const refit = () => {
+    const refitAndStart = () => {
       resizeFrame = 0;
-      if (!alive || !hostRef.current || hostRef.current.offsetHeight === 0) return;
+      const entry = terminalRef.current;
+      if (!alive || !entry || entry.closed || !hostRef.current || hostRef.current.offsetHeight === 0) return;
       try {
-        fitAddon.fit();
+        entry.fitAddon.fit();
       } catch {
         return;
       }
-      const { cols, rows } = terminal;
-      if (cols > 0 && rows > 0) {
-        if (started) void bridge.resizeShellPty?.(ptyKey, cols, rows);
-        else startPty();
+      const { cols, rows } = entry.terminal;
+      if (cols <= 0 || rows <= 0) return;
+      entry.fitted = true;
+      if (entry.ptyStarted) {
+        void bridge.resizeShellPty?.(ptyKey, cols, rows);
+        if (entry.pendingReplay !== undefined) {
+          entry.terminal.write(entry.pendingReplay);
+          entry.pendingReplay = undefined;
+          entry.terminal.focus();
+        }
+        return;
       }
+      entry.ptyStarted = true;
+      void bridge.startShellPty?.(ptyKey, cols, rows).then((result) => {
+        if (!alive) return;
+        if (!result?.ok) {
+          entry.ptyStarted = false;
+          setError(officialShellPtyError(result?.error, ptyKey, sessionRef.id));
+          return;
+        }
+        replayOfficialShellBuffer(entry, result.buffered);
+        if (entry.pendingReplay !== undefined) {
+          entry.terminal.write(entry.pendingReplay);
+          entry.pendingReplay = undefined;
+        }
+        entry.terminal.focus();
+      }).catch(() => {
+        entry.ptyStarted = false;
+        if (alive) setError("Failed to start shell");
+      });
     };
 
-    if (hostRef.current) {
+    ensureOfficialShellTerminal(ptyKey, bridge).then((entry) => {
+      if (!alive || !hostRef.current) return;
+      terminalRef.current = entry;
+      hostRef.current.replaceChildren(entry.host);
+      setClosed(entry.closed);
+      if (entry.closed) return;
+      selectionDisposable = entry.terminal.onSelectionChange(() => {
+        // Official keeps terminal selection live for contextual actions. The current pane
+        // does not yet expose that action surface, but keeping this hook matches the
+        // terminal lifecycle and avoids browser-level selection stealing focus.
+      });
       resizeObserver = new ResizeObserver(() => {
-        if (!resizeFrame) resizeFrame = requestAnimationFrame(refit);
+        if (!resizeFrame) resizeFrame = requestAnimationFrame(refitAndStart);
       });
       resizeObserver.observe(hostRef.current);
-    }
-
-    requestAnimationFrame(refit);
-    pollTimer = window.setInterval(syncBuffer, 600);
+      requestAnimationFrame(refitAndStart);
+    }).catch((err) => {
+      if (alive) setError(err instanceof Error ? err.message : "Failed to load terminal");
+    });
 
     return () => {
       alive = false;
+      closeUnsubscribe?.();
       if (resizeFrame) cancelAnimationFrame(resizeFrame);
-      if (pollTimer) window.clearInterval(pollTimer);
       resizeObserver?.disconnect();
-      unsubscribe?.();
-      dataDisposable?.dispose();
-      terminal.dispose();
+      selectionDisposable?.dispose();
+      terminalRef.current?.host.remove();
       terminalRef.current = null;
     };
-  }, [bridge, ptyKey, sessionRef.id]);
+  }, [bridge, ptyKey, restartNonce, sessionRef.id]);
 
+  const restartShell = useCallback(() => {
+    disposeOfficialShellTerminal(ptyKey);
+    setClosed(false);
+    setError(null);
+    setRestartNonce((value) => value + 1);
+  }, [ptyKey]);
+
+  const hidden = Boolean(error || closed);
   return (
     <div style={{ height: "100%", padding: "var(--p6)", backgroundColor: officialLightTerminalTheme.background }} className="relative w-full">
       <div
         ref={hostRef}
         className="h-full w-full [&_.xterm-viewport]:!bg-transparent [&_textarea]:[caret-color:transparent]"
+        style={{ display: hidden ? "none" : undefined }}
         onMouseDown={() => terminalRef.current?.terminal.focus()}
       />
       {error ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-bg-100 text-text-300">
+          <p className="text-sm max-w-[320px] px-4 text-center text-balance">{error}</p>
+        </div>
+      ) : null}
+      {!error && closed ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-g3 bg-bg-100 text-text-400">
-          <p className="text-body text-t6">{error}</p>
+          <p className="text-body text-t6">Shell exited.</p>
+          <button type="button" onClick={restartShell} className="rounded-md border-0.5 border-border-300 bg-bg-000 px-3 py-1.5 text-xs text-text-200 hover:bg-bg-200 transition-colors">
+            Restart shell
+          </button>
         </div>
       ) : null}
     </div>
@@ -1665,11 +2087,12 @@ function isOfficialTaskEvent(raw: Record<string, unknown>) {
 function officialTaskKind(taskType?: string) {
   switch (taskType) {
     case "local_agent":
-    case "remote_agent":
     case "in_process_teammate":
       return { kind: "agent", label: "Agent" };
+    case "remote_agent":
+      return { kind: "remote_agent", label: "Remote agent" };
     case "local_bash":
-      return { kind: "bash", label: "Background command" };
+      return { kind: "bash", label: "Bash" };
     case "local_workflow":
       return { kind: "workflow", label: "Workflow" };
     case "monitor_mcp":
@@ -1762,14 +2185,14 @@ function bridgeForSource(source: SessionSource | null, session: SessionSummary |
   return desktopBridge.LocalSessions;
 }
 
-function OfficialSpinner({ className = "", inheritColor = false, size = "m" }: { className?: string; inheritColor?: boolean; size?: "s" | "m" | "l" }) {
+function OfficialSpinner({ animate = true, className = "", inheritColor = false, size = "m" }: { animate?: boolean; className?: string; inheritColor?: boolean; size?: "s" | "m" | "l" }) {
   const config = size === "s" ? { box: 12, stroke: 1.5 } : size === "l" ? { box: 20, stroke: 2 } : { box: 16, stroke: 1.75 };
   const color = inheritColor ? "currentColor" : "var(--cds-text-muted, var(--t6))";
   const mask = `radial-gradient(farthest-side, transparent calc(100% - ${config.stroke}px), #000 calc(100% - ${config.stroke - 0.5}px))`;
   return (
     <span data-cds="Spinner" className={`relative inline-block shrink-0 align-middle ${className}`} style={{ height: config.box, width: config.box }} aria-hidden="true">
       <span className="absolute inset-0 rounded-full" style={{ border: `${config.stroke}px solid var(--cds-border, var(--t2))` }} />
-      <span className="absolute inset-0 rounded-full animate-[spin_2s_linear_infinite]" style={{ background: `conic-gradient(transparent 40%, ${color})`, WebkitMask: mask, mask }} />
+      <span className={`absolute inset-0 rounded-full ${animate ? "animate-[spin_2s_linear_infinite]" : ""}`} style={{ background: `conic-gradient(transparent 40%, ${color})`, WebkitMask: mask, mask }} />
     </span>
   );
 }
@@ -1797,7 +2220,7 @@ function OfficialSparkSpinner({ className = "", isWorking = true, size = "m" }: 
   );
 }
 
-function OfficialWorkingStatus({ isWorking, sessionId: _sessionId, startedAt }: { isWorking: boolean; sessionId?: string; startedAt?: number | null }) {
+function OfficialWorkingStatus({ isWorking, sessionId: _sessionId, startedAt, tokenEstimate = 0 }: { isWorking: boolean; sessionId?: string; startedAt?: number | null; tokenEstimate?: number }) {
   const startedAtRef = useRef(startedAt ?? Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -1817,11 +2240,19 @@ function OfficialWorkingStatus({ isWorking, sessionId: _sessionId, startedAt }: 
   if (!isWorking) return null;
 
   const showMeta = isWorking && elapsedSeconds >= 2;
+  const showTokens = showMeta && tokenEstimate > 0;
   return (
     <div className="flex items-center gap-[16px] h-h3">
       <OfficialSparkSpinner isWorking={isWorking} size="m" />
       <div className={`flex items-center text-footnote text-assistant-secondary tabular-nums shrink-0 transition-opacity ${showMeta ? "opacity-100" : "opacity-0"}`}>
         {formatElapsedSeconds(elapsedSeconds)}
+        {showTokens ? (
+          <>
+            {" · "}
+            <Icon name="ArrowDown" size="xs" />
+            {formatGeneratedTokenCount(tokenEstimate)} tokens
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -1834,7 +2265,11 @@ function formatElapsedSeconds(seconds: number) {
   return remaining ? `${minutes}m ${remaining}s` : `${minutes}m`;
 }
 
-function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, pendingTurnStartedAt, reload, session }: {
+function formatGeneratedTokenCount(tokens: number) {
+  return tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
+}
+
+function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState, pendingTurnStartedAt, ref, reload, scrollRef, session, streamTokenEstimate, tasks }: {
   entries: TranscriptEntry[];
   error: Error | null;
   initialSessionId?: string;
@@ -1842,16 +2277,29 @@ function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isR
   isResponding: boolean;
   isSessionNotFound: boolean;
   landingBody?: ReactNode;
+  onScrollState: (state: OfficialTranscriptScrollState) => void;
   pendingTurnStartedAt?: number | null;
+  ref: Ref<OfficialTranscriptHandle>;
   reload: () => Promise<void>;
+  scrollRef: MutableRefObject<HTMLDivElement | null>;
   session: SessionSummary | null;
+  streamTokenEstimate: number;
+  tasks: OfficialBackgroundTask[];
 }) {
   if (isSessionNotFound) return <SessionNotFound onBack={reload} />;
   if (error && entries.length === 0) return <SessionError error={error} onRetry={reload} />;
   if (!initialSessionId) return <div className="h-full overflow-y-auto overflow-x-hidden">{landingBody ?? null}</div>;
-  if (isLoading && entries.length === 0 && !session) return <Transcript entries={[]} isResponding={false} pendingTurnStartedAt={pendingTurnStartedAt} sessionId={initialSessionId} />;
+  const transcriptKey = `${initialSessionId}:messages`;
+  if (isLoading && entries.length === 0 && !session) {
+    return (
+      <div role="status" className="h-full flex items-center justify-center text-t5">
+        <OfficialSparkSpinner isWorking size="l" />
+        <span className="sr-only">Loading conversation</span>
+      </div>
+    );
+  }
   if (entries.length === 0 && !isResponding) return <div className="h-full flex items-center justify-center text-body text-t5">No messages yet.</div>;
-  return <Transcript entries={entries} isResponding={isResponding} pendingTurnStartedAt={pendingTurnStartedAt} sessionId={initialSessionId} />;
+  return <Transcript key={transcriptKey} entries={entries} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} />;
 }
 
 type TranscriptRow =
@@ -1859,42 +2307,111 @@ type TranscriptRow =
   | { id: string; kind: "loader" }
   | { id: string; kind: "running-tasks" };
 
-function Transcript({ entries, isResponding, pendingTurnStartedAt, sessionId }: { entries: TranscriptEntry[]; isResponding: boolean; pendingTurnStartedAt?: number | null; sessionId?: string }) {
-  const parentRef = useRef<HTMLDivElement | null>(null);
+type OfficialTranscriptRestore = {
+  anchorKey?: string;
+  anchorOffsetPx: number;
+  isPinned: boolean;
+  measurements: VirtualItem[];
+};
+
+const officialTranscriptScrollRestores = new Map<string, OfficialTranscriptRestore>();
+
+type TranscriptProps = {
+  entries: TranscriptEntry[];
+  isResponding: boolean;
+  onScrollState: (state: OfficialTranscriptScrollState) => void;
+  pendingTurnStartedAt?: number | null;
+  restoreKey?: string;
+  scrollRef: MutableRefObject<HTMLDivElement | null>;
+  sessionId?: string;
+  streamTokenEstimate: number;
+  tasks: OfficialBackgroundTask[];
+};
+
+const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isResponding, onScrollState, pendingTurnStartedAt, restoreKey, scrollRef, sessionId, streamTokenEstimate, tasks }, ref) {
+  const rowsRef = useRef<TranscriptRow[]>([]);
   const initialCount = useRef(entries.length);
   const rows = useMemo(() => buildTranscriptRows(entries), [entries]);
   const lastEntryIdx = entries.length - 1;
   const lastTextLength = entries.at(-1)?.items.flatMap((item) => item.kind === "text" ? [item.text] : []).join("\n").length ?? 0;
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    estimateSize: (index) => estimateTranscriptRowSize(rows[index]),
-    getScrollElement: () => parentRef.current,
+  const officialVirtualizer = useOfficialTranscriptVirtualizer({
+    estimateSize: estimateTranscriptRowSize,
+    getKey: (row) => row.id,
+    items: rows,
     overscan: 6,
     paddingEnd: 48,
     paddingStart: 48,
+    restoreKey,
+    useFlushSync: false,
   });
-  const virtualItems = rowVirtualizer.getVirtualItems();
+  const virtualItems = officialVirtualizer.virtualItems;
   const translateY = virtualItems[0]?.start ?? 0;
 
   useLayoutEffect(() => {
-    const node = parentRef.current;
-    if (!node) return;
-    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-    if (isResponding || distanceFromBottom < 160) {
-      rowVirtualizer.scrollToIndex(Math.max(0, rows.length - 1), { align: "end" });
+    rowsRef.current = rows;
+  }, [rows]);
+
+  useLayoutEffect(() => {
+    scrollRef.current = officialVirtualizer.scrollRef.current;
+    return () => {
+      scrollRef.current = null;
+    };
+  }, [officialVirtualizer.scrollRef, scrollRef]);
+
+  useLayoutEffect(() => {
+    const node = officialVirtualizer.scrollRef.current;
+    const sizer = officialVirtualizer.sizerRef.current;
+    if (!node) return undefined;
+    const updateScrollState = () => {
+      if (node.offsetParent === null) return;
+      const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+      onScrollState({ showScrollButton: distanceFromBottom > 200, showBottomFade: distanceFromBottom > 8 });
+    };
+    node.addEventListener("scroll", updateScrollState, { passive: true });
+    const observer = new ResizeObserver(updateScrollState);
+    if (sizer) observer.observe(sizer);
+    observer.observe(node);
+    updateScrollState();
+    return () => {
+      node.removeEventListener("scroll", updateScrollState);
+      observer.disconnect();
+      onScrollState({ showScrollButton: false, showBottomFade: false });
+    };
+  }, [officialVirtualizer.scrollRef, officialVirtualizer.sizerRef, onScrollState]);
+
+  useImperativeHandle(ref, () => ({
+    scrollToBottom: (behavior) => {
+      officialVirtualizer.setPinned(true);
+      const node = officialVirtualizer.scrollRef.current;
+      if (node) scrollElementToBottom(node, behavior);
+    },
+    scrollToEntry: (entryId) => {
+      const index = rowsRef.current.findIndex((row) => (row.kind === "user" || row.kind === "assistant") && row.entry.id === entryId);
+      if (index >= 0) officialVirtualizer.scrollToIndex(index, "start");
+    },
+  }), [officialVirtualizer]);
+
+  const unpinTranscript = useCallback(() => {
+    officialVirtualizer.setPinned(false);
+  }, [officialVirtualizer]);
+  const unpinTranscriptFromKeyboard = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const target = event.target;
+    if (target instanceof HTMLElement && !target.matches('input,textarea,[contenteditable="true"]')) {
+      officialVirtualizer.setPinned(false);
     }
-  }, [isResponding, lastTextLength, rows.length, rowVirtualizer]);
+  }, [officialVirtualizer]);
 
   return (
-    <div ref={parentRef} data-testid="epitaxy-virtual-transcript" className="h-full overflow-y-auto overflow-x-hidden [contain:strict]">
-      <div className="relative epitaxy-chat-column" style={{ height: rowVirtualizer.getTotalSize() }}>
-        <div className="absolute top-0 left-0 w-full" style={{ transform: `translateY(${translateY}px)` }}>
+    <div ref={officialVirtualizer.scrollRef} data-testid="epitaxy-virtual-transcript" className="h-full overflow-y-auto overflow-x-hidden [contain:strict]">
+      <div ref={officialVirtualizer.sizerRef} className="relative epitaxy-chat-column" style={{ height: officialVirtualizer.sizerHeight }}>
+        <div onPointerDownCapture={unpinTranscript} onKeyDownCapture={unpinTranscriptFromKeyboard} className="absolute top-0 left-0 w-full" style={{ transform: `translateY(${translateY}px)` }}>
           {virtualItems.map((virtualRow) => {
             const row = rows[virtualRow.index];
             return (
-              <div data-index={virtualRow.index} key={row.id} ref={rowVirtualizer.measureElement}>
+              <div data-index={virtualRow.index} key={virtualRow.key} ref={officialVirtualizer.measureElement}>
                 <div className={virtualRow.index < rows.length - 1 ? "epitaxy-chat-size pb-[var(--chat-turn-gap)] empty:pb-0" : "epitaxy-chat-size"}>
-                  <TranscriptRowContent initialCount={initialCount.current} isResponding={isResponding} lastEntryIdx={lastEntryIdx} pendingTurnStartedAt={pendingTurnStartedAt} row={row} sessionId={sessionId} />
+                  <TranscriptRowContent initialCount={initialCount.current} isResponding={isResponding} lastEntryIdx={lastEntryIdx} pendingTurnStartedAt={pendingTurnStartedAt} row={row} sessionId={sessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} />
                 </div>
               </div>
             );
@@ -1903,6 +2420,343 @@ function Transcript({ entries, isResponding, pendingTurnStartedAt, sessionId }: 
       </div>
     </div>
   );
+});
+
+function useOfficialTranscriptVirtualizer<TItem>({
+  estimateSize,
+  getKey,
+  items,
+  nearTopThresholdPx = 400,
+  onAnchorNotFound,
+  onNearTop,
+  overscan = 6,
+  paddingEnd,
+  paddingStart,
+  restoreKey,
+  useFlushSync,
+}: {
+  estimateSize: (item: TItem, index: number) => number;
+  getKey: (item: TItem) => string;
+  items: TItem[];
+  nearTopThresholdPx?: number;
+  onAnchorNotFound?: () => void;
+  onNearTop?: () => void;
+  overscan?: number;
+  paddingEnd?: number;
+  paddingStart?: number;
+  restoreKey?: string;
+  useFlushSync?: boolean;
+}) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const sizerRef = useRef<HTMLDivElement | null>(null);
+  const itemCount = items.length;
+  const restoreRef = useRef<OfficialTranscriptRestore | undefined | null>(null);
+  if (restoreRef.current === null) {
+    restoreRef.current = restoreKey !== undefined ? officialTranscriptScrollRestores.get(restoreKey) : undefined;
+  }
+
+  const pinnedRef = useRef(restoreRef.current?.isPinned ?? true);
+  const initialOffsetRef = useRef<number | undefined>(undefined);
+  if (initialOffsetRef.current === undefined) {
+    initialOffsetRef.current = pinnedRef.current
+      ? (paddingStart ?? 0) + items.reduce((total, item, index) => total + estimateSize(item, index), 0) + (paddingEnd ?? 0)
+      : 0;
+  }
+
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const getKeyRef = useRef(getKey);
+  getKeyRef.current = getKey;
+  const onNearTopRef = useRef(onNearTop);
+  onNearTopRef.current = onNearTop;
+  const onAnchorNotFoundRef = useRef(onAnchorNotFound);
+  onAnchorNotFoundRef.current = onAnchorNotFound;
+
+  const virtualizer = useVirtualizer({
+    count: itemCount,
+    estimateSize: (index) => estimateSize(itemsRef.current[index], index),
+    getItemKey: (index) => getKeyRef.current(itemsRef.current[index]),
+    getScrollElement: () => scrollRef.current,
+    initialMeasurementsCache: restoreRef.current?.measurements,
+    initialOffset: initialOffsetRef.current,
+    overscan,
+    paddingEnd,
+    paddingStart,
+    useFlushSync,
+  });
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => !pinnedRef.current && item.end <= (instance.scrollOffset ?? 0);
+
+  const totalSize = virtualizer.getTotalSize();
+  const isScrolling = virtualizer.isScrolling;
+  const lastScrollTopRef = useRef(0);
+  const lastTotalSizeRef = useRef(0);
+  const programmaticScrollTopRef = useRef(-1);
+  const pendingAnchorIndexRef = useRef<number | null>(null);
+  const pendingAnchorKeyRef = useRef<string | null>(null);
+  const anchorRestoredThisPassRef = useRef(false);
+  const sizerTransformOffsetRef = useRef(0);
+
+  const adjustScrollBy = useCallback((delta: number, node: HTMLElement) => {
+    if (virtualizer.isScrolling) {
+      sizerTransformOffsetRef.current += delta;
+      const sizer = sizerRef.current;
+      if (sizer) sizer.style.transform = `translateY(${-sizerTransformOffsetRef.current}px)`;
+      return;
+    }
+    node.scrollTop += delta;
+    lastScrollTopRef.current = node.scrollTop;
+  }, [virtualizer]);
+
+  const scrollToVirtualOffset = useCallback((node: HTMLElement, offset: number) => {
+    virtualizer.scrollToOffset(offset);
+    node.scrollTop = offset;
+  }, [virtualizer]);
+
+  const updatePinnedFromScroll = useCallback((node: HTMLElement) => {
+    const nextTotalSize = virtualizer.getTotalSize();
+    const nextScrollTop = node.scrollTop + sizerTransformOffsetRef.current;
+    const scrollDelta = lastScrollTopRef.current - nextScrollTop;
+    const shrinkDelta = Math.max(0, lastTotalSizeRef.current - nextTotalSize);
+    lastScrollTopRef.current = nextScrollTop;
+    lastTotalSizeRef.current = nextTotalSize;
+    if (Math.abs(scrollDelta) > shrinkDelta + 8) {
+      pendingAnchorIndexRef.current = null;
+      pendingAnchorKeyRef.current = null;
+    }
+    const scrolledUp = scrollDelta > shrinkDelta + 1;
+    if (nextTotalSize - nextScrollTop - node.clientHeight < 8 && !scrolledUp) {
+      pinnedRef.current = true;
+    } else if (scrolledUp) {
+      pinnedRef.current = false;
+    }
+    const firstStart = virtualizer.measurementsCache[0]?.start ?? 0;
+    if (!pinnedRef.current && nextScrollTop < firstStart + nearTopThresholdPx) onNearTopRef.current?.();
+  }, [nearTopThresholdPx, virtualizer]);
+
+  const initializedRef = useRef(false);
+  const anchorWaitCountRef = useRef(0);
+  useLayoutEffect(() => {
+    anchorRestoredThisPassRef.current = false;
+    if (itemCount === 0) return;
+    const node = scrollRef.current;
+    const setPendingAnchor = (key: string) => {
+      const index = itemsRef.current.findIndex((item) => getKeyRef.current(item) === key);
+      if (index < 0) return false;
+      pendingAnchorIndexRef.current = index;
+      pendingAnchorKeyRef.current = null;
+      pinnedRef.current = false;
+      anchorRestoredThisPassRef.current = true;
+      return true;
+    };
+
+    if (initializedRef.current) {
+      if (pendingAnchorKeyRef.current !== null && itemCount > anchorWaitCountRef.current) {
+        anchorWaitCountRef.current = itemCount;
+        if (!setPendingAnchor(pendingAnchorKeyRef.current)) onAnchorNotFoundRef.current?.();
+      }
+    } else {
+      initializedRef.current = true;
+      const anchorKey = restoreRef.current?.anchorKey;
+      if (!pinnedRef.current) {
+        if (anchorKey === undefined || setPendingAnchor(anchorKey)) {
+          if (anchorKey === undefined) pinnedRef.current = true;
+        } else {
+          pendingAnchorKeyRef.current = anchorKey;
+          anchorWaitCountRef.current = itemCount;
+          pinnedRef.current = true;
+          onAnchorNotFoundRef.current?.();
+        }
+      }
+    }
+
+    if (pendingAnchorIndexRef.current !== null && node) {
+      if (isScrolling && node.scrollTop !== programmaticScrollTopRef.current) return;
+      const measurement = virtualizer.measurementsCache[pendingAnchorIndexRef.current];
+      if (measurement) {
+        const anchorOffset = restoreRef.current?.anchorOffsetPx ?? 0;
+        const nextScrollTop = measurement.start + anchorOffset;
+        const scrollOffset = virtualizer.scrollOffset;
+        if (scrollOffset !== null && Math.abs(scrollOffset - nextScrollTop) < 1) {
+          pendingAnchorIndexRef.current = null;
+          return;
+        }
+        const nextTotalSize = virtualizer.getTotalSize();
+        if (sizerRef.current) {
+          const viewportHeight = virtualizer.scrollRect?.height ?? 0;
+          sizerRef.current.style.height = `${Math.max(nextTotalSize, viewportHeight)}px`;
+        }
+        scrollToVirtualOffset(node, nextScrollTop);
+        programmaticScrollTopRef.current = node.scrollTop;
+        lastScrollTopRef.current = node.scrollTop;
+        lastTotalSizeRef.current = nextTotalSize;
+      }
+      return;
+    }
+
+    if (!pinnedRef.current || !node) return;
+    if (isScrolling && node.scrollTop !== programmaticScrollTopRef.current) return;
+    const nextTotalSize = virtualizer.getTotalSize();
+    if (sizerRef.current) {
+      const viewportHeight = virtualizer.scrollRect?.height ?? 0;
+      sizerRef.current.style.height = `${Math.max(nextTotalSize, viewportHeight)}px`;
+    }
+    scrollToVirtualOffset(node, nextTotalSize);
+    programmaticScrollTopRef.current = node.scrollTop;
+    lastScrollTopRef.current = node.scrollTop;
+    lastTotalSizeRef.current = nextTotalSize;
+    if (nextTotalSize <= (virtualizer.scrollRect?.height ?? 0)) onNearTopRef.current?.();
+  }, [itemCount, totalSize, isScrolling, scrollToVirtualOffset, updatePinnedFromScroll, virtualizer]);
+
+  const firstKeyRef = useRef<string | null>(null);
+  const previousTotalSizeRef = useRef(0);
+  const adjustedForPrependRef = useRef(false);
+  useLayoutEffect(() => {
+    const firstKey = itemCount > 0 ? getKeyRef.current(itemsRef.current[0]) : null;
+    const previousFirstKey = firstKeyRef.current;
+    firstKeyRef.current = firstKey;
+    const sizeDelta = totalSize - previousTotalSizeRef.current;
+    previousTotalSizeRef.current = totalSize;
+    adjustedForPrependRef.current = false;
+    if (previousFirstKey === null || firstKey === previousFirstKey) return;
+    if (pinnedRef.current) return;
+    if (anchorRestoredThisPassRef.current) return;
+    if (pendingAnchorIndexRef.current !== null) {
+      const previousIndex = itemsRef.current.findIndex((item) => getKeyRef.current(item) === previousFirstKey);
+      if (previousIndex > 0) pendingAnchorIndexRef.current += previousIndex;
+    }
+    const node = scrollRef.current;
+    if (node && sizeDelta !== 0) {
+      adjustedForPrependRef.current = true;
+      adjustScrollBy(sizeDelta, node);
+      lastTotalSizeRef.current = totalSize;
+    }
+  }, [adjustScrollBy, itemCount, totalSize]);
+
+  const paddingStartRef = useRef(paddingStart ?? 0);
+  useLayoutEffect(() => {
+    const previousPaddingStart = paddingStartRef.current;
+    const nextPaddingStart = paddingStart ?? 0;
+    paddingStartRef.current = nextPaddingStart;
+    if (nextPaddingStart === previousPaddingStart) return;
+    if (pinnedRef.current) return;
+    if (pendingAnchorIndexRef.current !== null) return;
+    if (adjustedForPrependRef.current) return;
+    const node = scrollRef.current;
+    if (node) adjustScrollBy(nextPaddingStart - previousPaddingStart, node);
+  }, [adjustScrollBy, paddingStart]);
+
+  useLayoutEffect(() => {
+    if (isScrolling) return;
+    const offset = sizerTransformOffsetRef.current;
+    if (offset === 0) return;
+    const node = scrollRef.current;
+    const sizer = sizerRef.current;
+    if (!node || !sizer) return;
+    sizerTransformOffsetRef.current = 0;
+    sizer.style.transform = "";
+    node.scrollTop += offset;
+    lastScrollTopRef.current = node.scrollTop;
+  }, [isScrolling]);
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return undefined;
+    const handler = () => updatePinnedFromScroll(node);
+    node.addEventListener("scroll", handler, { passive: true });
+    return () => node.removeEventListener("scroll", handler);
+  }, [updatePinnedFromScroll]);
+
+  const latestRestoreKeyRef = useRef(restoreKey);
+  latestRestoreKeyRef.current = restoreKey;
+  useEffect(() => () => {
+    const key = latestRestoreKeyRef.current;
+    if (key === undefined) return;
+    if (pendingAnchorKeyRef.current !== null && restoreRef.current) {
+      officialTranscriptScrollRestores.set(key, restoreRef.current);
+      return;
+    }
+    const scrollOffset = (virtualizer.scrollOffset ?? 0) + sizerTransformOffsetRef.current;
+    const measurements = virtualizer.measurementsCache;
+    const anchor = measurements.find((measurement) => measurement.end > scrollOffset);
+    officialTranscriptScrollRestores.set(key, {
+      anchorKey: anchor ? String(anchor.key) : undefined,
+      anchorOffsetPx: anchor ? scrollOffset - anchor.start : 0,
+      isPinned: pinnedRef.current,
+      measurements,
+    });
+  }, [virtualizer]);
+
+  const viewportHeight = virtualizer.scrollRect?.height ?? 0;
+  const anchorOffset = Math.max(0, viewportHeight - totalSize);
+  const resizeObserverState = useMemo(() => {
+    if (typeof ResizeObserver === "undefined") return null;
+    const observed = new Set<Element>();
+    return {
+      observed,
+      ro: new ResizeObserver((entries) => {
+        for (const entry of entries) virtualizer.measureElement(entry.target as HTMLElement);
+        if (!pinnedRef.current) return;
+        const node = scrollRef.current;
+        const sizer = sizerRef.current;
+        if (!node || !sizer) return;
+        if (virtualizer.isScrolling && node.scrollTop !== programmaticScrollTopRef.current) return;
+        const nextTotalSize = virtualizer.getTotalSize();
+        if (nextTotalSize === lastTotalSizeRef.current) return;
+        const nextViewportHeight = virtualizer.scrollRect?.height ?? 0;
+        sizer.style.height = `${Math.max(nextTotalSize, nextViewportHeight)}px`;
+        scrollToVirtualOffset(node, nextTotalSize);
+        programmaticScrollTopRef.current = node.scrollTop;
+        lastScrollTopRef.current = node.scrollTop;
+        lastTotalSizeRef.current = nextTotalSize;
+      }),
+    };
+  }, [virtualizer]);
+
+  useEffect(() => {
+    if (!resizeObserverState) return undefined;
+    for (const element of resizeObserverState.observed) resizeObserverState.ro.observe(element, { box: "border-box" });
+    return () => resizeObserverState.ro.disconnect();
+  }, [resizeObserverState]);
+
+  const measureElement = useCallback((node: HTMLElement | null) => {
+    virtualizer.measureElement(node);
+    if (!resizeObserverState) return;
+    if (node) {
+      if (!resizeObserverState.observed.has(node)) {
+        resizeObserverState.observed.add(node);
+        resizeObserverState.ro.observe(node, { box: "border-box" });
+      }
+      return;
+    }
+    for (const element of resizeObserverState.observed) {
+      if (!element.isConnected) {
+        resizeObserverState.ro.unobserve(element);
+        resizeObserverState.observed.delete(element);
+      }
+    }
+  }, [resizeObserverState, virtualizer]);
+
+  const scrollToIndex = useCallback((index: number, align: "start" | "center" | "end" | "auto" = "start") => {
+    pinnedRef.current = false;
+    pendingAnchorIndexRef.current = null;
+    virtualizer.scrollToIndex(index, { align });
+  }, [virtualizer]);
+
+  const setPinned = useCallback((value: boolean) => {
+    pinnedRef.current = value;
+    if (!value) pendingAnchorIndexRef.current = null;
+  }, []);
+
+  return {
+    anchorOffset,
+    measureElement,
+    scrollRef,
+    scrollToIndex,
+    setPinned,
+    sizerHeight: Math.max(totalSize, viewportHeight),
+    sizerRef,
+    virtualItems: virtualizer.getVirtualItems(),
+  };
 }
 
 function estimateTranscriptRowSize(row: TranscriptRow) {
@@ -1912,10 +2766,20 @@ function estimateTranscriptRowSize(row: TranscriptRow) {
 }
 
 function buildTranscriptRows(entries: TranscriptEntry[]): TranscriptRow[] {
+  const usedIds = new Set<string>();
+  const rowId = (id: string, index: number) => {
+    if (!usedIds.has(id)) {
+      usedIds.add(id);
+      return id;
+    }
+    const next = `${id}:${index}`;
+    usedIds.add(next);
+    return next;
+  };
   const rows: TranscriptRow[] = entries.map((entry, entryIdx) => ({
     entry,
     entryIdx,
-    id: `entry-${entry.id}:${entryIdx}`,
+    id: rowId(entry.id, entryIdx),
     kind: entry.author,
   }));
   rows.push({ id: "running-tasks", kind: "running-tasks" });
@@ -1923,9 +2787,9 @@ function buildTranscriptRows(entries: TranscriptEntry[]): TranscriptRow[] {
   return rows;
 }
 
-function TranscriptRowContent({ initialCount, isResponding, lastEntryIdx, pendingTurnStartedAt, row, sessionId }: { initialCount: number; isResponding: boolean; lastEntryIdx: number; pendingTurnStartedAt?: number | null; row: TranscriptRow; sessionId?: string }) {
-  if (row.kind === "running-tasks") return <OfficialRunningTasks isResponding={isResponding} />;
-  if (row.kind === "loader") return <OfficialWorkingStatus isWorking={isResponding} sessionId={sessionId} startedAt={pendingTurnStartedAt} />;
+function TranscriptRowContent({ initialCount, isResponding, lastEntryIdx, pendingTurnStartedAt, row, sessionId, streamTokenEstimate, tasks }: { initialCount: number; isResponding: boolean; lastEntryIdx: number; pendingTurnStartedAt?: number | null; row: TranscriptRow; sessionId?: string; streamTokenEstimate: number; tasks: OfficialBackgroundTask[] }) {
+  if (row.kind === "running-tasks") return <OfficialRunningTasks isResponding={isResponding} tasks={tasks} />;
+  if (row.kind === "loader") return <OfficialWorkingStatus isWorking={isResponding} sessionId={sessionId} startedAt={pendingTurnStartedAt} tokenEstimate={streamTokenEstimate} />;
 
   const isNewUserEntry = row.kind === "user" && row.entryIdx >= initialCount;
   const isStreaming = row.kind === "assistant" && isResponding && row.entryIdx === lastEntryIdx;
@@ -1936,8 +2800,72 @@ function TranscriptRowContent({ initialCount, isResponding, lastEntryIdx, pendin
   return <div data-epitaxy-entry={row.entry.id}>{content}</div>;
 }
 
-function OfficialRunningTasks({ isResponding: _isResponding }: { isResponding: boolean }) {
-  return null;
+function OfficialRunningTasks({ isResponding, tasks }: { isResponding: boolean; tasks: OfficialBackgroundTask[] }) {
+  const context = useContext(EpitaxyTranscriptActionContext);
+  const summary = useMemo(() => summarizeOfficialRunningTasks(tasks), [tasks]);
+  if (isResponding || !summary) return null;
+  const content = (
+    <>
+      <span className={`text-body truncate min-w-0 ${summary.waiting ? "epitaxy-text-shine" : "text-assistant-secondary"}`}>
+        {formatOfficialRunningTasksSummary(summary)}
+      </span>
+      <ToolChevron expanded={false} />
+    </>
+  );
+  if (!context?.openTasks) {
+    return <div className="flex self-start max-w-full items-center">{content}</div>;
+  }
+  return (
+    <button type="button" onClick={context.openTasks} className="flex self-start max-w-full items-center gap-g1 text-left outline-none hide-focus-ring focus:ring-focus rounded-r3">
+      {content}
+    </button>
+  );
+}
+
+type OfficialRunningTaskKind = "shell" | "agent" | "workflow" | "monitor" | "dream" | "task";
+
+type OfficialRunningTasksSummary = {
+  count: number;
+  kind: OfficialRunningTaskKind;
+  waiting: boolean;
+};
+
+function summarizeOfficialRunningTasks(tasks: OfficialBackgroundTask[]): OfficialRunningTasksSummary | null {
+  const running = tasks.filter((task) => task.status === "running");
+  if (running.length === 0) return null;
+  const selectedKind = officialTaskRunningKind(running[0]?.taskType);
+  const sameKindCount = running.filter((task) => officialTaskRunningKind(task.taskType) === selectedKind).length;
+  return {
+    count: sameKindCount,
+    kind: selectedKind,
+    waiting: running.some((task) => !task.lastToolName && !task.usage),
+  };
+}
+
+function officialTaskRunningKind(taskType?: string): OfficialRunningTaskKind {
+  switch (taskType) {
+    case "local_bash":
+      return "shell";
+    case "local_agent":
+    case "remote_agent":
+    case "in_process_teammate":
+      return "agent";
+    case "local_workflow":
+      return "workflow";
+    case "monitor_mcp":
+      return "monitor";
+    case "dream":
+      return "dream";
+    default:
+      return "task";
+  }
+}
+
+function formatOfficialRunningTasksSummary(summary: OfficialRunningTasksSummary) {
+  if (summary.kind === "dream") return "Dreaming";
+  if (summary.kind === "task") return `${summary.count} ${summary.count === 1 ? "background task" : "background tasks"}`;
+  const label = summary.kind === "shell" ? "shell" : summary.kind;
+  return `${summary.count} ${label}${summary.count === 1 ? " running" : "s running"}`;
 }
 
 type TranscriptEntry = {
@@ -1962,6 +2890,11 @@ type TranscriptToolUse = {
   name: string;
   output?: string;
   status: "awaiting_approval" | "completed" | "error" | "running";
+  subagentActivity?: {
+    latestToolName?: string;
+    model?: string;
+    toolCallCount?: number;
+  };
 };
 
 function parseOfficialTranscriptEntries(messages: ChatMessage[], streamingMessageId?: string | null): TranscriptEntry[] {
@@ -1998,6 +2931,59 @@ function parseOfficialTranscriptEntries(messages: ChatMessage[], streamingMessag
         : stringValue(nestedMessage.role);
     if (role !== "assistant" && role !== "user") return;
     if (role === "assistant" && streamingMessageId && stringValue(nestedMessage.id) === streamingMessageId) return;
+    const content = Array.isArray(nestedMessage.content) || typeof nestedMessage.content === "string"
+      ? nestedMessage.content
+      : Array.isArray(raw.content) || typeof raw.content === "string"
+        ? raw.content
+        : undefined;
+    const items = role === "assistant"
+      ? parseAssistantTranscriptItems(content, pendingTools, index, message.text)
+      : parseUserTranscriptItems(content, index, message.text);
+    pushEntry({
+      author: role,
+      id: stringValue(raw.id) ?? stringValue(raw.uuid) ?? stringValue(nestedMessage.id) ?? message.id,
+      items,
+      timestamp: stringValue(raw.timestamp) ?? message.createdAt,
+    });
+  });
+
+  return entries;
+}
+
+function parseOfficialSubagentTranscriptEntries(messages: ChatMessage[], parentToolUseId: string): TranscriptEntry[] {
+  const entries: TranscriptEntry[] = [];
+  const pendingTools = new Map<string, TranscriptToolUse>();
+  const pushEntry = (entry: TranscriptEntry) => {
+    if (entry.items.length === 0) return;
+    const previous = entries.at(-1);
+    if (previous?.author === "assistant" && entry.author === "assistant") {
+      entries[entries.length - 1] = {
+        ...previous,
+        items: mergeAdjacentAssistantItems([...previous.items, ...entry.items]),
+        timestamp: entry.timestamp ?? previous.timestamp,
+      };
+      return;
+    }
+    entries.push({ ...entry, items: entry.author === "assistant" ? mergeAdjacentAssistantItems(entry.items) : entry.items });
+  };
+
+  messages.forEach((message, index) => {
+    const raw = asRecord(message.raw);
+    const rawType = stringValue(raw.type);
+    if (rawType === "result" || rawType === "stream_event") return;
+    const parent = stringValue(raw.parent_tool_use_id) ?? stringValue(raw.parentToolUseId);
+    if (parent !== parentToolUseId) return;
+    if (rawType === "user" && rawMessageContentContainsToolResult(raw)) {
+      attachToolResultMessages(raw, pendingTools);
+      return;
+    }
+    const nestedMessage = asRecord(raw.message);
+    const role = rawType === "assistant" || rawType === "user"
+      ? rawType
+      : message.role === "assistant" || message.role === "user"
+        ? message.role
+        : stringValue(nestedMessage.role);
+    if (role !== "assistant" && role !== "user") return;
     const content = Array.isArray(nestedMessage.content) || typeof nestedMessage.content === "string"
       ? nestedMessage.content
       : Array.isArray(raw.content) || typeof raw.content === "string"
@@ -2161,6 +3147,15 @@ function streamSnapshotToTranscriptItems(snapshot: NonNullable<OfficialStreamSna
   return items;
 }
 
+function estimateOfficialStreamSnapshotTokens(snapshot: OfficialStreamSnapshot) {
+  if (!snapshot) return 0;
+  const charCount = snapshot.blocks.reduce((total, block) => {
+    if (block.kind === "tool") return total + block.partialJson.length;
+    return total + block.text.length;
+  }, 0);
+  return Math.round(charCount / 4);
+}
+
 function OfficialUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
   const textItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "text" }> => item.kind === "text");
@@ -2282,7 +3277,7 @@ function OfficialToolGroup({ tools }: { tools: TranscriptToolUse[] }) {
   const runningTool = isRunning ? tools.find((tool) => tool.status === "running") : undefined;
   const debouncedRunningToolId = useDebouncedDisplayedKey(runningTool?.id ?? "settled", 650);
   const displayedRunningTool = debouncedRunningToolId !== "settled" ? tools.find((tool) => tool.id === debouncedRunningToolId) : undefined;
-  const runningMeta = displayedRunningTool ? toolInputSummary(displayedRunningTool) : undefined;
+  const runningSummary = displayedRunningTool ? officialToolRowSummary(displayedRunningTool) : undefined;
   const toggle = () => setExpanded((value) => !value);
   return (
     <div className="flex flex-col w-full">
@@ -2293,17 +3288,19 @@ function OfficialToolGroup({ tools }: { tools: TranscriptToolUse[] }) {
         type="button"
       >
         {isRunning ? <span className="sr-only">running</span> : null}
-        {displayedRunningTool ? (
-          <span className="inline-flex items-center gap-g3 min-w-0">
-            <span className="text-body epitaxy-text-shine shrink-0">{toolDisplayName(displayedRunningTool.name, true)}</span>
-            {runningMeta ? <span className="text-body text-assistant-secondary truncate min-w-0">{runningMeta}</span> : null}
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-g3 min-w-0">
-            <span className="text-body truncate min-w-0">{summary.map(renderToolSummaryPiece)}</span>
-            {isAwaitingApproval ? <span className="text-body text-extended-yellow shrink-0">Needs approval</span> : null}
-          </span>
-        )}
+        <OfficialAnimatedToolLabel className="inline-flex items-center gap-g3 min-w-0" mode="wait" morphKey={runningSummary ? debouncedRunningToolId : "settled"}>
+          {runningSummary ? (
+            <>
+              <span className="text-body epitaxy-text-shine shrink-0">{runningSummary.runningVerb}</span>
+              {runningSummary.meta ? <span className="text-body text-assistant-secondary truncate min-w-0">{runningSummary.meta}</span> : null}
+            </>
+          ) : (
+            <>
+              <span className="text-body truncate min-w-0">{summary.map(renderToolSummaryPiece)}</span>
+              {isAwaitingApproval ? <span className="text-body text-extended-yellow shrink-0">Needs approval</span> : null}
+            </>
+          )}
+        </OfficialAnimatedToolLabel>
         <ToolChevron expanded={expanded} />
       </button>
       <OfficialCollapse expanded={expanded}>
@@ -2316,19 +3313,29 @@ function OfficialToolGroup({ tools }: { tools: TranscriptToolUse[] }) {
 }
 
 function OfficialToolRow({ inGroup = false, tool }: { inGroup?: boolean; tool: TranscriptToolUse }) {
-  const summary = toolInputSummary(tool);
-  const hasDetails = hasToolDetails(tool);
+  const actions = useContext(EpitaxyTranscriptActionContext);
+  const summary = useMemo(() => officialToolRowSummary(tool), [tool]);
+  const hasDetails = hasToolDetails(tool, summary);
   const [expanded, setExpanded] = useState(false);
+  const isQuestionPrompt = summary.kind === "question" && typeof tool.output !== "string" && !tool.isError;
+  const isExpanded = expanded || isQuestionPrompt;
   const isRunning = tool.status === "running";
   const isError = tool.status === "error" || Boolean(tool.isError);
   const isAwaitingApproval = tool.status === "awaiting_approval";
+  const opensSubagent = (tool.name === "Task" || tool.name === "Agent") && Boolean(actions?.openSubagent);
+  const metaHref = summary.metaHref && /^https:\/\//i.test(summary.metaHref) ? summary.metaHref : undefined;
   const toggle = () => {
-    if (hasDetails) setExpanded((value) => !value);
+    if (opensSubagent && actions?.openSubagent) {
+      actions.openSubagent({ description: stringValue(tool.input.description) ?? tool.name, toolUseId: tool.id });
+      return;
+    }
+    if (!hasDetails || isQuestionPrompt) return;
+    setExpanded((value) => !value);
   };
   return (
     <div className="flex flex-col w-full">
       <div
-        aria-expanded={hasDetails ? expanded : undefined}
+        aria-expanded={opensSubagent || !hasDetails ? undefined : isExpanded}
         className="relative group/tool flex self-start max-w-full items-center py-0 gap-g2 text-left cursor-pointer outline-none hide-focus-ring focus:ring-focus rounded-r3"
         onClick={toggle}
         onKeyDown={(event) => {
@@ -2336,16 +3343,32 @@ function OfficialToolRow({ inGroup = false, tool }: { inGroup?: boolean; tool: T
           event.preventDefault();
           toggle();
         }}
-        role={hasDetails ? "button" : undefined}
-        tabIndex={hasDetails ? 0 : undefined}
+        role="button"
+        tabIndex={0}
       >
-        <span className={`shrink-0 ${isRunning ? "text-body epitaxy-text-shine" : isError ? "text-body text-extended-pink" : "text-body text-assistant-secondary"}`}>{toolDisplayName(tool.name, isRunning)}</span>
-        {summary ? <span className={toolMetaClassName(tool.name)}>{summary}</span> : null}
-        {isAwaitingApproval ? <span className="text-body text-extended-yellow shrink-0">Needs approval</span> : null}
+        <OfficialAnimatedToolLabel
+          className={`shrink-0 ${isRunning ? "text-body epitaxy-text-shine" : isError ? "text-body text-extended-pink" : "text-body text-assistant-secondary"}`}
+          morphKey={isRunning ? "running" : "settled"}
+        >
+          {isRunning ? summary.runningVerb : summary.verb}
+        </OfficialAnimatedToolLabel>
+        {tool.subagentActivity?.model ? <span className="text-body text-assistant-secondary shrink-0">{tool.subagentActivity.model}</span> : null}
+        {tool.subagentActivity ? (
+          <span className="text-body text-assistant-secondary truncate min-w-0">
+            {tool.subagentActivity.model ? "· " : ""}{tool.subagentActivity.latestToolName ?? tool.name} · {tool.subagentActivity.toolCallCount ?? 0}
+          </span>
+        ) : isAwaitingApproval ? <span className="text-body text-extended-yellow shrink-0">Needs approval</span> : null}
+        {!tool.subagentActivity && !isAwaitingApproval && summary.meta ? (
+          metaHref ? (
+            <a className="text-code text-assistant-primary truncate min-w-0" href={metaHref} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()} rel="noreferrer" target="_blank">{summary.meta}</a>
+          ) : (
+            <span className={officialToolRowMetaClassName(summary)}>{summary.meta}</span>
+          )
+        ) : null}
         {isRunning ? <span className="sr-only">running</span> : null}
-        {hasDetails ? <ToolChevron expanded={expanded} /> : null}
+        {hasDetails ? <ToolChevron expanded={isExpanded} /> : null}
       </div>
-      <OfficialCollapse expanded={expanded}>
+      <OfficialCollapse expanded={isExpanded}>
         <OfficialToolDetails tool={tool} />
       </OfficialCollapse>
     </div>
@@ -2368,6 +3391,25 @@ function OfficialCollapse({ children, expanded }: { children: ReactNode; expande
           {children}
         </motion.div>
       ) : null}
+    </AnimatePresence>
+  );
+}
+
+function OfficialAnimatedToolLabel({ children, className, mode = "popLayout", morphKey }: { children: ReactNode; className: string; mode?: "popLayout" | "sync" | "wait"; morphKey: string }) {
+  const reducedMotion = useReducedMotion();
+  if (reducedMotion) return <span className={className}>{children}</span>;
+  return (
+    <AnimatePresence initial={false} mode={mode}>
+      <motion.span
+        animate={{ opacity: 1, y: 0 }}
+        className={className}
+        exit={{ opacity: 0, y: -3 }}
+        initial={{ opacity: 0, y: 3 }}
+        key={morphKey}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+      >
+        {children}
+      </motion.span>
     </AnimatePresence>
   );
 }
@@ -2414,6 +3456,204 @@ function ToolChevron({ expanded }: { expanded: boolean }) {
       <Icon name={expanded ? "ChevronDownSmall" : "ChevronRightSmall"} size="sm" />
     </span>
   );
+}
+
+type OfficialToolRowKind = "bash" | "diff" | "file" | "plan" | "question" | "text" | "todos";
+
+type OfficialToolRowSummary = {
+  kind: OfficialToolRowKind;
+  meta?: string;
+  metaHref?: string;
+  metaIsCode?: boolean;
+  runningVerb: string;
+  verb: string;
+};
+
+type OfficialBashAction =
+  | { commitKind: "amended" | "cherry-picked" | "committed"; kind: "commit"; meta?: string }
+  | { kind: "push"; meta?: string }
+  | { action: "merged" | "rebased"; kind: "branch"; meta?: string }
+  | { action: "closed" | "commented" | "created" | "edited" | "merged" | "ready"; kind: "pr"; meta?: string; url?: string };
+
+function officialToolRowKind(name: string): OfficialToolRowKind {
+  switch (name) {
+    case "Bash":
+    case "BashTool":
+      return "bash";
+    case "Read":
+      return "file";
+    case "Write":
+    case "Edit":
+    case "MultiEdit":
+    case "NotebookEdit":
+      return "diff";
+    case "TodoWrite":
+    case "TaskCreate":
+    case "TaskUpdate":
+    case "TaskGet":
+    case "TaskList":
+    case "TaskStop":
+      return "todos";
+    case "ExitPlanMode":
+      return "plan";
+    case "AskUserQuestion":
+      return "question";
+    default:
+      return "text";
+  }
+}
+
+function officialToolRowSummary(tool: TranscriptToolUse): OfficialToolRowSummary {
+  const input = tool.input;
+  const inputString = (key: string) => stringValue(input[key]);
+  const kind = officialToolRowKind(tool.name);
+  switch (tool.name) {
+    case "Bash":
+    case "BashTool": {
+      const command = inputString("command");
+      const recognized = command && !tool.isError ? officialRecognizedBashAction(command, tool.output) : null;
+      if (recognized) {
+        const verbs = officialBashActionVerbs(recognized);
+        return {
+          ...verbs,
+          kind,
+          meta: recognized.meta ?? inputString("description") ?? command,
+          metaHref: recognized.kind === "pr" ? recognized.url : undefined,
+          metaIsCode: recognized.meta !== undefined,
+        };
+      }
+      return { kind, meta: inputString("description") ?? command, runningVerb: "Running", verb: "Ran" };
+    }
+    case "Read":
+      return { kind, meta: basename(inputString("file_path")), runningVerb: "Reading", verb: "Read" };
+    case "Write":
+      return { kind, meta: basename(inputString("file_path")), runningVerb: "Creating", verb: "Created" };
+    case "Edit":
+    case "MultiEdit":
+    case "NotebookEdit":
+      return { kind, meta: basename(inputString("file_path") ?? inputString("notebook_path")), runningVerb: "Editing", verb: "Edited" };
+    case "Grep":
+    case "Glob":
+      return { kind, meta: inputString("pattern"), runningVerb: "Searching", verb: "Searched" };
+    case "LS":
+      return { kind, meta: inputString("path"), runningVerb: "Listing", verb: "Listed" };
+    case "WebFetch":
+      return { kind, meta: inputString("url"), runningVerb: "Fetching", verb: "Fetched" };
+    case "WebSearch":
+      return { kind, meta: inputString("query"), runningVerb: "Searching web", verb: "Searched web" };
+    case "Task":
+    case "Agent":
+      return { kind, meta: inputString("description"), runningVerb: "Running agent", verb: "Ran agent" };
+    case "Skill": {
+      const skill = inputString("skill");
+      return { kind, meta: skill ? `/${skill}` : undefined, metaIsCode: true, runningVerb: "Running skill", verb: "Ran skill" };
+    }
+    case "TaskCreate":
+    case "TaskUpdate":
+    case "TaskGet":
+    case "TaskList":
+    case "TaskStop":
+      return { kind, runningVerb: "Updating todos", verb: "Updated todos" };
+    case "TodoWrite":
+      return { kind, runningVerb: "Updating todos", verb: Array.isArray(input.todos) && input.todos.length > 0 ? "Updated todos" : "Cleared todos" };
+    case "EnterPlanMode":
+      return { kind, runningVerb: "Entering plan mode", verb: "Entered plan mode" };
+    case "ExitPlanMode":
+      return { kind, runningVerb: "Proposing plan", verb: "Proposed plan" };
+    case "AskUserQuestion": {
+      const questions = Array.isArray(input.questions) ? input.questions : [];
+      const firstQuestion = asRecord(questions[0]);
+      return { kind, meta: stringValue(firstQuestion.header) ?? (questions.length > 1 ? `${questions.length} questions` : undefined), runningVerb: "Asking", verb: "Asked" };
+    }
+    case "SendUserMessage":
+    case "SendUserFile":
+      return { kind, runningVerb: "Sending", verb: "Sent" };
+    default: {
+      const label = tool.name.startsWith("mcp__") ? tool.name.split("__").at(-1)?.replace(/_/g, " ") ?? tool.name : tool.name;
+      return { kind, runningVerb: `Using ${label}`, verb: `Used ${label}` };
+    }
+  }
+}
+
+function officialToolRowMetaClassName(summary: OfficialToolRowSummary) {
+  return summary.kind === "diff" || summary.kind === "file" || summary.metaIsCode
+    ? "text-code text-assistant-primary truncate min-w-0"
+    : "text-body text-assistant-secondary truncate min-w-0";
+}
+
+const officialGitCommitRe = officialGitCommandRe("commit");
+const officialGitPushRe = officialGitCommandRe("push");
+const officialGitCherryPickRe = officialGitCommandRe("cherry-pick");
+const officialGitMergeRe = officialGitCommandRe("merge", "(?!-)");
+const officialGitRebaseRe = officialGitCommandRe("rebase");
+const officialGithubPrActions = [
+  { action: "created", re: /\bgh\s+pr\s+create\b/ },
+  { action: "edited", re: /\bgh\s+pr\s+edit\b/ },
+  { action: "merged", re: /\bgh\s+pr\s+merge\b/ },
+  { action: "commented", re: /\bgh\s+pr\s+comment\b/ },
+  { action: "closed", re: /\bgh\s+pr\s+close\b/ },
+  { action: "ready", re: /\bgh\s+pr\s+ready\b/ },
+] as const;
+
+function officialGitCommandRe(command: string, suffix = "") {
+  return new RegExp(`\\bgit(?:\\s+-[cC]\\s+\\S+|\\s+--\\S+=\\S+)*\\s+${command}\\b${suffix}`);
+}
+
+function officialGitArgument(command: string, subcommand: string) {
+  const rest = command.split(officialGitCommandRe(subcommand))[1];
+  if (!rest) return undefined;
+  for (const token of rest.trim().split(/\s+/)) {
+    if (/^[&|;><]/.test(token)) break;
+    if (!token.startsWith("-")) return token;
+  }
+  return undefined;
+}
+
+function officialRecognizedBashAction(command: string, output?: string): OfficialBashAction | null {
+  const text = output ?? "";
+  const prAction = officialGithubPrActions.find((item) => item.re.test(command))?.action;
+  if (prAction) {
+    const urlMatch = text.match(/https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/(\d+)/);
+    if (urlMatch?.[1]) return { action: prAction, kind: "pr", meta: `#${Number.parseInt(urlMatch[1], 10)}`, url: urlMatch[0] };
+    const numberMatch = text.match(/[Pp]ull request (?:\S+#)?#?(\d+)/);
+    return { action: prAction, kind: "pr", meta: numberMatch?.[1] ? `#${Number.parseInt(numberMatch[1], 10)}` : undefined };
+  }
+  const isCherryPick = officialGitCherryPickRe.test(command);
+  if (officialGitCommitRe.test(command) || isCherryPick) {
+    const commitMatch = text.match(/\[[\w./-]+(?: \(root-commit\))? ([0-9a-f]+)\]/);
+    return { commitKind: isCherryPick ? "cherry-picked" : /--amend\b/.test(command) ? "amended" : "committed", kind: "commit", meta: commitMatch?.[1]?.slice(0, 7) };
+  }
+  if (officialGitPushRe.test(command)) {
+    const refMatch = text.match(/^\s*[+\-*!= ]?\s*(?:\[new branch\]|\S+\.\.+\S+)\s+\S+\s*->\s*(\S+)/m);
+    return { kind: "push", meta: refMatch?.[1] };
+  }
+  if (officialGitMergeRe.test(command)) {
+    const branch = officialGitArgument(command, "merge");
+    if (branch) return { action: "merged", kind: "branch", meta: output === undefined || /(Fast-forward|Merge made by)/.test(text) ? branch : undefined };
+  }
+  if (officialGitRebaseRe.test(command)) {
+    const branch = officialGitArgument(command, "rebase");
+    if (branch) return { action: "rebased", kind: "branch", meta: output === undefined || /Successfully rebased/.test(text) ? branch : undefined };
+  }
+  return null;
+}
+
+function officialBashActionVerbs(action: OfficialBashAction) {
+  if (action.kind === "commit") {
+    if (action.commitKind === "amended") return { runningVerb: "Amending commit", verb: "Amended commit" };
+    if (action.commitKind === "cherry-picked") return { runningVerb: "Cherry-picking", verb: "Cherry-picked" };
+    return { runningVerb: "Committing", verb: "Committed" };
+  }
+  if (action.kind === "push") return { runningVerb: "Pushing", verb: "Pushed" };
+  if (action.kind === "branch") return action.action === "merged" ? { runningVerb: "Merging", verb: "Merged" } : { runningVerb: "Rebasing onto", verb: "Rebased onto" };
+  switch (action.action) {
+    case "created": return { runningVerb: "Creating PR", verb: "Created PR" };
+    case "edited": return { runningVerb: "Editing PR", verb: "Edited PR" };
+    case "merged": return { runningVerb: "Merging PR", verb: "Merged PR" };
+    case "commented": return { runningVerb: "Commenting on PR", verb: "Commented on PR" };
+    case "closed": return { runningVerb: "Closing PR", verb: "Closed PR" };
+    case "ready": return { runningVerb: "Marking PR ready", verb: "Marked PR ready" };
+  }
 }
 
 type ToolSummaryPiece = {
@@ -2491,8 +3731,21 @@ function officialToolKind(name: string) {
   return undefined;
 }
 
-function hasToolDetails(tool: TranscriptToolUse) {
-  return Boolean(tool.output || tool.isError || tool.name === "ExitPlanMode" && typeof tool.input.plan === "string" || Object.keys(tool.input).length > 0);
+function hasToolDetails(tool: TranscriptToolUse, summary: OfficialToolRowSummary) {
+  return !(summary.kind === "todos" && officialTodoItems(tool.input).length === 0);
+}
+
+function officialTodoItems(input: Record<string, unknown>) {
+  const todos = Array.isArray(input.todos) ? input.todos : [];
+  return todos.flatMap((todo) => {
+    const record = asRecord(todo);
+    const id = stringValue(record.id);
+    const content = stringValue(record.content);
+    if (!id || !content) return [];
+    const rawStatus = stringValue(record.status);
+    const status = rawStatus === "completed" || rawStatus === "in_progress" ? rawStatus : "pending";
+    return [{ content, id, status }];
+  });
 }
 
 function OfficialToolDetails({ tool }: { tool: TranscriptToolUse }) {
@@ -2662,6 +3915,7 @@ function normalizeToolUse(tool: unknown, index = 0): TranscriptToolUse {
   const toolUseResult = asRecord(record.toolUseResult ?? record.tool_use_result);
   const isError = record.isError === true || record.is_error === true || toolUseResult.isError === true || toolUseResult.is_error === true;
   const output = stringValue(record.output) ?? stringValue(record.content) ?? stringValue(toolUseResult.output) ?? stringValue(toolUseResult.content);
+  const subagentActivity = normalizeSubagentActivity(record.subagentActivity ?? record.subagent_activity);
   return {
     id: stringValue(record.id) ?? `tool-${index}`,
     input: asRecord(record.input),
@@ -2669,6 +3923,17 @@ function normalizeToolUse(tool: unknown, index = 0): TranscriptToolUse {
     name: stringValue(record.name) ?? stringValue(record.tool_name) ?? stringValue(record.kind) ?? "Tool",
     output,
     status: normalizeToolStatus(record.status, isError, output),
+    ...(subagentActivity ? { subagentActivity } : {}),
+  };
+}
+
+function normalizeSubagentActivity(value: unknown): TranscriptToolUse["subagentActivity"] | undefined {
+  const raw = asRecord(value);
+  if (Object.keys(raw).length === 0) return undefined;
+  return {
+    latestToolName: stringValue(raw.latestToolName) ?? stringValue(raw.latest_tool_name),
+    model: stringValue(raw.model),
+    toolCallCount: typeof raw.toolCallCount === "number" ? raw.toolCallCount : typeof raw.tool_call_count === "number" ? raw.tool_call_count : undefined,
   };
 }
 
@@ -2678,53 +3943,6 @@ function normalizeToolStatus(status: unknown, isError?: boolean, output?: string
   if (status === "error" || isError) return "error";
   if (status === "completed" || output) return "completed";
   return "running";
-}
-
-function toolDisplayName(name: string, running = false) {
-  if (name === "Bash" || name === "BashTool") return running ? "Running" : "Ran";
-  if (name === "Read") return running ? "Reading" : "Read";
-  if (name === "Write") return running ? "Creating" : "Created";
-  if (name === "Edit" || name === "MultiEdit" || name === "NotebookEdit") return running ? "Editing" : "Edited";
-  if (name === "Grep" || name === "Glob") return running ? "Searching" : "Searched";
-  if (name === "LS") return running ? "Listing" : "Listed";
-  if (name === "WebFetch") return running ? "Fetching" : "Fetched";
-  if (name === "WebSearch") return running ? "Searching web" : "Searched web";
-  if (name === "Task" || name === "Agent") return running ? "Running agent" : "Ran agent";
-  if (name === "Skill") return running ? "Running skill" : "Ran skill";
-  if (name === "TodoWrite" || name === "TaskCreate" || name === "TaskUpdate" || name === "TaskGet" || name === "TaskList" || name === "TaskStop") return running ? "Updating todos" : "Updated todos";
-  if (name === "EnterPlanMode") return running ? "Entering plan mode" : "Entered plan mode";
-  if (name === "ExitPlanMode") return running ? "Proposing plan" : "Proposed plan";
-  if (name === "AskUserQuestion") return running ? "Asking" : "Asked";
-  if (name === "SendUserMessage" || name === "SendUserFile") return running ? "Sending" : "Sent";
-  const fallback = name.startsWith("mcp__") ? name.split("__").at(-1)?.replace(/_/g, " ") ?? name : name.replace(/([a-z])([A-Z])/g, "$1 $2");
-  return `${running ? "Using" : "Used"} ${fallback}`;
-}
-
-function toolMetaClassName(name: string) {
-  return name === "Bash" || name === "BashTool" || name === "Read" || name === "Write" || name === "Edit" || name === "MultiEdit" || name === "NotebookEdit"
-    ? "text-code text-assistant-primary truncate min-w-0"
-    : "text-body text-assistant-secondary truncate min-w-0";
-}
-
-function toolInputSummary(tool: TranscriptToolUse) {
-  const input = tool.input;
-  if (tool.name === "Skill") {
-    const skill = stringValue(input.skill);
-    if (skill) return `/${skill}`;
-  }
-  if (tool.name === "AskUserQuestion" && Array.isArray(input.questions)) {
-    const firstQuestion = asRecord(input.questions[0]);
-    return stringValue(firstQuestion.header) ?? (input.questions.length > 1 ? `${input.questions.length} questions` : undefined);
-  }
-  for (const key of ["description", "command", "pattern", "url", "query", "prompt"]) {
-    const value = stringValue(input[key]);
-    if (value) return value.split("\n")[0];
-  }
-  for (const key of ["file_path", "notebook_path", "path"]) {
-    const value = stringValue(input[key]);
-    if (value) return basename(value) ?? value;
-  }
-  return undefined;
 }
 
 function isVisibleTranscriptEntryItem(item: TranscriptEntryItem): item is Exclude<TranscriptEntryItem, { kind: "thinking" }> {
@@ -3044,6 +4262,14 @@ const permissionModeOptions = [
   { label: "绕过权限", value: "bypassPermissions" },
 ];
 
+const effortLevelOptions = [
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High", value: "high" },
+  { label: "Extra high", value: "xhigh" },
+  { label: "Max", value: "max" },
+];
+
 function modelLabel(value: string) {
   const normalized = normalizeCodeModelValue(value);
   return codeModelOptions.find((option) => option.value === normalized)?.label ?? formatClaudeModelLabel(value);
@@ -3066,12 +4292,24 @@ function permissionModeLabel(value: string) {
   return permissionModeOptions.find((option) => option.value === value)?.label ?? value;
 }
 
+function normalizeEffortValue(value?: string) {
+  return effortLevelOptions.some((option) => option.value === value) ? value! : "medium";
+}
+
+function effortLevelLabel(value: string) {
+  return effortLevelOptions.find((option) => option.value === value)?.label ?? value;
+}
+
 type InlineToolPermissionRequest = {
+  alwaysAllowScope?: string;
+  decisionReason?: string;
   description?: string;
+  hasAlwaysAllow?: boolean;
   input: Record<string, unknown>;
   requestId: string;
   sessionId: string;
   toolName: string;
+  toolUseId?: string;
 };
 
 function InlineToolPermissionApprovals({ bridge, sessionId }: { bridge: LocalSessionsBridge; sessionId?: string }) {
@@ -3088,11 +4326,15 @@ function InlineToolPermissionApprovals({ bridge, sessionId }: { bridge: LocalSes
     void bridge.getSession(sessionId).then((session) => {
       if (!alive || !session?.pendingToolPermissions?.length) return;
       setRequests(session.pendingToolPermissions.map((item) => ({
+        alwaysAllowScope: item.alwaysAllowScope,
+        decisionReason: item.decisionReason,
         description: item.description,
+        hasAlwaysAllow: item.hasAlwaysAllow,
         input: asRecord(item.input),
         requestId: item.requestId,
         sessionId: item.sessionId,
         toolName: item.toolName,
+        toolUseId: item.toolUseId,
       })));
     }).catch(() => {});
     const onPermissionEvent = (event: unknown) => {
@@ -3122,8 +4364,10 @@ function InlineToolPermissionApprovals({ bridge, sessionId }: { bridge: LocalSes
   }, [bridge, sessionId]);
 
   const request = requests[0];
+  const hasAlwaysAllow = request?.hasAlwaysAllow !== false;
   const decide = useCallback(async (decision: "always" | "deny" | "once") => {
     if (!request || !bridge.respondToToolPermission) return;
+    if (decision === "always" && request.hasAlwaysAllow === false) return;
     setResolvingId(request.requestId);
     setResolveError(null);
     try {
@@ -3145,43 +4389,285 @@ function InlineToolPermissionApprovals({ bridge, sessionId }: { bridge: LocalSes
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || resolvingId === request.requestId) return;
       if (event.key === "Escape") {
+        if (event.isComposing) {
+          event.stopPropagation();
+          return;
+        }
         event.preventDefault();
+        event.stopPropagation();
         void decide("deny");
         return;
       }
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         event.preventDefault();
-        void decide(event.shiftKey ? "always" : "once");
+        event.stopPropagation();
+        void decide(event.shiftKey && hasAlwaysAllow ? "always" : "once");
       }
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [decide, request, resolvingId]);
+  }, [decide, hasAlwaysAllow, request, resolvingId]);
 
   if (!request) return null;
 
-  const inputPreview = Object.keys(request.input).length > 0 ? JSON.stringify(request.input, null, 2) : "";
   const busy = resolvingId === request.requestId;
 
   return (
-    <div className="relative isolate flex flex-col gap-g4 rounded-r6 px-p7 py-p6 text-body">
-      <div aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] bg-surface-primary-elevated effect-primary-elevated" />
-      <div className="flex items-start gap-g5">
-        <span className="mt-[2px] text-extended-yellow"><Icon name="Hand" size="sm" /></span>
-        <div className="min-w-0 flex-1">
-          <div className="text-t8">Claude wants to use {request.toolName}</div>
-          {request.description ? <div className="mt-p2 text-footnote text-t6">{request.description}</div> : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-g3">
-          <OfficialButton disabled={busy} onClick={() => void decide("deny")} size="small" variant="contained">Deny</OfficialButton>
-          <OfficialButton disabled={busy} onClick={() => void decide("always")} size="small" variant="contained">Always allow</OfficialButton>
-          <OfficialButton disabled={busy} onClick={() => void decide("once")} size="small" variant="primary">Allow once</OfficialButton>
+    <OfficialToolApprovalCard
+      busy={busy}
+      onDecide={(decision) => void decide(decision)}
+      queueDepth={Math.max(0, requests.length - 1)}
+      request={request}
+    >
+      {resolveError ? <div className="text-footnote text-extended-pink">{resolveError}</div> : null}
+    </OfficialToolApprovalCard>
+  );
+}
+
+type OfficialToolApprovalDecision = "always" | "deny" | "once";
+
+type OfficialToolApprovalCopy = {
+  action: ReactNode;
+  detail?: string;
+  meta?: string;
+};
+
+const officialApprovalCollapseTransition = {
+  height: { type: "spring", duration: 0.35, bounce: 0 },
+  opacity: { duration: 0.2, ease: "easeOut" },
+} as const;
+
+const officialApprovalCollapsed = { height: 0, opacity: 0 } as const;
+const officialApprovalExpanded = { height: "auto", opacity: 1 } as const;
+
+const OfficialToolApprovalCard = memo(function OfficialToolApprovalCard({
+  busy,
+  children,
+  onDecide,
+  queueDepth,
+  request,
+}: {
+  busy?: boolean;
+  children?: ReactNode;
+  onDecide: (decision: OfficialToolApprovalDecision) => void;
+  queueDepth: number;
+  request: InlineToolPermissionRequest;
+}) {
+  const copy = useMemo(() => officialToolApprovalCopy(request), [request]);
+  const ghostCount = Math.min(queueDepth, 2);
+  const hasAlwaysAllow = request.hasAlwaysAllow !== false;
+
+  return (
+    <div className="epitaxy-approval-card">
+      {Array.from({ length: ghostCount }, (_, index) => {
+        const layer = index + 1;
+        return (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 rounded-r7 bg-surface-primary-elevated epitaxy-approval-ghost"
+            key={layer}
+            style={{
+              opacity: 1 - 0.25 * layer,
+              transform: `translateY(-${6 * layer}px) scale(${1 - 0.03 * layer})`,
+              zIndex: -layer,
+            }}
+          />
+        );
+      })}
+      <OfficialApprovalSurface elevation="sidebar" />
+      <OfficialToolApprovalCopyView copy={copy} description={request.description} />
+      {request.decisionReason ? <div className="text-footnote text-t7 select-text break-words">{request.decisionReason}</div> : null}
+      {children}
+      <div className="epitaxy-approval-actions flex flex-wrap justify-between gap-x-g3 gap-y-[8px]">
+        <OfficialButton className="shrink-0" disabled={busy} onClick={() => onDecide("deny")} size="base" variant="contained">
+          Deny
+          <OfficialApprovalShortcut>esc</OfficialApprovalShortcut>
+        </OfficialButton>
+        <div className="flex min-w-0 flex-wrap gap-[8px]">
+          {hasAlwaysAllow ? (
+            <OfficialButton className="min-w-0" disabled={busy} onClick={() => onDecide("always")} size="base" variant="contained">
+              <span className="min-w-0 truncate">{officialAlwaysAllowLabel(request.alwaysAllowScope)}</span>
+              <OfficialApprovalShortcut>⌘⇧⏎</OfficialApprovalShortcut>
+            </OfficialButton>
+          ) : null}
+          <OfficialButton className="min-w-0" disabled={busy} onClick={() => onDecide("once")} size="base" variant="primary">
+            <span className="min-w-0 truncate">Allow once</span>
+            <OfficialApprovalShortcut>⌘⏎</OfficialApprovalShortcut>
+          </OfficialButton>
         </div>
       </div>
-      {resolveError ? <div className="text-footnote text-extended-pink">{resolveError}</div> : null}
-      {inputPreview ? <pre className="m-0 max-h-[96px] overflow-y-auto rounded-r4 bg-t1 px-p5 py-p4 text-code text-t7 whitespace-pre-wrap [overflow-wrap:anywhere]">{inputPreview}</pre> : null}
     </div>
   );
+});
+
+function OfficialToolApprovalCopyView({ copy, description }: { copy: OfficialToolApprovalCopy; description?: string }) {
+  const [expanded, setExpanded] = useState(true);
+  const hasDetail = Boolean(copy.detail && copy.detail !== copy.meta);
+  const descriptionNode = description ? <div className="text-footnote text-t6 select-text break-words">{description}</div> : null;
+  const title = (
+    <>
+      Allow Claude to <span className="text-t9">{copy.action}</span>
+      {copy.meta ? <> <span className="text-t9">{copy.meta}</span></> : null}?
+    </>
+  );
+
+  if (hasDetail) {
+    return (
+      <div className="flex flex-col gap-[8px]">
+        <OfficialApprovalHeader ariaExpanded={expanded} onClick={() => setExpanded((value) => !value)}>{title}</OfficialApprovalHeader>
+        {descriptionNode}
+        <OfficialApprovalCollapse expanded={expanded}>
+          <div className="bg-t1 rounded-r4 py-p6 px-p8 text-code text-t7 whitespace-pre-wrap break-words select-text max-h-[240px] overflow-y-auto">{copy.detail}</div>
+        </OfficialApprovalCollapse>
+      </div>
+    );
+  }
+
+  if (descriptionNode) {
+    return (
+      <div className="flex flex-col gap-[8px]">
+        <OfficialApprovalHeader>{title}</OfficialApprovalHeader>
+        {descriptionNode}
+      </div>
+    );
+  }
+
+  return <OfficialApprovalHeader>{title}</OfficialApprovalHeader>;
+}
+
+function OfficialApprovalHeader({
+  ariaExpanded,
+  children,
+  className,
+  onClick,
+}: {
+  ariaExpanded?: boolean;
+  children: ReactNode;
+  className?: string;
+  onClick?: () => void;
+}) {
+  const baseClass = className ?? "text-body-semibold text-t9 min-h-[24px] flex items-center gap-1 pb-p6";
+  const content = (
+    <span className="flex flex-1 min-w-0 flex-col gap-[2px]">
+      <span className="flex items-center gap-g3 min-w-0">
+        <span aria-hidden="true" className="grid size-[20px] shrink-0 place-items-center">
+          <span className="size-[6px] rounded-full bg-extended-yellow" />
+        </span>
+        <span className="min-w-0 break-words">{children}</span>
+      </span>
+    </span>
+  );
+
+  return onClick ? (
+    <button
+      aria-expanded={ariaExpanded}
+      className={`${baseClass} w-full text-left outline-none hide-focus-ring focus:ring-focus`}
+      onClick={onClick}
+      type="button"
+    >
+      {content}
+    </button>
+  ) : (
+    <div className={baseClass}>{content}</div>
+  );
+}
+
+function OfficialApprovalCollapse({ children, expanded }: { children: ReactNode; expanded: boolean }) {
+  const reducedMotion = useReducedMotion();
+  if (reducedMotion) return expanded ? <div>{children}</div> : null;
+  return (
+    <AnimatePresence initial={false}>
+      {expanded ? (
+        <motion.div
+          animate={officialApprovalExpanded}
+          className="overflow-hidden"
+          exit={officialApprovalCollapsed}
+          initial={officialApprovalCollapsed}
+          transition={officialApprovalCollapseTransition}
+        >
+          {children}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+function OfficialApprovalSurface({ className, elevation }: { className?: string; elevation: "hud" | "popover" | "prompt" | "sidebar" }) {
+  const elevationClass = {
+    hud: "bg-surface-hud effect-hud",
+    popover: "bg-surface-popover effect-stroke-shadow",
+    prompt: "bg-surface-prompt-blur effect-prompt-blur",
+    sidebar: "bg-surface-primary-elevated effect-primary-elevated",
+  }[elevation];
+  return <div aria-hidden="true" className={`absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none ${elevationClass} ${className ?? ""}`} data-surface={elevation} />;
+}
+
+function OfficialApprovalShortcut({ children }: { children: ReactNode }) {
+  return <kbd className="text-caption opacity-60 shrink-0">{children}</kbd>;
+}
+
+function officialAlwaysAllowLabel(scope?: string) {
+  if (scope === "session") return "Always allow in this session";
+  if (scope === "project") return "Always allow in this project";
+  if (scope === "projectLocal") return "Always allow in this project (local)";
+  if (scope === "user") return "Always allow everywhere";
+  return "Always allow";
+}
+
+function officialToolApprovalCopy(request: InlineToolPermissionRequest): OfficialToolApprovalCopy {
+  const input = request.input;
+  const stringInput = (key: string) => stringValue(input[key]);
+  const toolName = request.toolName;
+  const normalizedName = toolName.split("__").pop() ?? toolName;
+  switch (normalizedName) {
+    case "Bash":
+    case "BashTool":
+      return { action: "run", meta: stringInput("description"), detail: stringInput("command") };
+    case "Read":
+      return { action: "read", ...officialPathCopy(stringInput("file_path")) };
+    case "Write":
+      return { action: "write", ...officialPathCopy(stringInput("file_path")) };
+    case "Edit":
+    case "MultiEdit":
+      return { action: "edit", ...officialPathCopy(stringInput("file_path")) };
+    case "NotebookEdit":
+      return { action: "edit", ...officialPathCopy(stringInput("notebook_path")) };
+    case "Grep":
+    case "Glob":
+      return { action: "search", meta: stringInput("pattern") };
+    case "WebFetch":
+      return { action: "fetch", meta: stringInput("url") };
+    case "WebSearch":
+      return { action: "search the web", meta: stringInput("query") };
+    case "Skill": {
+      const skill = stringInput("skill");
+      return { action: "run skill", meta: skill ? `/${skill}` : undefined, detail: stringInput("args") };
+    }
+    case "Task":
+    case "Agent":
+      return { action: "run an agent", meta: stringInput("description") };
+    case "request_directory": {
+      const directory = stringInput("path");
+      return directory ? { action: "access", ...officialPathCopy(directory) } : { action: "access a folder" };
+    }
+    default: {
+      const label = toolName.startsWith("mcp__") ? normalizedName.replace(/_/g, " ") : normalizedName;
+      return {
+        action: `use ${label}`,
+        detail: Object.keys(input).length > 0 ? JSON.stringify(input, null, 2) : undefined,
+      };
+    }
+  }
+}
+
+function officialPathCopy(value?: string) {
+  return value ? { meta: officialBasename(value), detail: value } : {};
+}
+
+function officialBasename(value: string) {
+  const trimmed = value.replace(/[\\/]+$/, "");
+  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  return index < 0 ? trimmed : trimmed.slice(index + 1);
 }
 
 function toolPermissionResponseFailed(value: unknown) {
@@ -3198,26 +4684,40 @@ function ExistingSessionComposer({
   bridge,
   disabled,
   isResponding,
+  onOpenDiff,
+  onScrollToBottom,
   onSubmit,
   reload,
   session,
   sessionRef,
+  showScrollButton,
 }: {
   bridge: LocalSessionsBridge;
   disabled: boolean;
   isResponding: boolean;
+  onOpenDiff?: () => void;
+  onScrollToBottom: () => void;
   onSubmit: (text: string) => Promise<void>;
   reload: () => Promise<void>;
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef | null;
+  showScrollButton: boolean;
 }) {
   const [text, setText] = useState("");
   const [isSubmitting, setSubmitting] = useState(false);
   const [model, setModel] = useState(() => normalizeCodeModelValue(session?.model));
   const [permissionMode, setPermissionMode] = useState(session?.permissionMode ?? "default");
+  const [effort, setEffort] = useState(() => normalizeEffortValue(session?.effort));
   const [isConfigBusy, setConfigBusy] = useState(false);
   const submitRef = useRef<() => Promise<void>>(async () => {});
   const clearComposerRef = useRef<() => void>(() => {});
+  const tiptapEditorRef = useRef<Editor | null>(null);
+  const slashMenuStateRef = useRef({ bridge, session, sessionRef });
+  slashMenuStateRef.current = { bridge, session, sessionRef };
+  const slashMenuComponent = useMemo(() => function EpitaxySlashCommandMenuRenderer(props: OfficialSlashCommandMenuProps) {
+    const state = slashMenuStateRef.current;
+    return <OfficialEpitaxySlashCommandMenu {...props} bridge={state.bridge} session={state.session} sessionRef={state.sessionRef} />;
+  }, []);
   const bashModeRef = useRef(false);
   const respondingRef = useRef(isResponding);
   const isBashMode = text.trimStart().startsWith("!");
@@ -3233,18 +4733,23 @@ function ExistingSessionComposer({
         "data-placeholder": "Type / for commands",
       },
       handleKeyDown: (_view, event) => {
-        if (event.key === "Escape" && bashModeRef.current) {
+        const slashStorage = (tiptapEditorRef.current?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
+        const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
+        if (event.key === "Escape" && bashModeRef.current && !hasSlashMenu) {
           event.preventDefault();
           clearComposerRef.current();
           return true;
         }
-        if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.isComposing) {
+        if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.isComposing && !hasSlashMenu) {
           event.preventDefault();
           if (!respondingRef.current) void submitRef.current();
           return true;
         }
         return false;
       },
+    },
+    onCreate: ({ editor }) => {
+      tiptapEditorRef.current = editor;
     },
     extensions: [
       StarterKit.configure({
@@ -3256,21 +4761,29 @@ function ExistingSessionComposer({
         listItem: false,
         orderedList: false,
       }),
+      OfficialSkillChip,
+      OfficialSlashCommandSuggestion.configure({ placement: "onpage", menuComponent: slashMenuComponent }),
     ],
     onUpdate: ({ editor: nextEditor }) => {
       setText(nextEditor.getText({ blockSeparator: "\n" }));
     },
-  }, []);
+  }, [slashMenuComponent]);
 
   useEffect(() => {
     setModel(normalizeCodeModelValue(session?.model));
     setPermissionMode(session?.permissionMode ?? "default");
-  }, [session?.model, session?.permissionMode]);
+    setEffort(normalizeEffortValue(session?.effort));
+  }, [session?.effort, session?.model, session?.permissionMode]);
 
   useEffect(() => {
     bashModeRef.current = isBashMode;
     respondingRef.current = isResponding;
   }, [isBashMode, isResponding]);
+
+  useEffect(() => {
+    const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { disabled?: boolean } | undefined;
+    if (slashStorage) slashStorage.disabled = isBashMode;
+  }, [editor, isBashMode]);
 
   useEffect(() => {
     editor?.setEditable(!disabled && !isSubmitting && !isResponding);
@@ -3279,6 +4792,10 @@ function ExistingSessionComposer({
   const clearComposer = useCallback(() => {
     editor?.commands.clearContent(true);
     setText("");
+  }, [editor]);
+
+  const insertSlashCommand = useCallback(() => {
+    editor?.chain().focus("start").insertContent("/").run();
   }, [editor]);
 
   const submit = useCallback(async () => {
@@ -3328,6 +4845,18 @@ function ExistingSessionComposer({
     }
   };
 
+  const applyEffort = async (nextEffort: string) => {
+    if (!sessionRef || nextEffort === effort) return;
+    setEffort(nextEffort);
+    setConfigBusy(true);
+    try {
+      await bridge.setEffort?.(sessionRef.id, nextEffort);
+      await reload();
+    } finally {
+      setConfigBusy(false);
+    }
+  };
+
   const addFolder = async () => {
     if (!sessionRef) return;
     const paths = await desktopBridge.Preferences.getDirectoryPath?.(false);
@@ -3352,20 +4881,29 @@ function ExistingSessionComposer({
     checked: option.value === permissionMode,
     onSelect: () => void applyPermissionMode(option.value),
   }));
-  const cwd = session?.cwd;
-  const workspaceLabel = cwd ? basename(cwd) ?? cwd : "本地";
-  const folderItems = [
-    ...(cwd ? [{ icon: "Folder", label: cwd, disabled: true }] : []),
-    ...(cwd ? [{ label: "Copy path", onSelect: () => void navigator.clipboard?.writeText(cwd) }] : []),
-    { icon: "FolderPlus", label: "Add folder", onSelect: () => void addFolder() },
-  ];
-  const addItems = [
+  const effortItems = effortLevelOptions.map((option) => ({
+    label: option.label,
+    checked: option.value === effort,
+    onSelect: () => void applyEffort(option.value),
+  }));
+  const modelExtraSections = bridge.setEffort ? [{ key: "effort", header: "Effort", items: effortItems }] : undefined;
+  const plusMenuItems = [
     { icon: "Folder1", label: "Add folder", onSelect: () => void addFolder() },
   ];
 
   return (
     <div data-skip-approval-enter={undefined} className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]">
-      <button type="button" aria-label="Scroll to bottom" className="inline-flex items-center h-[24px] px-p3 rounded-r5 bg-fill-contained-default text-contained-default effect-contained-default hover:bg-fill-contained-hover hover:text-contained-hover cursor-default border-0 outline-none hide-focus-ring ring-focus absolute -top-[32px] left-1/2 -translate-x-1/2 z-[1] transition-opacity duration-150 opacity-0 pointer-events-none" />
+      <button
+        aria-hidden={!showScrollButton}
+        aria-label="Scroll to bottom"
+        className={`inline-flex items-center h-[24px] px-p3 rounded-r5 bg-fill-contained-default text-contained-default effect-contained-default hover:bg-fill-contained-hover hover:text-contained-hover cursor-default border-0 outline-none hide-focus-ring ring-focus absolute -top-[32px] left-1/2 -translate-x-1/2 z-[1] transition-opacity duration-150 ${showScrollButton ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        onClick={onScrollToBottom}
+        tabIndex={showScrollButton ? 0 : -1}
+        type="button"
+      >
+        <Icon name="ChevronDownSmall" size="s" />
+      </button>
+      <OfficialEpitaxyBranchRows bridge={bridge} onOpenDiff={onOpenDiff} session={session} sessionRef={sessionRef} />
       <InlineToolPermissionApprovals bridge={bridge} sessionId={sessionRef?.id} />
       <div
         className={`epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300 ${isBashMode ? "[&_.tiptap]:font-mono [&_.tiptap]:text-[length:var(--text-code)]" : ""}`}
@@ -3384,7 +4922,9 @@ function ExistingSessionComposer({
             className={`epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0 ${text.trim().length === 0 ? "[&_.is-editor-empty]:before:!content-['']" : ""}`}
             editor={editor}
             onKeyDownCapture={(event) => {
-              if (event.key === "Escape" && isBashMode) {
+              const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
+              const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
+              if (event.key === "Escape" && isBashMode && !hasSlashMenu) {
                 event.preventDefault();
                 clearComposer();
               }
@@ -3401,54 +4941,605 @@ function ExistingSessionComposer({
           </div>
         </div>
       </div>
-      <div className="w-full flex items-center gap-g5 py-[4px]">
-        <div className="flex items-center gap-g5 min-w-0">
-          <OfficialDropdownButton
-            ariaLabel="Permission mode"
-            disabled={disabled || isConfigBusy}
-            items={permissionItems}
-            label={<span className={permissionMode === "bypassPermissions" ? "text-extended-yellow" : undefined}>{permissionModeLabel(permissionMode)}</span>}
-            mode="text"
-            side="top"
-            variant="uncontained"
-          />
-          <OfficialDropdownButton
-            ariaLabel="Add"
-            disabled={disabled || isConfigBusy}
-            icon="Add"
-            items={addItems}
-            revealChevron="never"
-            side="top"
-            variant="uncontained"
-          />
-          <OfficialDropdownButton
-            ariaLabel="Workspace"
-            disabled={disabled || isConfigBusy}
-            icon="Folder"
-            items={folderItems}
-            label={workspaceLabel}
-            mode="text"
-            side="top"
-            variant="uncontained"
-          />
-        </div>
-        <div className="ml-auto flex items-center gap-g4">
-          <OfficialDropdownButton
-            ariaLabel="Model"
-            disabled={disabled || isConfigBusy}
-            items={modelItems}
-            label={modelLabel(model)}
-            mode="text"
-            side="top"
-            variant="uncontained"
-          />
-          <OfficialButton ariaLabel="Usage" className="h-small text-footnote rounded-small shrink-0" customIcon={
-            <span className="size-[12px] rounded-full border-2 border-border-400" aria-hidden="true" />
-          } />
-        </div>
+      <OfficialComposerFooter
+        bridge={bridge}
+        fastModeOn={false}
+        hideDictation
+        isPanelActive={!disabled}
+        modelExtraSections={modelExtraSections}
+        modelItems={modelItems}
+        modelLabel={modelLabel(model)}
+        modelPickerDisabled={disabled || isConfigBusy}
+        permissionDanger={permissionMode === "bypassPermissions"}
+        permissionItems={permissionItems}
+        permissionLabel={permissionModeLabel(permissionMode)}
+        plusMenuItems={plusMenuItems}
+        session={session}
+        sessionRef={sessionRef}
+        onInsertSlashCommand={insertSlashCommand}
+      />
+    </div>
+  );
+}
+
+type OfficialComposerDropdownItem = OfficialDropdownItem & { noQuickKey?: boolean };
+type OfficialComposerExtraSection = {
+  header?: ReactNode;
+  items: OfficialComposerDropdownItem[];
+  key?: string;
+  triggerKey?: ReactNode;
+};
+type OfficialComposerLoop = {
+  createdAt: number;
+  cron?: string;
+  humanSchedule?: string;
+  id: string;
+  nextRunAt?: number;
+  prompt?: string;
+};
+type OfficialComposerFooterProps = {
+  bridge: LocalSessionsBridge;
+  coordinatorMode?: boolean;
+  dictationDisabledReason?: ReactNode;
+  fastModeOn?: boolean;
+  hideDictation?: boolean;
+  isPanelActive?: boolean;
+  loops?: OfficialComposerLoop[];
+  modelExtraSections?: OfficialComposerExtraSection[];
+  modelItems: OfficialComposerDropdownItem[];
+  modelLabel: ReactNode;
+  modelPickerDisabled?: boolean;
+  onAddFiles?: (files: File[]) => void;
+  onCoordinatorModeChange?: (value: boolean) => void;
+  onInsertSlashCommand?: () => void;
+  onStopLoop?: (loop: OfficialComposerLoop) => void;
+  permissionDanger?: boolean | null;
+  permissionItems: OfficialComposerDropdownItem[];
+  permissionLabel: ReactNode;
+  plusMenuItems?: OfficialComposerDropdownItem[];
+  session?: SessionSummary | null;
+  sessionRef?: EpitaxySessionRef | null;
+  showDictationButton?: boolean;
+  supportsFileAttachments?: boolean;
+};
+
+const emptyComposerMenuItems: OfficialComposerDropdownItem[] = [];
+const composerShortcutBindings = [
+  { command: "togglePreview", key: "cmd+shift+p", code: "KeyP", when: "isClaudeApp" },
+  { command: "togglePreview", key: "cmd+alt+p", code: "KeyP" },
+  { command: "toggleDiff", key: "cmd+shift+d", code: "KeyD", when: "isClaudeApp" },
+  { command: "toggleDiff", key: "ctrl+shift+d", code: "KeyD", when: "!isClaudeApp" },
+  { command: "toggleTerminal", key: "ctrl+`", code: "Backquote" },
+  { command: "toggleBrowser", key: "cmd+shift+f", code: "KeyF" },
+  { command: "closePane", key: "cmd+\\", code: "Backslash" },
+  { command: "toggleSideChat", key: "cmd+;", code: "Semicolon" },
+  { command: "cycleTranscriptMode", key: "ctrl+o", code: "KeyO" },
+  { command: "openModeMenu", key: "cmd+shift+m", code: "KeyM", when: "isClaudeApp" },
+  { command: "openModeMenu", key: "cmd+alt+m", code: "KeyM" },
+  { command: "openModelMenu", key: "cmd+shift+i", code: "KeyI" },
+  { command: "openEffortMenu", key: "cmd+shift+e", code: "KeyE" },
+  { command: "toggleSelectionMode", key: "cmd+shift+s", code: "KeyS" },
+] as const;
+const composerMenuTargetByCommand = { openModeMenu: "mode", openModelMenu: "model", openEffortMenu: "effort" } as const;
+const composerUsageCircleSize = 12;
+const composerUsageCircumference = 2 * Math.PI * 5;
+
+type ComposerShortcutCommand = (typeof composerShortcutBindings)[number]["command"];
+type ComposerMenuTarget = "mode" | "model" | "effort";
+
+function OfficialComposerFooter({
+  bridge,
+  coordinatorMode = false,
+  dictationDisabledReason,
+  fastModeOn = false,
+  hideDictation = false,
+  isPanelActive = true,
+  loops,
+  modelExtraSections,
+  modelItems,
+  modelLabel,
+  modelPickerDisabled = false,
+  onAddFiles,
+  onCoordinatorModeChange,
+  onInsertSlashCommand,
+  onStopLoop,
+  permissionDanger = null,
+  permissionItems,
+  permissionLabel,
+  plusMenuItems,
+  session,
+  sessionRef = null,
+  showDictationButton = false,
+  supportsFileAttachments = false,
+}: OfficialComposerFooterProps) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const effortSection = modelExtraSections?.find((section) => section.key === "effort");
+  const effortItems = effortSection?.items ?? emptyComposerMenuItems;
+  const menu = useOfficialComposerFooterMenuState({ effortItems, isPanelActive, modeItems: permissionItems, modelItems });
+  const selectedEffortLabel = effortSection?.items.find((item) => item.checked)?.label;
+  const fastModeLabel = fastModeOn ? "Fast" : null;
+  const modelSections = useMemo(() => modelExtraSections?.map((section) => section.key === "effort" ? {
+    ...section,
+    items: menu.numberedEffortItems,
+    triggerKey: composerShortcutForCommand("openEffortMenu", true),
+  } : section), [menu.numberedEffortItems, modelExtraSections]);
+  const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
+  const footerPlusItems = useMemo(() => composeOfficialPlusItems(onInsertSlashCommand, onAddFiles ? openFilePicker : undefined, supportsFileAttachments, plusMenuItems), [onAddFiles, onInsertSlashCommand, openFilePicker, plusMenuItems, supportsFileAttachments]);
+  const onFileInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length > 0) onAddFiles?.(files);
+    event.target.value = "";
+  }, [onAddFiles]);
+  return (
+    <div className="w-full flex items-center gap-g5 py-[4px]">
+      <div className="flex items-center gap-g5 min-w-0">
+        <OfficialDropdownButton align="start" header="Mode" items={menu.numberedModeItems} label={permissionDanger ? <span className="text-extended-yellow">{permissionLabel}</span> : permissionLabel} onOpenChange={menu.onModeOpenChange} open={menu.modeOpen} revealChevron="never" side="top" size="small" triggerKey={composerShortcutForCommand("openModeMenu", true)} />
+        {onCoordinatorModeChange ? <OfficialCoordinatorModeToggle onChange={onCoordinatorModeChange} value={coordinatorMode} /> : null}
+        <OfficialDropdownButton align="start" ariaLabel="Add" className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} revealChevron="never" side="top" size="small" />
+        <input ref={fileInputRef} type="file" multiple accept={supportsFileAttachments ? undefined : "image/png,image/jpeg,image/gif,image/webp"} className="hidden" onChange={onFileInputChange} />
+        {sessionRef ? <span className="flex min-w-0"><OfficialSessionSource session={session ?? null} sessionRef={sessionRef} /></span> : null}
+        {hideDictation ? null : <OfficialDictationSlot disabledReason={dictationDisabledReason} showButton={showDictationButton} />}
+        {loops?.length && onStopLoop ? <OfficialLoopIndicator loops={loops} onStopLoop={onStopLoop} /> : null}
+      </div>
+      <div className="ml-auto flex items-center gap-g4">
+        <OfficialDropdownButton align="end" disabled={modelItems.length === 0 || modelPickerDisabled} extraSections={modelSections} header="Models" items={menu.numberedModelItems} label={<OfficialModelFooterLabel effortLabel={selectedEffortLabel} fastModeLabel={fastModeLabel} modelLabel={modelLabel} />} onOpenChange={menu.onModelOpenChange} open={menu.modelOpen} revealChevron="never" side="top" size="small" triggerKey={composerShortcutForCommand("openModelMenu", true)} />
+        <OfficialComposerUsageIndicator bridge={bridge} session={session} sessionRef={sessionRef} />
       </div>
     </div>
   );
+}
+
+function OfficialModelFooterLabel({ effortLabel, fastModeLabel, modelLabel }: { effortLabel?: ReactNode; fastModeLabel?: ReactNode; modelLabel: ReactNode }) {
+  if (!effortLabel && !fastModeLabel) return <>{modelLabel}</>;
+  return (
+    <span className="flex items-baseline gap-g3 min-w-0">
+      <span className="truncate">{modelLabel}</span>
+      {effortLabel ? <span className="text-t6 shrink-0">· {effortLabel}</span> : null}
+      {fastModeLabel ? <span className="text-t6 shrink-0">· {fastModeLabel}</span> : null}
+    </span>
+  );
+}
+
+function OfficialCoordinatorModeToggle({ onChange, value }: { onChange: (value: boolean) => void; value: boolean }) {
+  return <OfficialButton ariaLabel="Toggle coordinator mode" icon="AgentPlanPath" onClick={() => onChange(!value)} pressed={value} size="small" variant="toggle" />;
+}
+
+function OfficialDictationSlot({ disabledReason, showButton }: { disabledReason?: ReactNode; showButton: boolean }) {
+  const ariaLabel = disabledReason ? String(disabledReason) : "Dictate";
+  return showButton ? <OfficialButton ariaLabel="Dictate" disabled icon="MicrophoneDictation" size="small" /> : <OfficialButton ariaLabel={ariaLabel} disabled icon="MicrophoneDictation" size="small" />;
+}
+
+function OfficialLoopIndicator({ loops, onStopLoop }: { loops: OfficialComposerLoop[]; onStopLoop: (loop: OfficialComposerLoop) => void }) {
+  const label = loops.length > 1 ? `${loops.length} loops` : "Loop";
+  const items = loops.map((loop) => ({ icon: "XCrossCloseMedium", label: loop.prompt || "Recurring loop", onSelect: () => onStopLoop(loop) }));
+  return <OfficialDropdownButton className="shrink-0" header="Active loops" items={items} label={label} revealChevron="never" side="top" size="small" />;
+}
+
+function composeOfficialPlusItems(onInsertSlashCommand: (() => void) | undefined, openFilePicker: (() => void) | undefined, supportsFileAttachments: boolean, plusMenuItems?: OfficialComposerDropdownItem[]) {
+  const items: OfficialComposerDropdownItem[] = [];
+  if (onInsertSlashCommand) {
+    items.push({
+      icon: "SlashShortcutCommand",
+      label: "Slash commands",
+      onSelect: onInsertSlashCommand,
+    });
+  }
+  if (openFilePicker) {
+    items.push({
+      icon: "PaperclipAttach",
+      label: supportsFileAttachments ? "Add files or photos" : "Add image",
+      onSelect: openFilePicker,
+    });
+  }
+  if (plusMenuItems?.length) items.push(...plusMenuItems);
+  return items.length > 0 ? items : emptyComposerMenuItems;
+}
+
+const officialContextUsageCache = new Map<string, ContextUsage>();
+
+function OfficialComposerUsageIndicator({ bridge, session, sessionRef }: { bridge: LocalSessionsBridge; session?: SessionSummary | null; sessionRef?: EpitaxySessionRef | null }) {
+  const sessionId = sessionRef?.id;
+  const [bridgeUsage, setBridgeUsage] = useState<ContextUsage | null>(() => sessionId ? officialContextUsageCache.get(sessionId) ?? null : null);
+  const [isFetching, setIsFetching] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const setUsageForSession = useCallback((nextUsage: ContextUsage | null) => {
+    if (!sessionId) {
+      setBridgeUsage(null);
+      return;
+    }
+    if (nextUsage) officialContextUsageCache.set(sessionId, nextUsage);
+    setBridgeUsage(nextUsage ?? officialContextUsageCache.get(sessionId) ?? null);
+  }, [sessionId]);
+  const refreshUsage = useCallback(async () => {
+    if (!sessionId || !bridge.getContextUsage) {
+      setUsageForSession(null);
+      setIsFetching(false);
+      return;
+    }
+    setIsFetching(true);
+    let alive = true;
+    await bridge.getContextUsage(sessionId).then((nextUsage) => {
+      if (alive) setUsageForSession(nextUsage);
+    }).catch(() => {
+      if (alive) setUsageForSession(null);
+    }).finally(() => {
+      if (alive) setIsFetching(false);
+    });
+    alive = false;
+  }, [bridge, sessionId, setUsageForSession]);
+  useEffect(() => {
+    let alive = true;
+    if (!sessionId || !bridge.getContextUsage) {
+      setUsageForSession(null);
+      setIsFetching(false);
+      return undefined;
+    }
+    setBridgeUsage(officialContextUsageCache.get(sessionId) ?? null);
+    setIsFetching(true);
+    void bridge.getContextUsage(sessionId).then((nextUsage) => {
+      if (alive) setUsageForSession(nextUsage);
+    }).catch(() => {
+      if (alive) setUsageForSession(null);
+    }).finally(() => {
+      if (alive) setIsFetching(false);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [bridge, sessionId, setUsageForSession]);
+
+  const isLocalContext = sessionRef?.type === "local" || session?.kind === "code";
+  const usage = bridgeUsage;
+  const usedTokens = usage?.totalTokens ?? 0;
+  const maxTokens = usage?.rawMaxTokens ?? null;
+  const usagePercent = typeof maxTokens === "number" && maxTokens > 0 ? officialClampPercent(usedTokens / maxTokens * 100) : null;
+  const contextSummary = typeof maxTokens === "number" && maxTokens > 0 ? `${formatUsageTokenCount(usedTokens)} / ${formatUsageTokenCount(maxTokens)} (${usagePercent}%)` : formatUsageTokenCount(usedTokens);
+  const triggerPercent = isLocalContext ? usagePercent ?? 0 : 0;
+  const strokeDashoffset = composerUsageCircumference * (1 - triggerPercent / 100);
+  const ariaParts = [isLocalContext ? `context ${usagePercent !== null ? `${usagePercent}%` : contextSummary}` : null].filter(Boolean);
+  const ariaLabel = ariaParts.length > 0 ? `Usage: ${ariaParts.join(", ")}` : "Usage";
+  const handleOpenChange = useCallback((open: boolean) => {
+    if (open && isLocalContext) void refreshUsage();
+    if (!open) setExpanded(false);
+  }, [isLocalContext, refreshUsage]);
+  return (
+    <Popover.Root onOpenChange={handleOpenChange}>
+      <Popover.Trigger render={<OfficialButton ariaLabel={ariaLabel} className="shrink-0" customIcon={<OfficialUsageCircle strokeDashoffset={strokeDashoffset} usagePercent={triggerPercent} />} size="small" variant="uncontained" />} />
+      <Popover.Portal>
+        <Popover.Positioner align="end" className="epitaxy-root size-0" side="top" sideOffset={8}>
+          <Popover.Popup className="outline-none absolute bottom-0 right-0">
+            <div className="relative isolate flex flex-col py-p5 rounded-r6 w-[360px] max-w-[calc(100vw-2rem)] max-h-[min(var(--available-height),640px)]">
+              <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
+              <h2 className="sr-only">Usage</h2>
+              <div className="flex-1 min-h-0 flex flex-col overflow-y-auto overscroll-contain">
+                {isLocalContext ? (
+                  <OfficialContextWindowSummary
+                    contextPct={usagePercent}
+                    contextUsage={usage}
+                    expanded={expanded}
+                    isFetching={isFetching}
+                    onToggle={() => setExpanded((value) => !value)}
+                    summary={contextSummary}
+                  />
+                ) : null}
+              </div>
+            </div>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+function OfficialContextWindowSummary({
+  contextPct,
+  contextUsage,
+  expanded,
+  isFetching,
+  onToggle,
+  summary,
+}: {
+  contextPct: number | null;
+  contextUsage: ContextUsage | null;
+  expanded: boolean;
+  isFetching: boolean;
+  onToggle: () => void;
+  summary: string;
+}) {
+  const canToggle = contextUsage !== null || isFetching;
+  return (
+    <div className="flex flex-col gap-g2">
+      <button
+        aria-expanded={canToggle ? expanded : undefined}
+        className="group flex items-center gap-g6 px-p8 py-p2 min-h-[20px] text-left outline-none hide-focus-ring ring-focus rounded-r3"
+        disabled={!canToggle}
+        onClick={canToggle ? onToggle : undefined}
+        type="button"
+      >
+        <span className="text-footnote text-t6">Context window</span>
+        <span className="text-footnote text-t6 tabular-nums ml-auto">{summary}</span>
+        {canToggle ? <Icon name={expanded ? "ChevronDownSmall" : "ChevronRightSmall"} size="xs" className="text-t6 group-hover:text-t8 shrink-0" /> : null}
+      </button>
+      <div className="px-p8 pb-p2">
+        {contextUsage ? <OfficialContextWindowUsage usage={contextUsage} defaultExpanded={expanded} compact className="" /> : <OfficialContextProgressBar contextPct={contextPct} />}
+      </div>
+      {canToggle && expanded && !contextUsage ? (
+        <div className="px-p8 pb-p2 flex items-center gap-g4 text-footnote text-t7 min-h-[var(--h4)]">
+          <OfficialInlineSpinner />
+          <span>Loading context breakdown…</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function OfficialContextProgressBar({ contextPct }: { contextPct: number | null }) {
+  return (
+    <div className="h-[4px] rounded-r2 overflow-hidden bg-t2" role="progressbar" aria-valuenow={contextPct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
+      {contextPct !== null ? <div className={`h-full ${officialContextUsageColorClass(contextPct)} transition-[width]`} style={{ width: `${contextPct}%` }} /> : null}
+    </div>
+  );
+}
+
+type OfficialContextCategory = { color: string; name: string; tokens: number };
+type OfficialContextUsageModel = {
+  agents: Array<{ agentType: string; tokens: number }>;
+  categories: OfficialContextCategory[];
+  mcpTools: Array<{ name: string; serverName: string; tokens: number }>;
+  memoryFiles: Array<{ path: string; tokens: number }>;
+  percentage: number;
+  rawMaxTokens: number;
+  totalTokens: number;
+};
+
+function OfficialContextWindowUsage({ className = "p-[12px] rounded-r6 bg-t1 max-w-[520px]", compact = false, defaultExpanded = false, usage }: { className?: string; compact?: boolean; defaultExpanded?: boolean; usage: ContextUsage }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const actualExpanded = compact ? defaultExpanded : expanded;
+  const model = useMemo(() => normalizeOfficialContextUsageModel(usage), [usage]);
+  const categoryTotal = model.categories.reduce((total, category) => total + category.tokens, 0) || 1;
+  return (
+    <div className={`flex flex-col gap-g4 ${className}`}>
+      {!compact ? (
+        <button type="button" className="flex items-center gap-g4 min-w-0 text-left outline-none hide-focus-ring ring-focus rounded-r3" onClick={() => setExpanded((value) => !value)} aria-expanded={actualExpanded}>
+          <Icon name="Blocks" size="sm" className="text-t7 shrink-0" />
+          <span className="text-body text-t9 shrink-0">Context window</span>
+          <span className="text-footnote text-t6 truncate flex-1 text-right">{`${formatUsageTokenCount(model.totalTokens)} / ${formatUsageTokenCount(model.rawMaxTokens)} (${model.percentage}%)`}</span>
+          <Icon name={actualExpanded ? "ChevronDownSmall" : "ChevronRightSmall"} size="xs" className="text-t6 shrink-0" />
+        </button>
+      ) : null}
+      <div className={`flex shrink-0 rounded-r2 overflow-hidden bg-t2 ${compact ? "h-[4px]" : "h-[8px]"}`} role="img" aria-label={`${model.percentage}% of context window used`}>
+        {model.categories.map((category) => {
+          const visibleWidth = category.tokens / categoryTotal * 100;
+          const rawPercent = category.tokens / model.rawMaxTokens * 100;
+          if (visibleWidth < 0.5) return null;
+          return (
+            <div key={category.name} aria-label={`${category.name} — ${formatUsageTokenCount(category.tokens)} (${rawPercent.toFixed(1)}%)`} style={{ width: `${visibleWidth}%`, backgroundColor: category.color }} />
+          );
+        })}
+      </div>
+      {actualExpanded ? (
+        <div className="flex flex-col gap-g2">
+          {model.categories.map((category) => {
+            const rawPercent = category.tokens / model.rawMaxTokens * 100;
+            return (
+              <div className="flex items-center gap-g3 text-footnote" key={category.name}>
+                <span className="size-[8px] rounded-r1 shrink-0" style={{ backgroundColor: category.color }} aria-hidden="true" />
+                <span className="text-t8 flex-1 truncate">{category.name}</span>
+                <span className="text-t6 shrink-0 tabular-nums">{formatUsageTokenCount(category.tokens)}</span>
+                <span className="text-t8 shrink-0 tabular-nums w-[44px] text-right">{`${rawPercent.toFixed(1)}%`}</span>
+              </div>
+            );
+          })}
+          {model.mcpTools.length > 0 ? <OfficialContextUsageRows label="MCP tools" rows={model.mcpTools.map((row) => ({ name: `${row.serverName} · ${row.name}`, tokens: row.tokens }))} /> : null}
+          {model.memoryFiles.length > 0 ? <OfficialContextUsageRows label="Memory files" rows={model.memoryFiles.map((row) => ({ name: row.path, tokens: row.tokens }))} /> : null}
+          {model.agents.length > 0 ? <OfficialContextUsageRows label="Custom agents" rows={model.agents.map((row) => ({ name: row.agentType, tokens: row.tokens }))} /> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function OfficialContextUsageRows({ label, rows }: { label: string; rows: Array<{ name: string; tokens: number }> }) {
+  const [expanded, setExpanded] = useState(false);
+  const total = rows.reduce((sum, row) => sum + row.tokens, 0);
+  return (
+    <div className="flex flex-col gap-g1 mt-[var(--p2)]">
+      <button type="button" className="flex items-center gap-g3 text-footnote text-left" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
+        <span className="size-[8px] shrink-0 flex items-center justify-center">
+          <Icon name={expanded ? "ChevronDownSmall" : "ChevronRightSmall"} size="xs" className="text-t5" />
+        </span>
+        <span className="text-t7 flex-1">{label}</span>
+        <span className="text-t6 shrink-0 tabular-nums">{formatUsageTokenCount(total)}</span>
+        <span className="text-t6 shrink-0 tabular-nums w-[44px] text-right">{rows.length}</span>
+      </button>
+      {expanded ? (
+        <div className={`flex flex-col gap-g1 ${rows.length > 12 ? "max-h-[168px] overflow-y-auto overscroll-contain" : ""}`}>
+          {rows.map((row) => (
+            <div className="flex items-center gap-g3 text-footnote" key={row.name}>
+              <span className="size-[8px] shrink-0" aria-hidden="true" />
+              <span className="text-t6 flex-1 truncate">{row.name}</span>
+              <span className="text-t6 shrink-0 tabular-nums">{formatUsageTokenCount(row.tokens)}</span>
+              <span className="w-[44px] shrink-0" aria-hidden="true" />
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const officialFreeSpaceContextCategory = "Free space";
+const officialAutocompactContextCategory = "Autocompact buffer";
+
+function normalizeOfficialContextUsageModel(usage: ContextUsage): OfficialContextUsageModel {
+  const rawMaxTokens = Math.max(1, usage.rawMaxTokens ?? 1);
+  const totalTokens = Math.max(0, usage.totalTokens);
+  const percentage = typeof usage.percentage === "number" && Number.isFinite(usage.percentage)
+    ? officialClampPercent(usage.percentage)
+    : officialClampPercent(totalTokens / rawMaxTokens * 100);
+  const categories = usage.categories ?? [];
+  return {
+    agents: usage.agents ?? [],
+    categories: sortOfficialContextCategories(categories).map((category, index) => ({
+      ...category,
+      color: officialContextCategoryColor(category.name, index),
+    })),
+    mcpTools: usage.mcpTools ?? [],
+    memoryFiles: usage.memoryFiles ?? [],
+    percentage,
+    rawMaxTokens,
+    totalTokens,
+  };
+}
+
+function sortOfficialContextCategories(categories: Array<{ name: string; tokens: number }>) {
+  const visible = categories.filter((category) => category.name !== officialFreeSpaceContextCategory && category.name !== officialAutocompactContextCategory && !isDeferredOfficialContextCategory(category.name))
+    .sort((left, right) => right.tokens - left.tokens);
+  const deferred = categories.filter((category) => isDeferredOfficialContextCategory(category.name)).sort((left, right) => right.tokens - left.tokens);
+  const autocompact = categories.find((category) => category.name === officialAutocompactContextCategory);
+  const free = categories.find((category) => category.name === officialFreeSpaceContextCategory);
+  return [...visible, ...deferred, ...(autocompact ? [autocompact] : []), ...(free ? [free] : [])].filter((category) => category.tokens > 0);
+}
+
+function isDeferredOfficialContextCategory(name: string) {
+  return /\(deferred\)$/i.test(name);
+}
+
+function officialContextCategoryColor(name: string, index: number) {
+  if (name === officialFreeSpaceContextCategory) return "var(--t2)";
+  if (name === officialAutocompactContextCategory || isDeferredOfficialContextCategory(name)) return "var(--t4)";
+  return `hsl(217 70% ${Math.min(88, 62 + 6 * index)}%)`;
+}
+
+function officialContextUsageColorClass(percent: number) {
+  return percent >= 95 ? "bg-extended-pink" : percent >= 80 ? "bg-extended-yellow" : "bg-[var(--accent)]";
+}
+
+function officialClampPercent(value: number) {
+  return Math.round(100 * Math.max(0, Math.min(1, value / 100)));
+}
+
+function OfficialInlineSpinner() {
+  return (
+    <span className="relative inline-block shrink-0 align-middle size-4" aria-hidden="true">
+      <span className="absolute inset-0 rounded-full" style={{ border: "2px solid var(--t2)" }} />
+      <span className="absolute inset-0 rounded-full animate-[spin_2s_linear_infinite]" style={{ background: "conic-gradient(transparent 40%, var(--spinner-arc, var(--t6)))", mask: "radial-gradient(farthest-side, transparent calc(100% - 2px), rgb(0, 0, 0) calc(100% - 1.5px))" }} />
+    </span>
+  );
+}
+
+function OfficialUsageCircle({ strokeDashoffset, usagePercent }: { strokeDashoffset: number; usagePercent: number }) {
+  return (
+    <svg width={composerUsageCircleSize} height={composerUsageCircleSize} viewBox="0 0 12 12" className="-rotate-90" aria-hidden="true">
+      <circle cx={6} cy={6} r={5} fill="none" strokeWidth={2} stroke="var(--t3)" />
+      <circle cx={6} cy={6} r={5} fill="none" strokeWidth={2} strokeDasharray={composerUsageCircumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" stroke={usagePercent >= 95 ? "var(--extended-pink)" : usagePercent >= 80 ? "var(--extended-yellow)" : "var(--accent)"} className="transition-[stroke-dashoffset] duration-300" />
+    </svg>
+  );
+}
+
+function useOfficialComposerFooterMenuState({ effortItems, isPanelActive, modeItems, modelItems }: { effortItems: OfficialComposerDropdownItem[]; isPanelActive: boolean; modeItems: OfficialComposerDropdownItem[]; modelItems: OfficialComposerDropdownItem[] }) {
+  const [openMenu, setOpenMenu] = useState<ComposerMenuTarget | null>(null);
+  const closeMenu = useCallback(() => setOpenMenu(null), []);
+  useEffect(() => { if (!isPanelActive) closeMenu(); }, [closeMenu, isPanelActive]);
+  const selectableModeItems = useMemo(() => modeItems.filter(isQuickSelectableComposerItem), [modeItems]);
+  const selectableModelItems = useMemo(() => modelItems.filter(isQuickSelectableComposerItem), [modelItems]);
+  const selectableEffortItems = useMemo(() => effortItems.filter(isQuickSelectableComposerItem), [effortItems]);
+  const onKeyDown = useCallback((event: KeyboardEvent) => {
+    handleComposerFooterKeyDown(event, { closeMenu, effortItems, isPanelActive, modeItems, modelItems, openMenu, selectableEffortItems, selectableModeItems, selectableModelItems, setOpenMenu });
+  }, [closeMenu, effortItems, isPanelActive, modeItems, modelItems, openMenu, selectableEffortItems, selectableModeItems, selectableModelItems]);
+  useEffect(() => {
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [onKeyDown]);
+  return {
+    modeOpen: openMenu === "mode",
+    modelOpen: openMenu === "model" || openMenu === "effort",
+    numberedEffortItems: openMenu === "effort" ? numberComposerMenuItems(effortItems) : effortItems,
+    numberedModeItems: openMenu === "mode" ? numberComposerMenuItems(modeItems) : modeItems,
+    numberedModelItems: openMenu === "model" ? numberComposerMenuItems(modelItems) : modelItems,
+    onModeOpenChange: (open: boolean) => setOpenMenu(open ? "mode" : null),
+    onModelOpenChange: (open: boolean) => setOpenMenu(open ? "model" : null),
+  };
+}
+
+function handleComposerFooterKeyDown(event: KeyboardEvent, state: { closeMenu: () => void; effortItems: OfficialComposerDropdownItem[]; isPanelActive: boolean; modeItems: OfficialComposerDropdownItem[]; modelItems: OfficialComposerDropdownItem[]; openMenu: ComposerMenuTarget | null; selectableEffortItems: OfficialComposerDropdownItem[]; selectableModeItems: OfficialComposerDropdownItem[]; selectableModelItems: OfficialComposerDropdownItem[]; setOpenMenu: (menu: ComposerMenuTarget | null) => void }) {
+  if (!state.isPanelActive || event.defaultPrevented) return;
+  const menuIsOpen = state.openMenu !== null;
+  const plainKey = !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey);
+  if (menuIsOpen && plainKey && event.key === "Escape") return event.preventDefault(), event.stopImmediatePropagation(), state.closeMenu();
+  if (menuIsOpen && plainKey && event.code.startsWith("Digit")) return selectNumberedComposerItem(event, state);
+  const command = composerCommandForKeyboardEvent(event, { isClaudeApp: true, mac: isMacPlatform() });
+  const target = command ? composerMenuTargetByCommand[command as keyof typeof composerMenuTargetByCommand] : undefined;
+  if (!target || !composerMenuHasItems(target, state)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (!menuIsOpen) state.setOpenMenu(target === "effort" && state.effortItems.length === 0 ? "model" : target);
+}
+
+function selectNumberedComposerItem(event: KeyboardEvent, state: Parameters<typeof handleComposerFooterKeyDown>[1]) {
+  event.preventDefault();
+  event.stopPropagation();
+  const digit = Number(event.code.slice(5));
+  if (digit < 1 || digit > 9) return;
+  const items = state.openMenu === "mode" ? state.selectableModeItems : state.openMenu === "effort" ? state.selectableEffortItems : state.selectableModelItems;
+  const item = items[digit - 1];
+  if (!item?.onSelect) return;
+  item.onSelect();
+  state.closeMenu();
+}
+
+function composerMenuHasItems(target: ComposerMenuTarget, state: { effortItems: OfficialComposerDropdownItem[]; modeItems: OfficialComposerDropdownItem[]; modelItems: OfficialComposerDropdownItem[] }) {
+  if (target === "mode") return state.modeItems.length > 0;
+  if (target === "effort") return state.effortItems.length > 0 || state.modelItems.length > 0;
+  return state.modelItems.length > 0 || state.effortItems.length > 0;
+}
+
+function numberComposerMenuItems(items: OfficialComposerDropdownItem[]) {
+  let count = 0;
+  return items.map((item) => item.disabled || item.noQuickKey || count >= 9 ? item : { ...item, shortcut: String(++count) });
+}
+
+function isQuickSelectableComposerItem(item: OfficialComposerDropdownItem) {
+  return !item.disabled && !item.noQuickKey;
+}
+
+function composerCommandForKeyboardEvent(event: KeyboardEvent, options: { isClaudeApp: boolean; mac: boolean }) {
+  for (const binding of composerShortcutBindings) {
+    const when = "when" in binding ? binding.when : undefined;
+    if (event.code === binding.code && composerShortcutConditionMatches(when, options.isClaudeApp) && composerShortcutMatches(event, binding.key, options.mac)) return binding.command;
+  }
+  return null;
+}
+
+function composerShortcutConditionMatches(when: string | undefined, isClaudeApp: boolean) {
+  return when === "isClaudeApp" ? isClaudeApp : when !== "!isClaudeApp" || !isClaudeApp;
+}
+
+function composerShortcutMatches(event: KeyboardEvent, spec: string, mac: boolean) {
+  const parts = spec.split("+");
+  const wantsCmd = parts.includes("cmd");
+  const wantsCtrl = parts.includes("ctrl");
+  return event.metaKey === (mac && wantsCmd) && event.ctrlKey === (wantsCtrl || (!mac && wantsCmd)) && event.shiftKey === parts.includes("shift") && event.altKey === parts.includes("alt");
+}
+
+function composerShortcutForCommand(command: ComposerShortcutCommand, isClaudeApp: boolean) {
+  const binding = composerShortcutBindings.find((item) => item.command === command && composerShortcutConditionMatches("when" in item ? item.when : undefined, isClaudeApp));
+  return binding ? renderShortcutGlyphs(binding.key) : undefined;
+}
+
+function renderShortcutGlyphs(spec: string) {
+  const keyMap: Record<string, string> = { alt: "⌥", cmd: "⌘", ctrl: "⌃", shift: "⇧" };
+  return spec.split("+").map((part) => keyMap[part] ?? part.toUpperCase()).join("");
+}
+
+function isMacPlatform() {
+  return typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+}
+
+function formatUsageTokenCount(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return String(value);
 }
 
 function SessionNotFound({ onBack }: { onBack: () => Promise<void> }) {
@@ -3541,12 +5632,26 @@ function emptySessionDataState(isLoading: boolean): SessionDataState {
   };
 }
 
+const officialSessionDataCache = new Map<string, SessionDataState>();
+type SessionDataStateUpdater = SessionDataState | ((current: SessionDataState) => SessionDataState);
+
 function useEpitaxySessionData(sessionId?: string) {
   const finalizeStreamGenerationRef = useRef<number | null>(null);
   const loadSeqRef = useRef(0);
   const streamGenerationRef = useRef(0);
   const smootherRef = useRef(createOfficialSessionStreamSmoother());
-  const [state, setState] = useState<SessionDataState>(() => emptySessionDataState(Boolean(sessionId)));
+  const [, forceSessionDataRender] = useState(0);
+  const state = sessionId ? officialSessionDataCache.get(sessionId) ?? emptySessionDataState(true) : emptySessionDataState(false);
+  const setState = useCallback((updater: SessionDataStateUpdater) => {
+    if (!sessionId) {
+      forceSessionDataRender((version) => version + 1);
+      return;
+    }
+    const current = officialSessionDataCache.get(sessionId) ?? emptySessionDataState(true);
+    const next = typeof updater === "function" ? updater(current) : updater;
+    officialSessionDataCache.set(sessionId, next);
+    forceSessionDataRender((version) => version + 1);
+  }, [sessionId]);
 
   useEffect(() => {
     const smoother = createOfficialSessionStreamSmoother();
@@ -3568,17 +5673,7 @@ function useEpitaxySessionData(sessionId?: string) {
     smootherRef.current.clear();
     setState((current) => {
       if (!sessionId) return emptySessionDataState(false);
-      if (current.messages.length === 0 && current.session === null) return emptySessionDataState(true);
-      return {
-        ...current,
-        error: null,
-        isLoading: true,
-        isSessionNotFound: false,
-        pendingTurnStartedAt: null,
-        streamActivityMode: idleStreamActivityMode,
-        streamingMessageId: null,
-        streamSnapshot: null,
-      };
+      return officialSessionDataCache.get(sessionId) ?? emptySessionDataState(true);
     });
   }, [sessionId]);
 
@@ -3643,6 +5738,13 @@ function useEpitaxySessionData(sessionId?: string) {
   }, [reload]);
 
   useEffect(() => {
+    if (!sessionId) return;
+    if (state.error || state.isSessionNotFound) return;
+    if (!state.session && state.messages.length === 0) return;
+    officialSessionDataCache.set(sessionId, state);
+  }, [sessionId, state]);
+
+  useEffect(() => {
     if (!sessionId) return undefined;
     const handleEvent = (event: unknown) => {
       if (!isSessionEventForId(event, sessionId)) return;
@@ -3702,8 +5804,9 @@ function useEpitaxySessionData(sessionId?: string) {
   const activeStreamingMessageId = state.streamingMessageId ?? state.streamSnapshot?.messageId ?? null;
   const parsedEntries = useMemo(() => parseOfficialTranscriptEntries(state.messages, activeStreamingMessageId), [activeStreamingMessageId, state.messages]);
   const entries = useMemo(() => mergeOfficialStreamSnapshot(parsedEntries, state.streamSnapshot), [parsedEntries, state.streamSnapshot]);
+  const streamTokenEstimate = useMemo(() => estimateOfficialStreamSnapshotTokens(state.streamSnapshot), [state.streamSnapshot]);
   const isResponding = state.streamActivityMode !== idleStreamActivityMode || state.streamSnapshot !== null || state.streamingMessageId !== null || state.session?.isRunning === true;
-  return { ...state, entries, isResponding, reload };
+  return { ...state, entries, isResponding, reload, streamTokenEstimate };
 }
 
 async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMessage[]; session: SessionSummary; source: SessionSource } | null> {
@@ -3964,11 +6067,26 @@ function normalizeToolPermissionRequest(event: unknown, activeSessionId: string)
     ?? "Tool";
   if (!requestId) return null;
   return {
+    alwaysAllowScope: stringValue(request.alwaysAllowScope)
+      ?? stringValue(request.always_allow_scope)
+      ?? stringValue(request.permissionScope)
+      ?? stringValue(request.permission_scope)
+      ?? stringValue(raw.alwaysAllowScope)
+      ?? stringValue(message.alwaysAllowScope),
+    decisionReason: stringValue(request.decisionReason)
+      ?? stringValue(request.decision_reason)
+      ?? stringValue(raw.decisionReason)
+      ?? stringValue(message.decisionReason),
     description: stringValue(request.description) ?? stringValue(raw.description) ?? stringValue(message.description),
+    hasAlwaysAllow: booleanValue(request.hasAlwaysAllow)
+      ?? booleanValue(request.has_always_allow)
+      ?? booleanValue(raw.hasAlwaysAllow)
+      ?? booleanValue(message.hasAlwaysAllow),
     input: asRecord(request.input ?? raw.input ?? message.input),
     requestId,
     sessionId,
     toolName,
+    toolUseId: stringValue(request.toolUseId) ?? stringValue(request.tool_use_id),
   };
 }
 
@@ -3997,6 +6115,10 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+function booleanValue(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
 function firstNonEmptyRecord(...values: unknown[]): Record<string, unknown> {
   for (const value of values) {
     const record = asRecord(value);
@@ -4014,3 +6136,5 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 const composerDropdownButtonClass = "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled aria-[expanded=true]:text-[var(--text-uncontained-selected)] aria-[expanded=true]:hover:text-[var(--text-uncontained-selected)] h-small rounded-small text-footnote justify-between pl-p5 pr-p2";
+
+

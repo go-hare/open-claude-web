@@ -1,5 +1,5 @@
 import { Menu } from "@base-ui-components/react/menu";
-import { useEffect, useReducer, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useReducer, useState, type CSSProperties, type ReactNode } from "react";
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
 
@@ -14,10 +14,12 @@ export type OfficialDropdownItem = {
   icon?: string;
   keepOpen?: boolean;
   label: ReactNode;
+  noQuickKey?: boolean;
   onSelect?: () => void;
   separatorBefore?: boolean;
   shortcut?: string;
   status?: ReactNode;
+  tooltip?: ReactNode;
   trailing?: ReactNode;
 };
 
@@ -41,7 +43,7 @@ type OfficialDropdownButtonProps = {
   ariaLabel?: string;
   className?: string;
   disabled?: boolean;
-  extraSections?: Array<{ header?: ReactNode; items: OfficialDropdownItem[] }>;
+  extraSections?: Array<{ header?: ReactNode; items: OfficialDropdownItem[]; triggerKey?: ReactNode }>;
   header?: ReactNode;
   icon?: string;
   items?: OfficialDropdownItem[];
@@ -57,9 +59,24 @@ type OfficialDropdownButtonProps = {
   variant?: "uncontained" | "contained" | "muted";
 };
 
+export type OfficialComposerFolderRecent = {
+  displayName?: string;
+  path: string;
+};
+
+type OfficialComposerFolderPillProps = {
+  browseDisabled?: boolean;
+  folder?: string;
+  isSSH?: boolean;
+  onBrowse: () => void;
+  onSelectFolder: (path: string) => void;
+  recentFolders: OfficialComposerFolderRecent[];
+};
+
 type OfficialSessionHeaderProps = {
   activeView?: OfficialViewPane;
   dragHandle?: ReactNode;
+  hasRunningTasks?: boolean;
   hideSummary?: boolean;
   isTitleLoading?: boolean;
   isTopLeft?: boolean;
@@ -71,7 +88,7 @@ type OfficialSessionHeaderProps = {
   title: string;
 };
 
-export type OfficialViewPane = "preview" | "diff" | "terminal" | "tasks" | "plan" | "file";
+export type OfficialViewPane = "preview" | "diff" | "terminal" | "tasks" | "plan" | "file" | "subagent";
 
 type OfficialTranscriptProps = {
   children: ReactNode;
@@ -258,7 +275,7 @@ export function OfficialDropdownButton({
                 {extraSections?.map((section, index) => section.items.length > 0 ? (
                   <Menu.Group className="flex flex-col" key={index}>
                     {(items.length > 0 || index > 0) ? <OfficialMenuSeparator /> : null}
-                    {section.header ? <OfficialMenuHeader>{section.header}</OfficialMenuHeader> : null}
+                    {section.header ? <OfficialMenuHeader triggerKey={section.triggerKey}>{section.header}</OfficialMenuHeader> : null}
                     <OfficialMenuItems items={section.items} />
                   </Menu.Group>
                 ) : null)}
@@ -274,6 +291,7 @@ export function OfficialDropdownButton({
 export function OfficialSessionHeader({
   activeView,
   dragHandle,
+  hasRunningTasks = false,
   hideSummary = false,
   isTitleLoading = false,
   isTopLeft,
@@ -300,7 +318,7 @@ export function OfficialSessionHeader({
       <div className="relative z-[1] ml-auto flex items-center gap-g3 shrink-0 draggable-none">
         {sessionRef ? <OfficialTranscriptViewButton hideSummary={hideSummary} /> : null}
         {sessionRef?.type !== "local" ? <OfficialButton ariaLabel="Share" icon="ShareArrowOutOfBox" /> : null}
-        {sessionRef ? <OfficialViewsButton activeView={activeView} onViewSelect={onViewSelect} /> : null}
+        {sessionRef ? <OfficialViewsButton activeView={activeView} hasRunningTasks={hasRunningTasks} onViewSelect={onViewSelect} /> : null}
         {onSessionRemoved ? <OfficialButton ariaLabel="Close pane" icon="XCrossCloseMedium" onClick={onSessionRemoved} /> : null}
       </div>
     </div>
@@ -553,9 +571,87 @@ export function OfficialComposerPill({
 }) {
   return (
     <button aria-label={ariaLabel} className={`${officialComposerPillClass} ${className}`} onClick={onClick} title={title} type="button">
-      {icon ? <Icon name={icon} size="sm" /> : null}
+      {icon ? <Icon name={icon} size="s" /> : null}
       {children}
     </button>
+  );
+}
+
+export function OfficialComposerFolderPill({
+  browseDisabled = false,
+  folder,
+  isSSH = false,
+  onBrowse,
+  onSelectFolder,
+  recentFolders,
+}: OfficialComposerFolderPillProps) {
+  const [open, setOpen] = useState(false);
+  const duplicateBasenames = useMemoizedDuplicateBasenames(recentFolders);
+  const triggerChildren = (
+    <>
+      <Icon name="Folder1" size="s" />
+      <span className="truncate max-w-[160px]">{folder ? basename(folder) : "Select folder…"}</span>
+    </>
+  );
+
+  if (recentFolders.length === 0) {
+    const button = (
+      <button className={officialComposerPillClass} disabled={browseDisabled} onClick={onBrowse} title={folder} type="button">
+        {triggerChildren}
+      </button>
+    );
+    return browseDisabled ? <span className="inline-flex">{button}</span> : button;
+  }
+
+  return (
+    <Menu.Root open={open} onOpenChange={setOpen}>
+      <Menu.Trigger className={officialComposerPillClass} title={folder}>
+        {triggerChildren}
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner align="start" className="epitaxy-root z-[60]" side="top" sideOffset={8}>
+          <Menu.Popup className={officialMenuPopupClass} data-cds="Menu">
+            <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
+            <div className={officialMenuScrollClass}>
+              <Menu.Group className="flex flex-col">
+                <OfficialMenuHeader>Recent</OfficialMenuHeader>
+                {recentFolders.map((recent) => {
+                  const label = recent.displayName ?? basename(recent.path) ?? recent.path;
+                  const parent = parentPath(recent.path);
+                  const needsParent = !recent.displayName && parent && duplicateBasenames.has(label);
+                  return (
+                    <Menu.Item
+                      aria-checked={recent.path === folder}
+                      className={[officialMenuItemBaseClass, "gap-g3"].join(" ")}
+                      key={recent.path}
+                      onClick={() => onSelectFolder(recent.path)}
+                      role="menuitemradio"
+                      title={recent.path}
+                    >
+                      {needsParent ? (
+                        <span className="flex min-w-0 items-baseline">
+                          <span className="shrink-0">{label}</span>
+                          <span className="ml-[var(--g6)] truncate text-footnote text-t6">{parent}</span>
+                        </span>
+                      ) : (
+                        <span className="flex-1 min-w-0 truncate pr-[16px]">{label}</span>
+                      )}
+                      <span className="flex items-center justify-center size-[16px] shrink-0 ml-[6px] text-[var(--accent)]" style={officialMenuIconStyle}>
+                        {recent.path === folder ? <Icon name="CheckSelection" size="sm" /> : null}
+                      </span>
+                    </Menu.Item>
+                  );
+                })}
+              </Menu.Group>
+              <OfficialMenuSeparator />
+              <Menu.Item className={[officialMenuItemBaseClass, "gap-g3"].join(" ")} disabled={browseDisabled} onClick={onBrowse}>
+                <span className="flex-1 min-w-0 truncate pr-[16px]">{isSSH ? "Browse remote folder…" : "Open folder…"}</span>
+              </Menu.Item>
+            </div>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
   );
 }
 
@@ -575,7 +671,7 @@ export function OfficialComposerSplitPill({
   );
 }
 
-function OfficialSessionSource({ session, sessionRef }: { session: SessionSummary | null; sessionRef: OfficialSessionRef }) {
+export function OfficialSessionSource({ session, sessionRef }: { session: SessionSummary | null; sessionRef: OfficialSessionRef }) {
   const cwd = normalizeLabel(session?.cwd);
   const branch = normalizeLabel(session?.repo?.branch);
   const repoNames = normalizeLabel(session?.repo?.name) ? [normalizeLabel(session?.repo?.name)!] : [];
@@ -762,12 +858,12 @@ function OfficialTranscriptViewButton({ hideSummary }: { hideSummary: boolean })
   return <OfficialDropdownButton ariaLabel="Transcript view mode" header="Transcript view" icon="NoteSquareLines" items={items} revealChevron="never" />;
 }
 
-function OfficialViewsButton({ activeView, onViewSelect }: { activeView?: OfficialViewPane; onViewSelect?: (view: OfficialViewPane) => void }) {
+function OfficialViewsButton({ activeView, hasRunningTasks = false, onViewSelect }: { activeView?: OfficialViewPane; hasRunningTasks?: boolean; onViewSelect?: (view: OfficialViewPane) => void }) {
   const items: OfficialDropdownItem[] = [
     { icon: "Play", label: "预览", checked: activeView === "preview", shortcut: "⇧⌘P", onSelect: () => onViewSelect?.("preview") },
     { icon: "ChangesDiffPlusMinusBox", label: "Diff", checked: activeView === "diff", shortcut: "⇧⌘D", onSelect: () => onViewSelect?.("diff") },
     { icon: "TerminalOpenCommandLine", label: "Terminal", checked: activeView === "terminal", shortcut: "⌃`", onSelect: () => onViewSelect?.("terminal") },
-    { icon: "Blocks", label: "任务", checked: activeView === "tasks", onSelect: () => onViewSelect?.("tasks") },
+    { icon: "Blocks", label: "任务", checked: activeView === "tasks", status: hasRunningTasks && activeView !== "tasks", onSelect: () => onViewSelect?.("tasks") },
     { icon: "CheckList", label: "Plan", checked: activeView === "plan", onSelect: () => onViewSelect?.("plan") },
   ];
   return <OfficialDropdownButton ariaLabel="Views" icon="SidebarSimpleRightSquare" items={items} />;
@@ -808,12 +904,19 @@ function MenuItemFragment({ hasChecks, item }: { hasChecks: boolean; item: Offic
             {item.checked ? <Icon name="CheckSelection" size="sm" /> : null}
           </span>
         ) : null}
-        {item.status}
+        {renderMenuItemStatus(item.status)}
         {item.shortcut ? <OfficialShortcut keys={item.shortcut} /> : null}
         {item.trailing}
       </Menu.Item>
     </>
   );
+}
+
+function renderMenuItemStatus(status: ReactNode | boolean) {
+  if (status === true) {
+    return <span aria-hidden="true" className="size-[6px] shrink-0 rounded-full bg-[var(--accent)]" />;
+  }
+  return status || null;
 }
 
 function OfficialShortcut({ keys }: { keys: string }) {
@@ -845,6 +948,22 @@ function OfficialMenuSeparator() {
 
 function splitShortcutKeys(keys: string) {
   return Array.from(keys);
+}
+
+function useMemoizedDuplicateBasenames(recentFolders: OfficialComposerFolderRecent[]) {
+  return useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const recent of recentFolders) {
+      const label = basename(recent.path);
+      if (label) counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    return new Set([...counts].filter(([, count]) => count > 1).map(([label]) => label));
+  }, [recentFolders]);
+}
+
+function parentPath(value: string): string | null {
+  const index = Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\"));
+  return index > 0 ? value.slice(0, index) : null;
 }
 
 function normalizeLabel(value?: string): string | undefined {

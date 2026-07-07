@@ -43,8 +43,10 @@ export type SessionSummary = {
   hasWorktree?: boolean;
   messages?: ChatMessage[];
   pendingToolPermissions?: Array<{
+    alwaysAllowScope?: string;
     decisionReason?: string;
     description?: string;
+    hasAlwaysAllow?: boolean;
     input?: unknown;
     requestId: string;
     sessionId: string;
@@ -141,6 +143,22 @@ export type CodeStats = {
   streaks: { currentStreak: number; longestStreak: number };
 };
 
+export type ContextUsage = {
+  agents?: Array<{ agentType: string; tokens: number }>;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
+  categories?: Array<{ name: string; tokens: number }>;
+  inputTokens: number;
+  mcpTools?: Array<{ name: string; serverName: string; tokens: number }>;
+  memoryFiles?: Array<{ path: string; tokens: number }>;
+  messages?: number;
+  outputTokens: number;
+  percentage?: number;
+  rawMaxTokens?: number | null;
+  toolCallCount?: number;
+  totalTokens: number;
+};
+
 
 export type GitCommandResult = {
   ok?: boolean;
@@ -149,6 +167,19 @@ export type GitCommandResult = {
   stderr?: string;
   error?: string;
   code?: unknown;
+};
+
+export type SlashCommand = {
+  aliases?: string[];
+  argumentHint?: string;
+  description?: string;
+  name: string;
+  scope?: string;
+};
+
+export type GetSupportedCommandsRequest = {
+  cwd?: string;
+  sessionId?: string;
 };
 
 export type ShellPtyStartResult = {
@@ -167,6 +198,7 @@ export type LocalSessionsBridge = {
   getTranscript?: (id: string) => Promise<ChatMessage[]>;
   addFolderToSession?: (id: string, folder: string) => Promise<SessionSummary | null>;
   getCodeStats?: () => Promise<CodeStats | null>;
+  getContextUsage?: (id: string) => Promise<ContextUsage | null>;
   getDefaultEffort?: () => Promise<EffortLevel | null>;
   getDefaultPermissionMode?: (cwd?: string) => Promise<string>;
   getDiffFileContent?: (idOrCwd: string, refOrFilePath: string, filePath?: string, previousFilePath?: string) => Promise<GitCommandResult>;
@@ -176,16 +208,20 @@ export type LocalSessionsBridge = {
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<string>;
-  getSupportedCommands?: () => Promise<string[]>;
+  getSupportedCommands?: (request?: GetSupportedCommandsRequest) => Promise<SlashCommand[]>;
   getWorkingTreeStatus?: (idOrCwd: string) => Promise<GitCommandResult>;
+  clearSession?: (id: string) => Promise<unknown>;
+  launchUltrareview?: (idOrCwd: string, options?: unknown) => Promise<unknown>;
   readFileAtCwd?: (idOrCwd: string, filePath: string) => Promise<GitCommandResult>;
   readSessionFile?: (id: string, filePath: string) => Promise<string | null | Record<string, unknown>>;
   readSessionImageAsDataUrl?: (id: string, filePath: string) => Promise<string | null>;
   pickSessionFile?: (id: string) => Promise<string | null>;
   pickFileAtCwd?: (idOrCwd: string) => Promise<string | null>;
   setEffort?: (id: string, effort: EffortLevel | string) => Promise<SessionSummary | null>;
+  setMcpServers?: (id: string, mcpServers: unknown) => Promise<SessionSummary | null>;
   setModel?: (id: string, model: string) => Promise<SessionSummary | null>;
   setPermissionMode?: (id: string, mode: string) => Promise<SessionSummary | null>;
+  submitFeedback?: (input?: unknown) => Promise<unknown>;
   respondToToolPermission?: (requestId: string, decision: "always" | "deny" | "once", updatedInput?: unknown) => Promise<unknown>;
   startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<ShellPtyStartResult>;
   stop?: (id: string) => Promise<unknown>;

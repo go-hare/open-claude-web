@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Tabs } from "@base-ui-components/react/tabs";
-import { desktopBridge, type CodeStats, type EffortLevel, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
+import { desktopBridge, type CodeStats, type EffortLevel, type PermissionMode, type SessionSummary, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
 import { useFrameContext } from "../../stores/frameContext";
 import { Icon } from "../../shell/icons";
 import { EpitaxyRouteFrame, EpitaxySessionLoading } from "./EpitaxyFrameSurface";
 import {
+  OfficialComposerFolderPill,
   OfficialComposerPill,
   OfficialComposerSplitPill,
   OfficialDropdownButton,
+  type OfficialComposerFolderRecent,
   type OfficialDropdownItem,
 } from "./OfficialEpitaxyComponents";
 
@@ -435,6 +437,7 @@ function CodeComposer({
   workspace: WorkspaceContext;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [recentFolders, setRecentFolders] = useState<OfficialComposerFolderRecent[]>([]);
   const permissionItems: OfficialDropdownItem[] = permissionModeOptions.map((option) => ({
     checked: option.value === permissionMode,
     label: option.label,
@@ -450,23 +453,46 @@ function CodeComposer({
     label: option.label,
     onSelect: () => onEffortChange(option.value),
   }));
-  const chooseWorkspace = useCallback(async () => {
-    const selectedPaths = await desktopBridge.Preferences.getDirectoryPath?.(false);
-    const selectedPath = selectedPaths?.[0];
-    if (!selectedPath) return;
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([
+      desktopBridge.LocalSessions.list().catch(() => []),
+      desktopBridge.LocalAgentModeSessions.list().catch(() => []),
+    ]).then(([codeSessions, agentSessions]) => {
+      if (!alive) return;
+      setRecentFolders(buildOfficialRecentFolders([...codeSessions, ...agentSessions], workspace.cwd));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [workspace.cwd]);
 
+  const applyWorkspacePath = useCallback(async (selectedPath: string) => {
     const gitInfo = await desktopBridge.LocalSessions.getGitInfo?.(selectedPath).catch(() => null);
     const git = asRecord(gitInfo);
     const root = stringValue(git.root);
     const branch = stringValue(git.branch);
-    onWorkspaceChange({
+    const nextWorkspace = {
       mode: "local",
       projectName: basename(root) ?? basename(selectedPath) ?? selectedPath,
       branchName: branch ?? workspace.branchName,
       hasWorktree: hasWorktreeInfo(git),
       cwd: selectedPath,
-    });
+    } satisfies WorkspaceContext;
+    onWorkspaceChange(nextWorkspace);
+    setRecentFolders((current) => buildOfficialRecentFolders([], selectedPath, current));
   }, [onWorkspaceChange, workspace.branchName]);
+
+  const chooseWorkspace = useCallback(async () => {
+    const selectedPaths = await desktopBridge.Preferences.getDirectoryPath?.(false);
+    const selectedPath = selectedPaths?.[0];
+    if (!selectedPath) return;
+    await applyWorkspacePath(selectedPath);
+  }, [applyWorkspacePath]);
+
+  const selectRecentWorkspace = useCallback((path: string) => {
+    void applyWorkspacePath(path);
+  }, [applyWorkspacePath]);
 
   return (
     <div className="flex flex-col gap-g5">
@@ -474,9 +500,7 @@ function CodeComposer({
         <OfficialComposerPill icon="SystemComputerLaptopMacbook">
           <span className="truncate max-w-[200px]">本地</span>
         </OfficialComposerPill>
-        <OfficialComposerPill ariaLabel="Choose workspace folder" icon="Folder1" onClick={() => void chooseWorkspace()} title={workspace.cwd}>
-          <span className="truncate max-w-[200px]">{workspace.projectName}</span>
-        </OfficialComposerPill>
+        <OfficialComposerFolderPill folder={workspace.cwd} onBrowse={() => void chooseWorkspace()} onSelectFolder={selectRecentWorkspace} recentFolders={recentFolders} />
         <div className="group/split inline-flex rounded-r5 bg-fill-contained-default effect-contained-default has-[[aria-expanded=true]]:bg-[var(--fill-contained-selected)]">
           <OfficialComposerSplitPill className="gap-g5 px-p5">
             <Icon name="GitBranch" size="sm" />
@@ -935,6 +959,31 @@ function stringValue(value: unknown): string | undefined {
 
 function basename(value?: string): string | undefined {
   return value?.split(/[\\/]/).filter(Boolean).at(-1);
+}
+
+function buildOfficialRecentFolders(
+  sessions: SessionSummary[],
+  currentCwd?: string,
+  existing: OfficialComposerFolderRecent[] = [],
+): OfficialComposerFolderRecent[] {
+  const ordered = [...sessions].sort((a, b) => (b.updatedAtMs ?? 0) - (a.updatedAtMs ?? 0));
+  const seen = new Set<string>();
+  const recent: OfficialComposerFolderRecent[] = [];
+
+  const addPath = (path: string | undefined) => {
+    if (!path || seen.has(path)) return;
+    seen.add(path);
+    recent.push({ path });
+  };
+
+  addPath(currentCwd);
+  for (const item of existing) addPath(item.path);
+  for (const session of ordered) {
+    addPath(session.cwd);
+    for (const folder of session.folders ?? []) addPath(folder);
+  }
+
+  return recent.slice(0, 12);
 }
 
 function hasWorktreeInfo(gitInfo: Record<string, unknown>): boolean {

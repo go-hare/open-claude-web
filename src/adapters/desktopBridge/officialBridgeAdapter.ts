@@ -1,15 +1,18 @@
 import type {
   ChatMessage,
   CodeStats,
+  ContextUsage,
   CreateScheduledTaskInput,
   DesktopBridge,
   DesktopPreferences,
   GitCommandResult,
+  GetSupportedCommandsRequest,
   LocalSessionsBridge,
   ScheduledTaskSummary,
   ShellPtyEvent,
   ShellPtyStartResult,
   SessionSummary,
+  SlashCommand,
   StartSessionInput,
   WorkspaceContext,
 } from "./types";
@@ -20,7 +23,9 @@ type RawEventSubscription = (listener: (event: unknown) => void) => RemoveListen
 type RawLocalSessionsBridge = {
   getAll?: (...args: unknown[]) => Promise<unknown[]>;
   addFolderToSession?: (id: string, folder: string) => Promise<unknown>;
+  clearSession?: (id: string) => Promise<unknown>;
   getCodeStats?: () => Promise<unknown>;
+  getContextUsage?: (id: string) => Promise<unknown>;
   getDefaultEffort?: () => Promise<unknown>;
   getDefaultPermissionMode?: (cwd?: string) => Promise<unknown>;
   getDiffFileContent?: (idOrCwd: string, refOrFilePath: string, filePath?: string, previousFilePath?: string) => Promise<unknown>;
@@ -32,8 +37,9 @@ type RawLocalSessionsBridge = {
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<unknown>;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<unknown>;
-  getSupportedCommands?: () => Promise<unknown>;
+  getSupportedCommands?: (request?: GetSupportedCommandsRequest) => Promise<unknown>;
   getWorkingTreeStatus?: (idOrCwd: string) => Promise<unknown>;
+  launchUltrareview?: (idOrCwd: string, options?: unknown) => Promise<unknown>;
   readFileAtCwd?: (idOrCwd: string, filePath: string) => Promise<unknown>;
   readSessionFile?: (id: string, filePath: string) => Promise<unknown>;
   readSessionImageAsDataUrl?: (id: string, filePath: string) => Promise<unknown>;
@@ -41,6 +47,7 @@ type RawLocalSessionsBridge = {
   pickFileAtCwd?: (idOrCwd: string) => Promise<unknown>;
   respondToToolPermission?: (requestId: string, decision: "always" | "deny" | "once", updatedInput?: unknown) => Promise<unknown>;
   setEffort?: (id: string, effort: string) => Promise<unknown>;
+  setMcpServers?: (id: string, mcpServers: unknown) => Promise<unknown>;
   setModel?: (id: string, model: string) => Promise<unknown>;
   setPermissionMode?: (id: string, mode: string) => Promise<unknown>;
   startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<unknown>;
@@ -56,6 +63,7 @@ type RawLocalSessionsBridge = {
   forkSession?: (id: string, messageId?: string) => Promise<unknown>;
   rewind?: (id: string, messageId?: string) => Promise<unknown>;
   setFocusedSession?: (id: string | null) => Promise<unknown>;
+  submitFeedback?: (input?: unknown) => Promise<unknown>;
   submitTranscriptFeedback?: (sessionIdOrInput: unknown, input?: unknown) => Promise<unknown>;
   archive?: (id: string) => Promise<unknown>;
   delete?: (id: string) => Promise<unknown>;
@@ -203,6 +211,7 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
     },
     getCodeStats: async () => normalizeCodeStats(await raw?.getCodeStats?.().catch(() => null)),
+    getContextUsage: async (id) => normalizeOfficialContextUsageResult(await raw?.getContextUsage?.(id).catch(() => null)),
     getDefaultEffort: async () => normalizeEffort(await raw?.getDefaultEffort?.().catch(() => null)),
     getDefaultPermissionMode: async (cwd) => String(await raw?.getDefaultPermissionMode?.(cwd).catch(() => "default") ?? "default"),
     getDiffFileContent: async (idOrCwd, refOrFilePath, filePath, previousFilePath) => normalizeGitCommandResult(await raw?.getDiffFileContent?.(idOrCwd, refOrFilePath, filePath, previousFilePath)),
@@ -212,11 +221,10 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     getGitDiffStats: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiffStats?.(idOrCwd, base)),
     openInEditor: async (target, editor, line, column) => raw?.openInEditor?.(target, editor, line, column),
     getPermissionMode: async (id) => String(await raw?.getPermissionMode?.(id).catch(() => "default") ?? "default"),
-    getSupportedCommands: async () => {
-      const commands = await raw?.getSupportedCommands?.().catch(() => []);
-      return Array.isArray(commands) ? commands.filter((command): command is string => typeof command === "string") : [];
-    },
+    getSupportedCommands: async (request) => normalizeSupportedCommands(await raw?.getSupportedCommands?.(request).catch(() => [])),
     getWorkingTreeStatus: async (idOrCwd) => normalizeGitCommandResult(await raw?.getWorkingTreeStatus?.(idOrCwd)),
+    clearSession: async (id) => raw?.clearSession?.(id),
+    launchUltrareview: async (idOrCwd, options) => raw?.launchUltrareview?.(idOrCwd, options),
     readFileAtCwd: async (idOrCwd, filePath) => normalizeGitCommandResult(await raw?.readFileAtCwd?.(idOrCwd, filePath)),
     readSessionFile: async (id, filePath) => (await raw?.readSessionFile?.(id, filePath) ?? null) as string | null | Record<string, unknown>,
     readSessionImageAsDataUrl: async (id, filePath) => {
@@ -234,6 +242,10 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     respondToToolPermission: async (requestId, decision, updatedInput) => raw?.respondToToolPermission?.(requestId, decision, updatedInput),
     setEffort: async (id, effort) => {
       const item = await raw?.setEffort?.(id, effort);
+      return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
+    },
+    setMcpServers: async (id, mcpServers) => {
+      const item = await raw?.setMcpServers?.(id, mcpServers);
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
     },
     setModel: async (id, model) => {
@@ -296,6 +308,7 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     setFocusedSession: async (id) => {
       await raw?.setFocusedSession?.(id);
     },
+    submitFeedback: async (input) => raw?.submitFeedback?.(input),
     submitTranscriptFeedback: async (sessionIdOrInput, input) => raw?.submitTranscriptFeedback?.(sessionIdOrInput, input),
     onEvent: (listener) => {
       const subscribe = raw?.onEvent ?? raw?.onOnEvent;
@@ -471,8 +484,10 @@ function normalizePendingToolPermissions(value: unknown, fallbackSessionId: stri
       const requestId = stringValue(raw.requestId) ?? stringValue(raw.request_id) ?? stringValue(raw.toolUseId) ?? stringValue(raw.tool_use_id);
       if (!requestId) return null;
       return {
+        alwaysAllowScope: stringValue(raw.alwaysAllowScope) ?? stringValue(raw.always_allow_scope) ?? stringValue(raw.permissionScope) ?? stringValue(raw.permission_scope),
         decisionReason: stringValue(raw.decisionReason) ?? stringValue(raw.decision_reason),
         description: stringValue(raw.description),
+        hasAlwaysAllow: booleanValue(raw.hasAlwaysAllow) ?? booleanValue(raw.has_always_allow),
         input: raw.input,
         requestId,
         sessionId: stringValue(raw.sessionId) ?? stringValue(raw.session_id) ?? fallbackSessionId,
@@ -531,6 +546,28 @@ function normalizeGitCommandResult(value: unknown): GitCommandResult {
   };
 }
 
+function normalizeSupportedCommands(value: unknown): SlashCommand[] {
+  if (!Array.isArray(value)) return [];
+  const commands: SlashCommand[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const raw = asRecord(item);
+    const name = typeof item === "string" ? item : stringValue(raw.name) ?? stringValue(raw.command) ?? stringValue(raw.label);
+    const normalizedName = name?.replace(/^\/+/, "").trim();
+    if (!normalizedName || seen.has(normalizedName)) continue;
+    seen.add(normalizedName);
+    const aliases = Array.isArray(raw.aliases) ? raw.aliases.filter((alias): alias is string => typeof alias === "string" && alias.length > 0) : undefined;
+    commands.push({
+      aliases,
+      argumentHint: stringValue(raw.argumentHint) ?? stringValue(raw.argument_hint),
+      description: stringValue(raw.description) ?? stringValue(raw.skillDescription) ?? stringValue(raw.skill_description),
+      name: normalizedName,
+      scope: stringValue(raw.scope),
+    });
+  }
+  return commands;
+}
+
 function normalizeCodeStats(value: unknown): CodeStats | null {
   if (!value) return null;
   const raw = asRecord(value);
@@ -576,6 +613,79 @@ function normalizeCodeStats(value: unknown): CodeStats | null {
       longestStreak: numberValue(streaks.longestStreak),
     },
   };
+}
+
+function normalizeOfficialContextUsageResult(value: unknown): ContextUsage | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  if (!("rawMaxTokens" in raw) && !("raw_max_tokens" in raw)) return null;
+  return normalizeContextUsage(raw);
+}
+
+function normalizeContextUsage(value: unknown): ContextUsage | null {
+  if (!value) return null;
+  const raw = asRecord(value);
+  const totalTokens = numberValue(raw.totalTokens ?? raw.total_tokens);
+  return {
+    agents: normalizeContextAgentRows(raw.agents),
+    cacheCreationInputTokens: numberValue(raw.cacheCreationInputTokens ?? raw.cache_creation_input_tokens),
+    cacheReadInputTokens: numberValue(raw.cacheReadInputTokens ?? raw.cache_read_input_tokens),
+    categories: normalizeContextCategories(raw.categories),
+    inputTokens: numberValue(raw.inputTokens ?? raw.input_tokens),
+    mcpTools: normalizeContextMcpToolRows(raw.mcpTools ?? raw.mcp_tools),
+    memoryFiles: normalizeContextMemoryRows(raw.memoryFiles ?? raw.memory_files),
+    messages: numberValue(raw.messages),
+    outputTokens: numberValue(raw.outputTokens ?? raw.output_tokens),
+    percentage: raw.percentage === null ? undefined : numberValue(raw.percentage),
+    rawMaxTokens: raw.rawMaxTokens === null || raw.raw_max_tokens === null ? null : numberValue(raw.rawMaxTokens ?? raw.raw_max_tokens) || null,
+    toolCallCount: numberValue(raw.toolCallCount ?? raw.tool_call_count),
+    totalTokens,
+  };
+}
+
+function normalizeContextCategories(value: unknown): ContextUsage["categories"] {
+  if (!Array.isArray(value)) return undefined;
+  return value.map((item) => {
+    const raw = asRecord(item);
+    return {
+      name: stringValue(raw.name) ?? "Input",
+      tokens: numberValue(raw.tokens),
+    };
+  }).filter((item) => item.tokens > 0);
+}
+
+function normalizeContextMcpToolRows(value: unknown): ContextUsage["mcpTools"] {
+  if (!Array.isArray(value)) return undefined;
+  return value.map((item) => {
+    const raw = asRecord(item);
+    return {
+      name: stringValue(raw.name) ?? "",
+      serverName: stringValue(raw.serverName ?? raw.server_name) ?? "",
+      tokens: numberValue(raw.tokens),
+    };
+  }).filter((item) => item.name || item.serverName || item.tokens > 0);
+}
+
+function normalizeContextMemoryRows(value: unknown): ContextUsage["memoryFiles"] {
+  if (!Array.isArray(value)) return undefined;
+  return value.map((item) => {
+    const raw = asRecord(item);
+    return {
+      path: stringValue(raw.path) ?? "",
+      tokens: numberValue(raw.tokens),
+    };
+  }).filter((item) => item.path || item.tokens > 0);
+}
+
+function normalizeContextAgentRows(value: unknown): ContextUsage["agents"] {
+  if (!Array.isArray(value)) return undefined;
+  return value.map((item) => {
+    const raw = asRecord(item);
+    return {
+      agentType: stringValue(raw.agentType ?? raw.agent_type) ?? "",
+      tokens: numberValue(raw.tokens),
+    };
+  }).filter((item) => item.agentType || item.tokens > 0);
 }
 
 function normalizeEffort(value: unknown): "low" | "medium" | "high" | "xhigh" | "max" | null {
@@ -710,6 +820,10 @@ function basename(value?: string): string | undefined {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function booleanValue(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function numberValue(value: unknown): number {

@@ -33,6 +33,7 @@ export const desktopBridge: DesktopBridge = window.claudeDesktopBridge
 
 export type {
   CodeStats,
+  ContextUsage,
   DesktopBridge,
   DesktopPreferences,
   CreateScheduledTaskInput,

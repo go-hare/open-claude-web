@@ -492,11 +492,23 @@ const WEIGHT_RANGES: Record<16 | 20, { lo: number; hi: number }> = {
 };
 
 type IconSize = keyof typeof ICON_SIZES;
+type OfficialIconSize = keyof typeof OFFICIAL_VIEW_BOX;
+type IconSizeProp = IconSize | OfficialIconSize;
+
+const OFFICIAL_SIZE_ALIAS_TO_ICON_SIZE: Record<OfficialIconSize, IconSize> = {
+  s: "xs",
+  m: "sm",
+  l: "md",
+};
+
+function normalizeIconSize(size: IconSizeProp): IconSize {
+  return size in ICON_SIZES ? (size as IconSize) : OFFICIAL_SIZE_ALIAS_TO_ICON_SIZE[size as OfficialIconSize];
+}
 
 type IconProps = {
   name?: string;
   icon?: { name: string };
-  size?: IconSize;
+  size?: IconSizeProp;
   customSize?: number;
   bold?: boolean;
   alt?: string;
@@ -565,7 +577,7 @@ function resolveOfficialIconPaths(rawName: string | undefined, iconSize: IconSiz
 
 export function Icon({ name, icon, size = "sm", customSize, bold = false, alt, className, style }: IconProps) {
   const rawName = name ?? icon?.name;
-  const selectedSize = customSize === undefined ? size : nearestSize(customSize);
+  const selectedSize = customSize === undefined ? normalizeIconSize(size) : nearestSize(customSize);
   const pixelSize = customSize ?? ICON_SIZES[selectedSize].px;
   const officialPaths = resolveOfficialIconPaths(rawName, selectedSize, bold);
 
