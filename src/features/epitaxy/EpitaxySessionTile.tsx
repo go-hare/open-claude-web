@@ -34,6 +34,7 @@ import {
 } from "./cowork/CoworkConversationStatus";
 import { CoworkSessionActivityPanel } from "./cowork/CoworkSessionActivityPanel";
 import { CoworkSelectedFiles } from "./cowork/CoworkSelectedFiles";
+import { formatCoworkPromptWithUploadedFiles, parseCoworkUploadedFilesText, type CoworkUploadedFile } from "./cowork/coworkUploadedFiles";
 import { createOfficialSessionStreamSmoother, type OfficialStreamSnapshot } from "./officialStreamSmoother";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
@@ -2932,6 +2933,7 @@ type TranscriptEntryItem =
   | { id: string; kind: "bash"; command?: string; error?: string; output?: string }
   | { id: string; kind: "error"; code?: string; text: string }
   | { id: string; kind: "event"; content: string; eventType?: string }
+  | { file: CoworkUploadedFile; id: string; kind: "uploaded-file" }
   | { id: string; kind: "text"; text: string }
   | { id: string; kind: "thinking"; text: string }
   | { id: string; kind: "tools"; tools: TranscriptToolUse[] };
@@ -3100,7 +3102,7 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
     const id = stringValue(record.id) ?? `user-${messageIndex}-${index}`;
     if (kind === "text") {
       const text = stringValue(record.text) ?? stringValue(record.content);
-      if (text) items.push({ id, kind: "text", text });
+      if (text) pushUserTextAndUploadedFiles(items, id, text);
     } else if (kind === "bash") {
       items.push({ command: stringValue(record.command), error: stringValue(record.error), id, kind: "bash", output: stringValue(record.output) });
     } else if (kind === "event") {
@@ -3109,6 +3111,12 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
     }
   });
   return items;
+}
+
+function pushUserTextAndUploadedFiles(items: TranscriptEntryItem[], id: string, text: string) {
+  const parsed = parseCoworkUploadedFilesText(text);
+  parsed.files.forEach((file, index) => items.push({ file, id: `${id}-file-${index}`, kind: "uploaded-file" }));
+  if (parsed.text) items.push({ id, kind: "text", text: parsed.text });
 }
 
 function attachToolResultMessages(raw: Record<string, unknown>, pendingTools: Map<string, TranscriptToolUse>) {
@@ -3215,6 +3223,7 @@ function OfficialUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
   const textItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "text" }> => item.kind === "text");
   const bashItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "bash" }> => item.kind === "bash");
   const eventItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "event" }> => item.kind === "event");
+  const fileItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "uploaded-file" }> => item.kind === "uploaded-file");
   const copyText = textItems.map((item) => item.text).join("\n\n") || undefined;
   const forkFromHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.forkSession) return;
@@ -3232,11 +3241,26 @@ function OfficialUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
   return (
     <OfficialUserMessage copyText={copyText} createdAt={entry.timestamp} onFork={onFork} onRewind={onRewind} rewindAriaLabel={isCoworkSurface ? "Restart conversation from here" : undefined} rewindIcon={isCoworkSurface ? "Reload" : undefined}>
       <div className="flex flex-col gap-g4">
+        {fileItems.length > 0 ? <UserUploadedFiles files={fileItems.map((item) => item.file)} /> : null}
         {textItems.map((item) => <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty" key={item.id}>{renderInlineMarkdown(item.text, item.id)}</p>)}
         {bashItems.map((item) => <UserBashBlock item={item} key={item.id} />)}
         {eventItems.map((item) => <p className="text-body text-t7 whitespace-pre-wrap [overflow-wrap:anywhere]" key={item.id}>{item.content}</p>)}
       </div>
     </OfficialUserMessage>
+  );
+}
+
+function UserUploadedFiles({ files }: { files: CoworkUploadedFile[] }) {
+  const actions = useContext(EpitaxyTranscriptActionContext);
+  return (
+    <div className="flex flex-wrap gap-g2">
+      {files.map((file) => (
+        <button className="inline-flex max-w-full items-center gap-g2 rounded-r4 bg-fill-contained-default px-p4 py-p2 text-footnote text-t8 effect-contained-default" key={`${file.path}-${file.fileUuid ?? "local"}`} onClick={() => actions?.openFile({ path: file.path })} type="button">
+          <Icon name="Document" size="xs" />
+          <span className="max-w-[220px] truncate">{file.fileName}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -4000,8 +4024,8 @@ function normalizeToolStatus(status: unknown, isError?: boolean, output?: string
   return "running";
 }
 
-function isVisibleTranscriptEntryItem(item: TranscriptEntryItem): item is Exclude<TranscriptEntryItem, { kind: "thinking" }> {
-  return item.kind !== "thinking";
+function isVisibleTranscriptEntryItem(item: TranscriptEntryItem): item is Exclude<TranscriptEntryItem, { kind: "thinking" | "uploaded-file" }> {
+  return item.kind !== "thinking" && item.kind !== "uploaded-file";
 }
 
 type MarkdownBlock =
@@ -4865,7 +4889,7 @@ function ExistingSessionComposer({
   const submit = useCallback(async () => {
     if (!canSubmit) return;
     const filesForTurn = isCoworkSurface ? selectedFilePaths : [];
-    const payload = text.trim() || (filesForTurn.length > 0 ? "Please review the attached file(s)." : "");
+    const payload = formatCoworkPromptWithUploadedFiles(text.trim(), filesForTurn);
     setSubmitting(true);
     try {
       await onSubmit(payload, filesForTurn.length > 0 ? { userSelectedFiles: filesForTurn } : undefined);

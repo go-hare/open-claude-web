@@ -38,7 +38,8 @@ const sendButtonClass = `${composerIconButtonClass} text-primary-default hover:t
 
 export function CoworkPromptComposer(props: CoworkPromptComposerProps) {
   const hasPrompt = props.prompt.trim().length > 0;
-  const editor = useCoworkPromptEditor(props, hasPrompt);
+  const canSubmit = hasPrompt || props.selectedFilePaths.length > 0;
+  const editor = useCoworkPromptEditor(props, canSubmit);
 
   return (
     <>
@@ -51,7 +52,7 @@ export function CoworkPromptComposer(props: CoworkPromptComposerProps) {
             <div className="flex flex-col m-3.5 gap-3">
               <CoworkPromptEditor editor={editor} hasPrompt={hasPrompt} />
               <CoworkSelectedFiles filePaths={props.selectedFilePaths} onRemove={props.onRemoveFile} />
-              <CoworkPromptToolbar busy={props.busy} hasPrompt={hasPrompt} onAddFiles={props.onAddFiles} onSubmit={props.onSubmit} />
+              <CoworkPromptToolbar busy={props.busy} canSubmit={canSubmit} onAddFiles={props.onAddFiles} onSubmit={props.onSubmit} />
             </div>
           </div>
         </div>
@@ -70,13 +71,13 @@ export function CoworkPromptComposer(props: CoworkPromptComposerProps) {
   );
 }
 
-function useCoworkPromptEditor(props: CoworkPromptComposerProps, hasPrompt: boolean) {
+function useCoworkPromptEditor(props: CoworkPromptComposerProps, canSubmit: boolean) {
   const { busy, focusRequestKey, onSubmit, prompt, setPrompt } = props;
-  const submitStateRef = useRef({ busy, hasPrompt, onSubmit });
+  const submitStateRef = useRef({ busy, canSubmit, onSubmit });
 
   useEffect(() => {
-    submitStateRef.current = { busy, hasPrompt, onSubmit };
-  }, [busy, hasPrompt, onSubmit]);
+    submitStateRef.current = { busy, canSubmit, onSubmit };
+  }, [busy, canSubmit, onSubmit]);
 
   const editor = useEditor({
     content: "",
@@ -119,9 +120,9 @@ function syncEditorContent(editor: ReturnType<typeof useEditor>, prompt: string)
   if (current !== prompt) editor.commands.setContent(prompt);
 }
 
-function submitFromRef(ref: { current: { busy: boolean; hasPrompt: boolean; onSubmit: (options?: { keepGoing?: boolean }) => void } }, options?: { keepGoing?: boolean }) {
-  const { busy, hasPrompt, onSubmit } = ref.current;
-  if (!hasPrompt || busy) return;
+function submitFromRef(ref: { current: { busy: boolean; canSubmit: boolean; onSubmit: (options?: { keepGoing?: boolean }) => void } }, options?: { keepGoing?: boolean }) {
+  const { busy, canSubmit, onSubmit } = ref.current;
+  if (!canSubmit || busy) return;
   onSubmit(options);
 }
 
@@ -139,12 +140,12 @@ function CoworkPromptEditor({ editor, hasPrompt }: { editor: ReturnType<typeof u
 
 function CoworkPromptToolbar({
   busy,
-  hasPrompt,
+  canSubmit,
   onAddFiles,
   onSubmit,
 }: {
   busy: boolean;
-  hasPrompt: boolean;
+  canSubmit: boolean;
   onAddFiles: () => void;
   onSubmit: () => void;
 }) {
@@ -157,7 +158,7 @@ function CoworkPromptToolbar({
         <OfficialDropdownButton ariaLabel="Add files, connectors, and more" disabled={busy} icon="PlusLarge" items={addMenuItems} revealChevron="never" side="top" size="small" variant="uncontained" />
       </div>
       <div className="shrink-0 flex items-center w-8 z-10 justify-end">
-        <button aria-label="开始任务" className={sendButtonClass} disabled={busy || !hasPrompt} onClick={() => onSubmit()} type="button">
+        <button aria-label="开始任务" className={sendButtonClass} disabled={busy || !canSubmit} onClick={() => onSubmit()} type="button">
           <span aria-hidden="true" className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-primary-default)] group-hover/btn:bg-[var(--fill-primary-hover)] group-disabled/btn:bg-[var(--fill-primary-disabled)]" />
           <Icon name={busy ? "Stop" : "ArrowUp"} customSize={18} bold />
         </button>

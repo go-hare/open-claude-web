@@ -7,6 +7,7 @@ import { CoworkGridBackground } from "./CoworkGridBackground";
 import { CoworkHeader } from "./CoworkHeader";
 import { CoworkPromptComposer } from "./CoworkPromptComposer";
 import { CoworkSuggestions, type CoworkPromptSuggestion } from "./CoworkSuggestions";
+import { formatCoworkPromptWithUploadedFiles } from "./coworkUploadedFiles";
 
 type CoworkSubmitOptions = {
   keepGoing?: boolean;
@@ -35,7 +36,9 @@ export function CoworkNewTaskPage({
 
   const submit = useCallback(async (nextPrompt = prompt, options: CoworkSubmitOptions = {}) => {
     const normalized = nextPrompt.trim();
-    if (!normalized || busy) return;
+    const hasSelectedFiles = selectedFilePaths.length > 0;
+    if ((!normalized && !hasSelectedFiles) || busy) return;
+    const message = formatCoworkPromptWithUploadedFiles(normalized, selectedFilePaths);
     setBusy(true);
     try {
       const session = await desktopBridge.LocalAgentModeSessions.start({
@@ -43,9 +46,10 @@ export function CoworkNewTaskPage({
         messageUuid: createMessageUuid(),
         model: model === "default" ? undefined : model,
         permissionMode,
-        prompt: normalized,
+        prompt: message,
         skipRedirect: options.keepGoing,
         userSelectedFiles: selectedFilePaths,
+        userSelectedFolders: selectedWorkspace.cwd ? [selectedWorkspace.cwd] : undefined,
         workspace: selectedWorkspace,
       });
       setPrompt("");

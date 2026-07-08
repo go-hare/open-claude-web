@@ -28,6 +28,8 @@ export type SessionSummary = {
   cwd?: string;
   effort?: string;
   folders?: string[];
+  userSelectedFiles?: string[];
+  userSelectedFolders?: string[];
   model?: string;
   permissionMode?: string;
   repo?: {
@@ -146,6 +148,7 @@ export type StartSessionInput = {
   title?: string;
   origin?: string;
   userSelectedFiles?: string[];
+  userSelectedFolders?: string[];
   useWorktree?: boolean;
   worktreeName?: string;
   workspace: WorkspaceContext;

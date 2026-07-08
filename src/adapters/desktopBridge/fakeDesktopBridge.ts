@@ -222,7 +222,8 @@ const workspace: WorkspaceContext = {
 };
 
 const titleFromPrompt = (prompt: string) => {
-  const firstLine = prompt.trim().split("\n")[0] ?? "新会话";
+  const visiblePrompt = prompt.replace(/<uploaded_files>[\s\S]*?<\/uploaded_files>\s*/g, "").trim();
+  const firstLine = visiblePrompt.split("\n")[0] ?? "新会话";
   return firstLine.length > 24 ? `${firstLine.slice(0, 24)}…` : firstLine || "新会话";
 };
 
@@ -320,9 +321,11 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   onShellPtyEvent: () => () => {},
   start: async (input: StartSessionInput) => {
     const messageUuid = input.messageUuid ?? createMessageUuid();
+    const selectedFolders = input.userSelectedFolders?.length ? input.userSelectedFolders : input.workspace.cwd ? [input.workspace.cwd] : [];
     const userMessageRaw = {
       messageUuid,
       ...(input.userSelectedFiles?.length ? { userSelectedFiles: input.userSelectedFiles } : {}),
+      ...(selectedFolders.length ? { userSelectedFolders: selectedFolders } : {}),
     };
     const created: SessionSummary = {
       id: `${targetKind === "epitaxy" ? "local" : "code"}_${Date.now()}`,
@@ -332,6 +335,8 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
       kind: targetKind,
       sessionKind: targetKind === "epitaxy" ? "cowork" : "code",
       cwd: input.workspace.cwd,
+      folders: selectedFolders,
+      userSelectedFolders: selectedFolders,
       effort: input.effort,
       model: input.model,
       permissionMode: input.permissionMode,

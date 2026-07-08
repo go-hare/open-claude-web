@@ -509,8 +509,14 @@ function looksLikePath(value?: string): boolean {
   return Boolean(value && (/^(\/|~\/|[A-Za-z]:[\\/])/.test(value) || value.includes("/")));
 }
 
+function titleFromStartPrompt(prompt: string, targetKind: SessionSummary["kind"]) {
+  const visiblePrompt = prompt.replace(/<uploaded_files>[\s\S]*?<\/uploaded_files>\s*/g, "").trim();
+  return visiblePrompt.split("\n")[0] || (targetKind === "code" ? "General coding session" : "New session");
+}
+
 function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["kind"]): Record<string, unknown> {
   const cwd = input.workspace.cwd;
+  const selectedFolders = input.userSelectedFolders?.length ? input.userSelectedFolders : cwd ? [cwd] : [];
   const permissionMode = input.permissionMode === "bypass" ? "bypassPermissions" : input.permissionMode ?? "default";
   return {
     kind: targetKind,
@@ -518,17 +524,17 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
     prompt: input.prompt,
     cwd,
     effort: input.effort,
-    folders: cwd ? [cwd] : [],
+    folders: selectedFolders,
     messageUuid: input.messageUuid,
     model: input.model,
     scheduledTaskId: input.scheduledTaskId,
     skipRedirect: input.skipRedirect,
     origin: input.origin,
     userSelectedFiles: input.userSelectedFiles?.length ? input.userSelectedFiles : undefined,
-    userSelectedFolders: cwd ? [cwd] : [],
+    userSelectedFolders: selectedFolders.length ? selectedFolders : undefined,
     permissionMode,
     sourceBranch: input.sourceBranch,
-    title: input.title ?? (input.prompt.trim().split("\n")[0] || (targetKind === "code" ? "General coding session" : "New session")),
+    title: input.title ?? titleFromStartPrompt(input.prompt, targetKind),
     useWorktree: input.useWorktree,
     worktreeName: input.worktreeName,
   };
