@@ -19,7 +19,7 @@ export function ScheduledTasks({ onNavigate }: RouteViewProps) {
       <ScheduledTasksContent
         isLoading={isLoading}
         tasks={tasks}
-        onCreate={() => onNavigate("/epitaxy/scheduled/new-local")}
+        onCreate={() => onNavigate("/epitaxy/scheduled/new")}
         onSelect={(id) => onNavigate(`/epitaxy/scheduled/${encodeURIComponent(id)}`)}
       />
     </ScheduledRouteShell>

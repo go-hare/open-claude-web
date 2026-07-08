@@ -45,12 +45,26 @@ export function ReportedPage() {
 }
 
 export function RedirectPage({ route }: RouteViewProps) {
-  const target = route.path === "/claude-code-install" ? "/claude-code/install" : route.path === "/org-discovery" ? "/no-organization" : route.path === "/claude-code-desktop" ? "/epitaxy" : "/task/new";
+  const target = redirectTarget(route.path, window.location.pathname, window.location.search);
   useEffect(() => {
     window.history.replaceState({}, "", target);
     window.dispatchEvent(new Event("app:navigation"));
   }, [target]);
   return null;
+}
+
+function redirectTarget(routePath: string, pathname: string, search: string) {
+  if (routePath === "/claude-code-install") return "/claude-code/install";
+  if (routePath === "/org-discovery") return "/no-organization";
+  if (routePath === "/claude-code-desktop") return claudeCodeDesktopRedirectTarget(pathname, search);
+  return "/task/new";
+}
+
+function claudeCodeDesktopRedirectTarget(pathname: string, search: string) {
+  const suffix = pathname.startsWith("/claude-code-desktop") ? pathname.slice("/claude-code-desktop".length).replace(/\/+$/, "") : "";
+  if (!suffix || suffix === "/onboarding") return `/epitaxy${search}`;
+  if (suffix.startsWith("/scheduled/remote/")) return `/epitaxy/scheduled/${suffix.slice("/scheduled/remote/".length)}${search}`;
+  return `/epitaxy${suffix}${search}`;
 }
 
 export function ServiceStatusPage({ route }: RouteViewProps) {

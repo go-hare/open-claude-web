@@ -4,7 +4,6 @@ import { desktopBridge, type ScheduledTaskSummary, type SessionSummary } from ".
 import { Icon } from "../../shell/icons";
 import { sessionPath } from "../../shell/sessionPaths";
 import { DetailSection, RoutineHeader, ScheduledRouteShell, chipClass } from "./ScheduledPrimitives";
-import { ScheduledTaskForm } from "./ScheduledTaskForm";
 import { scheduleLabel, taskDisplayName } from "./scheduleUtils";
 import { useScheduledTasks } from "./useScheduledTasks";
 
@@ -25,7 +24,7 @@ export function ScheduledTaskDetail({ onNavigate }: RouteViewProps) {
   });
 
   useEffect(() => {
-    if (!taskId || taskId === "new-local") return;
+    if (!taskId) return;
     let alive = true;
     setDirectLookup({ id: taskId, task: null, loading: true });
     void desktopBridge.CCDScheduledTasks.get(taskId)
@@ -40,9 +39,6 @@ export function ScheduledTaskDetail({ onNavigate }: RouteViewProps) {
     };
   }, [taskId]);
 
-  if (taskId === "new-local") {
-    return <ScheduledTaskForm existingNames={existingNames} onBack={() => onNavigate("/epitaxy/scheduled")} onCreated={(id) => onNavigate(`/epitaxy/scheduled/${encodeURIComponent(id)}`)} />;
-  }
 
   const directTask = directLookup.id === taskId ? directLookup.task : null;
   const task = tasks.find((item) => item.id === taskId) ?? directTask;

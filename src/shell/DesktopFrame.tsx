@@ -23,9 +23,9 @@ export function DesktopFrame({ children, currentRoute, onNavigate }: DesktopFram
   const openSearch = useCallback(() => setSearchOpen(true), []);
 
   useEffect(() => {
-    const routeMode = currentRoute.id === "cowork-home" || currentRoute.id === "cowork-session" ? "cowork" : currentRoute.id === "epitaxy-home" || currentRoute.id === "epitaxy-session" ? "code" : undefined;
+    const routeMode = modeFromPath(window.location.pathname);
     if (routeMode && frame.mode !== routeMode) frame.setMode(routeMode);
-  }, [currentRoute.id, frame]);
+  }, [currentRoute.path, frame]);
 
   const frameStyle = {
     "--df-sidebar-width": `${frame.sidebarWidth}px`,
@@ -227,4 +227,26 @@ function isWindowsDesktopFrame() {
 function isDesktopFrame() {
   if (typeof navigator === "undefined") return false;
   return Boolean(window["claude.web"]) || /\bElectron\//.test(navigator.userAgent);
+}
+
+function modeFromPath(pathname: string) {
+  if (
+    pathname === "/task" ||
+    pathname.startsWith("/task/") ||
+    pathname.startsWith("/local_sessions") ||
+    pathname === "/space" ||
+    pathname.startsWith("/space/") ||
+    pathname.startsWith("/cowork-artifact") ||
+    pathname.startsWith("/scheduled-task") ||
+    pathname.startsWith("/cowork/agent")
+  ) return "cowork";
+  if (
+    pathname === "/" ||
+    pathname === "/epitaxy" ||
+    pathname.startsWith("/epitaxy/") ||
+    pathname === "/code" ||
+    pathname.startsWith("/code/") ||
+    pathname.startsWith("/claude-code-desktop")
+  ) return "code";
+  return undefined;
 }

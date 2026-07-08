@@ -49,6 +49,23 @@ const startsWithPath = (pathname: string, prefix: string) => {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 };
 
+const epitaxyReservedSessionSegments = new Set([
+  "agents",
+  "apps",
+  "dev",
+  "dispatch",
+  "pull-requests",
+  "remote-agents",
+  "scheduled",
+  "tasks",
+]);
+
+const isReservedEpitaxySessionPath = (pathname: string) => {
+  if (!pathname.startsWith("/epitaxy/")) return false;
+  const segment = pathname.split("/")[2] ?? "";
+  return epitaxyReservedSessionSegments.has(segment);
+};
+
 export const routes: AppRoute[] = [
   {
     id: "cowork-home",
@@ -79,13 +96,7 @@ export const routes: AppRoute[] = [
     kind: "epitaxy",
     sourceChunk: "cf52a4cc1-Cp3wVf85.js + c11959232-h_zsw3wI.js",
     Component: EpitaxySessionPage,
-    match: (pathname) => pathname.startsWith("/epitaxy/")
-      && !startsWithPath(pathname, "/epitaxy/scheduled")
-      && !startsWithPath(pathname, "/epitaxy/apps")
-      && !startsWithPath(pathname, "/epitaxy/dev")
-      && pathname !== "/epitaxy/dispatch"
-      && !startsWithPath(pathname, "/epitaxy/tasks")
-      && !startsWithPath(pathname, "/epitaxy/pull-requests"),
+    match: (pathname) => pathname.startsWith("/epitaxy/") && !isReservedEpitaxySessionPath(pathname),
   },
   {
     id: "cowork-session",
@@ -116,6 +127,26 @@ export const routes: AppRoute[] = [
     sourceChunk: "cf52a4cc1-Cp3wVf85.js + c705e2e19-CdkFb_TH.js",
     Component: EpitaxyNotFoundPage,
     match: (pathname) => startsWithPath(pathname, "/epitaxy/dev"),
+  },
+  {
+    id: "epitaxy-agents",
+    path: "/epitaxy/agents",
+    title: "Agents",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Mje reserved epitaxy segments",
+    Component: EpitaxyNotFoundPage,
+    match: (pathname) => startsWithPath(pathname, "/epitaxy/agents"),
+  },
+  {
+    id: "epitaxy-remote-agents",
+    path: "/epitaxy/remote-agents",
+    title: "Remote agents",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Mje reserved epitaxy segments",
+    Component: EpitaxyNotFoundPage,
+    match: (pathname) => startsWithPath(pathname, "/epitaxy/remote-agents"),
   },
   {
     id: "epitaxy-tasks-splat",
@@ -173,6 +204,16 @@ export const routes: AppRoute[] = [
     kind: "epitaxy",
     sourceChunk: "cf52a4cc1-Cp3wVf85.js + c705e2e19-CdkFb_TH.js",
     Component: DispatchPage,
+  },
+  {
+    id: "epitaxy-dispatch-splat",
+    path: "/epitaxy/dispatch/*",
+    title: "Not Found",
+    navKey: "dispatch",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Mje reserved epitaxy segments",
+    Component: EpitaxyPlainNotFoundPage,
+    match: (pathname) => startsWithPath(pathname, "/epitaxy/dispatch") && pathname !== "/epitaxy/dispatch",
   },
   {
     id: "epitaxy-tasks",

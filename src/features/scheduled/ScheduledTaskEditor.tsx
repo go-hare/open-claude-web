@@ -1,17 +1,14 @@
-import { useEffect } from "react";
 import type { RouteViewProps } from "../../app/routes";
-import { ScheduledRouteShell } from "./ScheduledPrimitives";
+import { ScheduledTaskForm } from "./ScheduledTaskForm";
+import { useScheduledTasks } from "./useScheduledTasks";
 
 export function ScheduledTaskEditor({ onNavigate }: RouteViewProps) {
-  useEffect(() => {
-    onNavigate("/epitaxy/scheduled");
-  }, [onNavigate]);
-
+  const { existingNames } = useScheduledTasks();
   return (
-    <ScheduledRouteShell>
-      <div role="status" className="h-full flex items-center justify-center text-t5">
-        <span className="sr-only">Loading scheduled tasks</span>
-      </div>
-    </ScheduledRouteShell>
+    <ScheduledTaskForm
+      existingNames={existingNames}
+      onBack={() => onNavigate("/epitaxy/scheduled")}
+      onCreated={(id) => onNavigate(`/epitaxy/scheduled/${encodeURIComponent(id)}`)}
+    />
   );
 }
