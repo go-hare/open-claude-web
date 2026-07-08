@@ -55,10 +55,9 @@ const coworkModelItems = [
   { label: "Sonnet", value: "claude-sonnet-4" },
 ];
 
-const coworkPermissionItems: Array<{ label: string; value: PermissionMode }> = [
-  { label: "Ask", value: "default" },
-  { label: "Act", value: "auto" },
-  { label: "Plan", value: "plan" },
+const coworkPermissionItems: Array<{ icon: string; label: string; value: PermissionMode }> = [
+  { icon: "Hand4FingerStop", label: "Ask", value: "default" },
+  { icon: "Warning", label: "Act", value: "auto" },
 ];
 
 export function OfficialCoworkPromptBox({
@@ -85,6 +84,7 @@ export function OfficialCoworkPromptBox({
   const modelLabel = coworkModelItems.find((item) => item.value === model)?.label ?? "Default model";
   const permissionItems: OfficialDropdownItem[] = coworkPermissionItems.map((item) => ({
     checked: item.value === permissionMode,
+    icon: item.icon,
     label: item.label,
     onSelect: () => onPermissionModeChange(item.value),
   }));
@@ -351,6 +351,7 @@ function OfficialCoworkPermissionModeSelector({
   label: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const selectedItem = items.find((item) => item.checked);
   return (
     <Menu.Root open={!disabled && open} onOpenChange={(nextOpen) => {
       if (!disabled) setOpen(nextOpen);
@@ -358,13 +359,14 @@ function OfficialCoworkPermissionModeSelector({
       <Menu.Trigger
         aria-label={`Mode: ${typeof label === "string" ? label : "selected"}`}
         className={[
-          "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus h-base text-body justify-between !pl-3 !pr-2 !rounded-xl bg-transparent hover:!bg-bg-200 transition-colors text-text-300 active:!scale-100 disabled:text-uncontained-disabled",
+          "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-body hover:!bg-bg-200 !text-text-300 !px-2 !h-9 !min-w-0 !rounded-xl bg-transparent transition-colors active:!scale-100 disabled:text-uncontained-disabled",
           open ? "!bg-bg-200 !text-text-100" : "",
         ].join(" ")}
         disabled={disabled}
       >
-        <span className="truncate">{label}</span>
-        <Icon name="ChevronDownSmall" size="xs" className="ml-1 mr-1 text-text-400" />
+        {selectedItem?.icon ? <span className="text-text-300 mr-0.5"><Icon name={selectedItem.icon} customSize={16} /></span> : null}
+        <span className="text-text-300 truncate">{label}</span>
+        <Icon name="ChevronDownSmall" customSize={12} className="text-text-500" />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner align="start" className="epitaxy-root z-[60] text-text-300" side="bottom" sideOffset={4}>
@@ -382,6 +384,11 @@ function OfficialCoworkPermissionModeSelector({
                       setOpen(false);
                     }}
                   >
+                    {item.icon ? (
+                      <span className="relative flex items-center justify-center size-[14px] shrink-0" style={officialMenuIconStyle}>
+                        <Icon name={item.icon} size="m" />
+                      </span>
+                    ) : null}
                     <span className="flex-1 min-w-0 truncate">{item.label}</span>
                     {item.checked ? <Icon name="CheckSelection" size="sm" className="text-accent-100 mr-1.5" /> : null}
                   </Menu.Item>
@@ -619,7 +626,7 @@ function OfficialCoworkFolderPicker({
 
   const trigger = (
     <Menu.Trigger
-      className="group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus w-full h-base text-body justify-between !pl-3 !pr-2 !rounded-xl bg-transparent hover:!bg-bg-200 transition-colors text-text-300 active:!scale-100 disabled:text-uncontained-disabled"
+      className="group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus w-full text-body justify-between !pl-3 !pr-2 !h-9 !rounded-xl bg-transparent hover:!bg-bg-200 transition-colors text-text-300 active:!scale-100 disabled:text-uncontained-disabled"
       disabled={disabled}
       title={selectedFolders.join(", ")}
     >
@@ -638,7 +645,7 @@ function OfficialCoworkFolderPicker({
       }}>
         {hasPopup ? trigger : (
           <button
-            className="group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus w-full h-base text-body justify-between !pl-3 !pr-2 !rounded-xl bg-transparent hover:!bg-bg-200 transition-colors text-text-300 active:!scale-100"
+            className="group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus w-full text-body justify-between !pl-3 !pr-2 !h-9 !rounded-xl bg-transparent hover:!bg-bg-200 transition-colors text-text-300 active:!scale-100"
             disabled={disabled}
             onClick={chooseDifferentFolder}
             type="button"
