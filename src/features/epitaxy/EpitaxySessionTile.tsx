@@ -10,8 +10,9 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { desktopBridge, type ContextUsage, type SessionSummary } from "../../adapters/desktopBridge";
-import type { ChatMessage, LocalSessionsBridge } from "../../adapters/desktopBridge/types";
+import type { ChatMessage, LocalSessionsBridge, SendMessageInput } from "../../adapters/desktopBridge/types";
 import { Icon } from "../../shell/icons";
+import { sessionHomePath, sessionPath } from "../../shell/sessionPaths";
 import type { PaneSlot } from "../../stores/paneStore";
 import { EpitaxyTileLayout } from "./EpitaxyFrameSurface";
 import {
@@ -26,6 +27,13 @@ import {
   type OfficialViewPane,
 } from "./OfficialEpitaxyComponents";
 import { OfficialEpitaxyBranchRows } from "./OfficialEpitaxyBranchRows";
+import {
+  CoworkConversationStatus,
+  parseCoworkConversationStatus,
+  type CoworkConversationStatusState,
+} from "./cowork/CoworkConversationStatus";
+import { CoworkSessionActivityPanel } from "./cowork/CoworkSessionActivityPanel";
+import { CoworkSelectedFiles } from "./cowork/CoworkSelectedFiles";
 import { createOfficialSessionStreamSmoother, type OfficialStreamSnapshot } from "./officialStreamSmoother";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
@@ -34,6 +42,7 @@ import type { OfficialSlashCommandMenuProps } from "./slash/OfficialSlashTypes";
 
 type EpitaxySessionType = "local" | "remote" | "bridge";
 type SessionSource = "code" | "epitaxy";
+type SessionSurface = "code" | "cowork";
 type StreamActivityMode = "idle" | "requesting" | "thinking" | "responding" | "tool-use";
 
 type EpitaxyTranscriptActionContextValue = {
@@ -45,6 +54,7 @@ type EpitaxyTranscriptActionContextValue = {
   onNavigate: (path: string) => void;
   reload: () => Promise<void>;
   sessionId?: string;
+  sessionSurface: SessionSurface;
 };
 
 const EpitaxyTranscriptActionContext = createContext<EpitaxyTranscriptActionContextValue | null>(null);
@@ -112,6 +122,7 @@ type EpitaxyFramePageProps = {
   landingBody?: ReactNode;
   onNavigate: (path: string) => void;
   sessionId: string;
+  sessionSourceHint?: SessionSource;
 };
 
 type EpitaxySessionTileProps = {
@@ -121,6 +132,7 @@ type EpitaxySessionTileProps = {
   onNavigate: (path: string) => void;
   paneIndex?: number;
   sessionId: string;
+  sessionSourceHint?: SessionSource;
   slot?: PaneSlot;
 };
 
@@ -131,7 +143,7 @@ const officialSparkMaskPath = "/assets/v1/epitaxy-spark-mask.webp";
 let officialThinkingSparkAnimationCache: OfficialSparkAnimation | null = null;
 let officialThinkingSparkAnimationPromise: Promise<OfficialSparkAnimation | null> | null = null;
 
-export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, onNavigate, sessionId }: EpitaxyFramePageProps) {
+export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, onNavigate, sessionId, sessionSourceHint }: EpitaxyFramePageProps) {
   const activeSessionId = sessionId || undefined;
   const sessionType = useEpitaxySessionType(activeSessionId);
 
@@ -155,6 +167,7 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
         landingBody={landingBody}
         onNavigate={onNavigate}
         sessionRef={sessionRef}
+        sessionSourceHint={sessionSourceHint}
         sessionType={activeSessionId ? sessionType : undefined}
       />
     </OfficialChatTileShell>
@@ -169,7 +182,7 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
   );
 }
 
-export function EpitaxySessionTile({ isLonePane = false, onClose, onMovePane, onNavigate, paneIndex = 0, sessionId, slot }: EpitaxySessionTileProps) {
+export function EpitaxySessionTile({ isLonePane = false, onClose, onMovePane, onNavigate, paneIndex = 0, sessionId, sessionSourceHint = "code", slot }: EpitaxySessionTileProps) {
   return (
     <EpitaxySecondPane
       isLonePane={isLonePane}
@@ -178,14 +191,16 @@ export function EpitaxySessionTile({ isLonePane = false, onClose, onMovePane, on
       onNavigate={onNavigate}
       paneIndex={paneIndex}
       sessionId={sessionId}
+      sessionSourceHint={sessionSourceHint}
       slot={slot}
     />
   );
 }
 
-function EpitaxySecondPane({ isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, slot }: EpitaxySessionTileProps) {
+function EpitaxySecondPane({ isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, sessionSourceHint = "code", slot }: EpitaxySessionTileProps) {
   const sessionType = useEpitaxySessionType(sessionId);
   const sessionRef = useMemo(() => ({ id: sessionId, type: sessionType }), [sessionId, sessionType]);
+  const fallbackHome = sessionHomePath(sessionSourceHint === "epitaxy" ? "cowork" : "code");
   const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft?: boolean, dragHandle?: ReactNode) => (
     <OfficialChatTileShell>
       <EpitaxyChatPanel
@@ -198,14 +213,15 @@ function EpitaxySecondPane({ isLonePane, onClose, onMovePane, onNavigate, paneIn
         onClose={onClose}
         onNavigate={onNavigate}
         onMovePane={onMovePane}
-        onSessionRemoved={onClose ?? (() => onNavigate("/epitaxy"))}
+        onSessionRemoved={onClose ?? (() => onNavigate(fallbackHome))}
         paneIndex={paneIndex}
         sessionRef={sessionRef}
+        sessionSourceHint={sessionSourceHint}
         sessionType={sessionType}
         slot={slot}
       />
     </OfficialChatTileShell>
-  ), [isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, sessionRef, sessionType, slot]);
+  ), [fallbackHome, isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, sessionRef, sessionSourceHint, sessionType, slot]);
 
   return (
     <div className="epitaxy-root select-none flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -230,6 +246,7 @@ type EpitaxyChatPanelProps = {
   onSessionRemoved?: () => void;
   paneIndex?: number;
   sessionRef: EpitaxySessionRef | null;
+  sessionSourceHint?: SessionSource;
   sessionType?: EpitaxySessionType;
   slot?: PaneSlot;
 };
@@ -249,19 +266,23 @@ function EpitaxyChatPanel({
   onSessionRemoved,
   paneIndex = 0,
   sessionRef,
+  sessionSourceHint,
   sessionType = "local",
   slot,
 }: EpitaxyChatPanelProps) {
-  const { entries, error, isLoading, isResponding, isSessionNotFound, messages, pendingTurnStartedAt, reload, session, source, streamTokenEstimate } = useEpitaxySessionData(initialSessionId);
+  const { entries, error, isLoading, isResponding, isSessionNotFound, messages, pendingTurnStartedAt, reload, session, source, streamTokenEstimate } = useEpitaxySessionData(initialSessionId, sessionSourceHint);
   const [activeView, setActiveView] = useState<OfficialViewPane | undefined>(undefined);
   const [fileView, setFileView] = useState<OfficialFileViewTarget | null>(null);
   const [previewTarget, setPreviewTarget] = useState<OfficialPreviewTarget | null>(null);
   const [subagentView, setSubagentView] = useState<OfficialSubagentTarget | null>(null);
   const [sidePaneWidth, setSidePaneWidth] = useState<number | undefined>(undefined);
-  const title = officialSessionHeaderTitle(session, initialSessionId);
+  const sessionSurface = inferSessionSurface(sessionSourceHint, source, session);
+  const isCoworkSurface = sessionSurface === "cowork";
+  const title = officialSessionHeaderTitle(session, initialSessionId, sessionSurface);
   const effectiveSessionRef = sessionRef ?? (initialSessionId ? { id: initialSessionId, type: sessionType } : null);
   const bridge = bridgeForSource(source, session);
   const tasks = useMemo(() => parseOfficialTasks(messages), [messages]);
+  const coworkStatus = useMemo(() => isCoworkSurface ? parseCoworkConversationStatus(messages, session) : null, [isCoworkSurface, messages, session]);
   const hasRunningTasks = useMemo(() => tasks.some((task) => task.status === "running"), [tasks]);
   const openFile = useCallback((target: OfficialFileViewTarget) => {
     setFileView({ ...target, scrollNonce: Date.now() });
@@ -276,11 +297,13 @@ function EpitaxyChatPanel({
     setActiveView("subagent");
   }, []);
   const openTasks = useCallback(() => {
+    if (isCoworkSurface) return;
     setActiveView("tasks");
-  }, []);
+  }, [isCoworkSurface]);
   const openDiff = useCallback(() => {
+    if (isCoworkSurface) return;
     setActiveView("diff");
-  }, []);
+  }, [isCoworkSurface]);
   const transcriptRef = useRef<OfficialTranscriptHandle | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -306,12 +329,13 @@ function EpitaxyChatPanel({
     onNavigate,
     reload,
     sessionId: initialSessionId,
-  }), [bridge, initialSessionId, onNavigate, openFile, openPreview, openSubagent, openTasks, reload]);
+    sessionSurface,
+  }), [bridge, initialSessionId, onNavigate, openFile, openPreview, openSubagent, openTasks, reload, sessionSurface]);
   const selectView = useCallback((view: OfficialViewPane) => {
     setActiveView((current) => current === view ? undefined : view);
   }, []);
 
-  useEpitaxyViewShortcuts(selectView);
+  useEpitaxyViewShortcuts(selectView, !isCoworkSurface);
   useEffect(() => {
     setFileView(null);
     setPreviewTarget(null);
@@ -320,6 +344,9 @@ function EpitaxyChatPanel({
       setActiveView(undefined);
     }
   }, [initialSessionId]);
+  useEffect(() => {
+    if (isCoworkSurface) setActiveView(undefined);
+  }, [isCoworkSurface]);
   useEffect(() => {
     if (!initialSessionId || (entries.length === 0 && !isResponding)) {
       updateTranscriptScrollState({ showScrollButton: false, showBottomFade: false });
@@ -360,7 +387,7 @@ function EpitaxyChatPanel({
           <div aria-hidden="true" className="epitaxy-top-scrim" />
           <div aria-hidden="true" className="epitaxy-bottom-scrim" style={{ opacity: showBottomFade ? 1 : 0 }} />
           <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
-            {renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState: updateTranscriptScrollState, pendingTurnStartedAt, ref: transcriptRef, reload, scrollRef: transcriptScrollRef, session, streamTokenEstimate, tasks })}
+            {renderTranscriptBody({ coworkStatus, entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState: updateTranscriptScrollState, pendingTurnStartedAt, ref: transcriptRef, reload, scrollRef: transcriptScrollRef, session, streamTokenEstimate, surface: sessionSurface, tasks })}
           </EpitaxyTranscriptActionContext.Provider>
         </div>
         {!hideComposer && initialSessionId && !isSessionNotFound ? (
@@ -368,15 +395,16 @@ function EpitaxyChatPanel({
             bridge={bridge}
             disabled={isLoading || Boolean(error)}
             isResponding={isResponding}
-            onOpenDiff={openDiff}
-            onSubmit={async (text) => {
-              await sendMessageToSession(source, initialSessionId, text);
+            onOpenDiff={isCoworkSurface ? undefined : openDiff}
+            onSubmit={async (text, input) => {
+              await sendMessageToSession(source, initialSessionId, text, input);
               await reload();
             }}
             reload={reload}
             session={session}
             sessionRef={effectiveSessionRef}
             showScrollButton={showScrollButton}
+            surface={sessionSurface}
             onScrollToBottom={() => scrollTranscriptToBottom("smooth")}
           />
         ) : null}
@@ -400,11 +428,12 @@ function EpitaxyChatPanel({
           paneIndex={paneIndex}
           session={session}
           sessionRef={effectiveSessionRef}
+          hideViews={isCoworkSurface}
           title={title}
         />
         {chatBody}
       </div>
-      {activeView ? (
+      {activeView && !isCoworkSurface ? (
         <EpitaxySidePaneTile
           activeView={activeView}
           fileView={fileView}
@@ -419,24 +448,36 @@ function EpitaxyChatPanel({
           onSidePaneWidthChange={setSidePaneWidth}
         />
       ) : null}
+      {isCoworkSurface && effectiveSessionRef && !isSessionNotFound ? (
+        <CoworkSessionActivityPanel
+          bridge={bridge}
+          messages={messages}
+          onNavigate={onNavigate}
+          onOpenFile={openFile}
+          session={session}
+          sessionId={effectiveSessionRef.id}
+          tasks={tasks}
+        />
+      ) : null}
     </div>
     </EpitaxyTranscriptActionContext.Provider>
   );
 }
 
-function officialSessionHeaderTitle(session: SessionSummary | null, initialSessionId?: string) {
-  if (!initialSessionId) return "Claude Code";
+function officialSessionHeaderTitle(session: SessionSummary | null, initialSessionId: string | undefined, surface: SessionSurface) {
+  if (!initialSessionId) return surface === "cowork" ? "新任务" : "Claude Code";
   const title = session?.title?.trim();
   if (!title || title === "Untitled" || (/^\d+$/.test(title) && (session?.kind === "code" || session?.kind === "epitaxy"))) {
-    return "Coding session";
+    return surface === "cowork" ? "新任务" : "Coding session";
   }
   return title;
 }
 
-function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, isTitleLoading, isTopLeft, onClose, onSessionRemoved, onViewSelect, paneIndex, session, sessionRef, title }: {
+function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, hideViews = false, isTitleLoading, isTopLeft, onClose, onSessionRemoved, onViewSelect, paneIndex, session, sessionRef, title }: {
   activeView?: OfficialViewPane;
   dragHandle?: ReactNode;
   hasRunningTasks?: boolean;
+  hideViews?: boolean;
   isTitleLoading: boolean;
   isTopLeft?: boolean;
   onClose?: () => void;
@@ -452,6 +493,7 @@ function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, isTitleLoa
       activeView={activeView}
       dragHandle={dragHandle}
       hasRunningTasks={hasRunningTasks}
+      hideViews={hideViews}
       isTitleLoading={isTitleLoading}
       isTopLeft={isTopLeft}
       onSessionRemoved={onSessionRemoved}
@@ -464,8 +506,9 @@ function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, isTitleLoa
   );
 }
 
-function useEpitaxyViewShortcuts(onSelect: (view: OfficialViewPane) => void) {
+function useEpitaxyViewShortcuts(onSelect: (view: OfficialViewPane) => void, enabled = true) {
   useEffect(() => {
+    if (!enabled) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       if (event.metaKey && event.shiftKey && event.code === "KeyP") {
@@ -485,7 +528,7 @@ function useEpitaxyViewShortcuts(onSelect: (view: OfficialViewPane) => void) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onSelect]);
+  }, [enabled, onSelect]);
 }
 
 const sidePaneMinWidth = 320;
@@ -2185,6 +2228,11 @@ function bridgeForSource(source: SessionSource | null, session: SessionSummary |
   return desktopBridge.LocalSessions;
 }
 
+function inferSessionSurface(hint: SessionSource | undefined, source: SessionSource | null, session: SessionSummary | null): SessionSurface {
+  if (hint === "epitaxy" || source === "epitaxy" || session?.sessionKind === "cowork" || session?.kind === "epitaxy") return "cowork";
+  return "code";
+}
+
 function OfficialSpinner({ animate = true, className = "", inheritColor = false, size = "m" }: { animate?: boolean; className?: string; inheritColor?: boolean; size?: "s" | "m" | "l" }) {
   const config = size === "s" ? { box: 12, stroke: 1.5 } : size === "l" ? { box: 20, stroke: 2 } : { box: 16, stroke: 1.75 };
   const color = inheritColor ? "currentColor" : "var(--cds-text-muted, var(--t6))";
@@ -2269,7 +2317,8 @@ function formatGeneratedTokenCount(tokens: number) {
   return tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
 }
 
-function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState, pendingTurnStartedAt, ref, reload, scrollRef, session, streamTokenEstimate, tasks }: {
+function renderTranscriptBody({ coworkStatus, entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState, pendingTurnStartedAt, ref, reload, scrollRef, session, streamTokenEstimate, surface, tasks }: {
+  coworkStatus: CoworkConversationStatusState | null;
   entries: TranscriptEntry[];
   error: Error | null;
   initialSessionId?: string;
@@ -2284,6 +2333,7 @@ function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isR
   scrollRef: MutableRefObject<HTMLDivElement | null>;
   session: SessionSummary | null;
   streamTokenEstimate: number;
+  surface: SessionSurface;
   tasks: OfficialBackgroundTask[];
 }) {
   if (isSessionNotFound) return <SessionNotFound onBack={reload} />;
@@ -2299,7 +2349,7 @@ function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isR
     );
   }
   if (entries.length === 0 && !isResponding) return <div className="h-full flex items-center justify-center text-body text-t5">No messages yet.</div>;
-  return <Transcript key={transcriptKey} entries={entries} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} />;
+  return <Transcript key={transcriptKey} coworkStatus={coworkStatus} entries={entries} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} streamTokenEstimate={streamTokenEstimate} surface={surface} tasks={tasks} />;
 }
 
 type TranscriptRow =
@@ -2317,6 +2367,7 @@ type OfficialTranscriptRestore = {
 const officialTranscriptScrollRestores = new Map<string, OfficialTranscriptRestore>();
 
 type TranscriptProps = {
+  coworkStatus: CoworkConversationStatusState | null;
   entries: TranscriptEntry[];
   isResponding: boolean;
   onScrollState: (state: OfficialTranscriptScrollState) => void;
@@ -2325,10 +2376,11 @@ type TranscriptProps = {
   scrollRef: MutableRefObject<HTMLDivElement | null>;
   sessionId?: string;
   streamTokenEstimate: number;
+  surface: SessionSurface;
   tasks: OfficialBackgroundTask[];
 };
 
-const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isResponding, onScrollState, pendingTurnStartedAt, restoreKey, scrollRef, sessionId, streamTokenEstimate, tasks }, ref) {
+const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ coworkStatus, entries, isResponding, onScrollState, pendingTurnStartedAt, restoreKey, scrollRef, sessionId, streamTokenEstimate, surface, tasks }, ref) {
   const rowsRef = useRef<TranscriptRow[]>([]);
   const initialCount = useRef(entries.length);
   const rows = useMemo(() => buildTranscriptRows(entries), [entries]);
@@ -2411,7 +2463,7 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
             return (
               <div data-index={virtualRow.index} key={virtualRow.key} ref={officialVirtualizer.measureElement}>
                 <div className={virtualRow.index < rows.length - 1 ? "epitaxy-chat-size pb-[var(--chat-turn-gap)] empty:pb-0" : "epitaxy-chat-size"}>
-                  <TranscriptRowContent initialCount={initialCount.current} isResponding={isResponding} lastEntryIdx={lastEntryIdx} pendingTurnStartedAt={pendingTurnStartedAt} row={row} sessionId={sessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} />
+                  <TranscriptRowContent coworkStatus={coworkStatus} initialCount={initialCount.current} isResponding={isResponding} lastEntryIdx={lastEntryIdx} pendingTurnStartedAt={pendingTurnStartedAt} row={row} sessionId={sessionId} streamTokenEstimate={streamTokenEstimate} surface={surface} tasks={tasks} />
                 </div>
               </div>
             );
@@ -2787,8 +2839,9 @@ function buildTranscriptRows(entries: TranscriptEntry[]): TranscriptRow[] {
   return rows;
 }
 
-function TranscriptRowContent({ initialCount, isResponding, lastEntryIdx, pendingTurnStartedAt, row, sessionId, streamTokenEstimate, tasks }: { initialCount: number; isResponding: boolean; lastEntryIdx: number; pendingTurnStartedAt?: number | null; row: TranscriptRow; sessionId?: string; streamTokenEstimate: number; tasks: OfficialBackgroundTask[] }) {
+function TranscriptRowContent({ coworkStatus, initialCount, isResponding, lastEntryIdx, pendingTurnStartedAt, row, sessionId, streamTokenEstimate, surface, tasks }: { coworkStatus: CoworkConversationStatusState | null; initialCount: number; isResponding: boolean; lastEntryIdx: number; pendingTurnStartedAt?: number | null; row: TranscriptRow; sessionId?: string; streamTokenEstimate: number; surface: SessionSurface; tasks: OfficialBackgroundTask[] }) {
   if (row.kind === "running-tasks") return <OfficialRunningTasks isResponding={isResponding} tasks={tasks} />;
+  if (row.kind === "loader" && surface === "cowork") return <CoworkConversationStatus isWorking={isResponding} startedAt={pendingTurnStartedAt} status={coworkStatus} />;
   if (row.kind === "loader") return <OfficialWorkingStatus isWorking={isResponding} sessionId={sessionId} startedAt={pendingTurnStartedAt} tokenEstimate={streamTokenEstimate} />;
 
   const isNewUserEntry = row.kind === "user" && row.entryIdx >= initialCount;
@@ -3158,6 +3211,7 @@ function estimateOfficialStreamSnapshotTokens(snapshot: OfficialStreamSnapshot) 
 
 function OfficialUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
+  const isCoworkSurface = actions?.sessionSurface === "cowork";
   const textItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "text" }> => item.kind === "text");
   const bashItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "bash" }> => item.kind === "bash");
   const eventItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "event" }> => item.kind === "event");
@@ -3165,18 +3219,18 @@ function OfficialUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
   const forkFromHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.forkSession) return;
     const forked = await actions.bridge.forkSession(actions.sessionId, entry.id);
-    if (forked?.id) actions.onNavigate(`/epitaxy/${forked.id}`);
+    if (forked?.id) actions.onNavigate(sessionPath(forked));
   }, [actions]);
   const rewindToHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.rewind) return;
     await actions.bridge.rewind(actions.sessionId, entry.id);
     await actions.reload();
   }, [actions, entry.id]);
-  const onFork = actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
+  const onFork = !isCoworkSurface && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
   const onRewind = actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
 
   return (
-    <OfficialUserMessage copyText={copyText} createdAt={entry.timestamp} onFork={onFork} onRewind={onRewind}>
+    <OfficialUserMessage copyText={copyText} createdAt={entry.timestamp} onFork={onFork} onRewind={onRewind} rewindAriaLabel={isCoworkSurface ? "Restart conversation from here" : undefined} rewindIcon={isCoworkSurface ? "Reload" : undefined}>
       <div className="flex flex-col gap-g4">
         {textItems.map((item) => <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty" key={item.id}>{renderInlineMarkdown(item.text, item.id)}</p>)}
         {bashItems.map((item) => <UserBashBlock item={item} key={item.id} />)}
@@ -3188,20 +3242,21 @@ function OfficialUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
 
 function OfficialAssistantEntryMessage({ entry, isStreaming = false }: { entry: TranscriptEntry; isStreaming?: boolean }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
+  const isCoworkSurface = actions?.sessionSurface === "cowork";
   const visibleItems = entry.items.filter(isVisibleTranscriptEntryItem);
   const copyText = visibleItems.flatMap((item) => item.kind === "text" ? [item.text] : []).join("\n\n") || undefined;
   const forkFromHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.forkSession) return;
     const forked = await actions.bridge.forkSession(actions.sessionId, entry.id);
-    if (forked?.id) actions.onNavigate(`/epitaxy/${forked.id}`);
+    if (forked?.id) actions.onNavigate(sessionPath(forked));
   }, [actions, entry.id]);
   const rewindToHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.rewind) return;
     await actions.bridge.rewind(actions.sessionId, entry.id);
     await actions.reload();
   }, [actions, entry.id]);
-  const onFork = !isStreaming && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
-  const onRewind = !isStreaming && actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
+  const onFork = !isCoworkSurface && !isStreaming && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
+  const onRewind = !isCoworkSurface && !isStreaming && actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
   const onRateMessage = !isStreaming && actions?.sessionId && actions.bridge.submitTranscriptFeedback
     ? (messageUuid: string, rating: "negative" | "positive") => {
       void actions.bridge.submitTranscriptFeedback?.(actions.sessionId, {
@@ -3215,7 +3270,7 @@ function OfficialAssistantEntryMessage({ entry, isStreaming = false }: { entry: 
   if (visibleItems.length === 0) return null;
 
   return (
-    <OfficialAssistantMessage copyText={copyText} createdAt={isStreaming ? undefined : entry.timestamp} onFork={onFork} onRateMessage={onRateMessage} onRewind={onRewind} rateMessageUuid={entry.id}>
+    <OfficialAssistantMessage copyText={copyText} createdAt={isStreaming ? undefined : entry.timestamp} onFork={onFork} onRateMessage={onRateMessage} onRewind={onRewind} rateMessageUuid={entry.id} showPinAction={!isCoworkSurface}>
       {visibleItems.map((item) => {
         if (item.kind === "text") {
           return (
@@ -4255,10 +4310,9 @@ const codeModelOptions = [
 ];
 
 const permissionModeOptions = [
-  { label: "默认", value: "default" },
+  { label: "询问权限", value: "default" },
   { label: "接受编辑", value: "acceptEdits" },
-  { label: "自动", value: "auto" },
-  { label: "计划", value: "plan" },
+  { label: "规划模式", value: "plan" },
   { label: "绕过权限", value: "bypassPermissions" },
 ];
 
@@ -4691,23 +4745,26 @@ function ExistingSessionComposer({
   session,
   sessionRef,
   showScrollButton,
+  surface,
 }: {
   bridge: LocalSessionsBridge;
   disabled: boolean;
   isResponding: boolean;
   onOpenDiff?: () => void;
   onScrollToBottom: () => void;
-  onSubmit: (text: string) => Promise<void>;
+  onSubmit: (text: string, input?: SendMessageInput) => Promise<void>;
   reload: () => Promise<void>;
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef | null;
   showScrollButton: boolean;
+  surface: SessionSurface;
 }) {
   const [text, setText] = useState("");
   const [isSubmitting, setSubmitting] = useState(false);
   const [model, setModel] = useState(() => normalizeCodeModelValue(session?.model));
   const [permissionMode, setPermissionMode] = useState(session?.permissionMode ?? "default");
   const [effort, setEffort] = useState(() => normalizeEffortValue(session?.effort));
+  const [selectedFilePaths, setSelectedFilePaths] = useState<string[]>([]);
   const [isConfigBusy, setConfigBusy] = useState(false);
   const submitRef = useRef<() => Promise<void>>(async () => {});
   const clearComposerRef = useRef<() => void>(() => {});
@@ -4720,9 +4777,12 @@ function ExistingSessionComposer({
   }, []);
   const bashModeRef = useRef(false);
   const respondingRef = useRef(isResponding);
-  const isBashMode = text.trimStart().startsWith("!");
+  const isCoworkSurface = surface === "cowork";
+  const isBashMode = !isCoworkSurface && text.trimStart().startsWith("!");
+  const placeholder = isCoworkSurface ? "Reply to Claude…" : "Type / for commands";
   const canStop = isResponding && Boolean(sessionRef && bridge.stop);
-  const canSubmit = text.trim().length > 0 && !disabled && !isSubmitting && !isResponding;
+  const hasSelectedFiles = isCoworkSurface && selectedFilePaths.length > 0;
+  const canSubmit = (text.trim().length > 0 || hasSelectedFiles) && !disabled && !isSubmitting && !isResponding;
   const editor = useEditor({
     content: "",
     editable: !disabled && !isSubmitting && !isResponding,
@@ -4730,7 +4790,7 @@ function ExistingSessionComposer({
       attributes: {
         "aria-label": "Prompt",
         class: "tiptap",
-        "data-placeholder": "Type / for commands",
+        "data-placeholder": placeholder,
       },
       handleKeyDown: (_view, event) => {
         const slashStorage = (tiptapEditorRef.current?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
@@ -4767,13 +4827,17 @@ function ExistingSessionComposer({
     onUpdate: ({ editor: nextEditor }) => {
       setText(nextEditor.getText({ blockSeparator: "\n" }));
     },
-  }, [slashMenuComponent]);
+  }, [placeholder, slashMenuComponent]);
 
   useEffect(() => {
     setModel(normalizeCodeModelValue(session?.model));
     setPermissionMode(session?.permissionMode ?? "default");
     setEffort(normalizeEffortValue(session?.effort));
   }, [session?.effort, session?.model, session?.permissionMode]);
+
+  useEffect(() => {
+    setSelectedFilePaths([]);
+  }, [sessionRef?.id]);
 
   useEffect(() => {
     bashModeRef.current = isBashMode;
@@ -4800,15 +4864,17 @@ function ExistingSessionComposer({
 
   const submit = useCallback(async () => {
     if (!canSubmit) return;
-    const payload = text.trim();
+    const filesForTurn = isCoworkSurface ? selectedFilePaths : [];
+    const payload = text.trim() || (filesForTurn.length > 0 ? "Please review the attached file(s)." : "");
     setSubmitting(true);
     try {
-      await onSubmit(payload);
+      await onSubmit(payload, filesForTurn.length > 0 ? { userSelectedFiles: filesForTurn } : undefined);
       clearComposer();
+      if (filesForTurn.length > 0) setSelectedFilePaths([]);
     } finally {
       setSubmitting(false);
     }
-  }, [canSubmit, clearComposer, onSubmit, text]);
+  }, [canSubmit, clearComposer, isCoworkSurface, onSubmit, selectedFilePaths, text]);
 
   useEffect(() => {
     submitRef.current = submit;
@@ -4871,6 +4937,20 @@ function ExistingSessionComposer({
     }
   };
 
+  const addFiles = async () => {
+    if (!isCoworkSurface || !desktopBridge.FileSystem.browseFiles) return;
+    const paths = await desktopBridge.FileSystem.browseFiles({
+      defaultPath: session?.cwd ?? session?.folders?.[0],
+      title: "Add files or photos",
+    });
+    if (paths.length === 0) return;
+    setSelectedFilePaths((current) => Array.from(new Set([...current, ...paths])));
+  };
+
+  const removeSelectedFile = (filePath: string) => {
+    setSelectedFilePaths((current) => current.filter((item) => item !== filePath));
+  };
+
   const modelItems = codeModelOptions.map((option) => ({
     label: option.label,
     checked: option.value === model,
@@ -4886,13 +4966,18 @@ function ExistingSessionComposer({
     checked: option.value === effort,
     onSelect: () => void applyEffort(option.value),
   }));
-  const modelExtraSections = bridge.setEffort ? [{ key: "effort", header: "Effort", items: effortItems }] : undefined;
-  const plusMenuItems = [
-    { icon: "Folder1", label: "Add folder", onSelect: () => void addFolder() },
-  ];
+  const modelExtraSections = !isCoworkSurface && bridge.setEffort ? [{ key: "effort", header: "Effort", items: effortItems }] : undefined;
+  const plusMenuItems = isCoworkSurface
+    ? [
+      { icon: "FileAdd", label: "Add files or photos", onSelect: () => void addFiles() },
+      { icon: "Folder1", label: "Add folder", onSelect: () => void addFolder() },
+    ]
+    : [
+      { icon: "Folder1", label: "Add folder", onSelect: () => void addFolder() },
+    ];
 
   return (
-    <div data-skip-approval-enter={undefined} className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]">
+    <div data-skip-approval-enter={undefined} data-chat-input-container={isCoworkSurface || undefined} className={`epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout] ${isCoworkSurface ? "sticky bottom-0 mx-auto w-full pt-6 z-[5]" : ""}`}>
       <button
         aria-hidden={!showScrollButton}
         aria-label="Scroll to bottom"
@@ -4903,7 +4988,7 @@ function ExistingSessionComposer({
       >
         <Icon name="ChevronDownSmall" size="s" />
       </button>
-      <OfficialEpitaxyBranchRows bridge={bridge} onOpenDiff={onOpenDiff} session={session} sessionRef={sessionRef} />
+      {!isCoworkSurface ? <OfficialEpitaxyBranchRows bridge={bridge} onOpenDiff={onOpenDiff} session={session} sessionRef={sessionRef} /> : null}
       <InlineToolPermissionApprovals bridge={bridge} sessionId={sessionRef?.id} />
       <div
         className={`epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300 ${isBashMode ? "[&_.tiptap]:font-mono [&_.tiptap]:text-[length:var(--text-code)]" : ""}`}
@@ -4914,8 +4999,13 @@ function ExistingSessionComposer({
       >
         <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" data-surface="prompt" />
         {isBashMode ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-r7 shadow-[inset_0_0_0_1px_var(--extended-purple)]" /> : null}
-        <span className="sr-only" role="status">{isBashMode ? "Bash mode. Press Escape to return to chat." : "Chat mode"}</span>
+        <span className="sr-only" role="status">{isBashMode ? "Bash mode. Press Escape to return to chat." : isCoworkSurface ? "Chat input" : "Chat mode"}</span>
         <div aria-hidden="true" className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}><div className="min-h-0 overflow-hidden" /></div>
+        {isCoworkSurface ? (
+          <div className="px-p7 pt-p5">
+            <CoworkSelectedFiles filePaths={selectedFilePaths} onRemove={removeSelectedFile} />
+          </div>
+        ) : null}
         <div className="relative flex w-full">
           {isBashMode ? <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
           <EditorContent
@@ -4930,7 +5020,7 @@ function ExistingSessionComposer({
               }
             }}
           />
-          {text.trim().length === 0 ? <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5">Type / for commands</span> : null}
+          {text.trim().length === 0 ? <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5">{placeholder}</span> : null}
           <div className="flex self-end p-p7 pl-p3">
             <OfficialButton
               ariaLabel={canStop ? "Stop response" : "Send"}
@@ -4953,11 +5043,22 @@ function ExistingSessionComposer({
         permissionDanger={permissionMode === "bypassPermissions"}
         permissionItems={permissionItems}
         permissionLabel={permissionModeLabel(permissionMode)}
+        plusAriaLabel={isCoworkSurface ? "Add files, connectors, and more" : "Add"}
         plusMenuItems={plusMenuItems}
         session={session}
         sessionRef={sessionRef}
-        onInsertSlashCommand={insertSlashCommand}
+        hideSessionSource={isCoworkSurface}
+        onInsertSlashCommand={isCoworkSurface ? undefined : insertSlashCommand}
       />
+      {isCoworkSurface ? <CoworkComposerDisclaimer /> : null}
+    </div>
+  );
+}
+
+function CoworkComposerDisclaimer() {
+  return (
+    <div role="note" data-disclaimer className="bg-bg-100 text-text-500 text-center text-xs py-2">
+      Claude is AI and can make mistakes. Please double-check responses.
     </div>
   );
 }
@@ -4967,7 +5068,7 @@ type OfficialComposerExtraSection = {
   header?: ReactNode;
   items: OfficialComposerDropdownItem[];
   key?: string;
-  triggerKey?: ReactNode;
+  triggerKey?: string;
 };
 type OfficialComposerLoop = {
   createdAt: number;
@@ -4989,6 +5090,8 @@ type OfficialComposerFooterProps = {
   modelItems: OfficialComposerDropdownItem[];
   modelLabel: ReactNode;
   modelPickerDisabled?: boolean;
+  hideSessionSource?: boolean;
+  plusAriaLabel?: string;
   onAddFiles?: (files: File[]) => void;
   onCoordinatorModeChange?: (value: boolean) => void;
   onInsertSlashCommand?: () => void;
@@ -5039,6 +5142,8 @@ function OfficialComposerFooter({
   modelItems,
   modelLabel,
   modelPickerDisabled = false,
+  hideSessionSource = false,
+  plusAriaLabel = "Add",
   onAddFiles,
   onCoordinatorModeChange,
   onInsertSlashCommand,
@@ -5075,9 +5180,9 @@ function OfficialComposerFooter({
       <div className="flex items-center gap-g5 min-w-0">
         <OfficialDropdownButton align="start" header="Mode" items={menu.numberedModeItems} label={permissionDanger ? <span className="text-extended-yellow">{permissionLabel}</span> : permissionLabel} onOpenChange={menu.onModeOpenChange} open={menu.modeOpen} revealChevron="never" side="top" size="small" triggerKey={composerShortcutForCommand("openModeMenu", true)} />
         {onCoordinatorModeChange ? <OfficialCoordinatorModeToggle onChange={onCoordinatorModeChange} value={coordinatorMode} /> : null}
-        <OfficialDropdownButton align="start" ariaLabel="Add" className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} revealChevron="never" side="top" size="small" />
+        <OfficialDropdownButton align="start" ariaLabel={plusAriaLabel} className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} revealChevron="never" side="top" size="small" />
         <input ref={fileInputRef} type="file" multiple accept={supportsFileAttachments ? undefined : "image/png,image/jpeg,image/gif,image/webp"} className="hidden" onChange={onFileInputChange} />
-        {sessionRef ? <span className="flex min-w-0"><OfficialSessionSource session={session ?? null} sessionRef={sessionRef} /></span> : null}
+        {sessionRef && !hideSessionSource ? <span className="flex min-w-0"><OfficialSessionSource session={session ?? null} sessionRef={sessionRef} /></span> : null}
         {hideDictation ? null : <OfficialDictationSlot disabledReason={dictationDisabledReason} showButton={showDictationButton} />}
         {loops?.length && onStopLoop ? <OfficialLoopIndicator loops={loops} onStopLoop={onStopLoop} /> : null}
       </div>
@@ -5524,12 +5629,7 @@ function composerShortcutMatches(event: KeyboardEvent, spec: string, mac: boolea
 
 function composerShortcutForCommand(command: ComposerShortcutCommand, isClaudeApp: boolean) {
   const binding = composerShortcutBindings.find((item) => item.command === command && composerShortcutConditionMatches("when" in item ? item.when : undefined, isClaudeApp));
-  return binding ? renderShortcutGlyphs(binding.key) : undefined;
-}
-
-function renderShortcutGlyphs(spec: string) {
-  const keyMap: Record<string, string> = { alt: "⌥", cmd: "⌘", ctrl: "⌃", shift: "⇧" };
-  return spec.split("+").map((part) => keyMap[part] ?? part.toUpperCase()).join("");
+  return binding?.key;
 }
 
 function isMacPlatform() {
@@ -5635,7 +5735,7 @@ function emptySessionDataState(isLoading: boolean): SessionDataState {
 const officialSessionDataCache = new Map<string, SessionDataState>();
 type SessionDataStateUpdater = SessionDataState | ((current: SessionDataState) => SessionDataState);
 
-function useEpitaxySessionData(sessionId?: string) {
+function useEpitaxySessionData(sessionId?: string, sourceHint?: SessionSource) {
   const finalizeStreamGenerationRef = useRef<number | null>(null);
   const loadSeqRef = useRef(0);
   const streamGenerationRef = useRef(0);
@@ -5702,7 +5802,7 @@ function useEpitaxySessionData(sessionId?: string) {
       isLoading: current.session === null && current.messages.length === 0 && current.streamSnapshot === null,
     }));
     try {
-      const next = await loadEpitaxySession(sessionId);
+      const next = await loadEpitaxySession(sessionId, sourceHint);
       if (loadSeqRef.current !== loadSeq) return;
       const nextSession = next?.session ?? null;
       const sessionSettled = nextSession ? nextSession.isRunning !== true : false;
@@ -5727,7 +5827,7 @@ function useEpitaxySessionData(sessionId?: string) {
         isLoading: false,
       }));
     }
-  }, [clearStreamState, sessionId]);
+  }, [clearStreamState, sessionId, sourceHint]);
 
   useEffect(() => {
     let alive = true;
@@ -5809,11 +5909,8 @@ function useEpitaxySessionData(sessionId?: string) {
   return { ...state, entries, isResponding, reload, streamTokenEstimate };
 }
 
-async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMessage[]; session: SessionSummary; source: SessionSource } | null> {
-  const sources: Array<{ bridge: LocalSessionsBridge; source: SessionSource }> = [
-    { bridge: desktopBridge.LocalSessions, source: "code" },
-    { bridge: desktopBridge.LocalAgentModeSessions, source: "epitaxy" },
-  ];
+async function loadEpitaxySession(sessionId: string, sourceHint?: SessionSource): Promise<{ messages: ChatMessage[]; session: SessionSummary; source: SessionSource } | null> {
+  const sources = sessionLoadSources(sourceHint);
 
   for (const item of sources) {
     const session = await item.bridge.getSession(sessionId).catch(() => null);
@@ -5827,13 +5924,22 @@ async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMe
   return null;
 }
 
-async function sendMessageToSession(source: SessionSource | null, sessionId: string, text: string) {
+function sessionLoadSources(sourceHint?: SessionSource): Array<{ bridge: LocalSessionsBridge; source: SessionSource }> {
+  if (sourceHint === "epitaxy") return [{ bridge: desktopBridge.LocalAgentModeSessions, source: "epitaxy" }];
+  if (sourceHint === "code") return [{ bridge: desktopBridge.LocalSessions, source: "code" }];
+  return [
+    { bridge: desktopBridge.LocalSessions, source: "code" },
+    { bridge: desktopBridge.LocalAgentModeSessions, source: "epitaxy" },
+  ];
+}
+
+async function sendMessageToSession(source: SessionSource | null, sessionId: string, text: string, input?: SendMessageInput) {
   const bridge = source === "epitaxy" ? desktopBridge.LocalAgentModeSessions : desktopBridge.LocalSessions;
   if (bridge.sendMessage) {
-    await bridge.sendMessage(sessionId, text);
+    await bridge.sendMessage(sessionId, text, input);
     return;
   }
-  await desktopBridge.LocalSessions.sendMessage?.(sessionId, text);
+  await desktopBridge.LocalSessions.sendMessage?.(sessionId, text, input);
 }
 
 function inferSessionType(sessionId?: string, session?: SessionSummary): EpitaxySessionType {
@@ -6136,5 +6242,3 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 const composerDropdownButtonClass = "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled aria-[expanded=true]:text-[var(--text-uncontained-selected)] aria-[expanded=true]:hover:text-[var(--text-uncontained-selected)] h-small rounded-small text-footnote justify-between pl-p5 pr-p2";
-
-

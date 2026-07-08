@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { desktopBridge, type SessionSummary } from "../../adapters/desktopBridge";
+import { sessionPath } from "../../shell/sessionPaths";
 
 type EpitaxyActionCenterProps = {
   onNavigate: (path: string) => void;
@@ -44,7 +45,7 @@ export function EpitaxyActionCenter({ onNavigate }: EpitaxyActionCenterProps) {
               <li key={session.id}>
                 <button
                   className="flex w-full items-center gap-g4 rounded-r6 border-0 bg-fill-contained-default px-p5 py-p4 text-left effect-contained-default hover:bg-fill-contained-hover"
-                  onClick={() => onNavigate(`/epitaxy/${encodeURIComponent(session.id)}`)}
+                  onClick={() => onNavigate(sessionPath(session))}
                   type="button"
                 >
                   <span className="status-dot shrink-0" data-kind={session.isRunning ? "ready" : "awaiting"} />

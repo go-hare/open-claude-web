@@ -38,8 +38,12 @@ export type {
   DesktopPreferences,
   CreateScheduledTaskInput,
   EffortLevel,
+  FileSystemBridge,
+  LocalSessionEnvironmentBridge,
   PermissionMode,
   ScheduledTaskSummary,
+  SendMessageInput,
   SessionSummary,
+  WorkspaceTrustResult,
   WorkspaceContext,
 } from "./types";

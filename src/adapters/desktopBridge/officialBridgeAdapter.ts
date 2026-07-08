@@ -14,8 +14,10 @@ import type {
   SessionSummary,
   SlashCommand,
   StartSessionInput,
+  WorkspaceTrustResult,
   WorkspaceContext,
 } from "./types";
+import { createMessageUuid } from "./messageUuid";
 
 type RemoveListener = () => void;
 type RawEventSubscription = (listener: (event: unknown) => void) => RemoveListener;
@@ -28,13 +30,19 @@ type RawLocalSessionsBridge = {
   getContextUsage?: (id: string) => Promise<unknown>;
   getDefaultEffort?: () => Promise<unknown>;
   getDefaultPermissionMode?: (cwd?: string) => Promise<unknown>;
+  getDetectedProjects?: () => Promise<unknown[]>;
   getDiffFileContent?: (idOrCwd: string, refOrFilePath: string, filePath?: string, previousFilePath?: string) => Promise<unknown>;
   getEffort?: (id: string) => Promise<unknown>;
   getSession?: (id: string, options?: Record<string, unknown>) => Promise<unknown | null>;
+  getSessionsForScheduledTask?: (taskId: string) => Promise<unknown[]>;
   getTranscript?: (id: string) => Promise<unknown[]>;
   getGitInfo?: (idOrCwd: string) => Promise<unknown>;
   getGitDiff?: (idOrCwd: string, base?: string) => Promise<unknown>;
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<unknown>;
+  getLocalBranches?: (idOrCwd: string) => Promise<unknown>;
+  checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<unknown>;
+  checkTrust?: (folder: string) => Promise<unknown>;
+  saveTrust?: (folder: string) => Promise<unknown>;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<unknown>;
   getSupportedCommands?: (request?: GetSupportedCommandsRequest) => Promise<unknown>;
@@ -59,7 +67,7 @@ type RawLocalSessionsBridge = {
   getShellPtyBuffer?: (sessionId: string) => Promise<unknown>;
   getTranscriptFeedback?: (id: string) => Promise<unknown>;
   start?: (input?: Record<string, unknown>) => Promise<unknown>;
-  sendMessage?: (id: string, text: string) => Promise<unknown>;
+  sendMessage?: (id: string, text: string, images?: unknown, permissionMode?: unknown, messageUuid?: unknown, options?: unknown) => Promise<unknown>;
   forkSession?: (id: string, messageId?: string) => Promise<unknown>;
   rewind?: (id: string, messageId?: string) => Promise<unknown>;
   setFocusedSession?: (id: string | null) => Promise<unknown>;
@@ -83,6 +91,15 @@ type RawScheduledTasksBridge = {
   onOnScheduledTaskEvent?: RawEventSubscription;
 };
 
+type RawLocalSessionEnvironmentBridge = {
+  get?: () => Promise<unknown>;
+  save?: (env: Record<string, string>) => Promise<unknown>;
+};
+
+type RawFileSystemBridge = {
+  browseFiles?: (options?: unknown) => Promise<unknown>;
+};
+
 type RawStoreBridge<TState> = {
   getState?: () => Promise<TState>;
   getStateSync?: () => TState;
@@ -98,7 +115,9 @@ export type RawBrowserNavigationState = {
 export type RawClaudeWebBridge = {
   LocalSessions?: RawLocalSessionsBridge;
   LocalAgentModeSessions?: RawLocalSessionsBridge;
+  LocalSessionEnvironment?: RawLocalSessionEnvironmentBridge;
   CCDScheduledTasks?: RawScheduledTasksBridge;
+  FileSystem?: RawFileSystemBridge;
   WindowControl?: {
     close?: () => Promise<unknown>;
   };
@@ -153,7 +172,11 @@ export function createDesktopBridgeFromOfficialNamespaces(
   return {
     LocalSessions: createLocalSessionsBridge(web.LocalSessions, "code"),
     LocalAgentModeSessions: createLocalSessionsBridge(web.LocalAgentModeSessions, "epitaxy"),
+    LocalSessionEnvironment: createLocalSessionEnvironmentBridge(web.LocalSessionEnvironment),
     CCDScheduledTasks: createScheduledTasksBridge(web.CCDScheduledTasks),
+    FileSystem: {
+      browseFiles: async (options) => normalizeStringArray(await web.FileSystem?.browseFiles?.(options).catch(() => [])),
+    },
     Preferences: {
       getWorkspaceContext: () => getWorkspaceContext(web),
       getPreferences: async () => normalizePreferences(await settings?.AppPreferences?.getPreferences?.()),
@@ -191,6 +214,16 @@ export function createDesktopBridgeFromOfficialNamespaces(
   };
 }
 
+function createLocalSessionEnvironmentBridge(raw: RawLocalSessionEnvironmentBridge | undefined): DesktopBridge["LocalSessionEnvironment"] {
+  return {
+    get: async () => normalizeEnvironmentMap(await raw?.get?.().catch(() => ({}))),
+    save: async (env) => {
+      await raw?.save?.(normalizeEnvironmentMap(env));
+      return true;
+    },
+  };
+}
+
 function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targetKind: SessionSummary["kind"]): LocalSessionsBridge {
   return {
     list: async () => {
@@ -205,6 +238,7 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       const transcriptMessages = normalizeMessages(transcript);
       return transcriptMessages?.length ? { ...session, messages: transcriptMessages } : session;
     },
+    getSessionsForScheduledTask: async (taskId) => normalizeSessionList(await raw?.getSessionsForScheduledTask?.(taskId), targetKind),
     getTranscript: async (id) => normalizeMessages(await raw?.getTranscript?.(id).catch(() => [])) ?? [],
     addFolderToSession: async (id, folder) => {
       const item = await raw?.addFolderToSession?.(id, folder);
@@ -213,12 +247,17 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     getCodeStats: async () => normalizeCodeStats(await raw?.getCodeStats?.().catch(() => null)),
     getContextUsage: async (id) => normalizeOfficialContextUsageResult(await raw?.getContextUsage?.(id).catch(() => null)),
     getDefaultEffort: async () => normalizeEffort(await raw?.getDefaultEffort?.().catch(() => null)),
-    getDefaultPermissionMode: async (cwd) => String(await raw?.getDefaultPermissionMode?.(cwd).catch(() => "default") ?? "default"),
+    getDefaultPermissionMode: async (cwd) => stringValue(await raw?.getDefaultPermissionMode?.(cwd).catch(() => null)) ?? null,
+    getDetectedProjects: async () => normalizeDetectedProjectList(await raw?.getDetectedProjects?.().catch(() => []), targetKind),
     getDiffFileContent: async (idOrCwd, refOrFilePath, filePath, previousFilePath) => normalizeGitCommandResult(await raw?.getDiffFileContent?.(idOrCwd, refOrFilePath, filePath, previousFilePath)),
     getEffort: async (id) => String(await raw?.getEffort?.(id).catch(() => "medium") ?? "medium"),
     getGitInfo: async (idOrCwd) => raw?.getGitInfo?.(idOrCwd),
     getGitDiff: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiff?.(idOrCwd, base)),
     getGitDiffStats: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiffStats?.(idOrCwd, base)),
+    getLocalBranches: async (idOrCwd) => normalizeLocalBranches(await raw?.getLocalBranches?.(idOrCwd)),
+    checkRemoteTrust: async (sshConfig, folder) => normalizeTrustResult(await raw?.checkRemoteTrust?.(sshConfig, folder)),
+    checkTrust: async (folder) => normalizeTrustResult(await raw?.checkTrust?.(folder)),
+    saveTrust: async (folder) => raw?.saveTrust?.(folder),
     openInEditor: async (target, editor, line, column) => raw?.openInEditor?.(target, editor, line, column),
     getPermissionMode: async (id) => String(await raw?.getPermissionMode?.(id).catch(() => "default") ?? "default"),
     getSupportedCommands: async (request) => normalizeSupportedCommands(await raw?.getSupportedCommands?.(request).catch(() => [])),
@@ -286,8 +325,12 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       const item = await raw?.start?.(toStartPayload(input, targetKind));
       return enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw);
     },
-    sendMessage: async (id, text) => {
-      const item = await raw?.sendMessage?.(id, text);
+    sendMessage: async (id, text, input) => {
+      const messageUuid = input?.messageUuid ?? createMessageUuid();
+      const item = await raw?.sendMessage?.(id, text, [], input?.permissionMode, messageUuid, {
+        messageUuid,
+        userSelectedFiles: input?.userSelectedFiles?.length ? input.userSelectedFiles : undefined,
+      });
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
     },
     forkSession: async (id, messageId) => {
@@ -349,6 +392,42 @@ function normalizeSessionList(items: unknown, targetKind: SessionSummary["kind"]
     .sort((left, right) => right.updatedAtMs - left.updatedAtMs);
 }
 
+function normalizeDetectedProjectList(items: unknown, targetKind: SessionSummary["kind"]): SessionSummary[] {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => normalizeDetectedProject(item, targetKind))
+    .filter((session): session is SessionSummary => Boolean(session?.cwd));
+}
+
+function normalizeDetectedProject(item: unknown, targetKind: SessionSummary["kind"]): SessionSummary | null {
+  const raw = asRecord(item);
+  const cwd = stringValue(raw.cwd) ?? stringValue(raw.root) ?? stringValue(raw.path) ?? stringValue(raw.id);
+  if (!cwd) return null;
+
+  const updatedAtMs = timestampValue(raw.updatedAt) ?? timestampValue(raw.lastActivityAt) ?? Date.now();
+  const name = stringValue(raw.name) ?? basename(cwd) ?? cwd;
+  const branch = stringValue(raw.branch);
+  return {
+    id: stringValue(raw.id) ?? cwd,
+    title: name,
+    createdAtMs: updatedAtMs,
+    updatedAt: relativeLabel(updatedAtMs),
+    updatedAtMs,
+    kind: targetKind,
+    sessionKind: targetKind === "code" ? "code" : "cowork",
+    cwd,
+    folders: Array.isArray(raw.folders) ? raw.folders.filter((folder): folder is string => typeof folder === "string") : [cwd],
+    repo: {
+      name,
+      branch,
+    },
+    isArchived: false,
+    isRunning: false,
+    isUnread: false,
+    hasWorktree: Boolean(raw.hasWorktree || raw.useWorktree),
+    messages: [],
+  };
+}
+
 function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): SessionSummary {
   const raw = asRecord(item);
   const original = asRecord(raw._originalSession);
@@ -388,7 +467,11 @@ function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): Se
     permissionMode: stringValue(raw.permissionMode) ?? stringValue(original.permissionMode),
     repo: repoInfo(raw, cwd),
     scheduledTaskId: stringValue(raw.scheduledTaskId) ?? stringValue(original.scheduledTaskId),
+    connectionState: stringValue(raw.connectionState) ?? stringValue(original.connectionState),
+    nextReconnectTime: timestampValue(raw.nextReconnectTime) ?? timestampValue(original.nextReconnectTime),
     origin: stringValue(raw.origin) ?? stringValue(original.origin),
+    showRetryButton: booleanValue(raw.showRetryButton) ?? booleanValue(original.showRetryButton),
+    statusMessage: stringValue(raw.statusMessage) ?? stringValue(raw.sessionStatusMessage) ?? stringValue(original.statusMessage) ?? stringValue(original.sessionStatusMessage),
     isPinned: Boolean(raw.isStarred),
     isArchived: Boolean(raw.archived ?? raw.isArchived),
     isRunning: isRunning(raw),
@@ -436,13 +519,43 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
     cwd,
     effort: input.effort,
     folders: cwd ? [cwd] : [],
+    messageUuid: input.messageUuid,
     model: input.model,
     scheduledTaskId: input.scheduledTaskId,
+    skipRedirect: input.skipRedirect,
     origin: input.origin,
+    userSelectedFiles: input.userSelectedFiles?.length ? input.userSelectedFiles : undefined,
     userSelectedFolders: cwd ? [cwd] : [],
     permissionMode,
+    sourceBranch: input.sourceBranch,
     title: input.title ?? (input.prompt.trim().split("\n")[0] || (targetKind === "code" ? "General coding session" : "New session")),
+    useWorktree: input.useWorktree,
+    worktreeName: input.worktreeName,
   };
+}
+
+function normalizeTrustResult(value: unknown): WorkspaceTrustResult {
+  const raw = asRecord(value);
+  return {
+    remote: booleanValue(raw.remote),
+    sources: Array.isArray(raw.sources) ? raw.sources.filter((item): item is string => typeof item === "string") : [],
+    trusted: booleanValue(raw.trusted) ?? true,
+  };
+}
+
+function normalizeLocalBranches(value: unknown): GitCommandResult | string[] {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
+  return normalizeGitCommandResult(value);
+}
+
+function normalizeEnvironmentMap(value: unknown): Record<string, string> {
+  const raw = asRecord(value);
+  const env = asRecord(raw.env ?? value);
+  return Object.fromEntries(
+    Object.entries(env).filter((entry): entry is [string, string] => (
+      typeof entry[0] === "string" && typeof entry[1] === "string"
+    )),
+  );
 }
 
 function normalizeMessages(value: unknown): ChatMessage[] | undefined {
@@ -744,11 +857,24 @@ function normalizeScheduledTask(item: unknown): ScheduledTaskSummary {
 }
 
 async function getWorkspaceContext(web: RawClaudeWebBridge): Promise<WorkspaceContext> {
+  const [codeSessionsRaw, agentSessionsRaw, codeProjectsRaw, agentProjectsRaw] = await Promise.all([
+    web.LocalSessions?.getAll?.().catch(() => []),
+    web.LocalAgentModeSessions?.getAll?.().catch(() => []),
+    (web.LocalSessions?.getDetectedProjects?.() ?? Promise.resolve([])).catch(() => []),
+    (web.LocalAgentModeSessions?.getDetectedProjects?.() ?? Promise.resolve([])).catch(() => []),
+  ]);
   const sessions = [
-    ...normalizeSessionList(await web.LocalSessions?.getAll?.().catch(() => []), "code"),
-    ...normalizeSessionList(await web.LocalAgentModeSessions?.getAll?.().catch(() => []), "epitaxy"),
+    ...normalizeSessionList(codeSessionsRaw, "code"),
+    ...normalizeSessionList(agentSessionsRaw, "epitaxy"),
   ];
-  const current = sessions.find((session) => session.cwd) ?? sessions[0];
+  const detectedProjects = [
+    ...normalizeDetectedProjectList(codeProjectsRaw, "code"),
+    ...normalizeDetectedProjectList(agentProjectsRaw, "epitaxy"),
+  ];
+  const current = sessions.find((session) => session.cwd)
+    ?? detectedProjects.find((project) => project.cwd)
+    ?? sessions[0]
+    ?? detectedProjects[0];
   return current ? {
     mode: "local",
     projectName: current.repo?.name ?? basename(current.cwd) ?? emptyWorkspace.projectName,
@@ -820,6 +946,10 @@ function basename(value?: string): string | undefined {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
 }
 
 function booleanValue(value: unknown): boolean | undefined {

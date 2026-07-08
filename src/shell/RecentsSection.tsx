@@ -12,6 +12,7 @@ import { isPinnedSession, sessionPinKey } from "./sessionPinning";
 import { SessionRowActions, useSessionRowActions } from "./SessionRowActions";
 import { SessionRowMenuContent, type RowAction } from "./SessionRowMenus";
 import { SidebarSectionHeader } from "./SidebarSectionHeader";
+import { selectedSessionIdFromPath, sessionPath } from "./sessionPaths";
 
 type RecentsSectionProps = {
   frame: FrameStore;
@@ -245,11 +246,6 @@ function nextPinnedOrder(pinnedOrder: string[], key: string, beforeKey?: string)
   return [...without.slice(0, index), key, ...without.slice(index)];
 }
 
-function selectedSessionIdFromPath(pathname: string) {
-  const match = /^\/epitaxy\/([^/?#]+)/.exec(pathname);
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
-}
-
 function customGroupDropHandler(frame: FrameStore, group: RecentDisplayGroup) {
   const groupId = group.customGroupId ?? null;
   const keys = group.sessions.map(sessionPinKey);
@@ -280,10 +276,6 @@ function insertBefore(keys: string[], droppedKey: string, beforeKey: string) {
   const index = without.indexOf(beforeKey);
   if (index < 0) return [droppedKey, ...without];
   return [...without.slice(0, index), droppedKey, ...without.slice(index)];
-}
-
-function sessionPath(session: SessionSummary) {
-  return `/epitaxy/${encodeURIComponent(session.id)}`;
 }
 
 function SessionGlyph({ session }: { session: SessionSummary }) {

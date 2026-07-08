@@ -23,7 +23,7 @@ export function DesktopFrame({ children, currentRoute, onNavigate }: DesktopFram
   const openSearch = useCallback(() => setSearchOpen(true), []);
 
   useEffect(() => {
-    const routeMode = currentRoute.id === "cowork-home" ? "cowork" : currentRoute.id === "epitaxy-home" || currentRoute.id === "epitaxy-session" ? "code" : undefined;
+    const routeMode = currentRoute.id === "cowork-home" || currentRoute.id === "cowork-session" ? "cowork" : currentRoute.id === "epitaxy-home" || currentRoute.id === "epitaxy-session" ? "code" : undefined;
     if (routeMode && frame.mode !== routeMode) frame.setMode(routeMode);
   }, [currentRoute.id, frame]);
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import type { FrameMode } from "../stores/frameStore";
-import { paneStore, PANE_SPLIT_BOUNDS, type PaneSlot } from "../stores/paneStore";
+import { paneRefToPath, paneStore, PANE_SPLIT_BOUNDS, type PaneSlot } from "../stores/paneStore";
+import { sessionHomePath } from "./sessionPaths";
 
 const adjacentSlots: Record<"tl" | PaneSlot, Partial<Record<string, Array<"tl" | PaneSlot>>>> = {
   tl: { ArrowRight: ["tr", "br"], ArrowDown: ["bl", "br"] },
@@ -24,7 +25,7 @@ export function usePaneKeyboard(mode: FrameMode, onNavigate: (path: string) => v
       const focusedIndex = Math.min(state.focusedIndex, panes.length);
       if (event.code === "KeyW" || closeChord) {
         event.preventDefault();
-        focusedIndex === 0 ? onNavigate("/epitaxy") : paneStore.closePane(mode, focusedIndex);
+        focusedIndex === 0 ? onNavigate(sessionHomePath(mode)) : paneStore.closePane(mode, focusedIndex);
         return;
       }
       if (!event.code.startsWith("Arrow")) return;
@@ -208,7 +209,7 @@ export function usePaneDrag(paneIndex: number, mode: FrameMode, onNavigate: (pat
         }
         if (intent === "tl") {
           const pane = (paneStore.getState().extraPanesByMode[mode] ?? [])[paneIndex - 1];
-          if (pane) onNavigate(`/epitaxy/${encodeURIComponent(pane.ref.id)}`);
+          if (pane) onNavigate(paneRefToPath(pane.ref));
         } else {
           paneStore.movePane(mode, paneIndex, intent);
         }

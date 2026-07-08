@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { desktopBridge, type WorkspaceContext } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
+import { sessionPath } from "../../shell/sessionPaths";
 
 type EpitaxyComposerProps = {
   workspace: WorkspaceContext;
@@ -29,7 +30,7 @@ export function EpitaxyComposer({ onNavigate, placeholder, workspace }: EpitaxyC
         workspace,
       });
       setPrompt("");
-      onNavigate(`/epitaxy/${encodeURIComponent(session.id)}`);
+      onNavigate(sessionPath(session));
     } finally {
       setIsSubmitting(false);
     }

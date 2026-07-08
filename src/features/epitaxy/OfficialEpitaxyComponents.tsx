@@ -1,5 +1,6 @@
 import { Menu } from "@base-ui-components/react/menu";
 import { useEffect, useMemo, useReducer, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
 
@@ -43,7 +44,7 @@ type OfficialDropdownButtonProps = {
   ariaLabel?: string;
   className?: string;
   disabled?: boolean;
-  extraSections?: Array<{ header?: ReactNode; items: OfficialDropdownItem[]; triggerKey?: ReactNode }>;
+  extraSections?: Array<{ header?: ReactNode; items: OfficialDropdownItem[]; triggerKey?: string }>;
   header?: ReactNode;
   icon?: string;
   items?: OfficialDropdownItem[];
@@ -55,8 +56,16 @@ type OfficialDropdownButtonProps = {
   revealChevron?: "always" | "hover" | "never";
   side?: "top" | "right" | "bottom" | "left";
   size?: "small" | "base" | "large";
-  triggerKey?: ReactNode;
+  triggerKey?: string;
   variant?: "uncontained" | "contained" | "muted";
+};
+
+type OfficialModalProps = {
+  children: ReactNode;
+  isOpen: boolean;
+  onClose: () => void;
+  title: ReactNode;
+  width?: string;
 };
 
 export type OfficialComposerFolderRecent = {
@@ -73,10 +82,28 @@ type OfficialComposerFolderPillProps = {
   recentFolders: OfficialComposerFolderRecent[];
 };
 
+type OfficialSearchSelectProps<T> = {
+  disabled?: boolean;
+  emptyMessage: ReactNode;
+  icon: string;
+  isLoading?: boolean;
+  itemToLabel: (item: T) => string;
+  items: T[];
+  onQueryChange?: (query: string) => void;
+  onSelect: (item: T) => void;
+  placeholder: string;
+  side?: "top" | "bottom";
+  triggerAriaLabel?: string;
+  triggerClassName: string;
+  triggerLabel?: ReactNode;
+  value: T | null;
+};
+
 type OfficialSessionHeaderProps = {
   activeView?: OfficialViewPane;
   dragHandle?: ReactNode;
   hasRunningTasks?: boolean;
+  hideViews?: boolean;
   hideSummary?: boolean;
   isTitleLoading?: boolean;
   isTopLeft?: boolean;
@@ -175,6 +202,96 @@ const officialMenuIconStyle = { "--class-base-icon": "14px" } as CSSProperties;
 export const officialComposerPillClass = "relative inline-flex items-center gap-g5 h-[24px] px-p5 rounded-r5 bg-fill-contained-default text-contained-default text-body effect-contained-default hover:bg-fill-contained-hover hover:text-contained-hover disabled:bg-fill-contained-disabled disabled:text-contained-disabled aria-[expanded=true]:bg-[var(--fill-contained-selected)] aria-[expanded=true]:text-[var(--text-contained-selected)] aria-[expanded=true]:hover:bg-[var(--fill-contained-selected)] aria-[expanded=true]:hover:text-[var(--text-contained-selected)] cursor-default select-none border-0 outline-none hide-focus-ring ring-focus";
 export const officialComposerSplitPillClass = "relative inline-flex items-center h-[24px] bg-transparent text-contained-default text-body hover:bg-fill-contained-hover hover:text-contained-hover disabled:text-contained-disabled aria-[expanded=true]:text-[var(--text-contained-selected)] aria-[expanded=true]:hover:bg-transparent aria-[expanded=true]:hover:text-[var(--text-contained-selected)] cursor-default select-none border-0 outline-none hide-focus-ring ring-focus rounded-[inherit]";
 
+export function OfficialSearchSelect<T>({
+  disabled,
+  emptyMessage,
+  icon,
+  isLoading,
+  itemToLabel,
+  items,
+  onQueryChange,
+  onSelect,
+  placeholder,
+  side = "top",
+  triggerAriaLabel,
+  triggerClassName,
+  triggerLabel,
+  value,
+}: OfficialSearchSelectProps<T>) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredItems = useMemo(() => (
+    normalizedQuery
+      ? items.filter((item) => itemToLabel(item).toLowerCase().includes(normalizedQuery))
+      : items
+  ), [itemToLabel, items, normalizedQuery]);
+
+  const searchBox = (
+    <div className="relative flex items-center gap-g5 mx-[6px] px-p6 h-h4 shrink-0 rounded-r5 bg-[var(--z0)]">
+      <Icon name="Search" size="s" />
+      <input
+        aria-label={placeholder}
+        className="flex-1 min-w-0 bg-transparent border-0 outline-none hide-focus-ring text-body text-t8 placeholder:text-t6"
+        onChange={(event) => {
+          setQuery(event.target.value);
+          onQueryChange?.(event.target.value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && filteredItems[0]) onSelect(filteredItems[0]);
+        }}
+        placeholder={placeholder}
+        value={query}
+      />
+      {isLoading ? (
+        <div role="status" className={`absolute inset-x-0 h-[2px] overflow-hidden rounded-full ${side === "top" ? "top-0" : "bottom-0"}`}>
+          <div className="epitaxy-linear-sweep h-full w-[30%] bg-[var(--t6)]" />
+          <span className="sr-only">Loading results</span>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <Menu.Root onOpenChange={(open) => { if (!open) setQuery(""); }}>
+      <Menu.Trigger aria-label={triggerAriaLabel} className={triggerClassName} disabled={disabled}>
+        <Icon name={icon} size="s" />
+        {triggerLabel ? <span className="truncate max-w-[200px]">{triggerLabel}</span> : null}
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner align="start" className="epitaxy-root z-[60]" side={side} sideOffset={8}>
+          <Menu.Popup className={`${officialMenuPopupClass} !max-h-[min(360px,var(--available-height))]`} data-cds="Menu">
+            <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
+            {side === "bottom" ? <>{searchBox}<div className="h-p5 shrink-0" /></> : null}
+            <div className={officialMenuScrollClass}>
+              {filteredItems.map((item) => {
+                const label = itemToLabel(item);
+                const selected = value !== null && itemToLabel(value) === label;
+                return (
+                  <Menu.Item
+                    aria-checked={selected}
+                    className={[officialMenuItemBaseClass, "group data-[selected]:before:bg-fill-uncontained-hover gap-g3"].join(" ")}
+                    data-selected={selected || undefined}
+                    key={label}
+                    onClick={() => onSelect(item)}
+                    role="menuitemradio"
+                  >
+                    <span className="flex-1 min-w-0 truncate">{label}</span>
+                    <span className="flex items-center justify-center size-[16px] shrink-0 ml-[6px] text-[var(--accent)]" style={officialMenuIconStyle}>
+                      {selected ? <Icon name="CheckSelection" size="sm" /> : null}
+                    </span>
+                  </Menu.Item>
+                );
+              })}
+            </div>
+            {filteredItems.length === 0 ? <div className="px-p8 py-p5 text-body text-t6">{emptyMessage}</div> : null}
+            {side === "top" ? <><div className="h-p5 shrink-0" />{searchBox}</> : null}
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
+  );
+}
+
 export function OfficialButton({
   ariaLabel,
   children,
@@ -209,6 +326,53 @@ export function OfficialButton({
       {customIcon ?? (icon ? <Icon name={icon} size={size === "small" ? "xs" : size === "large" ? "md" : "sm"} /> : null)}
       {children}
     </button>
+  );
+}
+
+export function OfficialModal({
+  children,
+  isOpen,
+  onClose,
+  title,
+  width = "w-[640px]",
+}: OfficialModalProps) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div className="epitaxy-root">
+      <button
+        aria-label="Close modal"
+        className="fixed inset-0 z-50 bg-always-black/50 backdrop-blur-[2px] draggable-none border-0 cursor-default"
+        onClick={onClose}
+        type="button"
+      />
+      <section
+        aria-modal="true"
+        className={`epitaxy-root fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 ${width} max-w-[calc(100vw-2rem)] max-h-[calc(100vh-4rem)] draggable-none outline-none`}
+        role="dialog"
+      >
+        <div className="relative isolate rounded-r6 flex flex-col max-h-[inherit]">
+          <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
+          <div className="flex items-center justify-between gap-g4 px-[24px] pt-[24px]">
+            <h2 className="text-heading-semibold text-t9">{title}</h2>
+            <OfficialButton ariaLabel="Close" icon="XCrossCloseMedium" onClick={onClose} size="small" variant="uncontained" />
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto px-[24px] pb-[24px] pt-[16px]">
+            {children}
+          </div>
+        </div>
+      </section>
+    </div>,
+    document.body,
   );
 }
 
@@ -292,6 +456,7 @@ export function OfficialSessionHeader({
   activeView,
   dragHandle,
   hasRunningTasks = false,
+  hideViews = false,
   hideSummary = false,
   isTitleLoading = false,
   isTopLeft,
@@ -318,7 +483,7 @@ export function OfficialSessionHeader({
       <div className="relative z-[1] ml-auto flex items-center gap-g3 shrink-0 draggable-none">
         {sessionRef ? <OfficialTranscriptViewButton hideSummary={hideSummary} /> : null}
         {sessionRef?.type !== "local" ? <OfficialButton ariaLabel="Share" icon="ShareArrowOutOfBox" /> : null}
-        {sessionRef ? <OfficialViewsButton activeView={activeView} hasRunningTasks={hasRunningTasks} onViewSelect={onViewSelect} /> : null}
+        {sessionRef && !hideViews ? <OfficialViewsButton activeView={activeView} hasRunningTasks={hasRunningTasks} onViewSelect={onViewSelect} /> : null}
         {onSessionRemoved ? <OfficialButton ariaLabel="Close pane" icon="XCrossCloseMedium" onClick={onSessionRemoved} /> : null}
       </div>
     </div>
@@ -369,6 +534,8 @@ export function OfficialUserMessage({
   isQueued = false,
   onFork,
   onRewind,
+  rewindAriaLabel,
+  rewindIcon,
 }: {
   children: ReactNode;
   copyText?: string;
@@ -376,6 +543,8 @@ export function OfficialUserMessage({
   isQueued?: boolean;
   onFork?: () => void;
   onRewind?: () => void;
+  rewindAriaLabel?: string;
+  rewindIcon?: string;
 }) {
   return (
     <div className={"group/msg flex justify-start items-start gap-g3 w-full transition-opacity duration-200 " + (isQueued ? "opacity-50 hover:opacity-80" : "")}>
@@ -384,7 +553,7 @@ export function OfficialUserMessage({
           {children}
         </div>
         {!isQueued && (copyText !== undefined || createdAt || onFork || onRewind) ? (
-          <OfficialMessageActions buttonVariant="link" copyText={copyText} onFork={onFork} onRewind={onRewind} timestamp={createdAt} className="-mt-[8px]" />
+          <OfficialMessageActions buttonVariant="link" copyText={copyText} onFork={onFork} onRewind={onRewind} rewindAriaLabel={rewindAriaLabel} rewindIcon={rewindIcon} timestamp={createdAt} className="-mt-[8px]" />
         ) : null}
       </div>
     </div>
@@ -404,6 +573,8 @@ function OfficialMessageActions({
   onRewind,
   rateMessageUuid,
   rating,
+  rewindAriaLabel = "Rewind to here",
+  rewindIcon = "ArrowUndoUp",
   showBranchActions = false,
   showPinAction = false,
   timestamp,
@@ -418,6 +589,8 @@ function OfficialMessageActions({
   onRewind?: () => void;
   rateMessageUuid?: string;
   rating?: OfficialMessageRating;
+  rewindAriaLabel?: string;
+  rewindIcon?: string;
   showBranchActions?: boolean;
   showPinAction?: boolean;
   timestamp?: string;
@@ -456,7 +629,7 @@ function OfficialMessageActions({
     <div className={`flex gap-g2 pt-[4px] opacity-0 pointer-events-none group-hover/msg:opacity-100 group-hover/msg:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto ${className}`}>
       {copyText !== undefined ? <OfficialButton ariaLabel={copied ? "Copied" : "Copy message"} icon={copied ? "CheckSelection" : "CopySquareBehind"} onClick={copyMessage} size="small" variant={buttonVariant} /> : null}
       {showPinAction ? <OfficialButton ariaLabel={pinned ? "Unpin chapter" : "Pin as chapter"} icon={pinned ? "Unpin" : "Pin"} onClick={pinMessage} pressed={pinned} size="small" variant={buttonVariant} /> : null}
-      {shouldShowRewind ? <OfficialButton ariaLabel="Rewind to here" icon="ArrowUndoUp" onClick={onRewind} size="small" variant={buttonVariant} /> : null}
+      {shouldShowRewind ? <OfficialButton ariaLabel={rewindAriaLabel} icon={rewindIcon} onClick={onRewind} size="small" variant={buttonVariant} /> : null}
       {shouldShowFork ? <OfficialButton ariaLabel="Fork from here" icon="GitBranch" onClick={onFork} size="small" variant={buttonVariant} /> : null}
       {shouldShowRating ? (
         <>
@@ -574,6 +747,33 @@ export function OfficialComposerPill({
       {icon ? <Icon name={icon} size="s" /> : null}
       {children}
     </button>
+  );
+}
+
+export function OfficialComposerPillPulse({
+  children,
+  pulseNonce,
+}: {
+  children: ReactNode;
+  pulseNonce?: unknown;
+}) {
+  const [isPulsing, setIsPulsing] = useState(false);
+
+  useEffect(() => {
+    if (pulseNonce === undefined) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    setIsPulsing(true);
+  }, [pulseNonce]);
+
+  return (
+    <span
+      className={isPulsing ? "inline-flex epitaxy-pill-pulse" : "inline-flex"}
+      onAnimationEnd={(event) => {
+        if (event.animationName === "epitaxy-pill-pulse") setIsPulsing(false);
+      }}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -882,16 +1082,18 @@ function OfficialMenuItems({ items }: { items: OfficialDropdownItem[] }) {
 
 function MenuItemFragment({ hasChecks, item }: { hasChecks: boolean; item: OfficialDropdownItem }) {
   const hasIcon = Boolean(item.icon);
+  const checkProps = item.checked === undefined
+    ? {}
+    : { "aria-checked": item.checked, role: "menuitemradio" as const };
   return (
     <>
       {item.separatorBefore ? <OfficialMenuSeparator /> : null}
       <Menu.Item
-        aria-checked={item.checked}
         className={[officialMenuItemBaseClass, hasIcon ? "gap-g6" : "gap-g3"].join(" ")}
         closeOnClick={item.keepOpen ? false : undefined}
         disabled={item.disabled}
         onClick={item.onSelect}
-        role={item.checked === undefined ? undefined : "menuitemradio"}
+        {...checkProps}
       >
         {item.icon ? (
           <span className={["relative flex items-center justify-center size-[14px] shrink-0", item.checked ? "text-[var(--accent)]" : ""].join(" ")} style={officialMenuIconStyle}>
@@ -920,6 +1122,10 @@ function renderMenuItemStatus(status: ReactNode | boolean) {
 }
 
 function OfficialShortcut({ keys }: { keys: string }) {
+  if (/^[1-9]$/.test(keys)) {
+    return <span className="shrink-0 pl-p2 text-body text-t6 tabular-nums">{keys}</span>;
+  }
+
   return (
     <span className="flex items-center gap-px shrink-0 text-footnote text-t6">
       {splitShortcutKeys(keys).map((key, index) => (
@@ -929,13 +1135,56 @@ function OfficialShortcut({ keys }: { keys: string }) {
   );
 }
 
-function OfficialMenuHeader({ children, triggerKey }: { children: ReactNode; triggerKey?: ReactNode }) {
+function OfficialMenuHeader({ children, triggerKey }: { children: ReactNode; triggerKey?: string }) {
   return (
     <div className="flex items-center gap-g3 px-p8 py-p2 min-h-[20px] text-footnote text-t6" role="presentation">
       <span className="flex-1 pr-p8">{children}</span>
-      {triggerKey}
+      {triggerKey ? <OfficialTriggerShortcut keys={triggerKey} /> : null}
     </div>
   );
+}
+
+function OfficialTriggerShortcut({ keys }: { keys: string }) {
+  return (
+    <span className="inline-flex items-center gap-g3">
+      {shortcutChordGroups(keys).map((group, groupIndex) => (
+        <span className="contents" key={`${group.join("-")}-${groupIndex}`}>
+          {groupIndex > 0 ? <span className="text-footnote opacity-60">then</span> : null}
+          {group.map((key, keyIndex) => (
+            <kbd className="inline-flex items-center justify-center h-h3 min-w-[var(--h3)] px-p3 rounded-r3 bg-t1 border border-[var(--border-default)] text-caption" key={`${key}-${keyIndex}`}>
+              {key}
+            </kbd>
+          ))}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function shortcutChordGroups(keys: string) {
+  return keys.trim().split(/\s+/).filter(Boolean).map(shortcutChordParts);
+}
+
+function shortcutChordParts(chord: string) {
+  if (!chord.includes("+")) return Array.from(chord);
+
+  const rawParts = chord.toLowerCase().split("+").filter(Boolean);
+  const keyPart = rawParts.find((part) => !["alt", "cmd", "ctrl", "shift"].includes(part));
+  const mac = isMacLikePlatform();
+  const modifierOrder = mac ? ["shift", "alt", "cmd", "ctrl"] : ["cmd", "ctrl", "shift", "alt"];
+  const modifierLabels: Record<string, string> = mac
+    ? { alt: "⌥", cmd: "⌘", ctrl: "⌃", shift: "⇧" }
+    : { alt: "Alt", cmd: "Ctrl", ctrl: "Ctrl", shift: "Shift" };
+  const parts = modifierOrder
+    .filter((part) => rawParts.includes(part))
+    .map((part) => modifierLabels[part]);
+  if (keyPart) parts.push(keyPart.toUpperCase());
+  return parts;
+}
+
+function isMacLikePlatform() {
+  if (typeof navigator === "undefined") return true;
+  return /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 }
 
 function OfficialMenuSeparator() {

@@ -5,6 +5,7 @@ import { desktopBridge, type SessionSummary } from "../adapters/desktopBridge";
 import { type ShellText, useShellText } from "../i18n/shellMessages";
 import type { FrameMode } from "../stores/frameStore";
 import { Icon } from "./icons";
+import { sessionPath } from "./sessionPaths";
 
 type SearchCommandPaletteProps = {
   isOpen: boolean;
@@ -51,7 +52,7 @@ export function SearchCommandPalette({ isOpen, mode, onClose, onNavigate }: Sear
 
   const openItem = (item: SearchItem) => {
     onClose();
-    onNavigate(`/epitaxy/${encodeURIComponent(item.id)}`);
+    onNavigate(sessionPath(item));
   };
 
   const openFirst = () => {

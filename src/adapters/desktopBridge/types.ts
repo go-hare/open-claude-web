@@ -35,7 +35,11 @@ export type SessionSummary = {
     branch?: string;
   };
   scheduledTaskId?: string;
+  connectionState?: string;
+  nextReconnectTime?: number;
   origin?: string;
+  showRetryButton?: boolean;
+  statusMessage?: string;
   isPinned?: boolean;
   isArchived?: boolean;
   isRunning?: boolean;
@@ -119,6 +123,12 @@ export type WorkspaceContext = {
   cwd?: string;
 };
 
+export type WorkspaceTrustResult = {
+  remote?: boolean;
+  sources: string[];
+  trusted: boolean;
+};
+
 export type PermissionMode = "default" | "acceptEdits" | "auto" | "bypassPermissions" | "plan" | "bypass";
 
 export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
@@ -126,13 +136,25 @@ export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
 export type StartSessionInput = {
   kind: SessionSummary["kind"];
   effort?: EffortLevel;
+  messageUuid?: string;
   model?: string;
   permissionMode?: PermissionMode;
   prompt: string;
   scheduledTaskId?: string;
+  skipRedirect?: boolean;
+  sourceBranch?: string;
   title?: string;
   origin?: string;
+  userSelectedFiles?: string[];
+  useWorktree?: boolean;
+  worktreeName?: string;
   workspace: WorkspaceContext;
+};
+
+export type SendMessageInput = {
+  messageUuid?: string;
+  permissionMode?: string;
+  userSelectedFiles?: string[];
 };
 
 export type CodeStats = {
@@ -192,20 +214,28 @@ export type ShellPtyEvent =
   | { type: "shell_pty_data"; sessionId: string; data: string }
   | { type: "shell_pty_close"; sessionId: string; code?: unknown; signal?: unknown };
 
+export type LocalSessionEnvironmentBridge = {
+  get: () => Promise<Record<string, string>>;
+  save: (env: Record<string, string>) => Promise<boolean>;
+};
+
 export type LocalSessionsBridge = {
   list: () => Promise<SessionSummary[]>;
   getSession: (id: string) => Promise<SessionSummary | null>;
   getTranscript?: (id: string) => Promise<ChatMessage[]>;
+  getSessionsForScheduledTask?: (taskId: string) => Promise<SessionSummary[]>;
   addFolderToSession?: (id: string, folder: string) => Promise<SessionSummary | null>;
   getCodeStats?: () => Promise<CodeStats | null>;
   getContextUsage?: (id: string) => Promise<ContextUsage | null>;
   getDefaultEffort?: () => Promise<EffortLevel | null>;
-  getDefaultPermissionMode?: (cwd?: string) => Promise<string>;
+  getDefaultPermissionMode?: (cwd?: string) => Promise<string | null>;
+  getDetectedProjects?: () => Promise<SessionSummary[]>;
   getDiffFileContent?: (idOrCwd: string, refOrFilePath: string, filePath?: string, previousFilePath?: string) => Promise<GitCommandResult>;
   getEffort?: (id: string) => Promise<EffortLevel | string>;
   getGitInfo?: (idOrCwd: string) => Promise<unknown>;
   getGitDiff?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
+  getLocalBranches?: (idOrCwd: string) => Promise<GitCommandResult | string[]>;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<string>;
   getSupportedCommands?: (request?: GetSupportedCommandsRequest) => Promise<SlashCommand[]>;
@@ -222,7 +252,10 @@ export type LocalSessionsBridge = {
   setModel?: (id: string, model: string) => Promise<SessionSummary | null>;
   setPermissionMode?: (id: string, mode: string) => Promise<SessionSummary | null>;
   submitFeedback?: (input?: unknown) => Promise<unknown>;
+  checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<WorkspaceTrustResult>;
+  checkTrust?: (folder: string) => Promise<WorkspaceTrustResult>;
   respondToToolPermission?: (requestId: string, decision: "always" | "deny" | "once", updatedInput?: unknown) => Promise<unknown>;
+  saveTrust?: (folder: string) => Promise<unknown>;
   startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<ShellPtyStartResult>;
   stop?: (id: string) => Promise<unknown>;
   stopShellPty?: (sessionId: string) => Promise<unknown>;
@@ -233,7 +266,7 @@ export type LocalSessionsBridge = {
   getTranscriptFeedback?: (id: string) => Promise<unknown[]>;
   onShellPtyEvent?: (listener: (event: ShellPtyEvent) => void) => () => void;
   start: (input: StartSessionInput) => Promise<SessionSummary>;
-  sendMessage?: (id: string, text: string) => Promise<SessionSummary | null>;
+  sendMessage?: (id: string, text: string, input?: SendMessageInput) => Promise<SessionSummary | null>;
   forkSession?: (id: string, messageId?: string) => Promise<SessionSummary | null>;
   rewind?: (id: string, messageId?: string) => Promise<unknown>;
   create: (kind: SessionSummary["kind"]) => Promise<SessionSummary>;
@@ -267,6 +300,10 @@ export type PreferencesBridge = {
   setGlobalShortcut?: (accelerator: string | null) => Promise<boolean>;
 };
 
+export type FileSystemBridge = {
+  browseFiles?: (options?: { defaultPath?: string; multiSelections?: boolean; title?: string }) => Promise<string[]>;
+};
+
 export type WindowBridge = {
   close: () => Promise<void>;
   getFullscreen: () => Promise<boolean>;
@@ -276,7 +313,9 @@ export type WindowBridge = {
 export type DesktopBridge = {
   LocalSessions: LocalSessionsBridge;
   LocalAgentModeSessions: LocalSessionsBridge;
+  LocalSessionEnvironment: LocalSessionEnvironmentBridge;
   CCDScheduledTasks: ScheduledTasksBridge;
+  FileSystem: FileSystemBridge;
   Preferences: PreferencesBridge;
   Window: WindowBridge;
 };

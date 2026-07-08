@@ -90,7 +90,7 @@ const resourceCache = new Map<string, I18nMessages>();
 declare global {
   interface Window {
     electronIntl?: {
-      getInitialLocale?: () => Promise<string | { locale?: string; messages?: I18nMessages }>;
+      getInitialLocale?: () => Promise<string | { locale?: string; messages?: I18nMessages }> | string | { locale?: string; messages?: I18nMessages };
       requestLocaleChange?: (locale: string) => Promise<unknown> | void;
       localeChanged?: (callback: (locale: string | { locale?: string }) => void) => () => void;
     };
@@ -127,8 +127,9 @@ export function useCurrentLocale() {
       if (event.key === LOCALE_STORAGE_KEY && event.newValue) applyNextLocale(event.newValue);
     };
 
-    if (!window.localStorage.getItem(LOCALE_STORAGE_KEY)) {
-      void window.electronIntl?.getInitialLocale?.().then(applyNextLocale).catch(() => {});
+    const initialDesktopLocale = window.electronIntl?.getInitialLocale?.();
+    if (!window.localStorage.getItem(LOCALE_STORAGE_KEY) && initialDesktopLocale !== undefined) {
+      void Promise.resolve(initialDesktopLocale).then(applyNextLocale).catch(() => {});
     }
 
     const unsubscribeDesktopLocale = window.electronIntl?.localeChanged?.(applyNextLocale);

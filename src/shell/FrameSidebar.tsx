@@ -10,6 +10,7 @@ import { SidebarFooter } from "./SidebarFooter";
 import { CustomizeSidebarDialog } from "./CustomizeSidebarDialog";
 import { Icon } from "./icons";
 import { primaryNavItems } from "./sidebarData";
+import { sessionHomePath } from "./sessionPaths";
 
 type FrameSidebarProps = {
   currentRoute: AppRoute;
@@ -415,7 +416,9 @@ function useSidebarShortcuts(frame: FrameStore, onSearch: () => void, onNavigate
       }
       if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && (key === "1" || key === "2")) {
         event.preventDefault();
-        frame.setMode(key === "1" ? "cowork" : "code");
+        const nextMode = key === "1" ? "cowork" : "code";
+        frame.setMode(nextMode);
+        onNavigate(sessionHomePath(nextMode));
       }
       const rowDirection = sidebarRowDirection(event);
       if (rowDirection !== 0) {
@@ -451,7 +454,7 @@ function focusAdjacentSidebarRow(mode: FrameStore["mode"], direction: number, on
   }
   const nextIndex = (selectedIndex + 1 + direction + rows.length + 1) % (rows.length + 1);
   if (nextIndex === 0) {
-    onNavigate("/epitaxy");
+    onNavigate(sessionHomePath(mode));
     return;
   }
   rows[nextIndex - 1]?.scrollIntoView({ block: "nearest" });
@@ -461,7 +464,7 @@ function focusAdjacentSidebarRow(mode: FrameStore["mode"], direction: number, on
 function SidebarContent({ currentRoute, customization, frame, onNavigate }: Omit<FrameSidebarProps, "onSearch"> & { customization: SidebarCustomization }) {
   const handleModeChange = useCallback((mode: FrameStore["mode"]) => {
     frame.setMode(mode);
-    onNavigate(mode === "cowork" ? "/task/new" : "/epitaxy");
+    onNavigate(sessionHomePath(mode));
   }, [frame, onNavigate]);
 
   const bodyClass = [

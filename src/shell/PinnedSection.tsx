@@ -6,6 +6,7 @@ import { GroupNameDialog } from "./GroupNameDialog";
 import { Icon } from "./icons";
 import { SidebarSectionHeader } from "./SidebarSectionHeader";
 import { orderPinnedSessions, sessionPinKey } from "./sessionPinning";
+import { sessionPath } from "./sessionPaths";
 
 type PinnedSectionProps = {
   collapsed: boolean;
@@ -57,7 +58,7 @@ export function PinnedSection({ collapsed, onCloseDragPinHint, onCreateGroup, on
       {showDragPinHint ? <DragPinHint onClose={onCloseDragPinHint} text={text} /> : null}
       {!collapsed && pinned.length > 0 ? (
         pinned.map((session) => {
-          const path = `/epitaxy/${encodeURIComponent(session.id)}`;
+          const path = sessionPath(session);
           const selected = session.id === selectedSessionId;
           const key = sessionPinKey(session);
           const openSplit = () => window.dispatchEvent(new CustomEvent("dframe:open-pane", { detail: { path, title: session.title } }));

@@ -6,6 +6,7 @@ import type {
   StartSessionInput,
   WorkspaceContext,
 } from "./types";
+import { createMessageUuid } from "./messageUuid";
 
 const now = Date.now();
 
@@ -204,6 +205,8 @@ let preferences: DesktopPreferences = {
 let fakeGlobalShortcut: string | null = null;
 let fakeMenuBarEnabled = true;
 let fakeStartupOnLoginEnabled = false;
+const fakeTrustedFolders = new Set<string>();
+let fakeLocalSessionEnvironment: Record<string, string> = {};
 
 const emitPreferences = () => {
   const snapshot = { ...preferences };
@@ -236,7 +239,7 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   },
   getCodeStats: async () => buildFakeCodeStats(),
   getDefaultEffort: async () => "medium",
-  getDefaultPermissionMode: async () => "default",
+  getDefaultPermissionMode: async () => null,
   getDiffFileContent: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
   getEffort: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind)?.effort ?? "medium",
   getGitInfo: async (idOrCwd) => ({
@@ -246,6 +249,13 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   }),
   getGitDiff: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
   getGitDiffStats: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
+  getLocalBranches: async () => ({ ok: true, success: true, stdout: "* main\n  v3\n  feature/workspace-trust\n", stderr: "" }),
+  checkTrust: async (folder) => ({ trusted: fakeTrustedFolders.has(folder), sources: [] }),
+  checkRemoteTrust: async () => ({ trusted: false, remote: true, sources: [] }),
+  saveTrust: async (folder) => {
+    fakeTrustedFolders.add(folder);
+    return true;
+  },
   openInEditor: async () => true,
   getPermissionMode: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind)?.permissionMode ?? "default",
   getSupportedCommands: async () => [
@@ -309,6 +319,11 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   getTranscriptFeedback: async () => [],
   onShellPtyEvent: () => () => {},
   start: async (input: StartSessionInput) => {
+    const messageUuid = input.messageUuid ?? createMessageUuid();
+    const userMessageRaw = {
+      messageUuid,
+      ...(input.userSelectedFiles?.length ? { userSelectedFiles: input.userSelectedFiles } : {}),
+    };
     const created: SessionSummary = {
       id: `${targetKind === "epitaxy" ? "local" : "code"}_${Date.now()}`,
       title: titleFromPrompt(input.prompt),
@@ -320,19 +335,21 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
       effort: input.effort,
       model: input.model,
       permissionMode: input.permissionMode,
+      hasWorktree: input.useWorktree,
       scheduledTaskId: input.scheduledTaskId,
       origin: input.origin,
       repo: {
         name: input.workspace.projectName,
-        branch: input.workspace.branchName,
+        branch: input.sourceBranch ?? input.workspace.branchName,
       },
       isRunning: false,
       messages: [
         {
-          id: `user_${Date.now()}`,
+          id: messageUuid,
           role: "user",
-          text: input.prompt,
+          text: input.userSelectedFiles?.length ? `${input.prompt}\n\n${input.userSelectedFiles.join("\n")}`.trim() : input.prompt,
           createdAt: "刚刚",
+          raw: userMessageRaw,
         },
         {
           id: `assistant_${Date.now()}`,
@@ -378,14 +395,20 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     };
     return true;
   },
-  sendMessage: async (id, text) => {
+  sendMessage: async (id, text, input) => {
     const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
     if (index < 0) return null;
+    const userSelectedFiles = input?.userSelectedFiles?.filter(Boolean) ?? [];
+    const messageUuid = input?.messageUuid ?? createMessageUuid();
     const message = {
-      id: `user_${Date.now()}`,
+      id: messageUuid,
       role: "user" as const,
-      text,
+      text: userSelectedFiles.length ? `${text}\n\n${userSelectedFiles.join("\n")}`.trim() : text,
       createdAt: new Date().toISOString(),
+      raw: {
+        messageUuid,
+        ...(userSelectedFiles.length ? { userSelectedFiles } : {}),
+      },
     };
     sessions[index] = {
       ...sessions[index],
@@ -461,6 +484,13 @@ function sliceFakeMessagesThroughId(messages: NonNullable<SessionSummary["messag
 export const fakeDesktopBridge: DesktopBridge = {
   LocalSessions: createSessionBridge("code"),
   LocalAgentModeSessions: createSessionBridge("epitaxy"),
+  LocalSessionEnvironment: {
+    get: async () => ({ ...fakeLocalSessionEnvironment }),
+    save: async (env) => {
+      fakeLocalSessionEnvironment = { ...env };
+      return true;
+    },
+  },
   CCDScheduledTasks: {
     list: async () => scheduledTasks.slice(),
     get: async (id) => scheduledTasks.find((task) => task.id === id) ?? null,
@@ -494,6 +524,9 @@ export const fakeDesktopBridge: DesktopBridge = {
         enabled: status === "enabled",
       };
     },
+  },
+  FileSystem: {
+    browseFiles: async () => [`${workspace.cwd ?? "/tmp"}/sample.txt`],
   },
   Preferences: {
     getWorkspaceContext: async () => workspace,

@@ -88,6 +88,16 @@ export const routes: AppRoute[] = [
       && !startsWithPath(pathname, "/epitaxy/pull-requests"),
   },
   {
+    id: "cowork-session",
+    path: "/local_sessions/:sessionId",
+    title: "本地任务",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js xos/bos local_sessions/$sessionId",
+    Component: EpitaxySessionPage,
+    match: (pathname) => pathname.startsWith("/local_sessions/"),
+  },
+  {
     id: "epitaxy-apps",
     path: "/epitaxy/apps",
     title: "应用",

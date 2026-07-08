@@ -18,10 +18,15 @@ type SessionRowMenuContentProps = {
 export function SessionRowMenuContent({ frame, onAction, onCreateGroup, onOpenSplit, session }: SessionRowMenuContentProps) {
   const text = useShellText();
   const pinned = isPinnedSession(session, frame.pinnedOrder);
+  const canOpenSplit = frame.mode === "code" && session.kind === "code";
   return (
     <>
-      <BaseMenuItem icon="ArrowSplitRight" onClick={onOpenSplit}>{text.openInSplitView}</BaseMenuItem>
-      <BaseMenuSeparator />
+      {canOpenSplit ? (
+        <>
+          <BaseMenuItem icon="ArrowSplitRight" onClick={onOpenSplit}>{text.openInSplitView}</BaseMenuItem>
+          <BaseMenuSeparator />
+        </>
+      ) : null}
       <BaseMenuItem icon={pinned ? "PinSlash" : "Pin"} onClick={() => onAction(session, pinned ? "unpin" : "pin")}>{pinned ? text.unpin : text.pin}</BaseMenuItem>
       <BaseMenuItem icon="Edit" onClick={() => onAction(session, "rename")}>{text.rename}</BaseMenuItem>
       <GroupSubmenu frame={frame} onCreateGroup={onCreateGroup} session={session} />
