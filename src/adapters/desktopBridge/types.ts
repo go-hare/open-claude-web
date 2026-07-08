@@ -138,11 +138,13 @@ export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
 export type StartSessionInput = {
   kind: SessionSummary["kind"];
   effort?: EffortLevel;
+  message?: string;
   messageUuid?: string;
   model?: string;
   permissionMode?: PermissionMode;
   prompt: string;
   scheduledTaskId?: string;
+  sessionId?: string;
   skipRedirect?: boolean;
   sourceBranch?: string;
   title?: string;

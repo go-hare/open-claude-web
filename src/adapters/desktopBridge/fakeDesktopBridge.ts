@@ -321,6 +321,7 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   onShellPtyEvent: () => () => {},
   start: async (input: StartSessionInput) => {
     const messageUuid = input.messageUuid ?? createMessageUuid();
+    const message = input.message ?? input.prompt;
     const selectedFolders = input.userSelectedFolders?.length ? input.userSelectedFolders : input.workspace.cwd ? [input.workspace.cwd] : [];
     const userMessageRaw = {
       messageUuid,
@@ -328,8 +329,8 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
       ...(selectedFolders.length ? { userSelectedFolders: selectedFolders } : {}),
     };
     const created: SessionSummary = {
-      id: `${targetKind === "epitaxy" ? "local" : "code"}_${Date.now()}`,
-      title: titleFromPrompt(input.prompt),
+      id: input.sessionId ?? `${targetKind === "epitaxy" ? "local" : "code"}_${Date.now()}`,
+      title: titleFromPrompt(message),
       updatedAt: "刚刚",
       updatedAtMs: Date.now(),
       kind: targetKind,
@@ -352,7 +353,7 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
         {
           id: messageUuid,
           role: "user",
-          text: input.prompt,
+          text: message,
           createdAt: "刚刚",
           raw: userMessageRaw,
         },

@@ -12,6 +12,8 @@ const files = {
   bridgeTypes: path.join(root, "src/adapters/desktopBridge/types.ts"),
   bridgeAdapter: path.join(root, "src/adapters/desktopBridge/officialBridgeAdapter.ts"),
   fakeBridge: path.join(root, "src/adapters/desktopBridge/fakeDesktopBridge.ts"),
+  coworkNewTask: path.join(root, "src/features/epitaxy/cowork/CoworkNewTaskPage.tsx"),
+  desktopStore: path.join(workspaceRoot, "open-claude-desktop/electron/main/services/localSessions/localSessionStore.ts"),
   desktopRunner: path.join(workspaceRoot, "open-claude-desktop/electron/main/services/localSessions/claudeCliRunner.ts"),
   desktopHandlers: path.join(workspaceRoot, "open-claude-desktop/electron/main/ipc/localSessionsHandlers.ts"),
   desktopPermissionVerifier: path.join(workspaceRoot, "open-claude-desktop/scripts/verify-claude-permission-protocol.mjs"),
@@ -62,6 +64,21 @@ const checks = [
       && /ariaLabel="Add"/.test(source.tile)
       && /ariaLabel="Workspace"/.test(source.tile)
       && /ariaLabel="Model"/.test(source.tile),
+  },
+  {
+    group: "协作路由",
+    name: "Cowork start uses official message/sessionId payload shape",
+    test: () => /message\?: string;/.test(source.bridgeTypes)
+      && /sessionId\?: string;/.test(source.bridgeTypes)
+      && /const message = input\.message \?\? input\.prompt/.test(source.bridgeAdapter)
+      && /sessionId: input\.sessionId/.test(source.bridgeAdapter)
+      && /const message = input\.message \?\? input\.prompt/.test(source.fakeBridge)
+      && /id: input\.sessionId \?\?/.test(source.fakeBridge)
+      && /const sessionId = createCoworkSessionId\(\)/.test(source.coworkNewTask)
+      && /message,\s*\n\s*messageUuid/.test(source.coworkNewTask)
+      && /sessionId,/.test(source.coworkNewTask)
+      && /sessionId\?: string;/.test(source.desktopStore)
+      && /const requestedId = typeof input\.sessionId === "string"/.test(source.desktopStore),
   },
   {
     group: "文件预览",
@@ -130,6 +147,10 @@ const checks = [
     name: "headless runtime verifier covers controls, composer, file pane, approval and stream",
     test: () => /copy\/rewind\/fork\/thumb buttons exist in real DOM/.test(source.runtimeVerifier)
       && /official TipTap composer and control buttons exist in real DOM/.test(source.runtimeVerifier)
+      && /Cowork new task page renders official composer/.test(source.runtimeVerifier)
+      && /Cowork UI submit lands on \/local_sessions/.test(source.runtimeVerifier)
+      && /Cowork legacy \/epitaxy\/local_\* redirects to \/local_sessions/.test(source.runtimeVerifier)
+      && /Cowork session renders Reply composer and long Add label/.test(source.runtimeVerifier)
       && /Shift\+Enter keeps newline/.test(source.runtimeVerifier)
       && /file pane opens and reads session file/.test(source.runtimeVerifier)
       && /permission request card appears from bridge event/.test(source.runtimeVerifier)

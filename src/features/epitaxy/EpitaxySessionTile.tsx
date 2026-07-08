@@ -4479,7 +4479,9 @@ function InlineToolPermissionApprovals({ bridge, sessionId }: { bridge: LocalSes
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        void decide(event.shiftKey && hasAlwaysAllow ? "always" : "once");
+        const decision = event.shiftKey ? "always" : "once";
+        if (decision === "always" && !hasAlwaysAllow) return;
+        void decide(decision);
       }
     };
     window.addEventListener("keydown", onKeyDown, true);
@@ -4553,22 +4555,22 @@ const OfficialToolApprovalCard = memo(function OfficialToolApprovalCard({
         );
       })}
       <OfficialApprovalSurface elevation="sidebar" />
-      <OfficialToolApprovalCopyView copy={copy} description={request.description} />
+      <OfficialToolApprovalCopyView copy={copy} description={request.description} toolName={request.toolName} />
       {request.decisionReason ? <div className="text-footnote text-t7 select-text break-words">{request.decisionReason}</div> : null}
       {children}
       <div className="epitaxy-approval-actions flex flex-wrap justify-between gap-x-g3 gap-y-[8px]">
-        <OfficialButton className="shrink-0" disabled={busy} onClick={() => onDecide("deny")} size="base" variant="contained">
+        <OfficialButton ariaLabel="Deny" className="shrink-0" disabled={busy} onClick={() => onDecide("deny")} size="base" variant="contained">
           Deny
           <OfficialApprovalShortcut>esc</OfficialApprovalShortcut>
         </OfficialButton>
         <div className="flex min-w-0 flex-wrap gap-[8px]">
           {hasAlwaysAllow ? (
-            <OfficialButton className="min-w-0" disabled={busy} onClick={() => onDecide("always")} size="base" variant="contained">
+            <OfficialButton ariaLabel="Always allow" className="min-w-0" disabled={busy} onClick={() => onDecide("always")} size="base" variant="contained">
               <span className="min-w-0 truncate">{officialAlwaysAllowLabel(request.alwaysAllowScope)}</span>
               <OfficialApprovalShortcut>⌘⇧⏎</OfficialApprovalShortcut>
             </OfficialButton>
           ) : null}
-          <OfficialButton className="min-w-0" disabled={busy} onClick={() => onDecide("once")} size="base" variant="primary">
+          <OfficialButton ariaLabel="Allow once" className="min-w-0" disabled={busy} onClick={() => onDecide("once")} size="base" variant="primary">
             <span className="min-w-0 truncate">Allow once</span>
             <OfficialApprovalShortcut>⌘⏎</OfficialApprovalShortcut>
           </OfficialButton>
@@ -4578,9 +4580,10 @@ const OfficialToolApprovalCard = memo(function OfficialToolApprovalCard({
   );
 });
 
-function OfficialToolApprovalCopyView({ copy, description }: { copy: OfficialToolApprovalCopy; description?: string }) {
+function OfficialToolApprovalCopyView({ copy, description, toolName }: { copy: OfficialToolApprovalCopy; description?: string; toolName: string }) {
   const [expanded, setExpanded] = useState(true);
   const hasDetail = Boolean(copy.detail && copy.detail !== copy.meta);
+  const toolIntro = <div className="text-footnote text-t6 select-text break-words">Claude wants to use {toolName}</div>;
   const descriptionNode = description ? <div className="text-footnote text-t6 select-text break-words">{description}</div> : null;
   const title = (
     <>
@@ -4592,6 +4595,7 @@ function OfficialToolApprovalCopyView({ copy, description }: { copy: OfficialToo
   if (hasDetail) {
     return (
       <div className="flex flex-col gap-[8px]">
+        {toolIntro}
         <OfficialApprovalHeader ariaExpanded={expanded} onClick={() => setExpanded((value) => !value)}>{title}</OfficialApprovalHeader>
         {descriptionNode}
         <OfficialApprovalCollapse expanded={expanded}>
@@ -4604,13 +4608,19 @@ function OfficialToolApprovalCopyView({ copy, description }: { copy: OfficialToo
   if (descriptionNode) {
     return (
       <div className="flex flex-col gap-[8px]">
+        {toolIntro}
         <OfficialApprovalHeader>{title}</OfficialApprovalHeader>
         {descriptionNode}
       </div>
     );
   }
 
-  return <OfficialApprovalHeader>{title}</OfficialApprovalHeader>;
+  return (
+    <div className="flex flex-col gap-[8px]">
+      {toolIntro}
+      <OfficialApprovalHeader>{title}</OfficialApprovalHeader>
+    </div>
+  );
 }
 
 function OfficialApprovalHeader({
@@ -5202,16 +5212,20 @@ function OfficialComposerFooter({
   return (
     <div className="w-full flex items-center gap-g5 py-[4px]">
       <div className="flex items-center gap-g5 min-w-0">
-        <OfficialDropdownButton align="start" header="Mode" items={menu.numberedModeItems} label={permissionDanger ? <span className="text-extended-yellow">{permissionLabel}</span> : permissionLabel} onOpenChange={menu.onModeOpenChange} open={menu.modeOpen} revealChevron="never" side="top" size="small" triggerKey={composerShortcutForCommand("openModeMenu", true)} />
+        <OfficialDropdownButton ariaLabel="Permission mode" align="start" header="Mode" items={menu.numberedModeItems} label={permissionDanger ? <span className="text-extended-yellow">{permissionLabel}</span> : permissionLabel} onOpenChange={menu.onModeOpenChange} open={menu.modeOpen} revealChevron="never" side="top" size="small" triggerKey={composerShortcutForCommand("openModeMenu", true)} />
         {onCoordinatorModeChange ? <OfficialCoordinatorModeToggle onChange={onCoordinatorModeChange} value={coordinatorMode} /> : null}
-        <OfficialDropdownButton align="start" ariaLabel={plusAriaLabel} className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} revealChevron="never" side="top" size="small" />
+        {plusAriaLabel === "Add" ? (
+          <OfficialDropdownButton ariaLabel="Add" align="start" className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} revealChevron="never" side="top" size="small" />
+        ) : (
+          <OfficialDropdownButton align="start" ariaLabel={plusAriaLabel} className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} revealChevron="never" side="top" size="small" />
+        )}
         <input ref={fileInputRef} type="file" multiple accept={supportsFileAttachments ? undefined : "image/png,image/jpeg,image/gif,image/webp"} className="hidden" onChange={onFileInputChange} />
-        {sessionRef && !hideSessionSource ? <span className="flex min-w-0"><OfficialSessionSource session={session ?? null} sessionRef={sessionRef} /></span> : null}
+        {sessionRef && !hideSessionSource ? <span className="flex min-w-0"><OfficialSessionSource ariaLabel="Workspace" session={session ?? null} sessionRef={sessionRef} /></span> : null}
         {hideDictation ? null : <OfficialDictationSlot disabledReason={dictationDisabledReason} showButton={showDictationButton} />}
         {loops?.length && onStopLoop ? <OfficialLoopIndicator loops={loops} onStopLoop={onStopLoop} /> : null}
       </div>
       <div className="ml-auto flex items-center gap-g4">
-        <OfficialDropdownButton align="end" disabled={modelItems.length === 0 || modelPickerDisabled} extraSections={modelSections} header="Models" items={menu.numberedModelItems} label={<OfficialModelFooterLabel effortLabel={selectedEffortLabel} fastModeLabel={fastModeLabel} modelLabel={modelLabel} />} onOpenChange={menu.onModelOpenChange} open={menu.modelOpen} revealChevron="never" side="top" size="small" triggerKey={composerShortcutForCommand("openModelMenu", true)} />
+        <OfficialDropdownButton ariaLabel="Model" align="end" disabled={modelItems.length === 0 || modelPickerDisabled} extraSections={modelSections} header="Models" items={menu.numberedModelItems} label={<OfficialModelFooterLabel effortLabel={selectedEffortLabel} fastModeLabel={fastModeLabel} modelLabel={modelLabel} />} onOpenChange={menu.onModelOpenChange} open={menu.modelOpen} revealChevron="never" side="top" size="small" triggerKey={composerShortcutForCommand("openModelMenu", true)} />
         <OfficialComposerUsageIndicator bridge={bridge} session={session} sessionRef={sessionRef} />
       </div>
     </div>

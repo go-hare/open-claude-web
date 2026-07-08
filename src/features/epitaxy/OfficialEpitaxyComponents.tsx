@@ -871,7 +871,7 @@ export function OfficialComposerSplitPill({
   );
 }
 
-export function OfficialSessionSource({ session, sessionRef }: { session: SessionSummary | null; sessionRef: OfficialSessionRef }) {
+export function OfficialSessionSource({ ariaLabel, session, sessionRef }: { ariaLabel?: string; session: SessionSummary | null; sessionRef: OfficialSessionRef }) {
   const cwd = normalizeLabel(session?.cwd);
   const branch = normalizeLabel(session?.repo?.branch);
   const repoNames = normalizeLabel(session?.repo?.name) ? [normalizeLabel(session?.repo?.name)!] : [];
@@ -879,13 +879,14 @@ export function OfficialSessionSource({ session, sessionRef }: { session: Sessio
   const kind = sessionSourceKind(sessionRef);
 
   if (repoName) {
-    return <OfficialSessionSourceMenu branch={branch} cwd={cwd} kind={kind} repoName={repoName} repoNames={repoNames} />;
+    return <OfficialSessionSourceMenu ariaLabel={ariaLabel} branch={branch} cwd={cwd} kind={kind} repoName={repoName} repoNames={repoNames} />;
   }
 
-  return <OfficialSessionSourceButton kind={kind} loading={!session} />;
+  return <OfficialSessionSourceButton ariaLabel={ariaLabel} kind={kind} loading={!session} />;
 }
 
-function OfficialSessionSourceMenu({ branch, cwd, kind, repoName, repoNames }: {
+function OfficialSessionSourceMenu({ ariaLabel, branch, cwd, kind, repoName, repoNames }: {
+  ariaLabel?: string;
   branch?: string;
   cwd?: string;
   kind: OfficialSessionSourceKind;
@@ -902,6 +903,7 @@ function OfficialSessionSourceMenu({ branch, cwd, kind, repoName, repoNames }: {
   return (
     <Menu.Root open={open} onOpenChange={setOpen}>
       <Menu.Trigger
+        aria-label={ariaLabel ?? sourceAriaLabel(kind)}
         className={officialSessionSourceClass}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -928,11 +930,11 @@ function OfficialSessionSourceMenu({ branch, cwd, kind, repoName, repoNames }: {
   );
 }
 
-function OfficialSessionSourceButton({ kind, label, loading = false }: { kind: OfficialSessionSourceKind; label?: string; loading?: boolean }) {
-  const ariaLabel = sourceAriaLabel(kind);
+function OfficialSessionSourceButton({ ariaLabel, kind, label, loading = false }: { ariaLabel?: string; kind: OfficialSessionSourceKind; label?: string; loading?: boolean }) {
+  const resolvedAriaLabel = ariaLabel ?? sourceAriaLabel(kind);
   if (label) {
     return (
-      <span className={officialSessionSourceClass}>
+      <span aria-label={resolvedAriaLabel} className={officialSessionSourceClass}>
         <OfficialSessionSourceIcon kind={kind} />
         <span className="truncate">{label}</span>
       </span>
@@ -940,13 +942,13 @@ function OfficialSessionSourceButton({ kind, label, loading = false }: { kind: O
   }
   if (loading) {
     return (
-      <span aria-hidden="true" className={officialSessionSourceClass}>
+      <span aria-label={resolvedAriaLabel} className={officialSessionSourceClass}>
         <OfficialSessionSourceIcon kind={kind} />
         <span className="h-[10px] w-[64px] rounded-r3 bg-t2 animate-pulse" />
       </span>
     );
   }
-  return <OfficialButton ariaLabel={ariaLabel} className="text-t9" icon={officialSessionIconMap[kind]} />;
+  return <OfficialButton ariaLabel={resolvedAriaLabel} className="text-t9" icon={officialSessionIconMap[kind]} />;
 }
 
 function OfficialSessionSourceIcon({ kind }: { kind: OfficialSessionSourceKind }) {

@@ -518,10 +518,12 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
   const cwd = input.workspace.cwd;
   const selectedFolders = input.userSelectedFolders?.length ? input.userSelectedFolders : cwd ? [cwd] : [];
   const permissionMode = input.permissionMode === "bypass" ? "bypassPermissions" : input.permissionMode ?? "default";
+  const message = input.message ?? input.prompt;
   return {
     kind: targetKind,
-    message: input.prompt,
+    message,
     prompt: input.prompt,
+    sessionId: input.sessionId,
     cwd,
     effort: input.effort,
     folders: selectedFolders,
@@ -534,7 +536,7 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
     userSelectedFolders: selectedFolders.length ? selectedFolders : undefined,
     permissionMode,
     sourceBranch: input.sourceBranch,
-    title: input.title ?? titleFromStartPrompt(input.prompt, targetKind),
+    title: input.title ?? titleFromStartPrompt(message, targetKind),
     useWorktree: input.useWorktree,
     worktreeName: input.worktreeName,
   };

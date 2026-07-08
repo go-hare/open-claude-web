@@ -41,12 +41,16 @@ export function CoworkNewTaskPage({
     const message = formatCoworkPromptWithUploadedFiles(normalized, selectedFilePaths);
     setBusy(true);
     try {
+      const messageUuid = createMessageUuid();
+      const sessionId = createCoworkSessionId();
       const session = await desktopBridge.LocalAgentModeSessions.start({
         kind: "epitaxy",
-        messageUuid: createMessageUuid(),
+        message,
+        messageUuid,
         model: model === "default" ? undefined : model,
         permissionMode,
         prompt: message,
+        sessionId,
         skipRedirect: options.keepGoing,
         userSelectedFiles: selectedFilePaths,
         userSelectedFolders: selectedWorkspace.cwd ? [selectedWorkspace.cwd] : undefined,
@@ -128,4 +132,8 @@ function useDefaultPermissionMode(cwd: string | undefined, setPermissionMode: (m
 
 function uniqueStrings(values: string[]) {
   return Array.from(new Set(values));
+}
+
+function createCoworkSessionId() {
+  return `local_${createMessageUuid().replace(/-/g, "")}`;
 }
