@@ -64,7 +64,7 @@ export const OfficialEpitaxySlashCommandMenu = memo(function OfficialEpitaxySlas
       extra.push({ name: "btw", description: "Ask a quick side question without adding to the conversation" });
     }
     if (isLocalSession && bridge.launchUltrareview && !names.has("ultrareview")) {
-      extra.push({ name: "ultrareview", description: "Request an ultrareview of the current changes" });
+      extra.push({ name: "ultrareview", description: "Launch a remote Ultrareview session for this repository" });
     }
     if (isLocalSession && bridge.rewind && !names.has("rewind")) {
       extra.push({ name: "rewind", description: "Rewind the conversation to a previous turn" });
@@ -73,7 +73,7 @@ export const OfficialEpitaxySlashCommandMenu = memo(function OfficialEpitaxySlas
       extra.push({ name: "fork", description: "Fork this conversation into a new session" });
     }
     if (isLocalSession && bridge.setMcpServers && !names.has("mcp")) {
-      extra.push({ name: "mcp", description: "Manage MCP servers for this session" });
+      extra.push({ name: "mcp", description: "Manage MCP connectors" });
     }
     if (isLocalSession && bridge.submitFeedback && !names.has("feedback")) {
       extra.push({

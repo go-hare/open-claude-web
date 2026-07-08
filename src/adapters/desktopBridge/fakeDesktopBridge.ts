@@ -1,6 +1,7 @@
 import type {
   DesktopBridge,
   DesktopPreferences,
+  LocalEnvironmentVariables,
   ScheduledTaskSummary,
   SessionSummary,
   StartSessionInput,
@@ -204,6 +205,8 @@ let preferences: DesktopPreferences = {
 let fakeGlobalShortcut: string | null = null;
 let fakeMenuBarEnabled = true;
 let fakeStartupOnLoginEnabled = false;
+let fakeLocalEnvironment: LocalEnvironmentVariables = {};
+const fakeTrustedFolders = new Set<string>();
 
 const emitPreferences = () => {
   const snapshot = { ...preferences };
@@ -213,9 +216,13 @@ const emitPreferences = () => {
 const workspace: WorkspaceContext = {
   mode: "local",
   projectName: "claude-desktop",
-  branchName: "main",
+  branchName: "",
+  branchPickerDisabled: true,
+  branches: [],
   hasWorktree: false,
   cwd: "/Users/apple/work-py/hare-code/claude-code",
+  worktree: false,
+  worktreeSupported: false,
 };
 
 const titleFromPrompt = (prompt: string) => {
@@ -234,9 +241,13 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     sessions[index] = { ...sessions[index], cwd: sessions[index].cwd ?? folder, folders };
     return sessions[index];
   },
+  addTrustedFolder: async (folder) => {
+    fakeTrustedFolders.add(folder);
+    return true;
+  },
   getCodeStats: async () => buildFakeCodeStats(),
   getDefaultEffort: async () => "medium",
-  getDefaultPermissionMode: async () => "default",
+  getDefaultPermissionMode: async () => "acceptEdits",
   getDiffFileContent: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
   getEffort: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind)?.effort ?? "medium",
   getGitInfo: async (idOrCwd) => ({
@@ -244,6 +255,7 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     root: idOrCwd,
     branch: workspace.branchName,
   }),
+  getLocalBranches: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
   getGitDiff: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
   getGitDiffStats: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
   openInEditor: async () => true,
@@ -255,7 +267,9 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     { name: "model", description: "Set the model for this session", argumentHint: "model-id" },
     { name: "schedule", description: "Create a scheduled task that can be run on demand or automatically on an interval." },
   ],
+  getTrustedFolders: async () => Array.from(fakeTrustedFolders),
   getWorkingTreeStatus: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
+  isFolderTrusted: async (folder) => fakeTrustedFolders.has(folder),
   readFileAtCwd: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
   readSessionFile: async (_id, filePath) => `Preview for ${filePath}\n\nThis is fake desktop bridge content.`,
   readSessionImageAsDataUrl: async () => null,
@@ -318,14 +332,16 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
       sessionKind: targetKind === "epitaxy" ? "cowork" : "code",
       cwd: input.workspace.cwd,
       effort: input.effort,
+      folders: input.workspace.folders?.length ? [input.workspace.cwd, ...input.workspace.folders].filter((folder): folder is string => Boolean(folder)) : input.workspace.cwd ? [input.workspace.cwd] : [],
       model: input.model,
       permissionMode: input.permissionMode,
       scheduledTaskId: input.scheduledTaskId,
       origin: input.origin,
       repo: {
         name: input.workspace.projectName,
-        branch: input.workspace.branchName,
+        branch: input.workspace.sourceBranch ?? input.workspace.branchName,
       },
+      hasWorktree: input.workspace.worktree,
       isRunning: false,
       messages: [
         {
@@ -461,6 +477,13 @@ function sliceFakeMessagesThroughId(messages: NonNullable<SessionSummary["messag
 export const fakeDesktopBridge: DesktopBridge = {
   LocalSessions: createSessionBridge("code"),
   LocalAgentModeSessions: createSessionBridge("epitaxy"),
+  LocalSessionEnvironment: {
+    get: async () => ({ ...fakeLocalEnvironment }),
+    save: async (environment) => {
+      fakeLocalEnvironment = { ...environment };
+      return true;
+    },
+  },
   CCDScheduledTasks: {
     list: async () => scheduledTasks.slice(),
     get: async (id) => scheduledTasks.find((task) => task.id === id) ?? null,

@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Tabs } from "@base-ui-components/react/tabs";
-import { desktopBridge, type CodeStats, type EffortLevel, type PermissionMode, type SessionSummary, type WorkspaceContext } from "../../adapters/desktopBridge";
+import { desktopBridge, type CodeStats, type DesktopPreferences, type EffortLevel, type PermissionMode, type SessionSummary, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
 import { useFrameContext } from "../../stores/frameContext";
 import { Icon } from "../../shell/icons";
 import { EpitaxyRouteFrame, EpitaxySessionLoading } from "./EpitaxyFrameSurface";
+import { OfficialComposerFooter, OfficialPromptEditor, type OfficialPromptEditorHandle } from "./OfficialEpitaxyComposer";
+import { OfficialComposerAddFolderButton, OfficialComposerAdditionalFolderPill, OfficialComposerBranchGroup, OfficialComposerEnvironmentPill } from "./OfficialComposerPills";
+import { OfficialCoworkPromptBox } from "./OfficialCoworkComposer";
+import { OfficialLocalEnvironmentDialog } from "./OfficialLocalEnvironmentDialog";
 import {
   OfficialComposerFolderPill,
-  OfficialComposerPill,
-  OfficialComposerSplitPill,
-  OfficialDropdownButton,
   type OfficialComposerFolderRecent,
   type OfficialDropdownItem,
 } from "./OfficialEpitaxyComponents";
@@ -46,19 +47,22 @@ const coworkSuggestions: PromptSuggestion[] = [
   },
 ];
 
-const codeModelOptions = [
-  { label: "Default", value: "default" },
-  { label: "Sonnet", value: "sonnet" },
-  { label: "Opus", value: "opus" },
+type CodeModelOption = { label: string; value: string };
+
+const defaultCodeModelOptions: CodeModelOption[] = [
+  { label: "DeepSeek Chat", value: "deepseek-chat" },
 ];
 
-const permissionModeOptions: Array<{ label: string; value: PermissionMode }> = [
-  { label: "默认", value: "default" },
-  { label: "接受编辑", value: "acceptEdits" },
-  { label: "自动", value: "auto" },
-  { label: "计划", value: "plan" },
-  { label: "绕过权限", value: "bypassPermissions" },
-];
+const permissionModeLabels: Record<PermissionMode, string> = {
+  acceptEdits: "接受编辑",
+  auto: "自动",
+  bypass: "绕过权限",
+  bypassPermissions: "绕过权限",
+  default: "默认",
+  plan: "计划",
+};
+
+const basePermissionModeOrder: PermissionMode[] = ["default", "acceptEdits", "plan"];
 
 const effortOptions: Array<{ label: string; value: EffortLevel }> = [
   { label: "Low", value: "low" },
@@ -96,6 +100,13 @@ export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
 function CoworkNewTaskPage({ onNavigate, workspace }: { onNavigate: (path: string) => void; workspace: WorkspaceContext }) {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
+  const [composerWorkspace, setComposerWorkspace] = useState(workspace);
+  const [model, setModel] = useState("default");
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>("default");
+
+  useEffect(() => {
+    setComposerWorkspace(workspace);
+  }, [workspace]);
 
   const submit = useCallback(async (nextPrompt = prompt) => {
     const normalized = nextPrompt.trim();
@@ -104,15 +115,16 @@ function CoworkNewTaskPage({ onNavigate, workspace }: { onNavigate: (path: strin
     try {
       const session = await desktopBridge.LocalAgentModeSessions.start({
         kind: "epitaxy",
+        model: model === "default" ? undefined : model,
         prompt: normalized,
-        workspace,
-        permissionMode: "default",
+        workspace: composerWorkspace,
+        permissionMode,
       });
       onNavigate(`/epitaxy/${encodeURIComponent(session.id)}`);
     } finally {
       setBusy(false);
     }
-  }, [busy, onNavigate, prompt, workspace]);
+  }, [busy, composerWorkspace, model, onNavigate, permissionMode, prompt]);
 
   return (
     <main className="mx-auto mt-4 w-full flex-1 px-4 md:px-8 lg:mt-6 max-w-7xl h-full !mt-0 !px-0 !max-w-none">
@@ -123,7 +135,18 @@ function CoworkNewTaskPage({ onNavigate, workspace }: { onNavigate: (path: strin
             <div className="w-full max-w-2xl">
               <div className="mb-4">
                 <CoworkHeader />
-                <CoworkPromptBox busy={busy} onSubmit={() => void submit()} prompt={prompt} setPrompt={setPrompt} />
+                <OfficialCoworkPromptBox
+                  busy={busy}
+                  model={model}
+                  onModelChange={setModel}
+                  onPermissionModeChange={setPermissionMode}
+                  onSubmit={() => void submit()}
+                  onWorkspaceChange={setComposerWorkspace}
+                  permissionMode={permissionMode}
+                  prompt={prompt}
+                  setPrompt={setPrompt}
+                  workspace={composerWorkspace}
+                />
               </div>
             </div>
             <CoworkSuggestions onSelect={(suggestion) => {
@@ -140,14 +163,40 @@ function CoworkNewTaskPage({ onNavigate, workspace }: { onNavigate: (path: strin
 function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: string) => void; workspace: WorkspaceContext }) {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
-  const [model, setModel] = useState("default");
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>("default");
+  const [modelOptions, setModelOptions] = useState<CodeModelOption[]>(defaultCodeModelOptions);
+  const [model, setModel] = useState(defaultCodeModelOptions[0].value);
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>("acceptEdits");
   const [effort, setEffort] = useState<EffortLevel>("medium");
+  const [preferences, setPreferences] = useState<DesktopPreferences | null>(null);
   const [composerWorkspace, setComposerWorkspace] = useState(workspace);
 
   useEffect(() => {
     setComposerWorkspace(workspace);
   }, [workspace]);
+
+  useEffect(() => {
+    let alive = true;
+    void loadOfficialCodeModelOptions().then((options) => {
+      if (!alive || options.length === 0) return;
+      setModelOptions(options);
+      setModel((current) => options.some((option) => option.value === current) ? current : options[0].value);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    void desktopBridge.Preferences.getPreferences?.().then((next) => {
+      if (alive) setPreferences(next);
+    });
+    const unsubscribe = desktopBridge.Preferences.onPreferencesChanged?.((next) => setPreferences(next));
+    return () => {
+      alive = false;
+      unsubscribe?.();
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -157,7 +206,9 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
     ]).then(([nextEffort, nextPermissionMode]) => {
       if (!alive) return;
       if (nextEffort) setEffort(nextEffort);
-      setPermissionMode(normalizePermissionMode(nextPermissionMode));
+      if (typeof nextPermissionMode === "string" && nextPermissionMode.length > 0 && nextPermissionMode !== "default") {
+        setPermissionMode(normalizePermissionMode(nextPermissionMode));
+      }
     });
     return () => {
       alive = false;
@@ -207,12 +258,14 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
                 busy={busy}
                 effort={effort}
                 model={model}
+                modelOptions={modelOptions}
                 onEffortChange={setEffort}
                 onModelChange={setModel}
                 onPermissionModeChange={setPermissionMode}
                 onSubmit={() => void submit()}
                 onWorkspaceChange={setComposerWorkspace}
                 permissionMode={permissionMode}
+                preferences={preferences}
                 prompt={prompt}
                 setPrompt={setPrompt}
                 workspace={composerWorkspace}
@@ -235,65 +288,6 @@ function CoworkHeader() {
       <p className="font-small text-text-500 mt-2">
         <a className="underline-offset-2 hover:underline" href={supportUrl} rel="noreferrer" target="_blank">了解如何安全使用协作</a>.
       </p>
-    </div>
-  );
-}
-
-function CoworkPromptBox({ busy, onSubmit, prompt, setPrompt }: { busy: boolean; onSubmit: () => void; prompt: string; setPrompt: (value: string) => void }) {
-  return (
-    <div
-      className="epitaxy-prompt !box-content flex flex-col bg-bg-000 mx-2 md:mx-0 items-stretch transition-all duration-200 rounded-[20px] cursor-text relative z-[1] border border-transparent md:w-full shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-300)/0.15)] hover:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] focus-within:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/7.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)]"
-      onClick={(event) => {
-        if (event.target instanceof HTMLElement && event.target.closest("button")) return;
-        event.currentTarget.querySelector("textarea")?.focus();
-      }}
-    >
-      <div className="flex flex-col m-3.5 gap-3">
-        <div className="relative font-large">
-          <textarea
-            aria-label="今天我可以帮你做什么？"
-            className="w-full resize-none border-0 bg-transparent text-text-100 placeholder:text-text-500 outline-none"
-            disabled={busy}
-            style={{ minHeight: 48, maxHeight: 218, padding: 0 }}
-            onChange={(event) => setPrompt(event.target.value)}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                event.preventDefault();
-                onSubmit();
-              }
-            }}
-            placeholder="今天我可以帮你做什么？"
-            value={prompt}
-          />
-        </div>
-        <div className="relative flex gap-2 w-full items-center">
-          <div className="relative flex-1 flex items-center shrink min-w-0 gap-1">
-            <button className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-uncontained-default hover:text-uncontained-hover h-base text-body rounded-base justify-center aspect-square px-p3" type="button" aria-label="添加文件、连接器等">
-              <span className="btn-squish absolute inset-0 -z-[1] rounded-[inherit]" aria-hidden="true" />
-              <Icon name="Add" customSize={20} />
-            </button>
-            <button className="group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover h-small rounded-small text-footnote justify-between pl-p3 pr-p2" type="button">
-              <span className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none" aria-hidden="true" />
-              <Icon name="Folder" customSize={16} />
-              <span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap ml-g2">在项目中工作</span>
-            </button>
-          </div>
-          <button className="group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover h-small rounded-small text-footnote justify-between pl-p3 pr-p2 shrink-0" type="button">
-            <span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap">Opus 4</span>
-            <Icon name="CaretDown" size="xs" />
-          </button>
-          <button
-            aria-label="开始任务"
-            className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-primary-default disabled:text-primary-disabled h-base text-body rounded-base justify-center aspect-square px-p3 disabled:opacity-50"
-            disabled={busy || prompt.trim().length === 0}
-            onClick={onSubmit}
-            type="button"
-          >
-            <span className="btn-squish absolute inset-0 -z-[1] rounded-[inherit]" style={{ backgroundColor: "#e6b5a6" }} aria-hidden="true" />
-            <Icon name="ArrowUp" customSize={20} bold />
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -413,12 +407,14 @@ function CodeComposer({
   busy,
   effort,
   model,
+  modelOptions,
   onEffortChange,
   onModelChange,
   onPermissionModeChange,
   onSubmit,
   onWorkspaceChange,
   permissionMode,
+  preferences,
   prompt,
   setPrompt,
   workspace,
@@ -426,26 +422,31 @@ function CodeComposer({
   busy: boolean;
   effort: EffortLevel;
   model: string;
+  modelOptions: CodeModelOption[];
   onEffortChange: (value: EffortLevel) => void;
   onModelChange: (value: string) => void;
   onPermissionModeChange: (value: PermissionMode) => void;
   onSubmit: () => void;
   onWorkspaceChange: (workspace: WorkspaceContext) => void;
   permissionMode: PermissionMode;
+  preferences: DesktopPreferences | null;
   prompt: string;
   setPrompt: (value: string) => void;
   workspace: WorkspaceContext;
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const promptEditorRef = useRef<OfficialPromptEditorHandle | null>(null);
+  const [localEnvironmentOpen, setLocalEnvironmentOpen] = useState(false);
   const [recentFolders, setRecentFolders] = useState<OfficialComposerFolderRecent[]>([]);
-  const permissionItems: OfficialDropdownItem[] = permissionModeOptions.map((option) => ({
-    checked: option.value === permissionMode,
-    label: option.label,
-    onSelect: () => onPermissionModeChange(option.value),
-  }));
-  const modelItems: OfficialDropdownItem[] = codeModelOptions.map((option) => ({
+  const permissionItems = useMemo(() => buildOfficialPermissionItems({
+    model,
+    onSelect: onPermissionModeChange,
+    permissionMode,
+    preferences,
+  }), [model, onPermissionModeChange, permissionMode, preferences]);
+  const modelItems: OfficialDropdownItem[] = modelOptions.map((option, index) => ({
     checked: option.value === model,
     label: option.label,
+    noQuickKey: index === 0,
     onSelect: () => onModelChange(option.value),
   }));
   const effortItems: OfficialDropdownItem[] = effortOptions.map((option) => ({
@@ -453,6 +454,14 @@ function CodeComposer({
     label: option.label,
     onSelect: () => onEffortChange(option.value),
   }));
+  const additionalFolders = workspace.folders ?? [];
+  const branchOptions = workspace.branches ?? [];
+  const isGitRepo = branchOptions.length > 0;
+  const worktreeSupported = isGitRepo && workspace.worktreeSupported === true;
+  const worktree = workspace.worktree ?? worktreeSupported;
+  const displayBranch = isGitRepo ? workspace.sourceBranch ?? (worktree && worktreeSupported ? workspace.defaultBranch ?? preferredDefaultBranch(branchOptions) ?? workspace.branchName : workspace.branchName) : undefined;
+  const modelExtraSections = [{ key: "effort", header: "Effort", items: effortItems }];
+
   useEffect(() => {
     let alive = true;
     void Promise.all([
@@ -468,20 +477,24 @@ function CodeComposer({
   }, [workspace.cwd]);
 
   const applyWorkspacePath = useCallback(async (selectedPath: string) => {
-    const gitInfo = await desktopBridge.LocalSessions.getGitInfo?.(selectedPath).catch(() => null);
-    const git = asRecord(gitInfo);
-    const root = stringValue(git.root);
-    const branch = stringValue(git.branch);
+    const git = await loadOfficialWorkspaceGit(selectedPath);
     const nextWorkspace = {
       mode: "local",
-      projectName: basename(root) ?? basename(selectedPath) ?? selectedPath,
-      branchName: branch ?? workspace.branchName,
-      hasWorktree: hasWorktreeInfo(git),
+      projectName: basename(git.root) ?? basename(selectedPath) ?? selectedPath,
+      branchName: git.displayBranch ?? "",
+      branchPickerDisabled: git.branches.length === 0,
+      branches: git.branches,
+      defaultBranch: git.defaultBranch,
+      hasWorktree: git.worktreeSupported,
       cwd: selectedPath,
+      folders: additionalFolders.filter((folder) => folder !== selectedPath),
+      sourceBranch: git.displayBranch,
+      worktree: git.worktree,
+      worktreeSupported: git.worktreeSupported,
     } satisfies WorkspaceContext;
     onWorkspaceChange(nextWorkspace);
     setRecentFolders((current) => buildOfficialRecentFolders([], selectedPath, current));
-  }, [onWorkspaceChange, workspace.branchName]);
+  }, [additionalFolders, onWorkspaceChange]);
 
   const chooseWorkspace = useCallback(async () => {
     const selectedPaths = await desktopBridge.Preferences.getDirectoryPath?.(false);
@@ -494,121 +507,84 @@ function CodeComposer({
     void applyWorkspacePath(path);
   }, [applyWorkspacePath]);
 
+  const addAdditionalFolder = useCallback(async () => {
+    const selectedPaths = await desktopBridge.Preferences.getDirectoryPath?.(false);
+    const selectedPath = selectedPaths?.[0];
+    if (!selectedPath || selectedPath === workspace.cwd || additionalFolders.includes(selectedPath)) return;
+    onWorkspaceChange({ ...workspace, folders: [...additionalFolders, selectedPath] });
+    setRecentFolders((current) => buildOfficialRecentFolders([], workspace.cwd, [...current, { path: selectedPath }]));
+  }, [additionalFolders, onWorkspaceChange, workspace]);
+
+  const removeAdditionalFolder = useCallback((folder: string) => {
+    onWorkspaceChange({ ...workspace, folders: additionalFolders.filter((item) => item !== folder) });
+  }, [additionalFolders, onWorkspaceChange, workspace]);
+
+  const selectBranch = useCallback((branch: string) => {
+    onWorkspaceChange({ ...workspace, branchName: branch, sourceBranch: branch });
+  }, [onWorkspaceChange, workspace]);
+
+  const setWorktree = useCallback((nextWorktree: boolean) => {
+    const nextBranch = nextWorktree ? workspace.sourceBranch ?? workspace.defaultBranch ?? preferredDefaultBranch(branchOptions) ?? workspace.branchName : workspace.branchName;
+    onWorkspaceChange({ ...workspace, branchName: nextBranch, sourceBranch: nextBranch, worktree: nextWorktree });
+  }, [branchOptions, onWorkspaceChange, workspace]);
+
   return (
     <div className="flex flex-col gap-g5">
       <div className="flex flex-wrap gap-g5 pb-p3 pr-[96px]">
-        <OfficialComposerPill icon="SystemComputerLaptopMacbook">
-          <span className="truncate max-w-[200px]">本地</span>
-        </OfficialComposerPill>
+        <OfficialComposerEnvironmentPill
+          envLabel="本地"
+          envType="local"
+          localEnvAvailable
+          onOpenLocalEnvSettings={() => setLocalEnvironmentOpen(true)}
+          onSelectLocalEnv={() => {}}
+        />
         <OfficialComposerFolderPill folder={workspace.cwd} onBrowse={() => void chooseWorkspace()} onSelectFolder={selectRecentWorkspace} recentFolders={recentFolders} />
-        <div className="group/split inline-flex rounded-r5 bg-fill-contained-default effect-contained-default has-[[aria-expanded=true]]:bg-[var(--fill-contained-selected)]">
-          <OfficialComposerSplitPill className="gap-g5 px-p5">
-            <Icon name="GitBranch" size="sm" />
-            <span className="truncate">{workspace.branchName}</span>
-          </OfficialComposerSplitPill>
-          {workspace.hasWorktree ? <span aria-hidden="true" className="w-px my-[7px] bg-t3 transition-opacity group-hover/split:opacity-0 group-focus-within/split:opacity-0" /> : null}
-          {workspace.hasWorktree ? (
-            <OfficialComposerSplitPill className="group/cb gap-g2 pl-p4 pr-p5">
-              <span className="inline-flex items-center justify-center size-[16px] shrink-0 p-[2.4px]">
-                <span className="flex items-center justify-center size-full rounded-[2.4px] bg-[var(--accent)]">
-                  <svg width="6" height="5" viewBox="0 0 5.875 5.375" fill="none" aria-hidden="true" className="text-[var(--core-white)]">
-                    <path d="M0.500014 2.75004L2.25001 4.87504L5.37501 0.500039" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-              </span>
-              <span>worktree</span>
-            </OfficialComposerSplitPill>
-          ) : null}
-        </div>
-        <OfficialComposerPill ariaLabel="Add another folder" icon="FolderAddRight" onClick={() => void chooseWorkspace()} />
+        {isGitRepo ? (
+          <OfficialComposerBranchGroup
+            branch={displayBranch}
+            branches={branchOptions}
+            branchPickerDisabled={workspace.branchPickerDisabled}
+            onSelectBranch={selectBranch}
+            onWorktreeChange={setWorktree}
+            worktree={worktree}
+            worktreeSupported={worktreeSupported}
+          />
+        ) : null}
+        {additionalFolders.map((folder) => <OfficialComposerAdditionalFolderPill folder={folder} key={folder} onRemove={removeAdditionalFolder} />)}
+        <OfficialComposerAddFolderButton onClick={() => void addAdditionalFolder()} />
       </div>
       <DraftClawd />
-      <div
-        className="epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300"
-        onClick={(event) => {
-          if (event.target instanceof HTMLElement && event.target.closest("button")) return;
-          textareaRef.current?.focus();
-        }}
-        style={{ boxShadow: "var(--df-shadow-card)" }}
-      >
-        <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" />
-        <span className="sr-only" role="status" />
-        <div className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}>
-          <div className="min-h-0 overflow-hidden" />
-        </div>
-        <div className="relative flex w-full">
-          <div className="epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0">
-            <textarea
-              aria-label="描述一个任务，或提一个问题"
-              className="tiptap block w-full resize-none bg-transparent placeholder:text-t5"
-              disabled={busy}
-              onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  onSubmit();
-                }
-              }}
-              placeholder="描述一个任务，或提一个问题"
-              ref={textareaRef}
-              rows={1}
-              value={prompt}
-            />
-          </div>
-          <div className="flex self-end p-p7 pl-p3">
-            <button className={composerIconButtonClass} disabled={busy || prompt.trim().length === 0} onClick={onSubmit} type="button" aria-label="Send">
-              <span aria-hidden="true" className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)] group-hover/btn:bg-[var(--fill-uncontained-hover)]" />
-              <Icon name={busy ? "Stop" : "ArrowReturn"} customSize={16} />
-            </button>
-          </div>
-        </div>
-      </div>
-      <div className="w-full flex items-center gap-g5 py-[4px]">
-        <div className="flex items-center gap-g5 min-w-0">
-          <OfficialDropdownButton
-            ariaLabel="Permission mode"
-            disabled={busy}
-            items={permissionItems}
-            label={<span className={permissionMode === "bypassPermissions" ? "text-extended-yellow" : undefined}>{permissionModeLabel(permissionMode)}</span>}
-            mode="text"
-            side="top"
-            variant="uncontained"
-          />
-          <OfficialDropdownButton
-            ariaLabel="Add"
-            disabled={busy}
-            icon="Add"
-            items={[{ icon: "Folder1", label: "Add folder", onSelect: () => void chooseWorkspace() }]}
-            revealChevron="never"
-            side="top"
-            variant="uncontained"
-          />
-        </div>
-        <div className="ml-auto flex items-center gap-g4">
-          <OfficialDropdownButton
-            ariaLabel="Effort"
-            disabled={busy}
-            items={effortItems}
-            label={effortLabel(effort)}
-            mode="text"
-            side="top"
-            variant="uncontained"
-          />
-          <OfficialDropdownButton
-            ariaLabel="Model"
-            disabled={busy}
-            items={modelItems}
-            label={modelLabel(model)}
-            mode="text"
-            side="top"
-            variant="uncontained"
-          />
-          <button className={`${composerIconButtonClass} h-small text-footnote rounded-small shrink-0`} type="button" aria-label="Usage">
-            <span aria-hidden="true" className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)] group-hover/btn:bg-[var(--fill-uncontained-hover)]" />
-            <span className="size-[12px] rounded-full border-2 border-border-400" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
+      <OfficialPromptEditor
+        ref={promptEditorRef}
+        bridge={desktopBridge.LocalSessions}
+        busy={busy}
+        disabled={busy}
+        onChange={setPrompt}
+        onSubmit={onSubmit}
+        placeholder="描述一个任务，或提一个问题"
+        slashCwd={workspace.cwd}
+        value={prompt}
+      />
+      <OfficialComposerFooter
+        bridge={desktopBridge.LocalSessions}
+        hideDictation
+        isPanelActive={!busy}
+        modelExtraSections={modelExtraSections}
+        modelItems={modelItems}
+        modelLabel={modelLabel(model, modelOptions)}
+        modelPickerDisabled={busy}
+        permissionDanger={permissionMode === "bypassPermissions" || permissionMode === "auto"}
+        permissionItems={permissionItems}
+        permissionLabel={permissionModeLabel(permissionMode)}
+        plusMenuItems={[{ icon: "Folder1", label: "Add folder", onSelect: () => void addAdditionalFolder() }]}
+        sessionRef={null}
+        onInsertSlashCommand={() => promptEditorRef.current?.insertSlashCommand()}
+      />
+      <OfficialLocalEnvironmentDialog
+        bridge={desktopBridge.LocalSessionEnvironment}
+        isOpen={localEnvironmentOpen}
+        onClose={() => setLocalEnvironmentOpen(false)}
+      />
     </div>
   );
 }
@@ -678,8 +654,6 @@ function CcProTrialSurfaces({ daysRemaining, state }: { daysRemaining: number | 
 
 const officialDraftClawdClass = "absolute right-[-16px] bottom-[-13px] w-[80px] h-[80px] -scale-x-100";
 const officialDraftClawdWithTrialClass = "absolute right-[140px] bottom-[-13px] w-[80px] h-[80px] -scale-x-100";
-const composerIconDropdownButtonClass = "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled aria-[expanded=true]:text-[var(--text-uncontained-selected)] aria-[expanded=true]:hover:text-[var(--text-uncontained-selected)] h-small rounded-small text-footnote justify-between pl-p3 pr-p2 shrink-0";
-const composerIconButtonClass = "group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled busy:text-uncontained-busy pressed:text-uncontained-selected pressed:hover:text-uncontained-selected ring-focus h-base text-body rounded-base justify-center aspect-square px-p3";
 
 function SegmentedTabs<T extends string>({ items, onValueChange, value }: { items: Array<{ label: string; value: T }>; onValueChange: (value: T) => void; value: T }) {
   return (
@@ -919,15 +893,13 @@ function TokenReferenceText({ totalTokens }: { totalTokens: number }) {
   );
 }
 
-function modelLabel(value: string) {
+function modelLabel(value: string, options: CodeModelOption[] = defaultCodeModelOptions) {
   const normalized = normalizeCodeModelValue(value);
-  return codeModelOptions.find((option) => option.value === normalized)?.label ?? formatClaudeModelLabel(value);
+  return options.find((option) => option.value === normalized)?.label ?? formatClaudeModelLabel(value);
 }
 
 function normalizeCodeModelValue(value?: string) {
-  if (!value || value === "opus-4") return "default";
-  if (value === "sonnet-4") return "sonnet";
-  return value;
+  return value || defaultCodeModelOptions[0].value;
 }
 
 function formatClaudeModelLabel(value: string) {
@@ -938,7 +910,7 @@ function formatClaudeModelLabel(value: string) {
 }
 
 function permissionModeLabel(value: PermissionMode) {
-  return permissionModeOptions.find((option) => option.value === value)?.label ?? value;
+  return permissionModeLabels[value] ?? value;
 }
 
 function effortLabel(value: EffortLevel) {
@@ -946,7 +918,102 @@ function effortLabel(value: EffortLevel) {
 }
 
 function normalizePermissionMode(value: unknown): PermissionMode {
-  return permissionModeOptions.find((option) => option.value === value)?.value ?? "default";
+  if (typeof value !== "string") return "acceptEdits";
+  if (value === "bypass") return "bypassPermissions";
+  return Object.prototype.hasOwnProperty.call(permissionModeLabels, value) ? value as PermissionMode : "acceptEdits";
+}
+
+function buildOfficialPermissionItems({
+  model,
+  onSelect,
+  permissionMode,
+  preferences,
+}: {
+  model: string;
+  onSelect: (mode: PermissionMode) => void;
+  permissionMode: PermissionMode;
+  preferences: DesktopPreferences | null;
+}): OfficialDropdownItem[] {
+  const autoAvailable = officialModelSupportsAutoPermissions(model);
+  const bypassAvailable = preferences?.bypassPermissionsModeEnabled === true;
+  const modes = officialAvailablePermissionModes({ bypassPermissionsModeEnabled: bypassAvailable, model });
+  const items: OfficialDropdownItem[] = modes.map((mode) => ({
+    checked: normalizePermissionMode(mode) === normalizePermissionMode(permissionMode),
+    label: permissionModeLabel(mode),
+    onSelect: () => onSelect(normalizePermissionMode(mode)),
+  }));
+  if (!bypassAvailable) {
+    items.push({
+      checked: false,
+      disabled: true,
+      hint: "Enable in Claude Code settings",
+      label: permissionModeLabel("bypassPermissions"),
+    });
+  }
+  if (!autoAvailable) {
+    items.push({
+      checked: false,
+      disabled: true,
+      hint: "Enable Auto mode for this model in Claude Code settings",
+      label: permissionModeLabel("auto"),
+    });
+  }
+  return items;
+}
+
+function officialAvailablePermissionModes({ bypassPermissionsModeEnabled, model }: { bypassPermissionsModeEnabled?: boolean; model: string }): PermissionMode[] {
+  const modes = [...basePermissionModeOrder];
+  if (officialModelSupportsAutoPermissions(model)) modes.push("auto");
+  if (bypassPermissionsModeEnabled === true) modes.push("bypassPermissions");
+  return modes;
+}
+
+function officialModelSupportsAutoPermissions(model: string) {
+  const normalized = model.toLowerCase();
+  if (normalized.includes("claude-3-")) return false;
+  return !/claude-[a-z]+-4(?:$|-(?:[0-5](?!\d)|\d{8}))/.test(normalized);
+}
+
+async function loadOfficialCodeModelOptions(): Promise<CodeModelOption[]> {
+  const bootstrap = await fetch("/api/bootstrap").then((response) => response.ok ? response.json() : null).catch(() => null);
+  return extractBootstrapModelOptions(bootstrap);
+}
+
+function extractBootstrapModelOptions(value: unknown): CodeModelOption[] {
+  const record = asRecord(value);
+  const account = asRecord(record.account);
+  const memberships = Array.isArray(account.memberships) ? account.memberships : [];
+  const models: CodeModelOption[] = [];
+  for (const membership of memberships) {
+    const organization = asRecord(asRecord(membership).organization);
+    const rawModels = organization.claude_ai_bootstrap_models_config;
+    if (!Array.isArray(rawModels)) continue;
+    for (const item of rawModels) {
+      const model = asRecord(item);
+      const value = stringValue(model.model) ?? stringValue(model.id);
+      const label = stringValue(model.name) ?? (value ? formatClaudeModelLabel(value) : undefined);
+      if (value && label) models.push({ label, value });
+    }
+  }
+  return uniqueStrings(models.map((item) => item.value)).map((value) => models.find((item) => item.value === value)!).filter(Boolean);
+}
+
+async function loadOfficialWorkspaceGit(selectedPath: string, fallbackBranch?: string) {
+  const gitInfo = await desktopBridge.LocalSessions.getGitInfo?.(selectedPath).catch(() => null);
+  const git = asRecord(gitInfo);
+  const branch = stringValue(git.branch) ?? fallbackBranch;
+  const branchesResult = await desktopBridge.LocalSessions.getLocalBranches?.(selectedPath).catch(() => null);
+  const branches = orderOfficialBranches(parseLocalBranches(asRecord(branchesResult).stdout), branch);
+  const defaultBranch = preferredDefaultBranch(branches);
+  const worktreeSupported = branches.length > 0;
+  return {
+    branches,
+    defaultBranch,
+    displayBranch: worktreeSupported ? defaultBranch ?? branch ?? branches[0] : branch,
+    root: stringValue(git.root),
+    worktree: worktreeSupported,
+    worktreeSupported,
+  };
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -955,6 +1022,31 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.length > 0))];
+}
+
+function parseLocalBranches(stdout: unknown): string[] {
+  return typeof stdout === "string"
+    ? uniqueStrings(stdout.split(/\r?\n/).map((line) => line.replace(/^\*\s*/, "").trim()).filter((line) => line.length > 0 && !line.includes("->")))
+    : [];
+}
+
+function preferredDefaultBranch(branches: string[]): string | undefined {
+  return branches.find((branch) => branch === "main") ?? branches.find((branch) => branch === "master") ?? branches[0];
+}
+
+function orderOfficialBranches(branches: string[], currentBranch?: string): string[] {
+  const defaultBranch = preferredDefaultBranch(branches);
+  return [...branches].sort((left, right) => {
+    if (left === defaultBranch) return -1;
+    if (right === defaultBranch) return 1;
+    if (left === currentBranch) return -1;
+    if (right === currentBranch) return 1;
+    return left.localeCompare(right);
+  });
 }
 
 function basename(value?: string): string | undefined {
@@ -984,12 +1076,6 @@ function buildOfficialRecentFolders(
   }
 
   return recent.slice(0, 12);
-}
-
-function hasWorktreeInfo(gitInfo: Record<string, unknown>): boolean {
-  if (typeof gitInfo.hasWorktree === "boolean") return gitInfo.hasWorktree;
-  if (typeof gitInfo.useWorktree === "boolean") return gitInfo.useWorktree;
-  return Boolean(stringValue(gitInfo.worktreeName) ?? stringValue(gitInfo.worktreePath));
 }
 
 function FragmentWithSeparator({ children, isLast }: { children: ReactNode; isLast: boolean }) {

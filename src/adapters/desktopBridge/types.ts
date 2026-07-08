@@ -114,9 +114,16 @@ export type PreferenceKey = keyof DesktopPreferences;
 export type WorkspaceContext = {
   mode: "local" | "remote";
   projectName: string;
-  branchName: string;
+  branchName?: string;
+  branchPickerDisabled?: boolean;
+  branches?: string[];
+  defaultBranch?: string;
   hasWorktree: boolean;
   cwd?: string;
+  folders?: string[];
+  sourceBranch?: string;
+  worktree?: boolean;
+  worktreeSupported?: boolean;
 };
 
 export type PermissionMode = "default" | "acceptEdits" | "auto" | "bypassPermissions" | "plan" | "bypass";
@@ -159,6 +166,13 @@ export type ContextUsage = {
   totalTokens: number;
 };
 
+export type LocalEnvironmentVariables = Record<string, string>;
+
+export type LocalSessionEnvironmentBridge = {
+  get?: () => Promise<LocalEnvironmentVariables | { env?: LocalEnvironmentVariables } | null | undefined>;
+  save?: (environment: LocalEnvironmentVariables) => Promise<unknown>;
+};
+
 
 export type GitCommandResult = {
   ok?: boolean;
@@ -197,6 +211,9 @@ export type LocalSessionsBridge = {
   getSession: (id: string) => Promise<SessionSummary | null>;
   getTranscript?: (id: string) => Promise<ChatMessage[]>;
   addFolderToSession?: (id: string, folder: string) => Promise<SessionSummary | null>;
+  addTrustedFolder?: (folder: string) => Promise<unknown>;
+  getTrustedFolders?: () => Promise<string[]>;
+  isFolderTrusted?: (folder: string) => Promise<boolean>;
   getCodeStats?: () => Promise<CodeStats | null>;
   getContextUsage?: (id: string) => Promise<ContextUsage | null>;
   getDefaultEffort?: () => Promise<EffortLevel | null>;
@@ -204,6 +221,7 @@ export type LocalSessionsBridge = {
   getDiffFileContent?: (idOrCwd: string, refOrFilePath: string, filePath?: string, previousFilePath?: string) => Promise<GitCommandResult>;
   getEffort?: (id: string) => Promise<EffortLevel | string>;
   getGitInfo?: (idOrCwd: string) => Promise<unknown>;
+  getLocalBranches?: (idOrCwd: string) => Promise<GitCommandResult>;
   getGitDiff?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
@@ -276,6 +294,7 @@ export type WindowBridge = {
 export type DesktopBridge = {
   LocalSessions: LocalSessionsBridge;
   LocalAgentModeSessions: LocalSessionsBridge;
+  LocalSessionEnvironment: LocalSessionEnvironmentBridge;
   CCDScheduledTasks: ScheduledTasksBridge;
   Preferences: PreferencesBridge;
   Window: WindowBridge;

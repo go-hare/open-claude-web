@@ -11,13 +11,14 @@ export type OfficialSessionRef = {
 export type OfficialDropdownItem = {
   checked?: boolean;
   disabled?: boolean;
+  hint?: ReactNode;
   icon?: string;
   keepOpen?: boolean;
   label: ReactNode;
   noQuickKey?: boolean;
   onSelect?: () => void;
   separatorBefore?: boolean;
-  shortcut?: string;
+  shortcut?: string | string[];
   status?: ReactNode;
   tooltip?: ReactNode;
   trailing?: ReactNode;
@@ -43,7 +44,7 @@ type OfficialDropdownButtonProps = {
   ariaLabel?: string;
   className?: string;
   disabled?: boolean;
-  extraSections?: Array<{ header?: ReactNode; items: OfficialDropdownItem[]; triggerKey?: ReactNode }>;
+  extraSections?: Array<{ header?: ReactNode; items: OfficialDropdownItem[]; triggerKey?: ReactNode | string | string[] }>;
   header?: ReactNode;
   icon?: string;
   items?: OfficialDropdownItem[];
@@ -55,7 +56,7 @@ type OfficialDropdownButtonProps = {
   revealChevron?: "always" | "hover" | "never";
   side?: "top" | "right" | "bottom" | "left";
   size?: "small" | "base" | "large";
-  triggerKey?: ReactNode;
+  triggerKey?: ReactNode | string | string[];
   variant?: "uncontained" | "contained" | "muted";
 };
 
@@ -882,6 +883,14 @@ function OfficialMenuItems({ items }: { items: OfficialDropdownItem[] }) {
 
 function MenuItemFragment({ hasChecks, item }: { hasChecks: boolean; item: OfficialDropdownItem }) {
   const hasIcon = Boolean(item.icon);
+  const labelContent = item.hint ? (
+    <span className="flex-1 min-w-0 flex flex-col py-p2 pr-[16px]">
+      <span className="truncate">{item.label}</span>
+      <span className="truncate text-footnote text-t7">{item.hint}</span>
+    </span>
+  ) : (
+    <span className="flex-1 min-w-0 truncate pr-[16px]">{item.label}</span>
+  );
   return (
     <>
       {item.separatorBefore ? <OfficialMenuSeparator /> : null}
@@ -895,17 +904,17 @@ function MenuItemFragment({ hasChecks, item }: { hasChecks: boolean; item: Offic
       >
         {item.icon ? (
           <span className={["relative flex items-center justify-center size-[14px] shrink-0", item.checked ? "text-[var(--accent)]" : ""].join(" ")} style={officialMenuIconStyle}>
-            <Icon name={item.icon} size="sm" bold={item.checked} />
+            <Icon name={item.icon} size="m" bold={item.checked} />
           </span>
         ) : null}
-        <span className="flex-1 min-w-0 truncate pr-[16px]">{item.label}</span>
+        {labelContent}
         {hasChecks ? (
-          <span className="flex items-center justify-center size-[16px] shrink-0 ml-[6px] text-[var(--accent)]" style={officialMenuIconStyle}>
-            {item.checked ? <Icon name="CheckSelection" size="sm" /> : null}
+          <span className="flex items-center justify-center size-[16px] shrink-0 ml-[6px]">
+            {item.checked ? <Icon name="CheckSelection" size="m" /> : null}
           </span>
         ) : null}
         {renderMenuItemStatus(item.status)}
-        {item.shortcut ? <OfficialShortcut keys={item.shortcut} /> : null}
+        {item.shortcut ? <OfficialMenuShortcut keys={item.shortcut} /> : null}
         {item.trailing}
       </Menu.Item>
     </>
@@ -919,21 +928,33 @@ function renderMenuItemStatus(status: ReactNode | boolean) {
   return status || null;
 }
 
-function OfficialShortcut({ keys }: { keys: string }) {
+export function OfficialShortcut({ keys }: { keys: string | string[] }) {
+  const parts = Array.isArray(keys) ? keys : splitShortcutKeys(keys);
+  return (
+    <span className="inline-flex items-center gap-g1 shrink-0 text-t6">
+      {parts.map((key, index) => (
+        <kbd className="font-ui inline-flex items-center justify-center h-h3 min-w-[var(--h3)] px-p3 rounded-r3 bg-t1 border border-[var(--border-default)] text-caption" key={`${key}-${index}`}>{key}</kbd>
+      ))}
+    </span>
+  );
+}
+
+function OfficialMenuShortcut({ keys }: { keys: string | string[] }) {
+  const parts = Array.isArray(keys) ? keys : splitShortcutKeys(keys);
   return (
     <span className="flex items-center gap-px shrink-0 text-footnote text-t6">
-      {splitShortcutKeys(keys).map((key, index) => (
+      {parts.map((key, index) => (
         <kbd className="font-ui flex items-center justify-center h-[16px]" key={`${key}-${index}`}>{key}</kbd>
       ))}
     </span>
   );
 }
 
-function OfficialMenuHeader({ children, triggerKey }: { children: ReactNode; triggerKey?: ReactNode }) {
+function OfficialMenuHeader({ children, triggerKey }: { children: ReactNode; triggerKey?: ReactNode | string | string[] }) {
   return (
     <div className="flex items-center gap-g3 px-p8 py-p2 min-h-[20px] text-footnote text-t6" role="presentation">
       <span className="flex-1 pr-p8">{children}</span>
-      {triggerKey}
+      {Array.isArray(triggerKey) || typeof triggerKey === "string" ? <OfficialShortcut keys={triggerKey} /> : triggerKey}
     </div>
   );
 }

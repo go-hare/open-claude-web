@@ -7,7 +7,9 @@ import type {
   DesktopPreferences,
   GitCommandResult,
   GetSupportedCommandsRequest,
+  LocalEnvironmentVariables,
   LocalSessionsBridge,
+  LocalSessionEnvironmentBridge,
   ScheduledTaskSummary,
   ShellPtyEvent,
   ShellPtyStartResult,
@@ -23,6 +25,7 @@ type RawEventSubscription = (listener: (event: unknown) => void) => RemoveListen
 type RawLocalSessionsBridge = {
   getAll?: (...args: unknown[]) => Promise<unknown[]>;
   addFolderToSession?: (id: string, folder: string) => Promise<unknown>;
+  addTrustedFolder?: (folder: string) => Promise<unknown>;
   clearSession?: (id: string) => Promise<unknown>;
   getCodeStats?: () => Promise<unknown>;
   getContextUsage?: (id: string) => Promise<unknown>;
@@ -33,11 +36,13 @@ type RawLocalSessionsBridge = {
   getSession?: (id: string, options?: Record<string, unknown>) => Promise<unknown | null>;
   getTranscript?: (id: string) => Promise<unknown[]>;
   getGitInfo?: (idOrCwd: string) => Promise<unknown>;
+  getLocalBranches?: (idOrCwd: string) => Promise<unknown>;
   getGitDiff?: (idOrCwd: string, base?: string) => Promise<unknown>;
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<unknown>;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<unknown>;
   getSupportedCommands?: (request?: GetSupportedCommandsRequest) => Promise<unknown>;
+  isFolderTrusted?: (folder: string) => Promise<unknown>;
   getWorkingTreeStatus?: (idOrCwd: string) => Promise<unknown>;
   launchUltrareview?: (idOrCwd: string, options?: unknown) => Promise<unknown>;
   readFileAtCwd?: (idOrCwd: string, filePath: string) => Promise<unknown>;
@@ -57,6 +62,7 @@ type RawLocalSessionsBridge = {
   writeShellPty?: (sessionId: string, data: string) => Promise<unknown>;
   resizeShellPty?: (sessionId: string, cols: number, rows: number) => Promise<unknown>;
   getShellPtyBuffer?: (sessionId: string) => Promise<unknown>;
+  getTrustedFolders?: () => Promise<unknown>;
   getTranscriptFeedback?: (id: string) => Promise<unknown>;
   start?: (input?: Record<string, unknown>) => Promise<unknown>;
   sendMessage?: (id: string, text: string) => Promise<unknown>;
@@ -83,6 +89,11 @@ type RawScheduledTasksBridge = {
   onOnScheduledTaskEvent?: RawEventSubscription;
 };
 
+type RawLocalSessionEnvironmentBridge = {
+  get?: () => Promise<unknown>;
+  save?: (environment: LocalEnvironmentVariables) => Promise<unknown>;
+};
+
 type RawStoreBridge<TState> = {
   getState?: () => Promise<TState>;
   getStateSync?: () => TState;
@@ -98,6 +109,7 @@ export type RawBrowserNavigationState = {
 export type RawClaudeWebBridge = {
   LocalSessions?: RawLocalSessionsBridge;
   LocalAgentModeSessions?: RawLocalSessionsBridge;
+  LocalSessionEnvironment?: RawLocalSessionEnvironmentBridge;
   CCDScheduledTasks?: RawScheduledTasksBridge;
   WindowControl?: {
     close?: () => Promise<unknown>;
@@ -142,8 +154,12 @@ export type RawClaudeSettingsBridge = {
 const emptyWorkspace: WorkspaceContext = {
   mode: "local",
   projectName: "local",
-  branchName: "main",
+  branchName: "",
+  branchPickerDisabled: true,
+  branches: [],
   hasWorktree: false,
+  worktree: true,
+  worktreeSupported: false,
 };
 
 export function createDesktopBridgeFromOfficialNamespaces(
@@ -153,6 +169,7 @@ export function createDesktopBridgeFromOfficialNamespaces(
   return {
     LocalSessions: createLocalSessionsBridge(web.LocalSessions, "code"),
     LocalAgentModeSessions: createLocalSessionsBridge(web.LocalAgentModeSessions, "epitaxy"),
+    LocalSessionEnvironment: createLocalSessionEnvironmentBridge(web.LocalSessionEnvironment),
     CCDScheduledTasks: createScheduledTasksBridge(web.CCDScheduledTasks),
     Preferences: {
       getWorkspaceContext: () => getWorkspaceContext(web),
@@ -191,6 +208,15 @@ export function createDesktopBridgeFromOfficialNamespaces(
   };
 }
 
+function createLocalSessionEnvironmentBridge(raw: RawLocalSessionEnvironmentBridge | undefined): LocalSessionEnvironmentBridge {
+  return {
+    get: raw?.get ? async () => normalizeLocalEnvironmentVariables(await raw.get?.()) : undefined,
+    save: raw?.save ? async (environment) => {
+      await raw?.save?.(environment);
+    } : undefined,
+  };
+}
+
 function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targetKind: SessionSummary["kind"]): LocalSessionsBridge {
   return {
     list: async () => {
@@ -210,6 +236,7 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       const item = await raw?.addFolderToSession?.(id, folder);
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
     },
+    addTrustedFolder: async (folder) => raw?.addTrustedFolder?.(folder),
     getCodeStats: async () => normalizeCodeStats(await raw?.getCodeStats?.().catch(() => null)),
     getContextUsage: async (id) => normalizeOfficialContextUsageResult(await raw?.getContextUsage?.(id).catch(() => null)),
     getDefaultEffort: async () => normalizeEffort(await raw?.getDefaultEffort?.().catch(() => null)),
@@ -217,12 +244,15 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     getDiffFileContent: async (idOrCwd, refOrFilePath, filePath, previousFilePath) => normalizeGitCommandResult(await raw?.getDiffFileContent?.(idOrCwd, refOrFilePath, filePath, previousFilePath)),
     getEffort: async (id) => String(await raw?.getEffort?.(id).catch(() => "medium") ?? "medium"),
     getGitInfo: async (idOrCwd) => raw?.getGitInfo?.(idOrCwd),
+    getLocalBranches: async (idOrCwd) => normalizeGitCommandResult(await raw?.getLocalBranches?.(idOrCwd)),
     getGitDiff: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiff?.(idOrCwd, base)),
     getGitDiffStats: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiffStats?.(idOrCwd, base)),
     openInEditor: async (target, editor, line, column) => raw?.openInEditor?.(target, editor, line, column),
     getPermissionMode: async (id) => String(await raw?.getPermissionMode?.(id).catch(() => "default") ?? "default"),
     getSupportedCommands: async (request) => normalizeSupportedCommands(await raw?.getSupportedCommands?.(request).catch(() => [])),
+    getTrustedFolders: async () => normalizeUnknownStringList(await raw?.getTrustedFolders?.().catch(() => [])),
     getWorkingTreeStatus: async (idOrCwd) => normalizeGitCommandResult(await raw?.getWorkingTreeStatus?.(idOrCwd)),
+    isFolderTrusted: async (folder) => Boolean(await raw?.isFolderTrusted?.(folder).catch(() => false)),
     clearSession: async (id) => raw?.clearSession?.(id),
     launchUltrareview: async (idOrCwd, options) => raw?.launchUltrareview?.(idOrCwd, options),
     readFileAtCwd: async (idOrCwd, filePath) => normalizeGitCommandResult(await raw?.readFileAtCwd?.(idOrCwd, filePath)),
@@ -428,20 +458,25 @@ function looksLikePath(value?: string): boolean {
 
 function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["kind"]): Record<string, unknown> {
   const cwd = input.workspace.cwd;
+  const folders = uniqueStrings([cwd, ...(input.workspace.folders ?? [])]);
   const permissionMode = input.permissionMode === "bypass" ? "bypassPermissions" : input.permissionMode ?? "default";
+  const useWorktree = input.workspace.worktreeSupported === true && input.workspace.worktree === true;
+  const sourceBranch = input.workspace.sourceBranch ?? (useWorktree ? input.workspace.branchName : undefined);
   return {
     kind: targetKind,
     message: input.prompt,
     prompt: input.prompt,
     cwd,
     effort: input.effort,
-    folders: cwd ? [cwd] : [],
+    folders,
     model: input.model,
     scheduledTaskId: input.scheduledTaskId,
     origin: input.origin,
-    userSelectedFolders: cwd ? [cwd] : [],
+    sourceBranch,
+    userSelectedFolders: folders,
     permissionMode,
     title: input.title ?? (input.prompt.trim().split("\n")[0] || (targetKind === "code" ? "General coding session" : "New session")),
+    useWorktree,
   };
 }
 
@@ -544,6 +579,14 @@ function normalizeGitCommandResult(value: unknown): GitCommandResult {
     error: stringValue(raw.error),
     code: raw.code,
   };
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.length > 0))];
+}
+
+function normalizeUnknownStringList(items: unknown): string[] {
+  return Array.isArray(items) ? uniqueStrings(items.map((item) => typeof item === "string" ? item : undefined)) : [];
 }
 
 function normalizeSupportedCommands(value: unknown): SlashCommand[] {
@@ -749,17 +792,85 @@ async function getWorkspaceContext(web: RawClaudeWebBridge): Promise<WorkspaceCo
     ...normalizeSessionList(await web.LocalAgentModeSessions?.getAll?.().catch(() => []), "epitaxy"),
   ];
   const current = sessions.find((session) => session.cwd) ?? sessions[0];
-  return current ? {
+  if (!current) return emptyWorkspace;
+
+  const git = await loadWorkspaceGitDetails(web.LocalSessions, current.cwd ?? current.id);
+  return {
     mode: "local",
-    projectName: current.repo?.name ?? basename(current.cwd) ?? emptyWorkspace.projectName,
-    branchName: current.repo?.branch ?? emptyWorkspace.branchName,
-    hasWorktree: Boolean(current.hasWorktree),
+    projectName: basename(git.root) ?? current.repo?.name ?? basename(current.cwd) ?? emptyWorkspace.projectName,
+    branchName: git.displayBranch ?? "",
+    branchPickerDisabled: git.branches.length === 0,
+    branches: git.branches,
+    defaultBranch: git.defaultBranch,
+    hasWorktree: git.worktreeSupported || Boolean(current.hasWorktree),
     cwd: current.cwd,
-  } : emptyWorkspace;
+    sourceBranch: git.sourceBranch,
+    worktree: git.worktree,
+    worktreeSupported: git.worktreeSupported,
+  };
+}
+
+async function loadWorkspaceGitDetails(raw: RawLocalSessionsBridge | undefined, cwdOrSession: string) {
+  const gitInfo = await raw?.getGitInfo?.(cwdOrSession).catch(() => undefined);
+  const git = asRecord(gitInfo);
+  const branch = stringValue(git.branch);
+  const root = stringValue(git.root);
+  const branchesResult = normalizeGitCommandResult(await raw?.getLocalBranches?.(cwdOrSession).catch(() => undefined));
+  const branches = orderOfficialBranches(parseLocalBranches(branchesResult.stdout), branch);
+  const defaultBranch = preferredDefaultBranch(branches);
+  const worktreeSupported = branches.length > 0;
+  const worktree = worktreeSupported;
+  const displayBranch = worktree ? defaultBranch ?? branch ?? branches[0] : branch ?? branches[0];
+  return {
+    branch,
+    branches,
+    defaultBranch,
+    displayBranch,
+    root,
+    sourceBranch: displayBranch,
+    worktree,
+    worktreeSupported,
+  };
 }
 
 function normalizePreferences(value: unknown): DesktopPreferences {
   return asRecord(value) as DesktopPreferences;
+}
+
+function normalizeLocalEnvironmentVariables(value: unknown): LocalEnvironmentVariables {
+  const raw = asRecord(value);
+  const source = typeof raw.env === "object" && raw.env !== null ? asRecord(raw.env) : raw;
+  const result: LocalEnvironmentVariables = {};
+  for (const [key, item] of Object.entries(source)) {
+    if (key === "userData" || key === "user_data") continue;
+    if (typeof item === "string") result[key] = item;
+    else if (typeof item === "number" || typeof item === "boolean") result[key] = String(item);
+  }
+  return result;
+}
+
+function parseLocalBranches(stdout?: string): string[] {
+  if (!stdout) return [];
+  const branches = stdout
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\*\s*/, "").trim())
+    .filter((line) => line.length > 0 && !line.includes("->"));
+  return uniqueStrings(branches);
+}
+
+function preferredDefaultBranch(branches: string[]): string | undefined {
+  return branches.find((branch) => branch === "main") ?? branches.find((branch) => branch === "master") ?? branches[0];
+}
+
+function orderOfficialBranches(branches: string[], currentBranch?: string): string[] {
+  const defaultBranch = preferredDefaultBranch(branches);
+  return [...branches].sort((left, right) => {
+    if (left === defaultBranch) return -1;
+    if (right === defaultBranch) return 1;
+    if (left === currentBranch) return -1;
+    if (right === currentBranch) return 1;
+    return left.localeCompare(right);
+  });
 }
 
 function repoInfo(raw: Record<string, unknown>, cwd?: string): SessionSummary["repo"] {

@@ -38,6 +38,8 @@ export type {
   DesktopPreferences,
   CreateScheduledTaskInput,
   EffortLevel,
+  LocalEnvironmentVariables,
+  LocalSessionEnvironmentBridge,
   PermissionMode,
   ScheduledTaskSummary,
   SessionSummary,
