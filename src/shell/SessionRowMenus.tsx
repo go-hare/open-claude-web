@@ -4,6 +4,7 @@ import type { FrameStore } from "../stores/frameStore";
 import { BaseMenuItem, BaseMenuSeparator } from "./BaseMenu";
 import { GroupSubmenu } from "./CustomGroups";
 import { isPinnedSession } from "./sessionPinning";
+import { canOpenSessionInSplit } from "./sessionPaths";
 
 export type RowAction = "pin" | "unpin" | "rename" | "archive" | "delete";
 
@@ -18,7 +19,7 @@ type SessionRowMenuContentProps = {
 export function SessionRowMenuContent({ frame, onAction, onCreateGroup, onOpenSplit, session }: SessionRowMenuContentProps) {
   const text = useShellText();
   const pinned = isPinnedSession(session, frame.pinnedOrder);
-  const canOpenSplit = frame.mode === "code" && session.kind === "code";
+  const canOpenSplit = canOpenSessionInSplit(frame.mode, session);
   return (
     <>
       {canOpenSplit ? (

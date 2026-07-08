@@ -5,7 +5,7 @@ export type PaneSlot = "tr" | "br" | "bl";
 export type PaneSplitAxis = "col" | "row";
 
 export type PaneRef = {
-  kind: "code";
+  kind: "code" | "cowork";
   id: string;
   title?: string | null;
 };
@@ -31,6 +31,7 @@ type PersistedPaneStore = {
 
 const PANE_STORE_KEY = "desktop-frame.paneStore.v1";
 export const PANE_SLOTS: PaneSlot[] = ["tr", "br", "bl"];
+const EPITAXY_RESERVED_SEGMENTS = new Set(["agents", "apps", "dev", "dispatch", "pull-requests", "remote-agents", "scheduled", "tasks"]);
 export const PANE_SPLIT_BOUNDS = {
   MIN: 0.15,
   MAX: 0.85,
@@ -67,15 +68,17 @@ export function paneRefKey(ref: PaneRef) {
 
 export function paneRefFromPath(path: string, title?: string | null): PaneRef | null {
   const pathname = path.split("?")[0] ?? path;
+  const coworkMatch = /^\/local_sessions\/([^/?#]+)/.exec(pathname);
+  if (coworkMatch?.[1]) return { kind: "cowork", id: decodeURIComponent(coworkMatch[1]), title };
   if (!pathname.startsWith("/epitaxy/")) return null;
-  if (pathname.startsWith("/epitaxy/scheduled/") || pathname.startsWith("/epitaxy/tasks/") || pathname.startsWith("/epitaxy/pull-requests/")) {
-    return null;
-  }
-  const id = decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) ?? "");
-  return id ? { kind: "code", id, title } : null;
+  const segments = pathname.split("/").filter(Boolean);
+  if (EPITAXY_RESERVED_SEGMENTS.has(segments[1] ?? "")) return null;
+  const id = decodeURIComponent(segments[1] ?? "");
+  return id ? { kind: isCoworkLocalSessionId(id) ? "cowork" : "code", id, title } : null;
 }
 
 export function paneRefToPath(ref: PaneRef) {
+  if (ref.kind === "cowork") return `/local_sessions/${encodeURIComponent(ref.id)}`;
   return `/epitaxy/${encodeURIComponent(ref.id)}`;
 }
 
@@ -98,7 +101,7 @@ function updatePaneState(updater: (state: PaneStoreState) => PaneStoreState) {
 
 function addPane(mode: FrameMode, currentKey: string, ref: PaneRef, preferredSlot?: PaneSlot) {
   updatePaneState((state) => {
-    if (!canSplitMode(mode)) return state;
+    if (!canSplitRef(mode, ref)) return state;
     const panes = getPanes(state, mode);
     const existingIndex = findPaneIndex(panes, ref);
     if (existingIndex !== -1) return { ...state, focusedIndex: existingIndex + 1 };
@@ -126,7 +129,7 @@ function addPane(mode: FrameMode, currentKey: string, ref: PaneRef, preferredSlo
 function openInPane(mode: FrameMode, currentKey: string, paneIndex: number, ref: PaneRef | null) {
   updatePaneState((state) => {
     if (paneIndex === 0) return { ...state, focusedIndex: 0 };
-    if (!ref || !canSplitMode(mode)) return state;
+    if (!ref || !canSplitRef(mode, ref)) return state;
     const targetIndex = paneIndex - 1;
     if (targetIndex >= 3) return state;
     const panes = getPanes(state, mode);
@@ -187,6 +190,10 @@ function setSplit(axis: PaneSplitAxis, split: number) {
 
 function canSplitMode(mode: FrameMode) {
   return mode === "code";
+}
+
+function canSplitRef(mode: FrameMode, ref: PaneRef) {
+  return canSplitMode(mode) && ref.kind === mode;
 }
 
 function getPanes(state: PaneStoreState, mode: FrameMode) {
@@ -265,13 +272,23 @@ function getPersistedPanes(value: unknown): PaneStoreState["extraPanesByMode"] {
   for (const mode of ["cowork", "code"] as FrameMode[]) {
     const entries = (value as Partial<Record<FrameMode, unknown>>)[mode];
     if (!Array.isArray(entries)) continue;
-    result[mode] = entries.filter(isPaneEntry).slice(0, 3);
+    result[mode] = entries
+      .map(normalizePaneEntry)
+      .filter((entry): entry is PaneEntry => Boolean(entry && canSplitRef(mode, entry.ref)))
+      .slice(0, 3);
   }
   return result;
 }
 
-function isPaneEntry(value: unknown): value is PaneEntry {
-  if (!value || typeof value !== "object") return false;
+function normalizePaneEntry(value: unknown): PaneEntry | null {
+  if (!value || typeof value !== "object") return null;
   const entry = value as Partial<PaneEntry>;
-  return Boolean(entry.ref && entry.ref.kind === "code" && typeof entry.ref.id === "string" && PANE_SLOTS.includes(entry.slot as PaneSlot));
+  if (!entry.ref || typeof entry.ref.id !== "string" || !PANE_SLOTS.includes(entry.slot as PaneSlot)) return null;
+  const refKind = entry.ref.kind === "cowork" || isCoworkLocalSessionId(entry.ref.id) ? "cowork" : entry.ref.kind === "code" ? "code" : null;
+  if (!refKind) return null;
+  return { ref: { ...entry.ref, kind: refKind }, slot: entry.slot as PaneSlot };
+}
+
+function isCoworkLocalSessionId(id: string) {
+  return id.startsWith("local_") || id.startsWith("epitaxy_");
 }

@@ -12,7 +12,7 @@ import { isPinnedSession, sessionPinKey } from "./sessionPinning";
 import { SessionRowActions, useSessionRowActions } from "./SessionRowActions";
 import { SessionRowMenuContent, type RowAction } from "./SessionRowMenus";
 import { SidebarSectionHeader } from "./SidebarSectionHeader";
-import { selectedSessionIdFromPath, sessionPath } from "./sessionPaths";
+import { canOpenSessionInSplit, selectedSessionIdFromPath, sessionPath } from "./sessionPaths";
 
 type RecentsSectionProps = {
   frame: FrameStore;
@@ -78,11 +78,12 @@ export function RecentsSection({ frame, mode, onNavigate }: RecentsSectionProps)
   const createGroupForSession = useCallback((session: SessionSummary, name: string) => {
     const group = frame.addCustomGroup(name);
     frame.assignToCustomGroup(sessionPinKey(session), group.id);
-    frame.setGroupBy("code", "custom");
-  }, [frame]);
+    frame.setGroupBy(mode, "custom");
+  }, [frame, mode]);
   const openSplit = useCallback((session: SessionSummary) => {
     window.dispatchEvent(new CustomEvent("dframe:open-pane", { detail: { path: sessionPath(session), title: session.title } }));
   }, []);
+  const canOpenSplit = useCallback((session: SessionSummary) => canOpenSessionInSplit(mode, session), [mode]);
   const renderActions = useCallback((session: SessionSummary, onCreateGroup: () => void) => (
     <SessionRowActions frame={frame} onAction={actions} onCreateGroup={onCreateGroup} onOpenSplit={() => openSplit(session)} session={session} />
   ), [actions, frame, openSplit]);
@@ -94,6 +95,7 @@ export function RecentsSection({ frame, mode, onNavigate }: RecentsSectionProps)
   return (
     <div className="dframe-recents-by-mode contents" data-mode={mode}>
       <PinnedSection
+        canOpenSplit={canOpenSplit}
         collapsed={frame.collapsedGroups.includes("pinned")}
         onCloseDragPinHint={frame.markDragPinHintSeen}
         onDropSessionKey={(key, beforeKey) => {
@@ -148,7 +150,7 @@ function RecentRows({ filter, frame, groups, onAction, onNavigate, renderActions
 
 function RecentSessionGroup({ filter, frame, group, onAction, onNavigate, renderActions, selectedSessionId }: { filter: RecentsFilterState; frame: FrameStore; group: RecentDisplayGroup; onAction: (session: SessionSummary, action: RowAction) => void; onNavigate: (path: string) => void; renderActions: (session: SessionSummary, onCreateGroup: () => void) => ReactNode; selectedSessionId: string | null }) {
   const collapsed = frame.collapsedGroups.includes(group.key);
-  const customDrop = filter.groupBy === "custom" ? customGroupDropHandler(frame, group) : undefined;
+  const customDrop = filter.groupBy === "custom" ? customGroupDropHandler(frame, group, frame.mode) : undefined;
   return (
     <div className="group/section flex flex-col gap-px rounded-lg transition-colors" onDragOver={customDrop?.onDragOver} onDrop={customDrop?.onDropEnd}>
       {group.customGroupId ? <CustomGroupHeader frame={frame} groupId={group.customGroupId} label={group.label ?? ""} /> : group.label ? <SidebarSectionHeader collapsed={collapsed} onToggle={() => frame.toggleGroupCollapsed(group.key)}>{group.label}</SidebarSectionHeader> : null}
@@ -173,11 +175,12 @@ function RecentSessionGroup({ filter, frame, group, onAction, onNavigate, render
 function RecentSessionRow({ frame, onAction, onDropBefore, renderActions, selected, session, onNavigate }: { frame: FrameStore; onAction: (session: SessionSummary, action: RowAction) => void; onDropBefore?: (droppedKey: string) => void; renderActions: (session: SessionSummary, onCreateGroup: () => void) => ReactNode; selected: boolean; session: SessionSummary; onNavigate: (path: string) => void }) {
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const path = sessionPath(session);
+  const canOpenSplit = canOpenSessionInSplit(frame.mode, session);
   const onOpenSplit = () => window.dispatchEvent(new CustomEvent("dframe:open-pane", { detail: { path, title: session.title } }));
   const createGroup = (name: string) => {
     const group = frame.addCustomGroup(name);
     frame.assignToCustomGroup(sessionPinKey(session), group.id);
-    frame.setGroupBy("code", "custom");
+    frame.setGroupBy(frame.mode, "custom");
   };
   const menu = <SessionRowMenuContent frame={frame} onAction={onAction} onCreateGroup={() => setCreateGroupOpen(true)} onOpenSplit={onOpenSplit} session={session} />;
   return (
@@ -208,7 +211,7 @@ function RecentSessionRow({ frame, onAction, onDropBefore, renderActions, select
             draggable
             onDragStart={(event) => writeSessionDragKey(event, sessionPinKey(session))}
             onClick={(event) => {
-              if (event.metaKey || event.ctrlKey) {
+              if ((event.metaKey || event.ctrlKey) && canOpenSplit) {
                 onOpenSplit();
                 return;
               }
@@ -246,12 +249,12 @@ function nextPinnedOrder(pinnedOrder: string[], key: string, beforeKey?: string)
   return [...without.slice(0, index), key, ...without.slice(index)];
 }
 
-function customGroupDropHandler(frame: FrameStore, group: RecentDisplayGroup) {
+function customGroupDropHandler(frame: FrameStore, group: RecentDisplayGroup, mode: FrameStore["mode"]) {
   const groupId = group.customGroupId ?? null;
   const keys = group.sessions.map(sessionPinKey);
   const assign = (droppedKey: string, order: string[]) => {
     frame.assignToCustomGroup(droppedKey, groupId, groupId ? order : undefined);
-    if (groupId) frame.setGroupBy("code", "custom");
+    if (groupId) frame.setGroupBy(mode, "custom");
   };
   return {
     dropBefore: (droppedKey: string, beforeKey: string) => {

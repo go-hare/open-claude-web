@@ -352,7 +352,7 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
         {
           id: messageUuid,
           role: "user",
-          text: input.userSelectedFiles?.length ? `${input.prompt}\n\n${input.userSelectedFiles.join("\n")}`.trim() : input.prompt,
+          text: input.prompt,
           createdAt: "刚刚",
           raw: userMessageRaw,
         },
@@ -408,7 +408,7 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     const message = {
       id: messageUuid,
       role: "user" as const,
-      text: userSelectedFiles.length ? `${text}\n\n${userSelectedFiles.join("\n")}`.trim() : text,
+      text,
       createdAt: new Date().toISOString(),
       raw: {
         messageUuid,

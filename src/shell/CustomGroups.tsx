@@ -23,7 +23,7 @@ export function GroupSubmenu({ frame, onCreateGroup, session }: { frame: FrameSt
   const currentGroup = frame.customGroups.find((group) => group.id === currentGroupId);
   const assign = (groupId: string | null) => {
     frame.assignToCustomGroup(sessionKey, groupId);
-    if (groupId !== null) frame.setGroupBy("code", "custom");
+    if (groupId !== null) frame.setGroupBy(frame.mode, "custom");
   };
 
   return (

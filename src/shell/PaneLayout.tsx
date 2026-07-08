@@ -81,6 +81,7 @@ export function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLay
             isLonePane={snapshot.extraPanes.length === 1}
             onNavigate={onNavigate}
             paneIndex={paneIndex}
+            refKind={pane.ref.kind}
             refId={pane.ref.id}
             slot={pane.slot}
           />
@@ -110,7 +111,7 @@ function FrameHeader({ currentKey, currentRoute, mode }: { currentKey: string; c
         <div className="draggable h-full flex-1 min-w-0" />
         {!isNewSessionHome ? (
           <div id="dframe-pane-actions" className="dframe-pane-actions flex items-center gap-2 shrink-0">
-            <PrimaryPaneMenu canOpenSplit={Boolean(currentRef) && mode === "code"} onOpenSplit={openSplit} />
+            <PrimaryPaneMenu canOpenSplit={currentRef?.kind === "code" && mode === "code"} onOpenSplit={openSplit} />
           </div>
         ) : null}
       </div>
@@ -140,7 +141,7 @@ function usePaneStoreEvents(mode: FrameMode, currentKey: string) {
   }, [currentKey, mode]);
 }
 
-function ExtraPane({ focused, isLonePane, mode, onClose, onFocus, onNavigate, paneIndex, refId, slot }: {
+function ExtraPane({ focused, isLonePane, mode, onClose, onFocus, onNavigate, paneIndex, refId, refKind, slot }: {
   focused: boolean;
   isLonePane: boolean;
   mode: FrameMode;
@@ -149,6 +150,7 @@ function ExtraPane({ focused, isLonePane, mode, onClose, onFocus, onNavigate, pa
   onNavigate: (path: string) => void;
   paneIndex: number;
   refId: string;
+  refKind: "code" | "cowork";
   slot: PaneSlot;
 }) {
   const drag = usePaneDrag(paneIndex, mode, onNavigate);
@@ -171,6 +173,7 @@ function ExtraPane({ focused, isLonePane, mode, onClose, onFocus, onNavigate, pa
         onNavigate={onNavigate}
         paneIndex={paneIndex}
         sessionId={refId}
+        sessionSourceHint={refKind === "cowork" ? "epitaxy" : "code"}
         slot={slot}
       />
     </div>

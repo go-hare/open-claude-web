@@ -13,6 +13,7 @@ type PinnedSectionProps = {
   onDropSessionKey: (key: string, beforeKey?: string) => void;
   onCloseDragPinHint: () => void;
   onCreateGroup: (session: SessionSummary, name: string) => void;
+  canOpenSplit: (session: SessionSummary) => boolean;
   onToggleCollapsed: () => void;
   sessions: SessionSummary[];
   pinnedOrder: string[];
@@ -23,7 +24,7 @@ type PinnedSectionProps = {
   showDragPinHint: boolean;
 };
 
-export function PinnedSection({ collapsed, onCloseDragPinHint, onCreateGroup, onDropSessionKey, onToggleCollapsed, pinnedOrder, renderActions, renderContextMenu, selectedSessionId, sessions, showDragPinHint, onNavigate }: PinnedSectionProps) {
+export function PinnedSection({ canOpenSplit, collapsed, onCloseDragPinHint, onCreateGroup, onDropSessionKey, onToggleCollapsed, pinnedOrder, renderActions, renderContextMenu, selectedSessionId, sessions, showDragPinHint, onNavigate }: PinnedSectionProps) {
   const text = useShellText();
   const [dragOver, setDragOver] = useState(false);
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
@@ -94,7 +95,7 @@ export function PinnedSection({ collapsed, onCloseDragPinHint, onCreateGroup, on
                 writeSessionDragKey(event, key);
               }}
               onClick={(event) => {
-                if (event.metaKey || event.ctrlKey) {
+                if ((event.metaKey || event.ctrlKey) && canOpenSplit(session)) {
                   openSplit();
                   return;
                 }

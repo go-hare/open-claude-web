@@ -13,6 +13,10 @@ export function sessionHomePath(mode: SessionNavigationMode) {
   return mode === "cowork" ? "/task/new" : codeSessionsBasePath;
 }
 
+export function canOpenSessionInSplit(mode: SessionNavigationMode, session: Pick<SessionSummary, "kind" | "sessionKind">) {
+  return mode === "code" && session.kind === "code" && !isCoworkSession(session);
+}
+
 export function selectedSessionIdFromPath(pathname: string) {
   const match = /^\/(?:epitaxy|local_sessions)\/([^/?#]+)/.exec(pathname);
   return match?.[1] ? decodeURIComponent(match[1]) : null;
