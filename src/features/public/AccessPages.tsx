@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { RouteViewProps } from "../../app/routes";
+import { scheduledTaskDetailPath } from "../scheduled/scheduledPaths";
 import { primaryButtonClass, secondaryButtonClass } from "../shared/buttonClasses";
 
 type WindowWithClaude = Window & {
@@ -63,7 +64,7 @@ function redirectTarget(routePath: string, pathname: string, search: string) {
 function claudeCodeDesktopRedirectTarget(pathname: string, search: string) {
   const suffix = pathname.startsWith("/claude-code-desktop") ? pathname.slice("/claude-code-desktop".length).replace(/\/+$/, "") : "";
   if (!suffix || suffix === "/onboarding") return `/epitaxy${search}`;
-  if (suffix.startsWith("/scheduled/remote/")) return `/epitaxy/scheduled/${suffix.slice("/scheduled/remote/".length)}${search}`;
+  if (suffix.startsWith("/scheduled/remote/")) return `${scheduledTaskDetailPath(suffix.slice("/scheduled/remote/".length))}${search}`;
   return `/epitaxy${suffix}${search}`;
 }
 

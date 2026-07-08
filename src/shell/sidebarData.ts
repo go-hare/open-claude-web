@@ -1,4 +1,5 @@
 import type { FrameMode } from "../stores/frameStore";
+import { scheduledTaskIndexPath } from "../features/scheduled/scheduledPaths";
 
 export type SidebarNavItem = {
   key: string;
@@ -39,7 +40,7 @@ export const primaryNavItems: SidebarNavItem[] = [
     key: "scheduled",
     label: "定时任务",
     icon: "Clock",
-    href: "/epitaxy/scheduled",
+    href: scheduledTaskIndexPath,
     visibleIn: ["cowork", "code"],
   },
   {

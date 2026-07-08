@@ -231,6 +231,8 @@ function isDesktopFrame() {
 
 function modeFromPath(pathname: string) {
   if (
+    pathname === "/new" ||
+    pathname.startsWith("/chat/") ||
     pathname === "/task" ||
     pathname.startsWith("/task/") ||
     pathname.startsWith("/local_sessions") ||

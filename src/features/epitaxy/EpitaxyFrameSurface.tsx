@@ -37,6 +37,16 @@ const tileContainerStyle: CSSProperties = {
   transformStyle: "preserve-3d",
 };
 
+const coworkTileContainerStyle: CSSProperties = {
+  ...tileContainerStyle,
+  /*
+   * 官方 Cowork 的标题/右栏来自 dframe header/content slot，不吃 tile 外层 gutter；
+   * 我们目前把 Cowork session header 转正在 tile 内，因此这里仅对
+   * Cowork 抵消顶部和左侧这 8px，避免右栏卡片离顶部过低、标题左侧多一截空隙。
+   */
+  padding: "0px 0px 8px 0px",
+};
+
 const rowStyle: CSSProperties = {
   display: "flex",
   position: "relative",
@@ -73,11 +83,11 @@ const iconButtonClass = "group/btn relative isolate inline-flex items-center whi
 
 const dropdownIconButtonClass = "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled aria-[expanded=true]:text-[var(--text-uncontained-selected)] aria-[expanded=true]:hover:text-[var(--text-uncontained-selected)] h-small rounded-small text-footnote justify-between pl-p3 pr-p2 shrink-0";
 
-export function EpitaxyTileLayout({ children }: { children: ReactNode }) {
+export function EpitaxyTileLayout({ children, flushLeading = false }: { children: ReactNode; flushLeading?: boolean }) {
   return (
     <div className="relative h-full w-full" style={tileVars}>
       <div style={viewportStyle}>
-        <div style={tileContainerStyle}>
+        <div style={flushLeading ? coworkTileContainerStyle : tileContainerStyle}>
           <div style={rowStyle}>
             <div style={tileWrapStyle}>
               <div className="tiles-shell" style={tileShellStyle}>

@@ -5,6 +5,7 @@ import { Icon } from "../../shell/icons";
 import { sessionPath } from "../../shell/sessionPaths";
 import { DetailSection, RoutineHeader, ScheduledRouteShell, chipClass } from "./ScheduledPrimitives";
 import { scheduleLabel, taskDisplayName } from "./scheduleUtils";
+import { scheduledTaskIndexPath } from "./scheduledPaths";
 import { useScheduledTasks } from "./useScheduledTasks";
 
 const taskIdFromPath = () => decodeURIComponent(window.location.pathname.split("/").filter(Boolean).at(-1) ?? "");
@@ -45,12 +46,12 @@ export function ScheduledTaskDetail({ onNavigate }: RouteViewProps) {
   const waitingDirect = directLookup.id !== taskId || directLookup.loading;
   if (!isLoading && !waitingDirect && !task) return <MissingTaskRedirect onNavigate={onNavigate} />;
   if (!task) return <DetailLoading />;
-  return <ScheduledTaskDetailView task={task} onBack={() => onNavigate("/epitaxy/scheduled")} onNavigate={onNavigate} />;
+  return <ScheduledTaskDetailView task={task} onBack={() => onNavigate(scheduledTaskIndexPath)} onNavigate={onNavigate} />;
 }
 
 function MissingTaskRedirect({ onNavigate }: { onNavigate: (path: string) => void }) {
   useEffect(() => {
-    onNavigate("/epitaxy/scheduled");
+    onNavigate(scheduledTaskIndexPath);
   }, [onNavigate]);
   return <DetailLoading />;
 }

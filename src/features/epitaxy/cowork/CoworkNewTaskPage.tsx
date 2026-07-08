@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
-import { desktopBridge, type PermissionMode, type WorkspaceContext } from "../../../adapters/desktopBridge";
+import { desktopBridge, type CoworkMountedProject, type PermissionMode, type SessionSummary, type WorkspaceContext } from "../../../adapters/desktopBridge";
 import { createMessageUuid } from "../../../adapters/desktopBridge/messageUuid";
 import { coworkSessionsBasePath } from "../../../shell/sessionPaths";
 import { normalizeCoworkPermissionMode } from "../composer/options";
 import { CoworkGridBackground } from "./CoworkGridBackground";
 import { CoworkHeader } from "./CoworkHeader";
 import { CoworkPromptComposer } from "./CoworkPromptComposer";
+import type { CoworkAddMenuProject } from "./CoworkAddMenuItems";
+import {
+  CoworkProjectWarningDialog,
+  coworkMountedProjectFromAddMenuProject,
+  persistCoworkProjectWarningDismissed,
+  sessionToCoworkAddMenuProject,
+  shouldShowCoworkProjectWarning,
+  type CoworkPendingProjectWarning,
+} from "./CoworkProjectContext";
 import { CoworkSuggestions, type CoworkPromptSuggestion } from "./CoworkSuggestions";
-import { formatCoworkPromptWithUploadedFiles } from "./coworkUploadedFiles";
+import { coworkUploadedFilePaths, formatCoworkPromptWithUploadedFiles, mergeCoworkUploadedFiles, type CoworkUploadedFile } from "./coworkUploadedFiles";
 
 type CoworkSubmitOptions = {
   keepGoing?: boolean;
@@ -26,19 +35,29 @@ export function CoworkNewTaskPage({
   const [model, setModel] = useState("default");
   const [focusRequestKey, setFocusRequestKey] = useState(0);
   const [selectedWorkspace, setSelectedWorkspace] = useState(workspace);
-  const [selectedFilePaths, setSelectedFilePaths] = useState<string[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<CoworkUploadedFile[]>([]);
+  const [detectedProjects, setDetectedProjects] = useState<SessionSummary[]>([]);
+  const [selectedProjects, setSelectedProjects] = useState<CoworkMountedProject[]>([]);
+  const [pendingProjectWarning, setPendingProjectWarning] = useState<CoworkPendingProjectWarning | null>(null);
 
   useEffect(() => {
     setSelectedWorkspace(workspace);
   }, [workspace]);
+  useDetectedProjects(setDetectedProjects);
 
   useDefaultPermissionMode(selectedWorkspace.cwd, setPermissionMode);
+  const projectMenuItems = detectedProjects.flatMap((project) => {
+    const item = sessionToCoworkAddMenuProject(project);
+    if (!item) return [];
+    return [{ ...item, checked: selectedProjects.some((selected) => selected.uuid === item.uuid) }];
+  });
 
   const submit = useCallback(async (nextPrompt = prompt, options: CoworkSubmitOptions = {}) => {
     const normalized = nextPrompt.trim();
-    const hasSelectedFiles = selectedFilePaths.length > 0;
+    const hasSelectedFiles = selectedFiles.length > 0;
     if ((!normalized && !hasSelectedFiles) || busy) return;
-    const message = formatCoworkPromptWithUploadedFiles(normalized, selectedFilePaths);
+    const message = formatCoworkPromptWithUploadedFiles(normalized, selectedFiles);
+    const selectedFilePaths = coworkUploadedFilePaths(selectedFiles);
     setBusy(true);
     try {
       const messageUuid = createMessageUuid();
@@ -54,31 +73,45 @@ export function CoworkNewTaskPage({
         skipRedirect: options.keepGoing,
         userSelectedFiles: selectedFilePaths,
         userSelectedFolders: selectedWorkspace.cwd ? [selectedWorkspace.cwd] : undefined,
+        mountedProjects: selectedProjects,
         workspace: selectedWorkspace,
       });
       setPrompt("");
-      setSelectedFilePaths([]);
+      setSelectedFiles([]);
+      setSelectedProjects([]);
       if (!options.keepGoing) onNavigate(`${coworkSessionsBasePath}/${encodeURIComponent(session.id)}`);
     } finally {
       setBusy(false);
     }
-  }, [busy, model, onNavigate, permissionMode, prompt, selectedFilePaths, selectedWorkspace]);
+  }, [busy, model, onNavigate, permissionMode, prompt, selectedFiles, selectedProjects, selectedWorkspace]);
 
   const addFiles = useCallback(async () => {
     const filePaths = await desktopBridge.FileSystem.browseFiles?.({
       defaultPath: selectedWorkspace.cwd,
       title: "Add files or photos",
     });
-    if (filePaths?.length) setSelectedFilePaths((current) => uniqueStrings([...current, ...filePaths]));
+    if (filePaths?.length) setSelectedFiles((current) => mergeCoworkUploadedFiles(current, filePaths));
   }, [selectedWorkspace.cwd]);
 
   const removeFile = useCallback((filePath: string) => {
-    setSelectedFilePaths((current) => current.filter((item) => item !== filePath));
+    setSelectedFiles((current) => current.filter((item) => item.path !== filePath));
   }, []);
 
   const selectSuggestion = useCallback((suggestion: CoworkPromptSuggestion) => {
     setPrompt(suggestion.prompt);
     setFocusRequestKey((key) => key + 1);
+  }, []);
+  const requestProject = useCallback((project: CoworkAddMenuProject) => {
+    if (!shouldShowCoworkProjectWarning(project.uuid)) {
+      addSelectedProject(project, setSelectedProjects);
+      return;
+    }
+    setPendingProjectWarning({ project, variant: "addMenu" });
+  }, []);
+  const confirmProject = useCallback((project: CoworkAddMenuProject, dontShowAgain: boolean) => {
+    if (dontShowAgain) persistCoworkProjectWarningDismissed(project.uuid);
+    addSelectedProject(project, setSelectedProjects);
+    setPendingProjectWarning(null);
   }, []);
 
   return (
@@ -96,16 +129,22 @@ export function CoworkNewTaskPage({
                   model={model}
                   onAddFiles={addFiles}
                   onModelChange={setModel}
+                  onNavigate={onNavigate}
+                  onProjectSelect={requestProject}
                   onPermissionModeChange={setPermissionMode}
+                  onRemoveProject={(uuid) => setSelectedProjects((current) => current.filter((project) => project.uuid !== uuid))}
                   onRemoveFile={removeFile}
                   onSubmit={(options) => void submit(prompt, options)}
                   onWorkspaceChange={setSelectedWorkspace}
                   permissionMode={permissionMode}
                   prompt={prompt}
-                  selectedFilePaths={selectedFilePaths}
+                  projectMenuItems={projectMenuItems}
+                  selectedFiles={selectedFiles}
+                  selectedProjects={selectedProjects}
                   setPrompt={setPrompt}
                   workspace={selectedWorkspace}
                 />
+                <CoworkProjectWarningDialog onCancel={() => setPendingProjectWarning(null)} onConfirm={confirmProject} pending={pendingProjectWarning} />
               </div>
             </div>
             {!busy ? <CoworkSuggestions onSelect={selectSuggestion} /> : null}
@@ -114,6 +153,24 @@ export function CoworkNewTaskPage({
       </div>
     </main>
   );
+}
+
+function addSelectedProject(project: NonNullable<ReturnType<typeof sessionToCoworkAddMenuProject>>, setSelectedProjects: (updater: (current: CoworkMountedProject[]) => CoworkMountedProject[]) => void) {
+  const mounted = coworkMountedProjectFromAddMenuProject(project);
+  if (!mounted) return;
+  setSelectedProjects((current) => current.some((item) => item.uuid === mounted.uuid) ? current.filter((item) => item.uuid !== mounted.uuid) : [...current, mounted]);
+}
+
+function useDetectedProjects(setDetectedProjects: (projects: SessionSummary[]) => void) {
+  useEffect(() => {
+    let active = true;
+    void desktopBridge.LocalAgentModeSessions.getDetectedProjects?.()
+      .then((projects) => { if (active) setDetectedProjects(projects ?? []); })
+      .catch(() => { if (active) setDetectedProjects([]); });
+    return () => {
+      active = false;
+    };
+  }, [setDetectedProjects]);
 }
 
 function useDefaultPermissionMode(cwd: string | undefined, setPermissionMode: (mode: PermissionMode) => void) {
@@ -128,10 +185,6 @@ function useDefaultPermissionMode(cwd: string | undefined, setPermissionMode: (m
       active = false;
     };
   }, [cwd, setPermissionMode]);
-}
-
-function uniqueStrings(values: string[]) {
-  return Array.from(new Set(values));
 }
 
 function createCoworkSessionId() {

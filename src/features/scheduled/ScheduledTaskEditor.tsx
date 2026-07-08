@@ -1,5 +1,6 @@
 import type { RouteViewProps } from "../../app/routes";
 import { ScheduledTaskForm } from "./ScheduledTaskForm";
+import { scheduledTaskDetailPath, scheduledTaskIndexPath } from "./scheduledPaths";
 import { useScheduledTasks } from "./useScheduledTasks";
 
 export function ScheduledTaskEditor({ onNavigate }: RouteViewProps) {
@@ -7,8 +8,8 @@ export function ScheduledTaskEditor({ onNavigate }: RouteViewProps) {
   return (
     <ScheduledTaskForm
       existingNames={existingNames}
-      onBack={() => onNavigate("/epitaxy/scheduled")}
-      onCreated={(id) => onNavigate(`/epitaxy/scheduled/${encodeURIComponent(id)}`)}
+      onBack={() => onNavigate(scheduledTaskIndexPath)}
+      onCreated={(id) => onNavigate(scheduledTaskDetailPath(id))}
     />
   );
 }

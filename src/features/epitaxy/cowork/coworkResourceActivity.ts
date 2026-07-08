@@ -22,6 +22,8 @@ export type {
   CoworkResourceSections,
 } from "./coworkResourceTypes";
 
+export const coworkChromeMcpServerUuid = "a8f3c7e2-4b9d-4f1a-8c3e-9d2a5b7f8e1c";
+
 export function parseCoworkResourceActivity(messages: ChatMessage[]): CoworkResourceActivity[] {
   const resources = new Map<string, CoworkResourceActivity>();
   messages.forEach((message, messageIndex) => {
@@ -93,8 +95,8 @@ export function coworkSessionFolders(session: SessionSummary | null) {
 }
 
 export function coworkFolderSectionTitle(folders: string[]) {
-  if (folders.length === 1) return basename(folders[0]) ?? folders[0];
-  return folders.length > 1 ? "Working folders" : "Working folder";
+  void folders;
+  return "工作文件夹";
 }
 
 function rawToolUsesFromMessage(message: ChatMessage): CoworkTranscriptToolUse[] {
@@ -131,6 +133,7 @@ function coworkResourceActivityFromTool(message: ChatMessage, messageIndex: numb
       filePath: `web_search://${tool.id}`,
       latestId: `${message.id}-${tool.id}`,
       operation,
+      searchQuery: query,
       timestamp,
       toolName: tool.name,
     });
@@ -139,11 +142,14 @@ function coworkResourceActivityFromTool(message: ChatMessage, messageIndex: numb
   if (operation === "skill_invoked") {
     const skill = stringValue(tool.input.skill) ?? stringValue(tool.input.name);
     if (!skill) return null;
+    const displayName = basename(skill) ?? skill;
     return createCoworkResourceActivity({
-      fileName: basename(skill) ?? skill,
+      fileName: displayName,
       filePath: `skill://${skill}`,
       latestId: `${message.id}-${tool.id}`,
       operation,
+      pluginName: pluginNameFromQualifiedName(skill),
+      skillName: skill,
       timestamp,
       toolName: tool.name,
     });
@@ -152,10 +158,17 @@ function coworkResourceActivityFromTool(message: ChatMessage, messageIndex: numb
   if (operation === "mcp_tool") {
     const parsed = parseCoworkMcpToolName(tool.name);
     if (!parsed) return null;
+    const serverName = coworkMcpServerDisplayName(parsed.server, tool.input);
+    const toolDisplayName = stringValue(tool.input.tool_display_name) ?? stringValue(tool.input.toolDisplayName) ?? parsed.tool;
     return createCoworkResourceActivity({
       fileName: parsed.tool,
       filePath: `mcp://${parsed.server}/${parsed.tool}`,
       latestId: `${message.id}-${tool.id}`,
+      mcpServer: { name: serverName, uuid: parsed.server },
+      mcpServerUuid: parsed.server,
+      mcpToolDisplayName: toolDisplayName,
+      mcpToolInput: tool.input,
+      mcpToolName: parsed.tool,
       operation,
       timestamp,
       toolName: tool.name,
@@ -174,17 +187,45 @@ function coworkResourceActivityFromTool(message: ChatMessage, messageIndex: numb
 }
 
 function createCoworkResourceActivity({
+  cliDisplayName,
+  cliIcon,
+  cliName,
+  commandName,
   fileName,
   filePath,
   latestId,
+  mcpServer,
+  mcpServerUuid,
+  mcpToolDisplayName,
+  mcpToolInput,
+  mcpToolName,
   operation,
+  pluginId,
+  pluginName,
+  searchQuery,
+  searchResults,
+  skillName,
   timestamp,
   toolName,
 }: {
+  cliDisplayName?: string;
+  cliIcon?: unknown;
+  cliName?: string;
+  commandName?: string;
   fileName?: string;
   filePath: string;
   latestId: string;
+  mcpServer?: CoworkResourceActivity["mcpServer"];
+  mcpServerUuid?: string;
+  mcpToolDisplayName?: string;
+  mcpToolInput?: Record<string, unknown>;
+  mcpToolName?: string;
   operation: CoworkResourceOperation;
+  pluginId?: string;
+  pluginName?: string;
+  searchQuery?: string;
+  searchResults?: unknown[];
+  skillName?: string;
   timestamp: number;
   toolName: string;
 }): CoworkResourceActivity {
@@ -193,11 +234,25 @@ function createCoworkResourceActivity({
   const categoryKey = coworkResourceCategory(normalizedPath, operation);
   return {
     categoryKey,
+    cliDisplayName,
+    cliIcon,
+    cliName,
+    commandName,
     displayName: coworkResourceDisplayName(normalizedPath, derivedFileName, categoryKey),
     fileName: derivedFileName,
     filePath,
     latestId,
+    mcpServer,
+    mcpServerUuid,
+    mcpToolDisplayName,
+    mcpToolInput,
+    mcpToolName,
     operation,
+    pluginId,
+    pluginName,
+    searchQuery,
+    searchResults,
+    skillName,
     timestamp,
     toolName,
   };
@@ -220,6 +275,21 @@ function parseCoworkMcpToolName(toolName: string) {
   const match = /^mcp__(.+?)__(.+)$/.exec(toolName);
   if (!match) return null;
   return { server: match[1], tool: match[2] };
+}
+
+function coworkMcpServerDisplayName(server: string, input: Record<string, unknown>) {
+  const explicitName = stringValue(input.server_name) ?? stringValue(input.serverName) ?? stringValue(input.mcp_server_name) ?? stringValue(input.mcpServerName);
+  if (isCoworkChromeMcpServer({ uuid: server, name: explicitName })) return "Claude in Chrome";
+  return explicitName ?? server;
+}
+
+export function isCoworkChromeMcpServer(server: { uuid?: string; name?: string }) {
+  return server.uuid === coworkChromeMcpServerUuid || server.name === "Claude in Chrome" || server.name === "Claude for Chrome";
+}
+
+function pluginNameFromQualifiedName(value: string) {
+  const separator = value.indexOf(":");
+  return separator > 0 ? value.slice(0, separator) : undefined;
 }
 
 function coworkResourceOperation(tool: CoworkTranscriptToolUse): CoworkResourceOperation | null {

@@ -3,10 +3,11 @@ import { CoworkActivitySection } from "./CoworkActivitySection";
 import { OfficialSpinner } from "./CoworkActivitySpinner";
 import type { CoworkBackgroundTask, CoworkTaskStatus, CoworkTodoItem } from "./coworkActivityTypes";
 
-export function CoworkProgressSection({ isExpanded, onToggle, tasks, todos }: { isExpanded: boolean; onToggle: () => void; tasks: CoworkBackgroundTask[]; todos: CoworkTodoItem[] }) {
+export function CoworkProgressSection({ allTodosCompleted, isExpanded, onToggle, tasks, todos }: { allTodosCompleted: boolean; isExpanded: boolean; onToggle: () => void; tasks: CoworkBackgroundTask[]; todos: CoworkTodoItem[] }) {
   const maxContentHeight = todos.length > 0 || tasks.length > 0 ? "24rem" : "12rem";
+  const headerLeftAction = !isExpanded && allTodosCompleted ? <span className="text-text-500 font-small">{todos.length} of {todos.length}</span> : undefined;
   return (
-    <CoworkActivitySection contentClassName="!pb-2" isExpanded={isExpanded} maxContentHeight={maxContentHeight} title="Progress" onToggle={onToggle}>
+    <CoworkActivitySection contentClassName="!pb-2" headerLeftAction={headerLeftAction} isExpanded={isExpanded} maxContentHeight={maxContentHeight} title="进度" onToggle={onToggle}>
       {todos.length > 0 ? <CoworkTodoList todos={todos} /> : tasks.length > 0 ? <CoworkTaskList tasks={tasks} /> : <CoworkEmptyProgressState />}
     </CoworkActivitySection>
   );

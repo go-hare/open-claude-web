@@ -15,11 +15,30 @@ export type CoworkResourceCategory = "commands" | "connectors" | "internal" | "m
 
 export type CoworkResourceActivity = {
   categoryKey: CoworkResourceCategory;
+  cliDisplayName?: string;
+  cliIcon?: unknown;
+  cliName?: string;
+  commandName?: string;
   displayName: string;
   fileName: string;
   filePath: string;
   latestId: string;
+  mcpServer?: {
+    iconSrc?: string;
+    iconType?: string;
+    name?: string;
+    uuid?: string;
+  };
+  mcpServerUuid?: string;
+  mcpToolDisplayName?: string;
+  mcpToolInput?: Record<string, unknown>;
+  mcpToolName?: string;
   operation: CoworkResourceOperation;
+  pluginId?: string;
+  pluginName?: string;
+  searchQuery?: string;
+  searchResults?: unknown[];
+  skillName?: string;
   timestamp: number;
   toolName: string;
 };

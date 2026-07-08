@@ -3,6 +3,7 @@ import type { ScheduledTaskSummary } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
 import { ScheduledRouteShell } from "./ScheduledPrimitives";
 import { scheduleLabel, taskDisplayName } from "./scheduleUtils";
+import { scheduledTaskDetailPath, scheduledTaskNewPath } from "./scheduledPaths";
 import { useScheduledTasks } from "./useScheduledTasks";
 
 type ContentProps = {
@@ -19,8 +20,8 @@ export function ScheduledTasks({ onNavigate }: RouteViewProps) {
       <ScheduledTasksContent
         isLoading={isLoading}
         tasks={tasks}
-        onCreate={() => onNavigate("/epitaxy/scheduled/new")}
-        onSelect={(id) => onNavigate(`/epitaxy/scheduled/${encodeURIComponent(id)}`)}
+        onCreate={() => onNavigate(scheduledTaskNewPath())}
+        onSelect={(id) => onNavigate(scheduledTaskDetailPath(id))}
       />
     </ScheduledRouteShell>
   );

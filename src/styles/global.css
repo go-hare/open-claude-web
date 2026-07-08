@@ -79,3 +79,15 @@ textarea {
   line-height: 18px;
   font-weight: 500;
 }
+
+/*
+ * 官方 dframe CSS 在 Epitaxy/Cowork 体验里把内容区额外 gutter 归零：
+ * `.epitaxy-root .dframe-content-inner { --df-content-gutter: 0px }`。
+ *
+ * 我们的 React 转正层是 DesktopFrame -> dframe-content-inner -> epitaxy-root，
+ * DOM 方向和官方 compiled route wrapper 相反，导致官方选择器命不中，
+ * 左侧栏和会话标题之间多出 8px 空隙。这里用 :has 补同一语义。
+ */
+.dframe-content-inner:has(.epitaxy-root) {
+  --df-content-gutter: 0px;
+}

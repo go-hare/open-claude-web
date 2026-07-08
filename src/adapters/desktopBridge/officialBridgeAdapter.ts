@@ -1,13 +1,18 @@
 import type {
   ChatMessage,
   CodeStats,
+  ConnectedBrowser,
+  ConnectedOfficeFile,
   ContextUsage,
+  CoworkMountedProject,
   CreateScheduledTaskInput,
   DesktopBridge,
   DesktopPreferences,
   GitCommandResult,
   GetSupportedCommandsRequest,
   LocalSessionsBridge,
+  LocalFileEntry,
+  LocalFileReadResult,
   ScheduledTaskSummary,
   ShellPtyEvent,
   ShellPtyStartResult,
@@ -40,6 +45,7 @@ type RawLocalSessionsBridge = {
   getGitDiff?: (idOrCwd: string, base?: string) => Promise<unknown>;
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<unknown>;
   getLocalBranches?: (idOrCwd: string) => Promise<unknown>;
+  mcpCallTool?: (serverName: string, toolName: string, input?: Record<string, unknown>) => Promise<unknown>;
   checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<unknown>;
   checkTrust?: (folder: string) => Promise<unknown>;
   saveTrust?: (folder: string) => Promise<unknown>;
@@ -98,12 +104,42 @@ type RawLocalSessionEnvironmentBridge = {
 
 type RawFileSystemBridge = {
   browseFiles?: (options?: unknown) => Promise<unknown>;
+  listFilesInFolder?: (...args: unknown[]) => Promise<unknown>;
+  openLocalFile?: (...args: unknown[]) => Promise<unknown>;
+  readLocalFile?: (...args: unknown[]) => Promise<unknown>;
+  showInFolder?: (...args: unknown[]) => Promise<unknown>;
+  writeLocalFile?: (...args: unknown[]) => Promise<unknown>;
+};
+
+type RawOpenDocumentsBridge = {
+  getOpenDocuments?: () => Promise<unknown>;
+  readOpenDocumentAsBase64?: (idOrPath: string) => Promise<unknown>;
 };
 
 type RawStoreBridge<TState> = {
   getState?: () => Promise<TState>;
   getStateSync?: () => TState;
   onStateChange?: (listener: (state: TState) => void) => RemoveListener;
+};
+
+type RawOfficeAddinFilesBridge = {
+  connectedFilesState_$store$_getState?: () => Promise<unknown>;
+  connectedFilesState_$store$_getStateSync?: () => unknown;
+  connectedFilesState_$store$_update?: RawEventSubscription;
+  focusFile?: (fileIdOrPath: string) => Promise<unknown>;
+  getConnectedFiles?: () => Promise<unknown>;
+  isFeatureEnabled?: () => Promise<unknown>;
+  onAddinNeedsContext?: RawEventSubscription;
+  onConnectedFilesState_$store$_update?: RawEventSubscription;
+  onFileAdded?: RawEventSubscription;
+  onFileRemoved?: RawEventSubscription;
+  onFileStateChanged?: RawEventSubscription;
+  selectFile?: (fileIdOrPath: string) => Promise<unknown>;
+  updateActiveConversationSummary?: (...args: unknown[]) => Promise<unknown>;
+};
+
+export type RawClaudeOfficeAddinBridge = {
+  OfficeAddinFiles?: RawOfficeAddinFilesBridge;
 };
 
 export type RawBrowserNavigationState = {
@@ -118,6 +154,7 @@ export type RawClaudeWebBridge = {
   LocalSessionEnvironment?: RawLocalSessionEnvironmentBridge;
   CCDScheduledTasks?: RawScheduledTasksBridge;
   FileSystem?: RawFileSystemBridge;
+  OpenDocuments?: RawOpenDocumentsBridge;
   WindowControl?: {
     close?: () => Promise<unknown>;
   };
@@ -168,15 +205,26 @@ const emptyWorkspace: WorkspaceContext = {
 export function createDesktopBridgeFromOfficialNamespaces(
   web: RawClaudeWebBridge,
   settings?: RawClaudeSettingsBridge,
+  officeAddin?: RawClaudeOfficeAddinBridge,
 ): DesktopBridge {
   return {
     LocalSessions: createLocalSessionsBridge(web.LocalSessions, "code"),
     LocalAgentModeSessions: createLocalSessionsBridge(web.LocalAgentModeSessions, "epitaxy"),
     LocalSessionEnvironment: createLocalSessionEnvironmentBridge(web.LocalSessionEnvironment),
+    BrowserUse: createBrowserUseBridge(web.LocalAgentModeSessions, settings?.AppPreferences),
     CCDScheduledTasks: createScheduledTasksBridge(web.CCDScheduledTasks),
     FileSystem: {
       browseFiles: async (options) => normalizeStringArray(await web.FileSystem?.browseFiles?.(options).catch(() => [])),
+      listFilesInFolder: async (sessionId, folderPath) => listFilesInFolder(web.FileSystem, sessionId, folderPath),
+      openLocalFile: async (filePathOrSessionId, encodedFilePath) => web.FileSystem?.openLocalFile?.(decodeOfficialPathArg(filePathOrSessionId, encodedFilePath)),
+      readLocalFile: async (filePathOrSessionId, encodedFilePath, options) => normalizeLocalFileReadResult(await web.FileSystem?.readLocalFile?.(decodeOfficialPathArg(filePathOrSessionId, encodedFilePath), options).catch(() => null)),
+      showInFolder: async (filePathOrSessionId, encodedFilePath) => Boolean(await web.FileSystem?.showInFolder?.(decodeOfficialPathArg(filePathOrSessionId, encodedFilePath)).catch(() => false)),
+      writeLocalFile: async (filePathOrSessionId, encodedFilePathOrData, dataOrOptions, options) => {
+        const writeArgs = normalizeWriteLocalFileArgs(filePathOrSessionId, encodedFilePathOrData, dataOrOptions, options);
+        return web.FileSystem?.writeLocalFile?.(writeArgs.filePath, writeArgs.data, writeArgs.options);
+      },
     },
+    OfficeAddinFiles: createOfficeAddinFilesBridge(officeAddin?.OfficeAddinFiles, web.OpenDocuments),
     Preferences: {
       getWorkspaceContext: () => getWorkspaceContext(web),
       getPreferences: async () => normalizePreferences(await settings?.AppPreferences?.getPreferences?.()),
@@ -221,6 +269,201 @@ function createLocalSessionEnvironmentBridge(raw: RawLocalSessionEnvironmentBrid
       await raw?.save?.(normalizeEnvironmentMap(env));
       return true;
     },
+  };
+}
+
+const chromeMcpServerName = "Claude in Chrome";
+
+function createBrowserUseBridge(
+  raw: RawLocalSessionsBridge | undefined,
+  preferences: RawClaudeSettingsBridge["AppPreferences"] | undefined,
+): DesktopBridge["BrowserUse"] {
+  if (!raw?.mcpCallTool) return {};
+  const callChromeTool = async (toolName: string, input: Record<string, unknown> = {}) => raw.mcpCallTool?.(chromeMcpServerName, toolName, input);
+  return {
+    // Official ion-dist basis: index-BELzQL5P.js MRt uses local tool list_connected_browsers/select_browser;
+    // PZt.displayName="BrowserPickerButton" renders the same connected-browser picker surface.
+    listConnectedBrowsers: async () => normalizeConnectedBrowsers(await callChromeTool("list_connected_browsers").catch(() => [])),
+    selectBrowser: async (deviceId) => !mcpToolReturnedError(await callChromeTool("select_browser", { deviceId }).catch(() => ({ isError: true }))),
+    switchBrowser: async () => !mcpToolReturnedError(await callChromeTool("switch_browser").catch(() => ({ isError: true }))),
+    getSelectedBrowserId: async () => {
+      const prefs = await preferences?.getPreferences?.().catch(() => ({}));
+      const root = asRecord(prefs);
+      const chromeExtension = asRecord(root.chromeExtension);
+      return stringValue(chromeExtension.pairedDeviceId) ?? stringValue(root.chromeExtensionPairedDeviceId) ?? null;
+    },
+  };
+}
+
+function mcpToolReturnedError(value: unknown) {
+  const raw = asRecord(value);
+  const nested = asRecord(raw.result);
+  return raw.isError === true || raw.error !== undefined || nested.isError === true || nested.error !== undefined || raw.ok === false;
+}
+
+function normalizeConnectedBrowsers(value: unknown): ConnectedBrowser[] {
+  const raw = asRecord(value);
+  const result = asRecord(raw.result);
+  const source = Array.isArray(value)
+    ? value
+    : Array.isArray(raw.browsers)
+      ? raw.browsers
+      : Array.isArray(result.browsers)
+        ? result.browsers
+        : connectedBrowsersFromMcpContent(Array.isArray(raw.content) ? raw.content : result.content);
+  const seen = new Set<string>();
+  return source
+    .map(normalizeConnectedBrowser)
+    .filter((browser): browser is ConnectedBrowser => Boolean(browser))
+    .filter((browser) => {
+      if (seen.has(browser.deviceId)) return false;
+      seen.add(browser.deviceId);
+      return true;
+    });
+}
+
+function connectedBrowsersFromMcpContent(content: unknown): unknown[] {
+  if (!Array.isArray(content)) return [];
+  const text = content.map((item) => stringValue(asRecord(item).text)).find(Boolean);
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : Array.isArray(asRecord(parsed).browsers) ? asRecord(parsed).browsers as unknown[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeConnectedBrowser(value: unknown): ConnectedBrowser | null {
+  const raw = asRecord(value);
+  const deviceId = stringValue(raw.deviceId) ?? stringValue(raw.device_id) ?? stringValue(raw.id);
+  if (!deviceId) return null;
+  return {
+    deviceId,
+    name: stringValue(raw.name) ?? stringValue(raw.displayName) ?? stringValue(raw.display_name),
+    osPlatform: stringValue(raw.osPlatform) ?? stringValue(raw.os_platform) ?? stringValue(raw.platform),
+  };
+}
+
+async function listFilesInFolder(raw: RawFileSystemBridge | undefined, sessionId: string, folderPath: string): Promise<LocalFileEntry[]> {
+  if (!raw?.listFilesInFolder) return [];
+  const officialResult = await raw.listFilesInFolder(sessionId, folderPath).catch(() => undefined);
+  if (officialResult !== undefined) return normalizeLocalFileEntries(officialResult, folderPath);
+  const fallbackResult = await raw.listFilesInFolder(folderPath, { entries: true }).catch(() => []);
+  return normalizeLocalFileEntries(fallbackResult, folderPath);
+}
+
+function decodeOfficialPathArg(filePathOrSessionId: string, encodedFilePath?: string) {
+  if (!encodedFilePath) return filePathOrSessionId;
+  try {
+    return decodeURIComponent(encodedFilePath);
+  } catch {
+    return encodedFilePath;
+  }
+}
+
+function normalizeLocalFileReadResult(value: unknown): LocalFileReadResult {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return { content: value };
+  const raw = asRecord(value);
+  return {
+    content: stringValue(raw.content),
+    name: stringValue(raw.name),
+    path: stringValue(raw.path),
+    size: numberValue(raw.size),
+    tooLarge: booleanValue(raw.tooLarge),
+  };
+}
+
+function normalizeWriteLocalFileArgs(filePathOrSessionId: string, encodedFilePathOrData: string, dataOrOptions?: string | Uint8Array | { encoding?: string }, options?: { encoding?: string }) {
+  if (typeof dataOrOptions === "string" || dataOrOptions instanceof Uint8Array) {
+    return {
+      data: dataOrOptions,
+      filePath: decodeOfficialPathArg(filePathOrSessionId, encodedFilePathOrData),
+      options,
+    };
+  }
+  return {
+    data: encodedFilePathOrData,
+    filePath: filePathOrSessionId,
+    options: dataOrOptions,
+  };
+}
+
+function createOfficeAddinFilesBridge(raw: RawOfficeAddinFilesBridge | undefined, openDocuments: RawOpenDocumentsBridge | undefined): DesktopBridge["OfficeAddinFiles"] {
+  const readConnectedFiles = async () => {
+    const direct = normalizeConnectedOfficeFiles(await raw?.getConnectedFiles?.().catch(() => undefined));
+    if (direct.length > 0) return direct;
+    const state = normalizeConnectedOfficeFiles(await raw?.connectedFilesState_$store$_getState?.().catch(() => undefined));
+    if (state.length > 0) return state;
+    return normalizeConnectedOfficeFiles(await openDocuments?.getOpenDocuments?.().catch(() => []));
+  };
+
+  return {
+    getConnectedFiles: readConnectedFiles,
+    isFeatureEnabled: async () => {
+      if (raw?.isFeatureEnabled) return Boolean(await raw.isFeatureEnabled().catch(() => false));
+      return Boolean(raw || openDocuments);
+    },
+    selectFile: async (fileIdOrPath) => {
+      const selected = normalizeConnectedOfficeFile(await raw?.selectFile?.(fileIdOrPath).catch(() => null));
+      if (selected) return selected;
+      const files = await readConnectedFiles();
+      return files.find((file) => file.id === fileIdOrPath || file.path === fileIdOrPath) ?? null;
+    },
+    focusFile: async (fileIdOrPath) => Boolean(await raw?.focusFile?.(fileIdOrPath).catch(() => false)),
+    onConnectedFilesChange: (listener) => {
+      const subscriptions = [
+        raw?.connectedFilesState_$store$_update,
+        raw?.onConnectedFilesState_$store$_update,
+        raw?.onFileAdded,
+        raw?.onFileRemoved,
+        raw?.onFileStateChanged,
+      ].filter((subscribe): subscribe is RawEventSubscription => Boolean(subscribe));
+      if (subscriptions.length === 0) return () => {};
+      const removers = subscriptions.map((subscribe) => subscribe(async (event) => {
+        const filesFromEvent = normalizeConnectedOfficeFiles(event);
+        listener(filesFromEvent.length > 0 ? filesFromEvent : await readConnectedFiles());
+      }));
+      return () => {
+        for (const remove of removers) remove();
+      };
+    },
+  };
+}
+
+function normalizeConnectedOfficeFiles(value: unknown): ConnectedOfficeFile[] {
+  const raw = asRecord(value);
+  const source = Array.isArray(value)
+    ? value
+    : Array.isArray(raw.files)
+      ? raw.files
+      : raw.activeFile
+        ? [raw.activeFile]
+        : [];
+  const files = source.map(normalizeConnectedOfficeFile).filter((file): file is ConnectedOfficeFile => Boolean(file));
+  const seen = new Set<string>();
+  return files.filter((file) => {
+    const key = file.path ?? file.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function normalizeConnectedOfficeFile(value: unknown): ConnectedOfficeFile | null {
+  const raw = asRecord(value);
+  const path = stringValue(raw.path) ?? stringValue(raw.filePath) ?? stringValue(raw.hostPath);
+  const document = stringValue(raw.document) ?? stringValue(raw.name) ?? basename(path) ?? stringValue(raw.id);
+  const id = stringValue(raw.id) ?? path ?? document;
+  if (!id || !document) return null;
+  return {
+    id,
+    document,
+    path,
+    status: stringValue(raw.status) ?? "Connected",
+    appIconBase64: stringValue(raw.appIconBase64) ?? stringValue(raw.app_icon_base64),
+    active: booleanValue(raw.active),
   };
 }
 
@@ -463,6 +706,7 @@ function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): Se
     cwd,
     effort: stringValue(raw.effort) ?? stringValue(original.effort),
     folders: Array.isArray(raw.folders) ? raw.folders.filter((folder): folder is string => typeof folder === "string") : undefined,
+    mountedProjects: normalizeCoworkMountedProjects(raw.mountedProjects ?? original.mountedProjects),
     model: stringValue(raw.model) ?? stringValue(original.model),
     permissionMode: stringValue(raw.permissionMode) ?? stringValue(original.permissionMode),
     repo: repoInfo(raw, cwd),
@@ -482,6 +726,22 @@ function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): Se
   };
 }
 
+function normalizeCoworkMountedProjects(value: unknown): CoworkMountedProject[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const projects = value
+    .map((item) => {
+      const raw = asRecord(item);
+      const hostPath = stringValue(raw.hostPath) ?? stringValue(raw.host_path) ?? stringValue(raw.path);
+      if (!hostPath) return null;
+      return {
+        uuid: stringValue(raw.uuid) ?? stringValue(raw.id) ?? hostPath,
+        name: stringValue(raw.name) ?? basename(hostPath) ?? hostPath,
+        hostPath,
+      };
+    })
+    .filter((project): project is CoworkMountedProject => Boolean(project));
+  return projects.length > 0 ? projects : undefined;
+}
 
 async function enrichSessionWithGitInfo(session: SessionSummary, raw?: RawLocalSessionsBridge): Promise<SessionSummary> {
   const gitInfo = await raw?.getGitInfo?.(session.id).catch(() => undefined);
@@ -534,6 +794,7 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
     origin: input.origin,
     userSelectedFiles: input.userSelectedFiles?.length ? input.userSelectedFiles : undefined,
     userSelectedFolders: selectedFolders.length ? selectedFolders : undefined,
+    mountedProjects: input.mountedProjects?.length ? input.mountedProjects : undefined,
     permissionMode,
     sourceBranch: input.sourceBranch,
     title: input.title ?? titleFromStartPrompt(message, targetKind),
@@ -958,6 +1219,37 @@ function stringValue(value: unknown): string | undefined {
 
 function normalizeStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
+}
+
+function normalizeLocalFileEntries(value: unknown, parentPath: string): LocalFileEntry[] {
+  const entries: LocalFileEntry[] = [];
+  for (const item of Array.isArray(value) ? value : []) {
+    if (typeof item === "string" && item.length > 0) {
+      entries.push({ name: basename(item) ?? item, path: item, isFile: true, isDirectory: false });
+      continue;
+    }
+    const raw = asRecord(item);
+    const entryPath = stringValue(raw.path) ?? joinPath(parentPath, stringValue(raw.name));
+    const name = stringValue(raw.name) ?? basename(entryPath);
+    if (!entryPath || !name) continue;
+    const isDirectory = Boolean(raw.isDirectory ?? raw.directory ?? (raw.type === "directory" || raw.kind === "directory"));
+    entries.push({
+      name,
+      path: entryPath,
+      isDirectory,
+      isFile: Boolean(raw.isFile ?? raw.file ?? !isDirectory),
+      modifiedAt: stringValue(raw.modifiedAt) ?? stringValue(raw.mtime),
+      size: typeof raw.size === "number" && Number.isFinite(raw.size) ? raw.size : undefined,
+    });
+  }
+  return entries;
+}
+
+function joinPath(parentPath: string, name?: string) {
+  if (!name) return undefined;
+  if (/^(\/|~\/|[A-Za-z]:[\\/])/.test(name)) return name;
+  const separator = parentPath.includes("\\") && !parentPath.includes("/") ? "\\" : "/";
+  return `${parentPath.replace(/[\\/]+$/, "")}${separator}${name}`;
 }
 
 function booleanValue(value: unknown): boolean | undefined {

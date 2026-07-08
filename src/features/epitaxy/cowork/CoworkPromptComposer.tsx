@@ -1,17 +1,23 @@
 import { useEffect, useRef, type MouseEvent } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import type { PermissionMode, WorkspaceContext } from "../../../adapters/desktopBridge";
+import type { CoworkMountedProject, PermissionMode, WorkspaceContext } from "../../../adapters/desktopBridge";
 import { Icon } from "../../../shell/icons";
-import { OfficialDropdownButton, type OfficialDropdownItem } from "../OfficialEpitaxyComponents";
+import { OfficialDropdownButton } from "../OfficialEpitaxyComponents";
+import { createCoworkAddMenuItems, coworkAddMenuOfficialSource, type CoworkAddMenuProject } from "./CoworkAddMenuItems";
 import { CoworkExternalChin } from "./CoworkExternalChin";
+import { CoworkSelectedProjectIndicators } from "./CoworkProjectContext";
 import { CoworkSelectedFiles } from "./CoworkSelectedFiles";
+import type { CoworkUploadedFile } from "./coworkUploadedFiles";
 
 type CoworkPromptComposerProps = {
   busy: boolean;
   focusRequestKey: number;
   model: string;
   onModelChange: (value: string) => void;
+  onNavigate?: (path: string) => void;
+  onProjectSelect?: (project: CoworkAddMenuProject) => void;
+  onRemoveProject?: (uuid: string) => void;
   onPermissionModeChange: (value: PermissionMode) => void;
   onWorkspaceChange: (workspace: WorkspaceContext) => void;
   onAddFiles: () => void;
@@ -19,9 +25,11 @@ type CoworkPromptComposerProps = {
   onSubmit: (options?: { keepGoing?: boolean }) => void;
   permissionMode: PermissionMode;
   prompt: string;
-  selectedFilePaths: string[];
+  selectedFiles: CoworkUploadedFile[];
+  selectedProjects?: CoworkMountedProject[];
   setPrompt: (value: string) => void;
   workspace: WorkspaceContext;
+  projectMenuItems?: CoworkAddMenuProject[];
 };
 
 const promptShellClass = [
@@ -38,7 +46,7 @@ const sendButtonClass = `${composerIconButtonClass} text-primary-default hover:t
 
 export function CoworkPromptComposer(props: CoworkPromptComposerProps) {
   const hasPrompt = props.prompt.trim().length > 0;
-  const canSubmit = hasPrompt || props.selectedFilePaths.length > 0;
+  const canSubmit = hasPrompt || props.selectedFiles.length > 0;
   const editor = useCoworkPromptEditor(props, canSubmit);
 
   return (
@@ -51,8 +59,9 @@ export function CoworkPromptComposer(props: CoworkPromptComposerProps) {
           >
             <div className="flex flex-col m-3.5 gap-3">
               <CoworkPromptEditor editor={editor} hasPrompt={hasPrompt} />
-              <CoworkSelectedFiles filePaths={props.selectedFilePaths} onRemove={props.onRemoveFile} />
-              <CoworkPromptToolbar busy={props.busy} canSubmit={canSubmit} onAddFiles={props.onAddFiles} onSubmit={props.onSubmit} />
+              <CoworkSelectedFiles files={props.selectedFiles} onRemove={props.onRemoveFile} />
+              <CoworkSelectedProjectIndicators onRemove={props.onRemoveProject ?? (() => undefined)} projects={props.selectedProjects ?? []} />
+              <CoworkPromptToolbar busy={props.busy} canSubmit={canSubmit} onAddFiles={props.onAddFiles} onNavigate={props.onNavigate} onProjectSelect={props.onProjectSelect} onSubmit={props.onSubmit} projectMenuItems={props.projectMenuItems} />
             </div>
           </div>
         </div>
@@ -142,20 +151,38 @@ function CoworkPromptToolbar({
   busy,
   canSubmit,
   onAddFiles,
+  onNavigate,
+  onProjectSelect,
   onSubmit,
+  projectMenuItems,
 }: {
   busy: boolean;
   canSubmit: boolean;
   onAddFiles: () => void;
+  onNavigate?: (path: string) => void;
+  onProjectSelect?: (project: CoworkAddMenuProject) => void;
   onSubmit: () => void;
+  projectMenuItems?: CoworkAddMenuProject[];
 }) {
-  const addMenuItems: OfficialDropdownItem[] = [
-    { icon: "FileAdd", label: "Add files or photos", onSelect: onAddFiles },
-  ];
+  const addMenuItems = createCoworkAddMenuItems({ onAddFiles, onNavigate, onSelectProject: onProjectSelect, projects: projectMenuItems });
   return (
     <div className="relative flex gap-2 w-full items-center">
       <div className="relative flex-1 flex items-center shrink min-w-0 gap-1">
-        <OfficialDropdownButton ariaLabel="Add files, connectors, and more" disabled={busy} icon="PlusLarge" items={addMenuItems} revealChevron="never" side="top" size="small" variant="uncontained" />
+        <OfficialDropdownButton
+          align="start"
+          alignOffset={-10}
+          ariaLabel="Add files, connectors, and more"
+          disabled={busy}
+          icon="PlusLarge"
+          items={addMenuItems}
+          popupClassName="max-h-[min(var(--available-height),24rem)]"
+          revealChevron="never"
+          side="bottom"
+          sideOffset={4}
+          size="small"
+          variant="uncontained"
+        />
+        <span className="sr-only" data-official-source={coworkAddMenuOfficialSource}>Official Add menu: cwt/dwt/pwt</span>
       </div>
       <div className="shrink-0 flex items-center w-8 z-10 justify-end">
         <button aria-label="开始任务" className={sendButtonClass} disabled={busy || !canSubmit} onClick={() => onSubmit()} type="button">

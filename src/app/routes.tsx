@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import { useEffect, type ComponentType } from "react";
 import { AnalyticsPage } from "../features/analytics/AnalyticsPage";
 import { CodeWebPage } from "../features/codeWeb/CodeWebPage";
 import { CustomizePage } from "../features/customize/CustomizePage";
@@ -66,6 +66,14 @@ const isReservedEpitaxySessionPath = (pathname: string) => {
   return epitaxyReservedSessionSegments.has(segment);
 };
 
+function CoworkLegacyTaskRedirect() {
+  useEffect(() => {
+    window.history.replaceState({}, "", "/task/new");
+    window.dispatchEvent(new Event("app:navigation"));
+  }, []);
+  return null;
+}
+
 export const routes: AppRoute[] = [
   {
     id: "cowork-home",
@@ -76,6 +84,35 @@ export const routes: AppRoute[] = [
     sourceChunk: "index-BELzQL5P.js",
     Component: EpitaxyHome,
     match: (pathname) => pathname === "/task/new",
+  },
+  {
+    id: "legacy-new-chat",
+    path: "/new",
+    title: "New chat",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Nds t(\"new\") beforeLoad -> /task/new",
+    Component: CoworkLegacyTaskRedirect,
+  },
+  {
+    id: "legacy-chat",
+    path: "/chat/:uuid",
+    title: "Chat",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Nds t(\"chat/$uuid\") beforeLoad -> /task/new",
+    Component: CoworkLegacyTaskRedirect,
+    match: (pathname) => pathname.startsWith("/chat/"),
+  },
+  {
+    id: "legacy-cowork-agent",
+    path: "/cowork/agent",
+    title: "Cowork",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Nds t(\"cowork/agent\") beforeLoad -> /task/new",
+    Component: CoworkLegacyTaskRedirect,
+    match: (pathname) => pathname === "/cowork/agent",
   },
   {
     id: "epitaxy-home",
@@ -107,6 +144,34 @@ export const routes: AppRoute[] = [
     sourceChunk: "index-BELzQL5P.js xos/bos local_sessions/$sessionId",
     Component: EpitaxySessionPage,
     match: (pathname) => pathname.startsWith("/local_sessions/"),
+  },
+  {
+    id: "scheduled-task-new",
+    path: "/scheduled-task/new",
+    title: "新建定时任务",
+    navKey: "scheduled",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Nds scheduled-task canonical + local editor",
+    Component: ScheduledTaskEditor,
+  },
+  {
+    id: "scheduled-task-detail",
+    path: "/scheduled-task/:taskId",
+    title: "定时任务详情",
+    navKey: "scheduled",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Nds scheduled-task/$id canonical",
+    Component: ScheduledTaskDetail,
+    match: (pathname) => startsWithPath(pathname, "/scheduled-task") && pathname !== "/scheduled-task" && pathname !== "/scheduled-task/new",
+  },
+  {
+    id: "scheduled-task",
+    path: "/scheduled-task",
+    title: "定时任务",
+    navKey: "scheduled",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Nds scheduled-task canonical",
+    Component: ScheduledTasks,
   },
   {
     id: "epitaxy-apps",

@@ -17,6 +17,27 @@ export type ChatMessage = {
   raw?: unknown;
 };
 
+export type CoworkMountedProject = {
+  uuid: string;
+  name: string;
+  hostPath: string;
+};
+
+export type ConnectedOfficeFile = {
+  id: string;
+  document: string;
+  path?: string;
+  status?: string;
+  appIconBase64?: string;
+  active?: boolean;
+};
+
+export type ConnectedBrowser = {
+  deviceId: string;
+  name?: string;
+  osPlatform?: string;
+};
+
 export type SessionSummary = {
   id: string;
   title: string;
@@ -30,6 +51,7 @@ export type SessionSummary = {
   folders?: string[];
   userSelectedFiles?: string[];
   userSelectedFolders?: string[];
+  mountedProjects?: CoworkMountedProject[];
   model?: string;
   permissionMode?: string;
   repo?: {
@@ -151,6 +173,7 @@ export type StartSessionInput = {
   origin?: string;
   userSelectedFiles?: string[];
   userSelectedFolders?: string[];
+  mountedProjects?: CoworkMountedProject[];
   useWorktree?: boolean;
   worktreeName?: string;
   workspace: WorkspaceContext;
@@ -305,8 +328,45 @@ export type PreferencesBridge = {
   setGlobalShortcut?: (accelerator: string | null) => Promise<boolean>;
 };
 
+export type LocalFileEntry = {
+  isDirectory?: boolean;
+  isFile?: boolean;
+  modifiedAt?: string;
+  name: string;
+  path: string;
+  size?: number;
+};
+
+export type LocalFileReadResult = {
+  content?: string;
+  name?: string;
+  path?: string;
+  size?: number;
+  tooLarge?: boolean;
+} | string | null;
+
 export type FileSystemBridge = {
   browseFiles?: (options?: { defaultPath?: string; multiSelections?: boolean; title?: string }) => Promise<string[]>;
+  listFilesInFolder?: (sessionId: string, folderPath: string) => Promise<LocalFileEntry[]>;
+  openLocalFile?: (filePathOrSessionId: string, encodedFilePath?: string, reveal?: boolean) => Promise<unknown>;
+  readLocalFile?: (filePathOrSessionId: string, encodedFilePath?: string, options?: { encoding?: "base64" | "utf8" }) => Promise<LocalFileReadResult>;
+  showInFolder?: (filePathOrSessionId: string, encodedFilePath?: string) => Promise<boolean>;
+  writeLocalFile?: (filePathOrSessionId: string, encodedFilePathOrData: string, dataOrOptions?: string | Uint8Array | { encoding?: string }, options?: { encoding?: string }) => Promise<unknown>;
+};
+
+export type ConnectedOfficeFilesBridge = {
+  getConnectedFiles?: () => Promise<ConnectedOfficeFile[]>;
+  isFeatureEnabled?: () => Promise<boolean>;
+  selectFile?: (fileIdOrPath: string) => Promise<ConnectedOfficeFile | null>;
+  focusFile?: (fileIdOrPath: string) => Promise<boolean>;
+  onConnectedFilesChange?: (listener: (files: ConnectedOfficeFile[]) => void) => () => void;
+};
+
+export type BrowserUseBridge = {
+  listConnectedBrowsers?: () => Promise<ConnectedBrowser[]>;
+  selectBrowser?: (deviceId: string) => Promise<boolean>;
+  switchBrowser?: () => Promise<boolean>;
+  getSelectedBrowserId?: () => Promise<string | null>;
 };
 
 export type WindowBridge = {
@@ -319,8 +379,10 @@ export type DesktopBridge = {
   LocalSessions: LocalSessionsBridge;
   LocalAgentModeSessions: LocalSessionsBridge;
   LocalSessionEnvironment: LocalSessionEnvironmentBridge;
+  BrowserUse: BrowserUseBridge;
   CCDScheduledTasks: ScheduledTasksBridge;
   FileSystem: FileSystemBridge;
+  OfficeAddinFiles: ConnectedOfficeFilesBridge;
   Preferences: PreferencesBridge;
   Window: WindowBridge;
 };

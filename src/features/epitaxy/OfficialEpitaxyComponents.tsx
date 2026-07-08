@@ -11,8 +11,10 @@ export type OfficialSessionRef = {
 
 export type OfficialDropdownItem = {
   checked?: boolean;
+  closeOnClick?: boolean;
   disabled?: boolean;
   icon?: string;
+  items?: OfficialDropdownItem[];
   keepOpen?: boolean;
   label: ReactNode;
   noQuickKey?: boolean;
@@ -20,8 +22,12 @@ export type OfficialDropdownItem = {
   separatorBefore?: boolean;
   shortcut?: string;
   status?: ReactNode;
+  subtitle?: ReactNode;
+  suffix?: ReactNode;
+  submenuFooterItems?: OfficialDropdownItem[];
   tooltip?: ReactNode;
   trailing?: ReactNode;
+  type?: "button" | "checkbox" | "loading" | "section-header" | "separator" | "submenu";
 };
 
 type OfficialButtonProps = {
@@ -41,6 +47,7 @@ type OfficialButtonProps = {
 
 type OfficialDropdownButtonProps = {
   align?: "start" | "center" | "end";
+  alignOffset?: number;
   ariaLabel?: string;
   className?: string;
   disabled?: boolean;
@@ -52,9 +59,11 @@ type OfficialDropdownButtonProps = {
   mode?: "text" | "icon" | "chevron";
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
+  popupClassName?: string;
   pressed?: boolean;
   revealChevron?: "always" | "hover" | "never";
   side?: "top" | "right" | "bottom" | "left";
+  sideOffset?: number;
   size?: "small" | "base" | "large";
   triggerKey?: string;
   variant?: "uncontained" | "contained" | "muted";
@@ -378,6 +387,7 @@ export function OfficialModal({
 
 export function OfficialDropdownButton({
   align = "end",
+  alignOffset,
   ariaLabel,
   className,
   disabled,
@@ -389,15 +399,19 @@ export function OfficialDropdownButton({
   mode,
   onOpenChange,
   open,
+  popupClassName,
   pressed,
   revealChevron = "always",
   side = "bottom",
+  sideOffset,
   size = "base",
   triggerKey,
   variant = "uncontained",
 }: OfficialDropdownButtonProps) {
   const actualMode = mode ?? (icon ? "icon" : "text");
   const hasPopup = items.length > 0 || Boolean(extraSections?.some((section) => section.items.length > 0));
+  const resolvedAlignOffset = alignOffset ?? (align === "end" ? 0 : actualMode === "text" ? -6 : -8);
+  const resolvedSideOffset = sideOffset ?? 8;
   const trigger = (
     <Menu.Trigger
       aria-label={ariaLabel}
@@ -426,8 +440,8 @@ export function OfficialDropdownButton({
       {trigger}
       {hasPopup ? (
         <Menu.Portal>
-          <Menu.Positioner align={align} alignOffset={align === "end" ? 0 : actualMode === "text" ? -6 : -8} className="epitaxy-root z-[60]" side={side} sideOffset={8}>
-            <Menu.Popup className={officialMenuPopupClass} data-cds="Menu">
+          <Menu.Positioner align={align} alignOffset={resolvedAlignOffset} className="epitaxy-root z-[60]" side={side} sideOffset={resolvedSideOffset}>
+            <Menu.Popup className={`${officialMenuPopupClass} ${popupClassName ?? ""}`} data-cds="Menu">
               <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
               <div className={officialMenuScrollClass}>
                 {items.length > 0 ? (
@@ -547,7 +561,7 @@ export function OfficialUserMessage({
   rewindIcon?: string;
 }) {
   return (
-    <div className={"group/msg flex justify-start items-start gap-g3 w-full transition-opacity duration-200 " + (isQueued ? "opacity-50 hover:opacity-80" : "")}>
+    <div className={`group/msg flex justify-start items-start gap-g3 w-full transition-opacity duration-200 ${isQueued ? "opacity-50 hover:opacity-80" : ""}`}>
       <div className="flex flex-col items-start gap-g6 max-w-[75%] min-w-0">
         <div className={`${userMessageClass} max-w-full`}>
           {children}
@@ -1083,6 +1097,11 @@ function OfficialMenuItems({ items }: { items: OfficialDropdownItem[] }) {
 }
 
 function MenuItemFragment({ hasChecks, item }: { hasChecks: boolean; item: OfficialDropdownItem }) {
+  if (item.type === "separator") return <OfficialMenuSeparator />;
+  if (item.type === "section-header") return <OfficialMenuHeader>{item.label}</OfficialMenuHeader>;
+  if (item.type === "loading") return <OfficialLoadingMenuItem item={item} />;
+  if (item.items?.length || item.type === "submenu") return <OfficialSubmenuItem hasChecks={hasChecks} item={item} />;
+
   const hasIcon = Boolean(item.icon);
   const checkProps = item.checked === undefined
     ? {}
@@ -1092,9 +1111,9 @@ function MenuItemFragment({ hasChecks, item }: { hasChecks: boolean; item: Offic
       {item.separatorBefore ? <OfficialMenuSeparator /> : null}
       <Menu.Item
         className={[officialMenuItemBaseClass, hasIcon ? "gap-g6" : "gap-g3"].join(" ")}
-        closeOnClick={item.keepOpen ? false : undefined}
         disabled={item.disabled}
         onClick={item.onSelect}
+        closeOnClick={item.keepOpen || item.closeOnClick === false ? false : undefined}
         {...checkProps}
       >
         {item.icon ? (
@@ -1102,7 +1121,7 @@ function MenuItemFragment({ hasChecks, item }: { hasChecks: boolean; item: Offic
             <Icon name={item.icon} size="sm" bold={item.checked} />
           </span>
         ) : null}
-        <span className="flex-1 min-w-0 truncate pr-[16px]">{item.label}</span>
+        <OfficialMenuItemLabel item={item} />
         {hasChecks ? (
           <span className="flex items-center justify-center size-[16px] shrink-0 ml-[6px] text-[var(--accent)]" style={officialMenuIconStyle}>
             {item.checked ? <Icon name="CheckSelection" size="sm" /> : null}
@@ -1110,9 +1129,87 @@ function MenuItemFragment({ hasChecks, item }: { hasChecks: boolean; item: Offic
         ) : null}
         {renderMenuItemStatus(item.status)}
         {item.shortcut ? <OfficialShortcut keys={item.shortcut} /> : null}
+        {item.suffix}
         {item.trailing}
       </Menu.Item>
     </>
+  );
+}
+
+function OfficialSubmenuItem({ hasChecks, item }: { hasChecks: boolean; item: OfficialDropdownItem }) {
+  const hasIcon = Boolean(item.icon);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      {item.separatorBefore ? <OfficialMenuSeparator /> : null}
+      <Menu.SubmenuRoot open={open} onOpenChange={(nextOpen) => setOpen(nextOpen)}>
+        <Menu.SubmenuTrigger
+          className={[officialMenuItemBaseClass, hasIcon ? "gap-g6" : "gap-g3"].join(" ")}
+          delay={0}
+          disabled={item.disabled}
+          onClick={() => setOpen(true)}
+          onPointerEnter={() => setOpen(true)}
+          openOnHover
+        >
+          {item.icon ? (
+            <span className={["relative flex items-center justify-center size-[14px] shrink-0", item.checked ? "text-[var(--accent)]" : ""].join(" ")} style={officialMenuIconStyle}>
+              <Icon name={item.icon} size="sm" bold={item.checked} />
+            </span>
+          ) : null}
+          <OfficialMenuItemLabel item={item} />
+          {hasChecks ? <span className="size-[16px] shrink-0 ml-[6px]" /> : null}
+          {renderMenuItemStatus(item.status)}
+          {item.shortcut ? <OfficialShortcut keys={item.shortcut} /> : null}
+          {item.suffix}
+          {item.trailing}
+          <span className="flex items-center justify-center size-[16px] shrink-0 ml-[6px] text-t6" style={officialMenuIconStyle}>
+            <Icon name="ChevronRightMedium" size="sm" />
+          </span>
+        </Menu.SubmenuTrigger>
+        <Menu.Portal>
+          <Menu.Positioner align="start" className="epitaxy-root z-[70]" side="right" sideOffset={4}>
+            <Menu.Popup className={officialMenuPopupClass} data-cds="Menu">
+              <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
+              <div className={officialMenuScrollClass}>
+                <Menu.Group className="flex flex-col">
+                  <OfficialMenuItems items={item.items ?? []} />
+                  {item.submenuFooterItems?.length ? (
+                    <>
+                      <OfficialMenuSeparator />
+                      <OfficialMenuItems items={item.submenuFooterItems} />
+                    </>
+                  ) : null}
+                </Menu.Group>
+              </div>
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.SubmenuRoot>
+    </>
+  );
+}
+
+function OfficialLoadingMenuItem({ item }: { item: OfficialDropdownItem }) {
+  return (
+    <>
+      {item.separatorBefore ? <OfficialMenuSeparator /> : null}
+      <Menu.Item className={[officialMenuItemBaseClass, "gap-g6"].join(" ")} disabled>
+        <span className="relative flex items-center justify-center size-[14px] shrink-0" style={officialMenuIconStyle}>
+          <Icon name={item.icon ?? "Spinner"} size="sm" />
+        </span>
+        <span className="flex-1 min-w-0 truncate pr-[16px]">{item.label || "Loading…"}</span>
+      </Menu.Item>
+    </>
+  );
+}
+
+function OfficialMenuItemLabel({ item }: { item: OfficialDropdownItem }) {
+  if (!item.subtitle) return <span className="flex-1 min-w-0 truncate pr-[16px]">{item.label}</span>;
+  return (
+    <span className="flex flex-1 min-w-0 flex-col pr-[16px]">
+      <span className="truncate">{item.label}</span>
+      <span className="truncate text-footnote text-t6">{item.subtitle}</span>
+    </span>
   );
 }
 

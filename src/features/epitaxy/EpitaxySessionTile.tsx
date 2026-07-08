@@ -32,9 +32,19 @@ import {
   parseCoworkConversationStatus,
   type CoworkConversationStatusState,
 } from "./cowork/CoworkConversationStatus";
+import { createCoworkAddMenuItems } from "./cowork/CoworkAddMenuItems";
+import {
+  OfficialCoworkComposer,
+  OfficialCoworkDirectoryApprovalCard,
+  OfficialCoworkSessionHeader,
+  OfficialCoworkThinkingBlock,
+  OfficialCoworkUserMessage,
+  isCoworkDirectoryPermissionRequest,
+  isCoworkDirectoryToolName,
+} from "./cowork/OfficialCoworkComponents";
+import { CoworkActivityPanelHeaderToggle } from "./cowork/CoworkActivityPanelShell";
 import { CoworkSessionActivityPanel } from "./cowork/CoworkSessionActivityPanel";
-import { CoworkSelectedFiles } from "./cowork/CoworkSelectedFiles";
-import { formatCoworkPromptWithUploadedFiles, parseCoworkUploadedFilesText, type CoworkUploadedFile } from "./cowork/coworkUploadedFiles";
+import { coworkUploadedFilePaths, formatCoworkPromptWithUploadedFiles, mergeCoworkUploadedFiles, parseCoworkUploadedFilesText, type CoworkUploadedFile } from "./cowork/coworkUploadedFiles";
 import { createOfficialSessionStreamSmoother, type OfficialStreamSnapshot } from "./officialStreamSmoother";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
@@ -177,7 +187,7 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
   return (
     <div className="epitaxy-root select-none h-full w-full flex flex-col">
       <div className="flex-1 min-h-0">
-        <EpitaxyTileLayout>{renderChatTile()}</EpitaxyTileLayout>
+        <EpitaxyTileLayout flushLeading={sessionSourceHint === "epitaxy"}>{renderChatTile()}</EpitaxyTileLayout>
       </div>
     </div>
   );
@@ -226,7 +236,7 @@ function EpitaxySecondPane({ isLonePane, onClose, onMovePane, onNavigate, paneIn
 
   return (
     <div className="epitaxy-root select-none flex-1 min-h-0 flex flex-col overflow-hidden">
-      <EpitaxyTileLayout>{renderChatTile()}</EpitaxyTileLayout>
+      <EpitaxyTileLayout flushLeading={sessionSourceHint === "epitaxy"}>{renderChatTile()}</EpitaxyTileLayout>
     </div>
   );
 }
@@ -397,6 +407,7 @@ function EpitaxyChatPanel({
             disabled={isLoading || Boolean(error)}
             isResponding={isResponding}
             onOpenDiff={isCoworkSurface ? undefined : openDiff}
+            onNavigate={onNavigate}
             onSubmit={async (text, input) => {
               await sendMessageToSession(source, initialSessionId, text, input);
               await reload();
@@ -430,11 +441,12 @@ function EpitaxyChatPanel({
           session={session}
           sessionRef={effectiveSessionRef}
           hideViews={isCoworkSurface}
+          surface={sessionSurface}
           title={title}
         />
         {chatBody}
       </div>
-      {activeView && !isCoworkSurface ? (
+      {activeView && (!isCoworkSurface || activeView === "file") ? (
         <EpitaxySidePaneTile
           activeView={activeView}
           fileView={fileView}
@@ -474,7 +486,7 @@ function officialSessionHeaderTitle(session: SessionSummary | null, initialSessi
   return title;
 }
 
-function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, hideViews = false, isTitleLoading, isTopLeft, onClose, onSessionRemoved, onViewSelect, paneIndex, session, sessionRef, title }: {
+function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, hideViews = false, isTitleLoading, isTopLeft, onClose, onSessionRemoved, onViewSelect, paneIndex, session, sessionRef, surface, title }: {
   activeView?: OfficialViewPane;
   dragHandle?: ReactNode;
   hasRunningTasks?: boolean;
@@ -487,8 +499,19 @@ function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, hideViews 
   paneIndex: number;
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef | null;
+  surface: SessionSurface;
   title: string;
 }) {
+  if (surface === "cowork") {
+    return (
+      <OfficialCoworkSessionHeader
+        dragHandle={dragHandle}
+        isTitleLoading={isTitleLoading}
+        rightAction={sessionRef ? <CoworkActivityPanelHeaderToggle sessionId={sessionRef.id} /> : undefined}
+        title={title}
+      />
+    );
+  }
   return (
     <OfficialSessionHeader
       activeView={activeView}
@@ -1465,6 +1488,9 @@ async function readPreviewText(bridge: LocalSessionsBridge, sessionId: string, f
   const sessionValue = await bridge.readSessionFile?.(sessionId, filePath).catch(() => null);
   const sessionText = previewTextFromBridgeValue(sessionValue);
   if (sessionText !== null) return sessionText;
+  const localValue = await desktopBridge.FileSystem.readLocalFile?.(filePath).catch(() => null);
+  const localText = previewTextFromBridgeValue(localValue);
+  if (localText !== null) return localText;
   const cwdResult = await bridge.readFileAtCwd?.(sessionId, filePath);
   if (cwdResult?.ok === false) throw new Error(cwdResult.error ?? cwdResult.stderr ?? "Failed to read file");
   return cwdResult?.stdout ?? "";
@@ -2849,7 +2875,7 @@ function TranscriptRowContent({ coworkStatus, initialCount, isResponding, lastEn
   const isStreaming = row.kind === "assistant" && isResponding && row.entryIdx === lastEntryIdx;
   const content = row.kind === "user" ? <OfficialUserEntryMessage entry={row.entry} /> : <OfficialAssistantEntryMessage entry={row.entry} isStreaming={isStreaming} />;
   if (row.kind === "user") {
-    return <div data-epitaxy-entry={row.entry.id} className={`origin-left ${isNewUserEntry ? "epitaxy-user-enter" : ""}`}>{content}</div>;
+    return <div data-epitaxy-entry={row.entry.id} className={`${surface === "cowork" ? "origin-right" : "origin-left"} ${isNewUserEntry ? "epitaxy-user-enter" : ""}`}>{content}</div>;
   }
   return <div data-epitaxy-entry={row.entry.id}>{content}</div>;
 }
@@ -3237,15 +3263,21 @@ function OfficialUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
   }, [actions, entry.id]);
   const onFork = !isCoworkSurface && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
   const onRewind = actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
+  const messageBody = (
+    <div className="flex flex-col gap-g4">
+      {fileItems.length > 0 ? <UserUploadedFiles files={fileItems.map((item) => item.file)} /> : null}
+      {textItems.map((item) => <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty" key={item.id}>{renderInlineMarkdown(item.text, item.id)}</p>)}
+      {bashItems.map((item) => <UserBashBlock item={item} key={item.id} />)}
+      {eventItems.map((item) => <p className="text-body text-t7 whitespace-pre-wrap [overflow-wrap:anywhere]" key={item.id}>{item.content}</p>)}
+    </div>
+  );
 
+  if (isCoworkSurface) {
+    return <OfficialCoworkUserMessage>{messageBody}</OfficialCoworkUserMessage>;
+  }
   return (
-    <OfficialUserMessage copyText={copyText} createdAt={entry.timestamp} onFork={onFork} onRewind={onRewind} rewindAriaLabel={isCoworkSurface ? "Restart conversation from here" : undefined} rewindIcon={isCoworkSurface ? "Reload" : undefined}>
-      <div className="flex flex-col gap-g4">
-        {fileItems.length > 0 ? <UserUploadedFiles files={fileItems.map((item) => item.file)} /> : null}
-        {textItems.map((item) => <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty" key={item.id}>{renderInlineMarkdown(item.text, item.id)}</p>)}
-        {bashItems.map((item) => <UserBashBlock item={item} key={item.id} />)}
-        {eventItems.map((item) => <p className="text-body text-t7 whitespace-pre-wrap [overflow-wrap:anywhere]" key={item.id}>{item.content}</p>)}
-      </div>
+    <OfficialUserMessage copyText={copyText} createdAt={entry.timestamp} onFork={onFork} onRewind={onRewind}>
+      {messageBody}
     </OfficialUserMessage>
   );
 }
@@ -3267,7 +3299,7 @@ function UserUploadedFiles({ files }: { files: CoworkUploadedFile[] }) {
 function OfficialAssistantEntryMessage({ entry, isStreaming = false }: { entry: TranscriptEntry; isStreaming?: boolean }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
   const isCoworkSurface = actions?.sessionSurface === "cowork";
-  const visibleItems = entry.items.filter(isVisibleTranscriptEntryItem);
+  const visibleItems = entry.items.filter((item) => isCoworkSurface ? item.kind !== "uploaded-file" : isVisibleTranscriptEntryItem(item));
   const copyText = visibleItems.flatMap((item) => item.kind === "text" ? [item.text] : []).join("\n\n") || undefined;
   const forkFromHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.forkSession) return;
@@ -3296,6 +3328,7 @@ function OfficialAssistantEntryMessage({ entry, isStreaming = false }: { entry: 
   return (
     <OfficialAssistantMessage copyText={copyText} createdAt={isStreaming ? undefined : entry.timestamp} onFork={onFork} onRateMessage={onRateMessage} onRewind={onRewind} rateMessageUuid={entry.id} showPinAction={!isCoworkSurface}>
       {visibleItems.map((item) => {
+        if (item.kind === "thinking") return <OfficialCoworkThinkingBlock text={item.text} key={item.id} />;
         if (item.kind === "text") {
           return (
             <div className="epitaxy-markdown" key={item.id}>
@@ -3306,6 +3339,7 @@ function OfficialAssistantEntryMessage({ entry, isStreaming = false }: { entry: 
         if (item.kind === "tools") return <AssistantToolsBlock item={item} key={item.id} />;
         if (item.kind === "error") return <div className="rounded-r3 border border-[var(--fill-destructive-default)] px-p3 py-p2 text-code text-destructive-default whitespace-pre-wrap break-words" key={item.id}>{item.text}</div>;
         if (item.kind === "bash") return <UserBashBlock item={item} key={item.id} />;
+        if (item.kind === "uploaded-file") return null;
         return <div className="text-body text-t6 whitespace-pre-wrap break-words" key={item.id}>{item.content}</div>;
       })}
     </OfficialAssistantMessage>
@@ -3586,6 +3620,9 @@ function officialToolRowSummary(tool: TranscriptToolUse): OfficialToolRowSummary
   const input = tool.input;
   const inputString = (key: string) => stringValue(input[key]);
   const kind = officialToolRowKind(tool.name);
+  if (isCoworkDirectoryToolName(tool.name)) {
+    return { kind, meta: tool.status === "awaiting_approval" ? "Request" : undefined, runningVerb: "Request cowork directory", verb: "Request cowork directory" };
+  }
   switch (tool.name) {
     case "Bash":
     case "BashTool": {
@@ -4491,6 +4528,13 @@ function InlineToolPermissionApprovals({ bridge, sessionId }: { bridge: LocalSes
   if (!request) return null;
 
   const busy = resolvingId === request.requestId;
+  if (isCoworkDirectoryPermissionRequest(request)) {
+    return (
+      <OfficialCoworkDirectoryApprovalCard busy={busy} onDecide={(decision) => void decide(decision)} request={request}>
+        {resolveError ? <div className="text-footnote text-extended-pink">{resolveError}</div> : null}
+      </OfficialCoworkDirectoryApprovalCard>
+    );
+  }
 
   return (
     <OfficialToolApprovalCard
@@ -4773,6 +4817,7 @@ function ExistingSessionComposer({
   disabled,
   isResponding,
   onOpenDiff,
+  onNavigate,
   onScrollToBottom,
   onSubmit,
   reload,
@@ -4785,6 +4830,7 @@ function ExistingSessionComposer({
   disabled: boolean;
   isResponding: boolean;
   onOpenDiff?: () => void;
+  onNavigate: (path: string) => void;
   onScrollToBottom: () => void;
   onSubmit: (text: string, input?: SendMessageInput) => Promise<void>;
   reload: () => Promise<void>;
@@ -4798,7 +4844,7 @@ function ExistingSessionComposer({
   const [model, setModel] = useState(() => normalizeCodeModelValue(session?.model));
   const [permissionMode, setPermissionMode] = useState(session?.permissionMode ?? "default");
   const [effort, setEffort] = useState(() => normalizeEffortValue(session?.effort));
-  const [selectedFilePaths, setSelectedFilePaths] = useState<string[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<CoworkUploadedFile[]>([]);
   const [isConfigBusy, setConfigBusy] = useState(false);
   const submitRef = useRef<() => Promise<void>>(async () => {});
   const clearComposerRef = useRef<() => void>(() => {});
@@ -4813,13 +4859,13 @@ function ExistingSessionComposer({
   const respondingRef = useRef(isResponding);
   const isCoworkSurface = surface === "cowork";
   const isBashMode = !isCoworkSurface && text.trimStart().startsWith("!");
-  const placeholder = isCoworkSurface ? "Reply to Claude…" : "Type / for commands";
+  const placeholder = isCoworkSurface ? "Write a message..." : "Type / for commands";
   const canStop = isResponding && Boolean(sessionRef && bridge.stop);
-  const hasSelectedFiles = isCoworkSurface && selectedFilePaths.length > 0;
-  const canSubmit = (text.trim().length > 0 || hasSelectedFiles) && !disabled && !isSubmitting && !isResponding;
+  const hasSelectedFiles = isCoworkSurface && selectedFiles.length > 0;
+  const canSubmit = (text.trim().length > 0 || hasSelectedFiles) && !disabled && !isSubmitting && (!isResponding || isCoworkSurface);
   const editor = useEditor({
     content: "",
-    editable: !disabled && !isSubmitting && !isResponding,
+    editable: !disabled && !isSubmitting && (!isResponding || isCoworkSurface),
     editorProps: {
       attributes: {
         "aria-label": "Prompt",
@@ -4836,7 +4882,7 @@ function ExistingSessionComposer({
         }
         if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.isComposing && !hasSlashMenu) {
           event.preventDefault();
-          if (!respondingRef.current) void submitRef.current();
+          if (!respondingRef.current || isCoworkSurface) void submitRef.current();
           return true;
         }
         return false;
@@ -4861,7 +4907,7 @@ function ExistingSessionComposer({
     onUpdate: ({ editor: nextEditor }) => {
       setText(nextEditor.getText({ blockSeparator: "\n" }));
     },
-  }, [placeholder, slashMenuComponent]);
+  }, [isCoworkSurface, placeholder, slashMenuComponent]);
 
   useEffect(() => {
     setModel(normalizeCodeModelValue(session?.model));
@@ -4870,7 +4916,7 @@ function ExistingSessionComposer({
   }, [session?.effort, session?.model, session?.permissionMode]);
 
   useEffect(() => {
-    setSelectedFilePaths([]);
+    setSelectedFiles([]);
   }, [sessionRef?.id]);
 
   useEffect(() => {
@@ -4884,8 +4930,8 @@ function ExistingSessionComposer({
   }, [editor, isBashMode]);
 
   useEffect(() => {
-    editor?.setEditable(!disabled && !isSubmitting && !isResponding);
-  }, [disabled, editor, isResponding, isSubmitting]);
+    editor?.setEditable(!disabled && !isSubmitting && (!isResponding || isCoworkSurface));
+  }, [disabled, editor, isCoworkSurface, isResponding, isSubmitting]);
 
   const clearComposer = useCallback(() => {
     editor?.commands.clearContent(true);
@@ -4898,17 +4944,18 @@ function ExistingSessionComposer({
 
   const submit = useCallback(async () => {
     if (!canSubmit) return;
-    const filesForTurn = isCoworkSurface ? selectedFilePaths : [];
+    const filesForTurn = isCoworkSurface ? selectedFiles : [];
     const payload = formatCoworkPromptWithUploadedFiles(text.trim(), filesForTurn);
+    const filePathsForTurn = coworkUploadedFilePaths(filesForTurn);
     setSubmitting(true);
     try {
-      await onSubmit(payload, filesForTurn.length > 0 ? { userSelectedFiles: filesForTurn } : undefined);
+      await onSubmit(payload, filePathsForTurn.length > 0 ? { userSelectedFiles: filePathsForTurn } : undefined);
       clearComposer();
-      if (filesForTurn.length > 0) setSelectedFilePaths([]);
+      if (filesForTurn.length > 0) setSelectedFiles([]);
     } finally {
       setSubmitting(false);
     }
-  }, [canSubmit, clearComposer, isCoworkSurface, onSubmit, selectedFilePaths, text]);
+  }, [canSubmit, clearComposer, isCoworkSurface, onSubmit, selectedFiles, text]);
 
   useEffect(() => {
     submitRef.current = submit;
@@ -4978,11 +5025,11 @@ function ExistingSessionComposer({
       title: "Add files or photos",
     });
     if (paths.length === 0) return;
-    setSelectedFilePaths((current) => Array.from(new Set([...current, ...paths])));
+    setSelectedFiles((current) => mergeCoworkUploadedFiles(current, paths));
   };
 
   const removeSelectedFile = (filePath: string) => {
-    setSelectedFilePaths((current) => current.filter((item) => item !== filePath));
+    setSelectedFiles((current) => current.filter((item) => item.path !== filePath));
   };
 
   const modelItems = codeModelOptions.map((option) => ({
@@ -5002,16 +5049,54 @@ function ExistingSessionComposer({
   }));
   const modelExtraSections = !isCoworkSurface && bridge.setEffort ? [{ key: "effort", header: "Effort", items: effortItems }] : undefined;
   const plusMenuItems = isCoworkSurface
-    ? [
-      { icon: "FileAdd", label: "Add files or photos", onSelect: () => void addFiles() },
-      { icon: "Folder1", label: "Add folder", onSelect: () => void addFolder() },
-    ]
+    ? createCoworkAddMenuItems({
+      includeAddFolder: Boolean(sessionRef),
+      onAddFiles: () => void addFiles(),
+      onAddFolder: () => void addFolder(),
+      onNavigate,
+    })
     : [
       { icon: "Folder1", label: "Add folder", onSelect: () => void addFolder() },
     ];
 
+  if (isCoworkSurface) {
+    return (
+      <OfficialCoworkComposer
+        canStop={canStop}
+        canSubmit={canSubmit}
+        childrenAbove={<InlineToolPermissionApprovals bridge={bridge} sessionId={sessionRef?.id} />}
+        disabled={disabled}
+        editor={editor}
+        isSubmitting={isSubmitting}
+        modelItems={modelItems}
+        modelLabel={modelLabel(model)}
+        modelPickerDisabled={disabled || isConfigBusy}
+        onContainerClick={(event) => {
+          if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+          editor?.commands.focus("end");
+        }}
+        onKeyDownCapture={(event) => {
+          const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
+          const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
+          if (event.key === "Escape" && !hasSlashMenu) {
+            event.preventDefault();
+            clearComposer();
+          }
+        }}
+        onRemoveFile={removeSelectedFile}
+        onScrollToBottom={onScrollToBottom}
+        onStop={() => void stopResponse()}
+        onSubmit={() => void submit()}
+        plusMenuItems={plusMenuItems}
+        selectedFiles={selectedFiles}
+        showScrollButton={showScrollButton}
+        text={text}
+      />
+    );
+  }
+
   return (
-    <div data-skip-approval-enter={undefined} data-chat-input-container={isCoworkSurface || undefined} className={`epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout] ${isCoworkSurface ? "sticky bottom-0 mx-auto w-full pt-6 z-[5]" : ""}`}>
+    <div data-skip-approval-enter={undefined} className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]">
       <button
         aria-hidden={!showScrollButton}
         aria-label="Scroll to bottom"
@@ -5022,7 +5107,7 @@ function ExistingSessionComposer({
       >
         <Icon name="ChevronDownSmall" size="s" />
       </button>
-      {!isCoworkSurface ? <OfficialEpitaxyBranchRows bridge={bridge} onOpenDiff={onOpenDiff} session={session} sessionRef={sessionRef} /> : null}
+      <OfficialEpitaxyBranchRows bridge={bridge} onOpenDiff={onOpenDiff} session={session} sessionRef={sessionRef} />
       <InlineToolPermissionApprovals bridge={bridge} sessionId={sessionRef?.id} />
       <div
         className={`epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300 ${isBashMode ? "[&_.tiptap]:font-mono [&_.tiptap]:text-[length:var(--text-code)]" : ""}`}
@@ -5033,13 +5118,8 @@ function ExistingSessionComposer({
       >
         <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" data-surface="prompt" />
         {isBashMode ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-r7 shadow-[inset_0_0_0_1px_var(--extended-purple)]" /> : null}
-        <span className="sr-only" role="status">{isBashMode ? "Bash mode. Press Escape to return to chat." : isCoworkSurface ? "Chat input" : "Chat mode"}</span>
+        <span className="sr-only" role="status">{isBashMode ? "Bash mode. Press Escape to return to chat." : "Chat mode"}</span>
         <div aria-hidden="true" className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}><div className="min-h-0 overflow-hidden" /></div>
-        {isCoworkSurface ? (
-          <div className="px-p7 pt-p5">
-            <CoworkSelectedFiles filePaths={selectedFilePaths} onRemove={removeSelectedFile} />
-          </div>
-        ) : null}
         <div className="relative flex w-full">
           {isBashMode ? <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
           <EditorContent
@@ -5077,22 +5157,12 @@ function ExistingSessionComposer({
         permissionDanger={permissionMode === "bypassPermissions"}
         permissionItems={permissionItems}
         permissionLabel={permissionModeLabel(permissionMode)}
-        plusAriaLabel={isCoworkSurface ? "Add files, connectors, and more" : "Add"}
+        plusAriaLabel="Add"
         plusMenuItems={plusMenuItems}
         session={session}
         sessionRef={sessionRef}
-        hideSessionSource={isCoworkSurface}
-        onInsertSlashCommand={isCoworkSurface ? undefined : insertSlashCommand}
+        onInsertSlashCommand={insertSlashCommand}
       />
-      {isCoworkSurface ? <CoworkComposerDisclaimer /> : null}
-    </div>
-  );
-}
-
-function CoworkComposerDisclaimer() {
-  return (
-    <div role="note" data-disclaimer className="bg-bg-100 text-text-500 text-center text-xs py-2">
-      Claude is AI and can make mistakes. Please double-check responses.
     </div>
   );
 }
@@ -5133,7 +5203,11 @@ type OfficialComposerFooterProps = {
   permissionDanger?: boolean | null;
   permissionItems: OfficialComposerDropdownItem[];
   permissionLabel: ReactNode;
+  plusMenuAlignOffset?: number;
   plusMenuItems?: OfficialComposerDropdownItem[];
+  plusMenuPopupClassName?: string;
+  plusMenuSide?: "top" | "right" | "bottom" | "left";
+  plusMenuSideOffset?: number;
   session?: SessionSummary | null;
   sessionRef?: EpitaxySessionRef | null;
   showDictationButton?: boolean;
@@ -5185,7 +5259,11 @@ function OfficialComposerFooter({
   permissionDanger = null,
   permissionItems,
   permissionLabel,
+  plusMenuAlignOffset,
   plusMenuItems,
+  plusMenuPopupClassName,
+  plusMenuSide,
+  plusMenuSideOffset,
   session,
   sessionRef = null,
   showDictationButton = false,
@@ -5217,7 +5295,7 @@ function OfficialComposerFooter({
         {plusAriaLabel === "Add" ? (
           <OfficialDropdownButton ariaLabel="Add" align="start" className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} revealChevron="never" side="top" size="small" />
         ) : (
-          <OfficialDropdownButton align="start" ariaLabel={plusAriaLabel} className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} revealChevron="never" side="top" size="small" />
+          <OfficialDropdownButton align="start" alignOffset={plusMenuAlignOffset} ariaLabel={plusAriaLabel} className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} popupClassName={plusMenuPopupClassName} revealChevron="never" side={plusMenuSide ?? "top"} sideOffset={plusMenuSideOffset} size="small" />
         )}
         <input ref={fileInputRef} type="file" multiple accept={supportsFileAttachments ? undefined : "image/png,image/jpeg,image/gif,image/webp"} className="hidden" onChange={onFileInputChange} />
         {sessionRef && !hideSessionSource ? <span className="flex min-w-0"><OfficialSessionSource ariaLabel="Workspace" session={session ?? null} sessionRef={sessionRef} /></span> : null}

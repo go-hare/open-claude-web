@@ -1,6 +1,9 @@
 import type {
+  ConnectedBrowser,
+  ConnectedOfficeFile,
   DesktopBridge,
   DesktopPreferences,
+  LocalFileEntry,
   ScheduledTaskSummary,
   SessionSummary,
   StartSessionInput,
@@ -29,6 +32,32 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function joinPath(parentPath: string, name: string) {
+  const separator = parentPath.includes("\\") && !parentPath.includes("/") ? "\\" : "/";
+  return `${parentPath.replace(/[\\/]+$/, "")}${separator}${name}`;
+}
+
+function decodeFakeFilePath(filePathOrSessionId: string, encodedFilePath?: string) {
+  if (!encodedFilePath) return filePathOrSessionId;
+  try {
+    return decodeURIComponent(encodedFilePath);
+  } catch {
+    return encodedFilePath;
+  }
+}
+
+function fakeFolderEntries(folderPath: string): LocalFileEntry[] {
+  if (folderPath.endsWith("runtime-assets")) {
+    return [
+      { name: "notes.md", path: joinPath(folderPath, "notes.md"), isDirectory: false, isFile: true, size: 256 },
+    ];
+  }
+  return [
+    { name: "sample.txt", path: joinPath(folderPath, "sample.txt"), isDirectory: false, isFile: true, size: 128 },
+    { name: "runtime-assets", path: joinPath(folderPath, "runtime-assets"), isDirectory: true, isFile: false },
+  ];
 }
 
 function notifyFakeListeners(listeners: Set<FakeEventListener>, event: unknown) {
@@ -184,6 +213,7 @@ function buildFakeTranscript(index: number) {
 const scheduledTasks: ScheduledTaskSummary[] = [];
 
 const preferencesListeners = new Set<(preferences: DesktopPreferences) => void>();
+const fakeConnectedOfficeFileListeners = new Set<(files: ConnectedOfficeFile[]) => void>();
 
 let preferences: DesktopPreferences = {
   autoCreatePullRequests: false,
@@ -206,12 +236,49 @@ let fakeGlobalShortcut: string | null = null;
 let fakeMenuBarEnabled = true;
 let fakeStartupOnLoginEnabled = false;
 const fakeTrustedFolders = new Set<string>();
+const fakeLocalFiles = new Map<string, string>();
+let fakeConnectedOfficeFiles: ConnectedOfficeFile[] = [
+  {
+    id: "fake-office-budget",
+    document: "Budget.xlsx",
+    path: "/Users/apple/Downloads/Budget.xlsx",
+    status: "Connected",
+  },
+];
+let fakeConnectedBrowsers: ConnectedBrowser[] = [
+  {
+    deviceId: "chrome-work-0001",
+    name: "Chrome · Work",
+    osPlatform: "macOS",
+  },
+  {
+    deviceId: "chrome-research-0002",
+    name: "Chrome · Research",
+    osPlatform: "macOS",
+  },
+];
+let fakeSelectedBrowserId: string | null = fakeConnectedBrowsers[0]?.deviceId ?? null;
+let fakeBrowserSwitchCount = 0;
 let fakeLocalSessionEnvironment: Record<string, string> = {};
 
 const emitPreferences = () => {
   const snapshot = { ...preferences };
   preferencesListeners.forEach((listener) => listener(snapshot));
 };
+
+export function setFakeConnectedOfficeFiles(files: ConnectedOfficeFile[]) {
+  fakeConnectedOfficeFiles = files;
+  fakeConnectedOfficeFileListeners.forEach((listener) => listener(fakeConnectedOfficeFiles.slice()));
+}
+
+export function setFakeConnectedBrowsers(browsers: ConnectedBrowser[]) {
+  fakeConnectedBrowsers = browsers;
+  fakeSelectedBrowserId = browsers.some((browser) => browser.deviceId === fakeSelectedBrowserId) ? fakeSelectedBrowserId : browsers[0]?.deviceId ?? null;
+}
+
+export function getFakeBrowserSwitchCount() {
+  return fakeBrowserSwitchCount;
+}
 
 const workspace: WorkspaceContext = {
   mode: "local",
@@ -220,6 +287,33 @@ const workspace: WorkspaceContext = {
   hasWorktree: false,
   cwd: "/Users/apple/work-py/hare-code/claude-code",
 };
+
+function fakeDetectedProjects(targetKind: SessionSummary["kind"]): SessionSummary[] {
+  return [
+    {
+      id: "project_gateway_docs",
+      title: "Gateway docs",
+      updatedAt: "刚刚",
+      updatedAtMs: now,
+      kind: targetKind,
+      sessionKind: targetKind === "epitaxy" ? "cowork" : "code",
+      cwd: "/Users/apple/Downloads",
+      folders: ["/Users/apple/Downloads"],
+      repo: { name: "Workbench Org", branch: "main" },
+    },
+    {
+      id: "project_claude_desktop",
+      title: "Claude Desktop",
+      updatedAt: "今天",
+      updatedAtMs: now - 1000 * 60 * 8,
+      kind: targetKind,
+      sessionKind: targetKind === "epitaxy" ? "cowork" : "code",
+      cwd: workspace.cwd,
+      folders: workspace.cwd ? [workspace.cwd] : [],
+      repo: { name: "Workbench Org", branch: workspace.branchName },
+    },
+  ];
+}
 
 const titleFromPrompt = (prompt: string) => {
   const visiblePrompt = prompt.replace(/<uploaded_files>[\s\S]*?<\/uploaded_files>\s*/g, "").trim();
@@ -241,6 +335,7 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   getCodeStats: async () => buildFakeCodeStats(),
   getDefaultEffort: async () => "medium",
   getDefaultPermissionMode: async () => null,
+  getDetectedProjects: async () => fakeDetectedProjects(targetKind),
   getDiffFileContent: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
   getEffort: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind)?.effort ?? "medium",
   getGitInfo: async (idOrCwd) => ({
@@ -338,6 +433,7 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
       cwd: input.workspace.cwd,
       folders: selectedFolders,
       userSelectedFolders: selectedFolders,
+      mountedProjects: input.mountedProjects,
       effort: input.effort,
       model: input.model,
       permissionMode: input.permissionMode,
@@ -497,6 +593,19 @@ export const fakeDesktopBridge: DesktopBridge = {
       return true;
     },
   },
+  BrowserUse: {
+    listConnectedBrowsers: async () => fakeConnectedBrowsers.map((browser) => ({ ...browser })),
+    selectBrowser: async (deviceId) => {
+      const exists = fakeConnectedBrowsers.some((browser) => browser.deviceId === deviceId);
+      if (exists) fakeSelectedBrowserId = deviceId;
+      return exists;
+    },
+    switchBrowser: async () => {
+      fakeBrowserSwitchCount += 1;
+      return true;
+    },
+    getSelectedBrowserId: async () => fakeSelectedBrowserId,
+  },
   CCDScheduledTasks: {
     list: async () => scheduledTasks.slice(),
     get: async (id) => scheduledTasks.find((task) => task.id === id) ?? null,
@@ -533,6 +642,41 @@ export const fakeDesktopBridge: DesktopBridge = {
   },
   FileSystem: {
     browseFiles: async () => [`${workspace.cwd ?? "/tmp"}/sample.txt`],
+    listFilesInFolder: async (_sessionId, folderPath) => fakeFolderEntries(folderPath),
+    openLocalFile: async () => ({ ok: true }),
+    readLocalFile: async (filePathOrSessionId, encodedFilePath) => {
+      const filePath = decodeFakeFilePath(filePathOrSessionId, encodedFilePath);
+      return { content: fakeLocalFiles.get(filePath) ?? "", path: filePath };
+    },
+    showInFolder: async () => true,
+    writeLocalFile: async (filePathOrSessionId, encodedFilePathOrData, dataOrOptions) => {
+      const hasOfficialPath = typeof dataOrOptions === "string" || dataOrOptions instanceof Uint8Array;
+      const filePath = hasOfficialPath ? decodeFakeFilePath(filePathOrSessionId, encodedFilePathOrData) : filePathOrSessionId;
+      const data = hasOfficialPath ? dataOrOptions : encodedFilePathOrData;
+      const content = data instanceof Uint8Array ? new TextDecoder().decode(data) : String(data ?? "");
+      fakeLocalFiles.set(filePath, content);
+      return { ok: true, path: filePath };
+    },
+  },
+  OfficeAddinFiles: {
+    getConnectedFiles: async () => fakeConnectedOfficeFiles.slice(),
+    isFeatureEnabled: async () => true,
+    focusFile: async (fileIdOrPath) => {
+      const file = fakeConnectedOfficeFiles.find((item) => item.id === fileIdOrPath || item.path === fileIdOrPath);
+      return Boolean(file);
+    },
+    selectFile: async (fileIdOrPath) => {
+      const file = fakeConnectedOfficeFiles.find((item) => item.id === fileIdOrPath || item.path === fileIdOrPath) ?? null;
+      if (file) {
+        fakeConnectedOfficeFiles = fakeConnectedOfficeFiles.map((item) => ({ ...item, active: item.id === file.id }));
+        fakeConnectedOfficeFileListeners.forEach((listener) => listener(fakeConnectedOfficeFiles.slice()));
+      }
+      return file;
+    },
+    onConnectedFilesChange: (listener) => {
+      fakeConnectedOfficeFileListeners.add(listener);
+      return () => fakeConnectedOfficeFileListeners.delete(listener);
+    },
   },
   Preferences: {
     getWorkspaceContext: async () => workspace,

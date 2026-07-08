@@ -1,5 +1,5 @@
 import { fakeDesktopBridge } from "./fakeDesktopBridge";
-import { createDesktopBridgeFromOfficialNamespaces, type RawClaudeSettingsBridge, type RawClaudeWebBridge } from "./officialBridgeAdapter";
+import { createDesktopBridgeFromOfficialNamespaces, type RawClaudeOfficeAddinBridge, type RawClaudeSettingsBridge, type RawClaudeWebBridge } from "./officialBridgeAdapter";
 import type { DesktopBridge } from "./types";
 
 declare global {
@@ -7,6 +7,7 @@ declare global {
     claudeDesktopBridge?: DesktopBridge;
     "claude.web"?: RawClaudeWebBridge;
     "claude.settings"?: RawClaudeSettingsBridge;
+    "claude.officeAddin"?: RawClaudeOfficeAddinBridge;
     process?: {
       versions?: Record<string, string | undefined>;
     };
@@ -29,11 +30,15 @@ export const desktopBridgeMode = officialWebBridge
 export const isDesktopBridgeMissingInElectron = desktopBridgeMode === "missing";
 
 export const desktopBridge: DesktopBridge = window.claudeDesktopBridge
-  ?? (officialWebBridge ? createDesktopBridgeFromOfficialNamespaces(officialWebBridge, window["claude.settings"]) : fakeDesktopBridge);
+  ?? (officialWebBridge ? createDesktopBridgeFromOfficialNamespaces(officialWebBridge, window["claude.settings"], window["claude.officeAddin"]) : fakeDesktopBridge);
 
 export type {
+  BrowserUseBridge,
   CodeStats,
+  ConnectedBrowser,
+  ConnectedOfficeFile,
   ContextUsage,
+  CoworkMountedProject,
   DesktopBridge,
   DesktopPreferences,
   CreateScheduledTaskInput,
