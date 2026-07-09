@@ -4,10 +4,14 @@ import type { Editor } from "@tiptap/core";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { desktopBridge, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
+import { desktopBridge, type CoworkMountedProject, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { LocalSessionsBridge, SessionSummary } from "../../adapters/desktopBridge/types";
 import { OfficialButton, type OfficialDropdownItem } from "./OfficialEpitaxyComponents";
 import { Icon } from "../../shell/icons";
+import { createCoworkAddMenuItems, type CoworkAddMenuProject } from "./cowork/CoworkAddMenuItems";
+import { CoworkSelectedProjectIndicators } from "./cowork/CoworkProjectContext";
+import { CoworkSelectedFiles } from "./cowork/CoworkSelectedFiles";
+import type { CoworkUploadedFile } from "./cowork/coworkUploadedFiles";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
 import { OfficialSlashCommandSuggestion } from "./slash/OfficialSlashCommandSuggestion";
@@ -15,13 +19,22 @@ import type { OfficialSlashCommandMenuProps } from "./slash/OfficialSlashTypes";
 
 type OfficialCoworkPromptBoxProps = {
   busy: boolean;
+  focusRequestKey?: number;
   model: string;
+  onAddFiles?: () => void;
   onModelChange: (model: string) => void;
+  onNavigate?: (path: string) => void;
   onPermissionModeChange: (mode: PermissionMode) => void;
+  onProjectSelect?: (project: CoworkAddMenuProject) => void;
+  onRemoveFile?: (filePath: string) => void;
+  onRemoveProject?: (uuid: string) => void;
   onSubmit: () => void;
   onWorkspaceChange: (workspace: WorkspaceContext) => void;
   permissionMode: PermissionMode;
+  projectMenuItems?: CoworkAddMenuProject[];
   prompt: string;
+  selectedFiles?: CoworkUploadedFile[];
+  selectedProjects?: CoworkMountedProject[];
   setPrompt: (value: string) => void;
   workspace: WorkspaceContext;
 };
@@ -45,6 +58,7 @@ type OfficialCoworkPromptInputHandle = {
   insertSlashCommand: () => void;
 };
 
+const noop = () => undefined;
 const officialMenuPopupClass = "epitaxy-popup relative isolate min-w-[130px] max-w-[320px] max-h-[var(--available-height)] flex flex-col py-p5 rounded-r6 outline-none";
 const officialMenuScrollClass = "flex-1 min-h-0 flex flex-col overflow-y-auto";
 const officialMenuItemBaseClass = "relative isolate flex items-center min-h-[var(--h4)] shrink-0 px-p8 text-body select-none cursor-default outline-none hide-focus-ring before:content-[''] before:absolute before:-z-[1] before:inset-y-0 before:left-[6px] before:right-[6px] before:rounded-r5 data-[disabled]:opacity-50 data-[disabled]:pointer-events-none text-[var(--menu-item-color,var(--t8))] data-[highlighted]:before:bg-fill-uncontained-hover hover:before:bg-fill-uncontained-hover focus-visible:before:bg-fill-uncontained-hover";
@@ -62,13 +76,22 @@ const coworkPermissionItems: Array<{ icon: string; label: string; value: Permiss
 
 export function OfficialCoworkPromptBox({
   busy,
+  focusRequestKey = 0,
   model,
+  onAddFiles,
   onModelChange,
+  onNavigate,
   onPermissionModeChange,
+  onProjectSelect,
+  onRemoveFile,
+  onRemoveProject,
   onSubmit,
   onWorkspaceChange,
   permissionMode,
+  projectMenuItems = [],
   prompt,
+  selectedFiles = [],
+  selectedProjects = [],
   setPrompt,
   workspace,
 }: OfficialCoworkPromptBoxProps) {
@@ -94,16 +117,18 @@ export function OfficialCoworkPromptBox({
     onWorkspaceChange({ ...workspace, folders: uniqueStrings(folders) });
   }, [onWorkspaceChange, workspace]);
 
-  const addMenuItems: OfficialDropdownItem[] = [
-    {
-      icon: "Folder1",
-      label: "Add folder",
-      onSelect: async () => {
-        const paths = await desktopBridge.Preferences.getDirectoryPath?.(true);
-        if (paths?.length) updateSelectedFolders([...selectedFolders, ...paths]);
-      },
-    },
-  ];
+  const addFolder = useCallback(async () => {
+    const paths = await desktopBridge.Preferences.getDirectoryPath?.(true);
+    if (paths?.length) updateSelectedFolders([...selectedFolders, ...paths]);
+  }, [selectedFolders, updateSelectedFolders]);
+
+  const addMenuItems: OfficialDropdownItem[] = useMemo(() => (onAddFiles
+    ? createCoworkAddMenuItems({ includeAddFolder: true, onAddFiles, onAddFolder: addFolder, onNavigate, onSelectProject: onProjectSelect, projects: projectMenuItems })
+    : [{ icon: "Folder1", label: "Add folder", onSelect: addFolder }]), [addFolder, onAddFiles, onNavigate, onProjectSelect, projectMenuItems]);
+
+  useEffect(() => {
+    if (focusRequestKey > 0) window.setTimeout(() => inputRef.current?.focus(), 0);
+  }, [focusRequestKey]);
 
   return (
     <div>
@@ -130,6 +155,8 @@ export function OfficialCoworkPromptBox({
                   value={prompt}
                 />
               </div>
+              <CoworkSelectedFiles files={selectedFiles} onRemove={onRemoveFile ?? noop} />
+              <CoworkSelectedProjectIndicators onRemove={onRemoveProject ?? noop} projects={selectedProjects} />
               <OfficialCoworkToolbar
                 addMenuItems={addMenuItems}
                 busy={busy}

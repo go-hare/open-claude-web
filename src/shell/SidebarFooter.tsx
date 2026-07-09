@@ -24,7 +24,7 @@ export function SidebarFooter({ frame, mode, onNavigate }: SidebarFooterProps) {
       <div className="min-w-0 max-w-[75%]">
         <Menu.Root>
           <Menu.Trigger className="cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 outline-none transition-colors duration-fast hover:bg-[var(--df-hover)] focus-visible:shadow-focus" data-testid="user-menu-button" type="button">
-            <img alt="" aria-hidden="true" className="size-4 shrink-0 claude-rebuild-logo-img" src="/assets/v1/cd02a42d9-Vq_H3mgS.svg" />
+            <img alt="" aria-hidden="true" className="size-4 shrink-0 object-contain" src="/assets/v1/cd02a42d9-Vq_H3mgS.svg" />
             <span className="flex min-w-0 items-baseline gap-1 text-xs"><span className="shrink-0 text-primary">{displayName}</span><span aria-hidden="true" className="text-muted">·</span><span className="min-w-0 truncate text-muted">{organizationName}</span></span>
             <Icon name="CaretDown" size="xs" className="shrink-0 text-muted" />
           </Menu.Trigger>

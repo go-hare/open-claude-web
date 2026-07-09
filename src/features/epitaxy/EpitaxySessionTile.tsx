@@ -24,6 +24,7 @@ import {
   OfficialSessionSource,
   OfficialUserMessage,
   type OfficialDropdownItem,
+  type OfficialTranscriptMode,
   type OfficialViewPane,
 } from "./OfficialEpitaxyComponents";
 import { OfficialEpitaxyBranchRows } from "./OfficialEpitaxyBranchRows";
@@ -285,6 +286,7 @@ function EpitaxyChatPanel({
 }: EpitaxyChatPanelProps) {
   const { entries, error, isLoading, isResponding, isSessionNotFound, messages, pendingTurnStartedAt, reload, session, source, streamTokenEstimate } = useEpitaxySessionData(initialSessionId, sessionSourceHint);
   const [activeView, setActiveView] = useState<OfficialViewPane | undefined>(undefined);
+  const [transcriptMode, setTranscriptMode] = useState<OfficialTranscriptMode>("normal");
   const [fileView, setFileView] = useState<OfficialFileViewTarget | null>(null);
   const [previewTarget, setPreviewTarget] = useState<OfficialPreviewTarget | null>(null);
   const [subagentView, setSubagentView] = useState<OfficialSubagentTarget | null>(null);
@@ -400,7 +402,7 @@ function EpitaxyChatPanel({
           <div aria-hidden="true" className="epitaxy-top-scrim" />
           <div aria-hidden="true" className="epitaxy-bottom-scrim" style={{ opacity: showBottomFade ? 1 : 0 }} />
           <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
-            {renderTranscriptBody({ coworkStatus, entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState: updateTranscriptScrollState, pendingTurnStartedAt, ref: transcriptRef, reload, scrollRef: transcriptScrollRef, session, streamTokenEstimate, surface: sessionSurface, tasks })}
+            {renderTranscriptBody({ coworkStatus, entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState: updateTranscriptScrollState, pendingTurnStartedAt, ref: transcriptRef, reload, scrollRef: transcriptScrollRef, session, streamTokenEstimate, surface: sessionSurface, tasks, transcriptMode })}
           </EpitaxyTranscriptActionContext.Provider>
         </div>
         {!hideComposer && initialSessionId && !isSessionNotFound ? (
@@ -438,6 +440,7 @@ function EpitaxyChatPanel({
           isTopLeft={isTopLeft}
           onClose={onClose}
           onSessionRemoved={onSessionRemoved}
+          onTranscriptModeChange={setTranscriptMode}
           onViewSelect={selectView}
           paneIndex={paneIndex}
           session={session}
@@ -445,6 +448,7 @@ function EpitaxyChatPanel({
           hideViews={isCoworkSurface}
           surface={sessionSurface}
           title={title}
+          transcriptMode={transcriptMode}
         />
         {chatBody}
       </div>
@@ -488,7 +492,7 @@ function officialSessionHeaderTitle(session: SessionSummary | null, initialSessi
   return title;
 }
 
-function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, hideViews = false, isTitleLoading, isTopLeft, onClose, onSessionRemoved, onViewSelect, paneIndex, session, sessionRef, surface, title }: {
+function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, hideViews = false, isTitleLoading, isTopLeft, onClose, onSessionRemoved, onTranscriptModeChange, onViewSelect, paneIndex, session, sessionRef, surface, title, transcriptMode = "normal" }: {
   activeView?: OfficialViewPane;
   dragHandle?: ReactNode;
   hasRunningTasks?: boolean;
@@ -497,12 +501,14 @@ function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, hideViews 
   isTopLeft?: boolean;
   onClose?: () => void;
   onSessionRemoved?: () => void;
+  onTranscriptModeChange?: (mode: OfficialTranscriptMode) => void;
   onViewSelect?: (view: OfficialViewPane) => void;
   paneIndex: number;
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef | null;
   surface: SessionSurface;
   title: string;
+  transcriptMode?: OfficialTranscriptMode;
 }) {
   if (surface === "cowork") {
     return (
@@ -523,11 +529,13 @@ function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, hideViews 
       isTitleLoading={isTitleLoading}
       isTopLeft={isTopLeft}
       onSessionRemoved={onSessionRemoved}
+      onTranscriptModeChange={onTranscriptModeChange}
       onViewSelect={onViewSelect}
       paneIndex={paneIndex}
       session={session}
       sessionRef={sessionRef}
       title={title}
+      transcriptMode={transcriptMode}
     />
   );
 }
@@ -2344,7 +2352,7 @@ function formatGeneratedTokenCount(tokens: number) {
   return tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
 }
 
-function renderTranscriptBody({ coworkStatus, entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState, pendingTurnStartedAt, ref, reload, scrollRef, session, streamTokenEstimate, surface, tasks }: {
+function renderTranscriptBody({ coworkStatus, entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState, pendingTurnStartedAt, ref, reload, scrollRef, session, streamTokenEstimate, surface, tasks, transcriptMode }: {
   coworkStatus: CoworkConversationStatusState | null;
   entries: TranscriptEntry[];
   error: Error | null;
@@ -2362,6 +2370,7 @@ function renderTranscriptBody({ coworkStatus, entries, error, initialSessionId, 
   streamTokenEstimate: number;
   surface: SessionSurface;
   tasks: OfficialBackgroundTask[];
+  transcriptMode: OfficialTranscriptMode;
 }) {
   if (isSessionNotFound) return <SessionNotFound onBack={reload} />;
   if (error && entries.length === 0) return <SessionError error={error} onRetry={reload} />;
@@ -2388,7 +2397,7 @@ function renderTranscriptBody({ coworkStatus, entries, error, initialSessionId, 
       />
     );
   }
-  return <Transcript key={transcriptKey} entries={entries} isAwaitingReply={officialIsAwaitingReply(session, isResponding)} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} />;
+  return <Transcript key={transcriptKey} entries={entries} isAwaitingReply={officialIsAwaitingReply(session, isResponding)} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} transcriptMode={transcriptMode} />;
 }
 
 function officialIsAwaitingReply(session: SessionSummary | null, isResponding: boolean) {
@@ -2476,6 +2485,7 @@ type TranscriptProps = {
   sessionId?: string;
   streamTokenEstimate: number;
   tasks: OfficialBackgroundTask[];
+  transcriptMode: OfficialTranscriptMode;
 };
 
 type CodeUserChapter = {
@@ -2486,7 +2496,7 @@ type CodeUserChapter = {
 
 const emptyCodeUserChaptersByAfterId = new Map<string, CodeUserChapter[]>();
 
-const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isAwaitingReply, isResponding, onScrollState, pendingTurnStartedAt, restoreKey, scrollRef, sessionId, streamTokenEstimate, tasks }, ref) {
+const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isAwaitingReply, isResponding, onScrollState, pendingTurnStartedAt, restoreKey, scrollRef, sessionId, streamTokenEstimate, tasks, transcriptMode }, ref) {
   const rowsRef = useRef<TranscriptRow[]>([]);
   const initialCount = useRef(entries.length);
   const [userChapters, setUserChapters] = useState<CodeUserChapter[]>([]);
@@ -2584,7 +2594,7 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
             return (
               <div data-index={virtualRow.index} key={virtualRow.key} ref={officialVirtualizer.measureElement}>
                 <div className={virtualRow.index < rows.length - 1 ? "epitaxy-chat-size pb-[var(--chat-turn-gap)] empty:pb-0" : "epitaxy-chat-size"}>
-                  <TranscriptRowContent initialCount={initialCount.current} isAwaitingReply={isAwaitingReply} isResponding={isResponding} lastEntryIdx={lastEntryIdx} onPinUserChapter={pinUserChapter} onUnpinUserChapters={unpinUserChapters} pendingTurnStartedAt={pendingTurnStartedAt} row={row} sessionId={sessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} userChaptersByAfterId={userChaptersByAfterId} />
+                  <TranscriptRowContent initialCount={initialCount.current} isAwaitingReply={isAwaitingReply} isResponding={isResponding} lastEntryIdx={lastEntryIdx} onPinUserChapter={pinUserChapter} onUnpinUserChapters={unpinUserChapters} pendingTurnStartedAt={pendingTurnStartedAt} row={row} sessionId={sessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} transcriptMode={transcriptMode} userChaptersByAfterId={userChaptersByAfterId} />
                 </div>
               </div>
             );
@@ -2988,6 +2998,7 @@ function TranscriptRowContent({
   sessionId,
   streamTokenEstimate,
   tasks,
+  transcriptMode = "normal",
   userChaptersByAfterId,
 }: {
   initialCount: number;
@@ -3001,6 +3012,7 @@ function TranscriptRowContent({
   sessionId?: string;
   streamTokenEstimate: number;
   tasks: OfficialBackgroundTask[];
+  transcriptMode?: OfficialTranscriptMode;
   userChaptersByAfterId: Map<string, CodeUserChapter[]>;
 }) {
   if (row.kind === "running-tasks") return <OfficialRunningTasks isResponding={isResponding} tasks={tasks} />;
@@ -3018,6 +3030,7 @@ function TranscriptRowContent({
         onPinUserChapter={onPinUserChapter}
         onUnpinUserChapters={onUnpinUserChapters}
         showAwaitingDot={showCodeAwaitingDot}
+        transcriptMode={transcriptMode}
         userChaptersByAfterId={userChaptersByAfterId}
       />
     );
@@ -3409,13 +3422,22 @@ function CodeUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
   }, [actions, entry.id]);
   const onFork = actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
   const onRewind = actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
+  const [expandedLongText, setExpandedLongText] = useState(false);
+  const isLongText = (copyText?.length ?? 0) > 1200;
   const messageBody = (
-    <div className="flex flex-col gap-g4">
+    <>
       {fileItems.length > 0 ? <UserUploadedFiles files={fileItems.map((item) => item.file)} /> : null}
-      {textItems.map((item) => <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty" key={item.id}>{renderInlineMarkdown(item.text, item.id)}</p>)}
-      {bashItems.map((item) => <UserBashBlock item={item} key={item.id} />)}
-      {eventItems.map((item) => <p className="text-body text-t7 whitespace-pre-wrap [overflow-wrap:anywhere]" key={item.id}>{item.content}</p>)}
-    </div>
+      <div className={isLongText && !expandedLongText ? "flex flex-col gap-g4 max-h-[16rem] overflow-clip [mask-image:linear-gradient(to_bottom,black_calc(100%_-_3rem),transparent)]" : "flex flex-col gap-g4"}>
+        {textItems.map((item) => <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty" key={item.id}>{renderInlineMarkdown(item.text, item.id)}</p>)}
+        {bashItems.map((item) => <UserBashBlock item={item} key={item.id} />)}
+        {eventItems.map((item) => <p className="text-body text-t7 whitespace-pre-wrap [overflow-wrap:anywhere]" key={item.id}>{item.content}</p>)}
+      </div>
+      {isLongText ? (
+        <OfficialButton className="self-start" onClick={() => setExpandedLongText((value) => !value)} size="small" variant="uncontained">
+          {expandedLongText ? "Show less" : "Show more"}
+        </OfficialButton>
+      ) : null}
+    </>
   );
 
   return (
@@ -3461,6 +3483,7 @@ function CodeAssistantEntryMessage({
   onPinUserChapter,
   onUnpinUserChapters,
   showAwaitingDot = false,
+  transcriptMode = "normal",
   userChaptersByAfterId,
 }: {
   entry: TranscriptEntry;
@@ -3468,6 +3491,7 @@ function CodeAssistantEntryMessage({
   onPinUserChapter?: (afterId: string, text: string) => void;
   onUnpinUserChapters?: (afterId: string) => void;
   showAwaitingDot?: boolean;
+  transcriptMode?: OfficialTranscriptMode;
   userChaptersByAfterId?: Map<string, CodeUserChapter[]>;
 }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
@@ -3511,17 +3535,17 @@ function CodeAssistantEntryMessage({
       {visibleItems.map((item) => (
         <Fragment key={item.id}>
           {chaptersByAfterId.get(item.id)?.map((chapter) => <CodeChapterTitle chapter={chapter} key={chapter.id} />)}
-          {renderCodeAssistantEntryItem(item, isStreaming)}
+          {renderCodeAssistantEntryItem(item, isStreaming, transcriptMode)}
         </Fragment>
       ))}
     </OfficialAssistantMessage>
   );
 }
 
-function renderCodeAssistantEntryItem(item: Exclude<TranscriptEntryItem, { kind: "uploaded-file" }>, isStreaming: boolean) {
-  if (item.kind === "thinking") return <CodeThinkingBlock text={item.text} />;
+function renderCodeAssistantEntryItem(item: Exclude<TranscriptEntryItem, { kind: "uploaded-file" }>, isStreaming: boolean, transcriptMode: OfficialTranscriptMode) {
+  if (item.kind === "thinking") return <CodeThinkingBlock text={item.text} transcriptMode={transcriptMode} />;
   if (item.kind === "text") return <div><OfficialCodeMarkdown isStreaming={isStreaming} text={item.text} /></div>;
-  if (item.kind === "tools") return <AssistantToolsBlock item={item} />;
+  if (item.kind === "tools") return <AssistantToolsBlock item={item} transcriptMode={transcriptMode} />;
   if (item.kind === "error") return <div className="rounded-r3 border border-[var(--fill-destructive-default)] px-p3 py-p2 text-code text-destructive-default whitespace-pre-wrap break-words">{item.text}</div>;
   if (item.kind === "bash") return <UserBashBlock item={item} />;
   return <div className="text-body text-t6 whitespace-pre-wrap break-words">{item.content}</div>;
@@ -3558,22 +3582,30 @@ function CoworkAssistantEntryMessage({ entry, isStreaming = false }: { entry: Tr
   );
 }
 
-function CodeThinkingBlock({ text }: { text: string }) {
-  void text;
-  return null;
+function CodeThinkingBlock({ text, transcriptMode }: { text: string; transcriptMode: OfficialTranscriptMode }) {
+  if (!officialTranscriptModeShowsThinking(transcriptMode)) return null;
+  return <div className="text-body text-t6 italic whitespace-pre-wrap break-words">{text}</div>;
 }
 
-function AssistantToolsBlock({ item }: { item: Extract<TranscriptEntryItem, { kind: "tools" }> }) {
+function officialTranscriptModeShowsThinking(mode: OfficialTranscriptMode) {
+  return mode === "thinking" || mode === "verbose";
+}
+
+function officialTranscriptModeExpandsDetails(mode: OfficialTranscriptMode) {
+  return mode === "verbose";
+}
+
+function AssistantToolsBlock({ item, transcriptMode = "normal" }: { item: Extract<TranscriptEntryItem, { kind: "tools" }>; transcriptMode?: OfficialTranscriptMode }) {
   const runs = groupOfficialToolRuns(item.tools);
   if (runs.length === 1) {
     const run = runs[0];
-    return run.tools.length === 1 ? <OfficialToolRow tool={run.tools[0]} /> : <OfficialToolGroup tools={run.tools} />;
+    return run.tools.length === 1 ? <OfficialToolRow tool={run.tools[0]} transcriptMode={transcriptMode} /> : <OfficialToolGroup tools={run.tools} transcriptMode={transcriptMode} />;
   }
   return (
     <div className="flex flex-col gap-[var(--chat-item-gap)] w-full">
       {runs.map((run) => run.tools.length === 1
-        ? <OfficialToolRow key={run.id} tool={run.tools[0]} />
-        : <OfficialToolGroup key={run.id} tools={run.tools} />)}
+        ? <OfficialToolRow key={run.id} tool={run.tools[0]} transcriptMode={transcriptMode} />
+        : <OfficialToolGroup key={run.id} tools={run.tools} transcriptMode={transcriptMode} />)}
     </div>
   );
 }
@@ -3594,8 +3626,9 @@ function groupOfficialToolRuns(tools: TranscriptToolUse[]) {
   return groups;
 }
 
-function OfficialToolGroup({ tools }: { tools: TranscriptToolUse[] }) {
+function OfficialToolGroup({ tools, transcriptMode = "normal" }: { tools: TranscriptToolUse[]; transcriptMode?: OfficialTranscriptMode }) {
   const [expanded, setExpanded] = useState(false);
+  const isVerbose = officialTranscriptModeExpandsDetails(transcriptMode);
   const toolsKey = tools.map((tool) => tool.id).join("|");
   useEffect(() => {
     setExpanded(false);
@@ -3608,11 +3641,15 @@ function OfficialToolGroup({ tools }: { tools: TranscriptToolUse[] }) {
   const debouncedRunningToolId = useDebouncedDisplayedKey(runningTool?.id ?? "settled", 650);
   const displayedRunningTool = debouncedRunningToolId !== "settled" ? tools.find((tool) => tool.id === debouncedRunningToolId) : undefined;
   const runningSummary = displayedRunningTool ? officialToolRowSummary(displayedRunningTool) : undefined;
-  const toggle = () => setExpanded((value) => !value);
+  const isExpanded = isVerbose || expanded;
+  const toggle = () => {
+    if (isVerbose) return;
+    setExpanded((value) => !value);
+  };
   return (
     <div className="flex flex-col w-full">
       <button
-        aria-expanded={expanded}
+        aria-expanded={isExpanded}
         className="relative group/tool flex self-start max-w-full items-center py-0 gap-g1 text-left outline-none hide-focus-ring focus:ring-focus rounded-r3"
         onClick={toggle}
         type="button"
@@ -3631,24 +3668,25 @@ function OfficialToolGroup({ tools }: { tools: TranscriptToolUse[] }) {
             </>
           )}
         </OfficialAnimatedToolLabel>
-        <ToolChevron expanded={expanded} />
+        <ToolChevron expanded={isExpanded} />
       </button>
-      <OfficialCollapse expanded={expanded}>
+      <OfficialCollapse expanded={isExpanded}>
         <div className="flex flex-col gap-g3 bg-t1 rounded-r6 p-p7 mt-[var(--p6)]">
-          {tools.map((tool) => <OfficialToolRow inGroup key={tool.id} tool={tool} />)}
+          {tools.map((tool) => <OfficialToolRow inGroup key={tool.id} tool={tool} transcriptMode={transcriptMode} />)}
         </div>
       </OfficialCollapse>
     </div>
   );
 }
 
-function OfficialToolRow({ inGroup = false, tool }: { inGroup?: boolean; tool: TranscriptToolUse }) {
+function OfficialToolRow({ inGroup = false, tool, transcriptMode = "normal" }: { inGroup?: boolean; tool: TranscriptToolUse; transcriptMode?: OfficialTranscriptMode }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
   const summary = useMemo(() => officialToolRowSummary(tool), [tool]);
   const hasDetails = hasToolDetails(tool, summary);
   const [expanded, setExpanded] = useState(false);
+  const isVerbose = officialTranscriptModeExpandsDetails(transcriptMode);
   const isQuestionPrompt = summary.kind === "question" && typeof tool.output !== "string" && !tool.isError;
-  const isExpanded = expanded || isQuestionPrompt;
+  const isExpanded = isVerbose || expanded || isQuestionPrompt;
   const isRunning = tool.status === "running";
   const isError = tool.status === "error" || Boolean(tool.isError);
   const isAwaitingApproval = tool.status === "awaiting_approval";
@@ -3659,7 +3697,7 @@ function OfficialToolRow({ inGroup = false, tool }: { inGroup?: boolean; tool: T
       actions.openSubagent({ description: stringValue(tool.input.description) ?? tool.name, toolUseId: tool.id });
       return;
     }
-    if (!hasDetails || isQuestionPrompt) return;
+    if (isVerbose || !hasDetails || isQuestionPrompt) return;
     setExpanded((value) => !value);
   };
   return (

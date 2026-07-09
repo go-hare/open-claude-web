@@ -33,8 +33,8 @@ const files = {
   coworkResourceActivity: path.join(root, "src/features/epitaxy/cowork/coworkResourceActivity.ts"),
   coworkResourceTypes: path.join(root, "src/features/epitaxy/cowork/coworkResourceTypes.ts"),
   coworkHeader: path.join(root, "src/features/epitaxy/cowork/CoworkHeader.tsx"),
+  officialCoworkComposer: path.join(root, "src/features/epitaxy/OfficialCoworkComposer.tsx"),
   coworkNewTask: path.join(root, "src/features/epitaxy/cowork/CoworkNewTaskPage.tsx"),
-  coworkPromptComposer: path.join(root, "src/features/epitaxy/cowork/CoworkPromptComposer.tsx"),
   coworkProjectContext: path.join(root, "src/features/epitaxy/cowork/CoworkProjectContext.tsx"),
   coworkUploadedFiles: path.join(root, "src/features/epitaxy/cowork/coworkUploadedFiles.ts"),
   publicAccessPages: path.join(root, "src/features/public/AccessPages.tsx"),
@@ -63,13 +63,13 @@ const checks = [
     group: "小细节按钮",
     name: "assistant message forwards fork/rewind into OfficialMessageActions",
     test: () => /export function OfficialAssistantMessage\([\s\S]*onFork[\s\S]*onRewind/.test(source.components)
-      && /OfficialMessageActions copyText=\{copyText\} onFork=\{onFork\}[\s\S]*onRewind=\{onRewind\}/.test(source.components),
+      && /OfficialMessageActions[\s\S]*copyText=\{copyText\}[\s\S]*onFork=\{onFork\}[\s\S]*onRewind=\{onRewind\}/.test(source.components),
   },
   {
     group: "小细节按钮",
     name: "assistant transcript entries wire fork/rewind callbacks",
-    test: () => /function OfficialAssistantEntryMessage[\s\S]*actions\.bridge\.forkSession[\s\S]*actions\.onNavigate/.test(source.tile)
-      && /function OfficialAssistantEntryMessage[\s\S]*actions\.bridge\.rewind[\s\S]*actions\.reload/.test(source.tile),
+    test: () => /function CodeAssistantEntryMessage[\s\S]*actions\.bridge\.forkSession[\s\S]*actions\.onNavigate/.test(source.tile)
+      && /function CodeAssistantEntryMessage[\s\S]*actions\.bridge\.rewind[\s\S]*actions\.reload/.test(source.tile),
   },
   {
     group: "小细节按钮",
@@ -371,9 +371,11 @@ const checks = [
       && /Research/.test(source.coworkAddMenu)
       && /Use style/.test(source.coworkAddMenu)
       && /Menu\.SubmenuRoot/.test(source.components)
-      && /alignOffset=\{-10\}/.test(source.coworkPromptComposer)
-      && /side="bottom"/.test(source.coworkPromptComposer)
-      && /sideOffset=\{4\}/.test(source.coworkPromptComposer)
+      && /function OfficialCoworkPromptBox/.test(source.officialCoworkComposer)
+      && /createCoworkAddMenuItems/.test(source.officialCoworkComposer)
+      && /CoworkSelectedFiles/.test(source.officialCoworkComposer)
+      && /CoworkSelectedProjectIndicators/.test(source.officialCoworkComposer)
+      && /placeholder="今天我可以帮助你做什么？"/.test(source.officialCoworkComposer)
       && /alignOffset=\{-10\}/.test(source.coworkOfficialComponents)
       && /side="bottom"/.test(source.coworkOfficialComponents)
       && /sideOffset=\{4\}/.test(source.coworkOfficialComponents)
@@ -499,7 +501,7 @@ const checks = [
       && /Cowork Add menu Google Drive submenu exposes official empty state/.test(source.runtimeVerifier)
       && /Cowork Add connectors action opens official customize route/.test(source.runtimeVerifier)
       && /Cowork attachment payload matches official uploaded_files shape/.test(source.runtimeVerifier)
-      && /Cowork legacy \/epitaxy\/local_\* redirects to \/local_sessions/.test(source.runtimeVerifier)
+      && /fake bridge creates a Cowork local_\* session/.test(source.runtimeVerifier)
       && /Cowork session renders official Cowork composer and long Add label/.test(source.runtimeVerifier)
       && /Cowork working folder exposes official Go to folder action/.test(source.runtimeVerifier)
       && /Cowork working folder exposes official Browse files action/.test(source.runtimeVerifier)

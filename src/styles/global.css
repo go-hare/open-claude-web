@@ -19,16 +19,6 @@ textarea {
   font: inherit;
 }
 
-.claude-rebuild-logo {
-  color: hsl(var(--accent-brand));
-  line-height: 1;
-}
-
-.claude-rebuild-logo-img {
-  display: block;
-  object-fit: contain;
-}
-
 .claude-rebuild-composer textarea {
   min-height: var(--h8, 72px);
 }

@@ -1,5 +1,6 @@
 import type { RouteViewProps } from "../../app/routes";
 import type { ScheduledTaskSummary } from "../../adapters/desktopBridge";
+import { OfficialButton } from "../epitaxy/OfficialEpitaxyComponents";
 import { Icon } from "../../shell/icons";
 import { ScheduledRouteShell } from "./ScheduledPrimitives";
 import { scheduleLabel, taskDisplayName } from "./scheduleUtils";
@@ -47,9 +48,7 @@ function ScheduledTasksHeader({ onCreate }: { onCreate: () => void }) {
         <h1 className="text-heading text-t9">Scheduled tasks</h1>
         <p className="text-body text-t6">Run tasks on a schedule or whenever you need them. Type /schedule in any session to set one up.</p>
       </div>
-      <button type="button" onClick={onCreate} className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-primary-default hover:text-primary-hover disabled:text-primary-disabled disabled:hover:text-primary-disabled busy:text-primary-busy ring-focus-primary h-base text-body rounded-base gap-g3 px-p6">
-        <span>新任务</span>
-      </button>
+      <OfficialButton onClick={onCreate} size="base" variant="primary">新任务</OfficialButton>
     </div>
   );
 }
@@ -57,7 +56,7 @@ function ScheduledTasksHeader({ onCreate }: { onCreate: () => void }) {
 function LocalAwakeBanner() {
   return (
     <div className="flex items-center gap-g4 px-p6 py-p5 rounded-r6 bg-t1 text-body text-t7">
-      <Icon name="check" />
+      <Icon name="ShieldCheck" size="md" className="shrink-0 text-t6" />
       <span>Local tasks only run while your computer is awake.</span>
     </div>
   );
@@ -78,20 +77,42 @@ function TaskListState({ isLoading, tasks, onSelect }: Omit<ContentProps, "onCre
 function EmptyScheduledTasks() {
   return (
     <div className="flex flex-col items-center justify-center gap-g4 py-[64px] text-body text-t5">
-      <Icon name="clock" />
+      <Icon name="ClockTimeslot" size="lg" />
       <span>No scheduled tasks yet.</span>
     </div>
   );
 }
 
 function TaskCard({ task, onSelect }: { task: ScheduledTaskSummary; onSelect: (id: string) => void }) {
+  const label = scheduleLabel(task);
+  const nextRun = task.enabled && task.nextRunAt ? formatNextRun(task.nextRunAt) : null;
   return (
     <button type="button" onClick={() => onSelect(task.id)} className="flex items-center gap-g6 px-p7 py-p6 rounded-r6 bg-t1 hover:bg-t2 text-left outline-none hide-focus-ring ring-focus">
       <div className="flex-1 min-w-0 flex flex-col gap-g1">
         <div className="text-body text-t9 truncate">{taskDisplayName(task)}</div>
-        <div className="text-footnote text-t6 truncate">{scheduleLabel(task)}</div>
+        <div className="text-footnote text-t6 truncate">
+          {label}
+          {nextRun ? <> · Next run {nextRun}</> : null}
+        </div>
       </div>
-      {!task.enabled ? <span className="inline-flex items-center gap-g2 px-p4 py-p1 rounded-r4 bg-t2 text-footnote text-t7">Paused</span> : null}
+      {task.fireAt ? (
+        <span className="inline-flex items-center gap-g2 px-p4 py-p1 rounded-r4 bg-t2 text-footnote text-t7">
+          <Icon name="ArrowRight" size="sm" />
+          Run once
+        </span>
+      ) : null}
+      {!task.enabled ? (
+        <span className="inline-flex items-center gap-g2 px-p4 py-p1 rounded-r4 bg-t2 text-footnote text-t7">
+          <Icon name="Stop" size="sm" />
+          Paused
+        </span>
+      ) : null}
     </button>
   );
+}
+
+function formatNextRun(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, { day: "numeric", hour: "numeric", minute: "2-digit", month: "short" });
 }

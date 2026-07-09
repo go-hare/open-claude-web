@@ -118,14 +118,17 @@ type OfficialSessionHeaderProps = {
   isTitleLoading?: boolean;
   isTopLeft?: boolean;
   onSessionRemoved?: () => void;
+  onTranscriptModeChange?: (mode: OfficialTranscriptMode) => void;
   onViewSelect?: (view: OfficialViewPane) => void;
   paneIndex?: number;
   session: SessionSummary | null;
   sessionRef: OfficialSessionRef | null;
   title: string;
+  transcriptMode?: OfficialTranscriptMode;
 };
 
 export type OfficialViewPane = "preview" | "diff" | "terminal" | "tasks" | "plan" | "file" | "subagent";
+export type OfficialTranscriptMode = "normal" | "thinking" | "verbose" | "summary";
 
 type OfficialTranscriptProps = {
   children: ReactNode;
@@ -484,11 +487,13 @@ export function OfficialSessionHeader({
   isTitleLoading = false,
   isTopLeft,
   onSessionRemoved,
+  onTranscriptModeChange,
   onViewSelect,
   paneIndex = 0,
   session,
   sessionRef,
   title,
+  transcriptMode = "normal",
 }: OfficialSessionHeaderProps) {
   return (
     <div data-top-left={isTopLeft || undefined} className="relative flex items-center h-[32px] pl-[16px] pr-[16px]">
@@ -504,7 +509,7 @@ export function OfficialSessionHeader({
       </div>
       {dragHandle}
       <div className="relative z-[1] ml-auto flex items-center gap-g3 shrink-0 draggable-none">
-        {sessionRef ? <OfficialTranscriptViewButton hideSummary={hideSummary} /> : null}
+        {sessionRef ? <OfficialTranscriptViewButton hideSummary={hideSummary} mode={transcriptMode} onModeChange={onTranscriptModeChange} /> : null}
         {sessionRef?.type !== "local" ? <OfficialButton ariaLabel="Share" icon="ShareArrowOutOfBox" /> : null}
         {sessionRef && !hideViews ? <OfficialViewsButton activeView={activeView} hasRunningTasks={hasRunningTasks} onViewSelect={onViewSelect} /> : null}
         {onSessionRemoved ? <OfficialButton ariaLabel="Close pane" icon="XCrossCloseMedium" onClick={onSessionRemoved} /> : null}
@@ -1036,7 +1041,7 @@ function OfficialSessionTitle({ paneIndex, title }: { paneIndex: number; title: 
   );
 }
 
-function OfficialTranscriptViewButton({ hideSummary }: { hideSummary: boolean }) {
+function OfficialTranscriptViewButton({ hideSummary, mode, onModeChange }: { hideSummary: boolean; mode: OfficialTranscriptMode; onModeChange?: (mode: OfficialTranscriptMode) => void }) {
   const [textSize, setTextSize] = useState<"s" | "m" | "l">("m");
   useEffect(() => {
     document.documentElement.dataset.chatTextSize = textSize;
@@ -1045,11 +1050,13 @@ function OfficialTranscriptViewButton({ hideSummary }: { hideSummary: boolean })
     };
   }, [textSize]);
 
+  const effectiveMode = hideSummary && mode === "summary" ? "normal" : mode;
+  const selectMode = (nextMode: OfficialTranscriptMode) => onModeChange?.(nextMode);
   const items: OfficialDropdownItem[] = [
-    { label: "Normal", checked: true },
-    { label: "Thinking", checked: false },
-    { label: "Verbose", checked: false },
-    ...(hideSummary ? [] : [{ label: "Summary", checked: false } satisfies OfficialDropdownItem]),
+    { label: "Normal", checked: effectiveMode === "normal", onSelect: () => selectMode("normal") },
+    { label: "Thinking", checked: effectiveMode === "thinking", onSelect: () => selectMode("thinking") },
+    { label: "Verbose", checked: effectiveMode === "verbose", onSelect: () => selectMode("verbose") },
+    ...(hideSummary ? [] : [{ label: "Summary", checked: effectiveMode === "summary", onSelect: () => selectMode("summary") } satisfies OfficialDropdownItem]),
     {
       keepOpen: true,
       label: null,

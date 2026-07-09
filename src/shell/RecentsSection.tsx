@@ -6,7 +6,7 @@ import { BaseContextMenuPopup, ContextMenu } from "./BaseMenu";
 import { buildCustomGroups, CustomGroupHeader, type RecentDisplayGroup } from "./CustomGroups";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { GroupNameDialog } from "./GroupNameDialog";
-import { Icon } from "./icons";
+import { OfficialSidebarStatusGlyph } from "./OfficialSidebarStatusGlyph";
 import { PinnedSection, readSessionDragKey, writeSessionDragKey } from "./PinnedSection";
 import { buildRecentsGroups, defaultRecentsFilter, RecentsControls, type RecentsFilterState } from "./RecentsControls";
 import { isPinnedSession, sessionPinKey } from "./sessionPinning";
@@ -297,35 +297,5 @@ function insertBefore(keys: string[], droppedKey: string, beforeKey: string) {
 }
 
 function SessionGlyph({ session }: { session: SessionSummary }) {
-  if (session.sessionKind === "code") {
-    return <CodeStatusGlyph session={session} />;
-  }
-
-  return (
-    <span className="claude-rebuild-logo" aria-hidden="true">
-      ✳
-    </span>
-  );
-}
-
-function CodeStatusGlyph({ session }: { session: SessionSummary }) {
-  if ((session.pendingToolPermissions?.length ?? 0) > 0) {
-    return <span className="status-dot" data-kind="awaiting" />;
-  }
-  if (session.isRunning) {
-    return (
-      <span className="inline-flex size-3 items-center justify-center gap-[2px] leading-none" aria-hidden="true">
-        <span className="dframe-dot" />
-        <span className="dframe-dot" />
-        <span className="dframe-dot" />
-      </span>
-    );
-  }
-  if (session.isUnread) {
-    return <span className="status-dot" data-kind="ready" />;
-  }
-  if (session.isArchived) {
-    return <Icon name="Archive" size="sm" className="text-text-500 opacity-80" />;
-  }
-  return <span aria-hidden="true" className="block size-[6px] border border-text-400 opacity-50 rounded-full" />;
+  return <OfficialSidebarStatusGlyph session={session} />;
 }

@@ -5,7 +5,7 @@ import { coworkSessionsBasePath } from "../../../shell/sessionPaths";
 import { normalizeCoworkPermissionMode } from "../composer/options";
 import { CoworkGridBackground } from "./CoworkGridBackground";
 import { CoworkHeader } from "./CoworkHeader";
-import { CoworkPromptComposer } from "./CoworkPromptComposer";
+import { OfficialCoworkPromptBox } from "../OfficialCoworkComposer";
 import type { CoworkAddMenuProject } from "./CoworkAddMenuItems";
 import {
   CoworkProjectWarningDialog,
@@ -17,10 +17,6 @@ import {
 } from "./CoworkProjectContext";
 import { CoworkSuggestions, type CoworkPromptSuggestion } from "./CoworkSuggestions";
 import { coworkUploadedFilePaths, formatCoworkPromptWithUploadedFiles, mergeCoworkUploadedFiles, type CoworkUploadedFile } from "./coworkUploadedFiles";
-
-type CoworkSubmitOptions = {
-  keepGoing?: boolean;
-};
 
 export function CoworkNewTaskPage({
   onNavigate,
@@ -52,7 +48,7 @@ export function CoworkNewTaskPage({
     return [{ ...item, checked: selectedProjects.some((selected) => selected.uuid === item.uuid) }];
   });
 
-  const submit = useCallback(async (nextPrompt = prompt, options: CoworkSubmitOptions = {}) => {
+  const submit = useCallback(async (nextPrompt = prompt) => {
     const normalized = nextPrompt.trim();
     const hasSelectedFiles = selectedFiles.length > 0;
     if ((!normalized && !hasSelectedFiles) || busy) return;
@@ -70,7 +66,6 @@ export function CoworkNewTaskPage({
         permissionMode,
         prompt: message,
         sessionId,
-        skipRedirect: options.keepGoing,
         userSelectedFiles: selectedFilePaths,
         userSelectedFolders: selectedWorkspace.cwd ? [selectedWorkspace.cwd] : undefined,
         mountedProjects: selectedProjects,
@@ -79,7 +74,7 @@ export function CoworkNewTaskPage({
       setPrompt("");
       setSelectedFiles([]);
       setSelectedProjects([]);
-      if (!options.keepGoing) onNavigate(`${coworkSessionsBasePath}/${encodeURIComponent(session.id)}`);
+      onNavigate(`${coworkSessionsBasePath}/${encodeURIComponent(session.id)}`);
     } finally {
       setBusy(false);
     }
@@ -123,7 +118,7 @@ export function CoworkNewTaskPage({
             <div className="w-full max-w-2xl">
               <div className="mb-4">
                 <CoworkHeader />
-                <CoworkPromptComposer
+                <OfficialCoworkPromptBox
                   busy={busy}
                   focusRequestKey={focusRequestKey}
                   model={model}
@@ -134,7 +129,7 @@ export function CoworkNewTaskPage({
                   onPermissionModeChange={setPermissionMode}
                   onRemoveProject={(uuid) => setSelectedProjects((current) => current.filter((project) => project.uuid !== uuid))}
                   onRemoveFile={removeFile}
-                  onSubmit={(options) => void submit(prompt, options)}
+                  onSubmit={() => void submit(prompt)}
                   onWorkspaceChange={setSelectedWorkspace}
                   permissionMode={permissionMode}
                   prompt={prompt}

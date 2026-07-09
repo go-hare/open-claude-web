@@ -5,6 +5,7 @@ import { desktopBridge, type SessionSummary } from "../adapters/desktopBridge";
 import { type ShellText, useShellText } from "../i18n/shellMessages";
 import type { FrameMode } from "../stores/frameStore";
 import { Icon } from "./icons";
+import { OfficialSidebarStatusGlyph } from "./OfficialSidebarStatusGlyph";
 import { sessionPath } from "./sessionPaths";
 
 type SearchCommandPaletteProps = {
@@ -155,28 +156,5 @@ function SearchResultItem({ item, onOpen }: { item: SearchItem; onOpen: (item: S
 }
 
 function SessionGlyph({ item }: { item: SearchItem }) {
-  if (item.sessionKind === "code") return <CodeStatusGlyph session={item} />;
-  return <span className="claude-rebuild-logo shrink-0" aria-hidden="true">✳</span>;
-}
-
-function CodeStatusGlyph({ session }: { session: SearchItem }) {
-  if ((session.pendingToolPermissions?.length ?? 0) > 0) {
-    return <span className="status-dot shrink-0" data-kind="awaiting" />;
-  }
-  if (session.isRunning) {
-    return (
-      <span className="inline-flex size-3 shrink-0 items-center justify-center gap-[2px] leading-none" aria-hidden="true">
-        <span className="dframe-dot" />
-        <span className="dframe-dot" />
-        <span className="dframe-dot" />
-      </span>
-    );
-  }
-  if (session.isUnread) {
-    return <span className="status-dot shrink-0" data-kind="ready" />;
-  }
-  if (session.isArchived) {
-    return <Icon name="Archive" size="sm" className="shrink-0 text-text-500 opacity-80" />;
-  }
-  return <span aria-hidden="true" className="block size-[6px] shrink-0 border border-text-400 opacity-50 rounded-full" />;
+  return <OfficialSidebarStatusGlyph className="shrink-0" session={item} />;
 }
