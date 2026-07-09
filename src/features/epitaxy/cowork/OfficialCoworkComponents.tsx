@@ -1,7 +1,7 @@
 import { EditorContent } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Icon } from "../../../shell/icons";
 import { OfficialButton, OfficialDropdownButton, type OfficialDropdownItem } from "../OfficialEpitaxyComponents";
 import { CoworkSelectedFiles } from "./CoworkSelectedFiles";
@@ -37,23 +37,10 @@ export function OfficialCoworkSessionHeader({ dragHandle, isTitleLoading, rightA
 
 export function OfficialCoworkUserMessage({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-1 mt-6 group" data-official-source="index-BELzQL5P.js:pat HumanMessage">
-      <div className="flex flex-col items-end gap-1">
-        <div
-          className="group relative inline-flex gap-2 bg-bg-300 rounded-xl pl-2.5 py-2.5 break-words text-text-100 transition-all max-w-[75ch] flex-col !px-4 max-w-[85%]"
-          data-user-message-bubble
-          data-official-source="index-BELzQL5P.js:KYe UserMessageBubble className !px-4 max-w-[85%]"
-        >
-          <div className="flex flex-row gap-2 relative">
-            <div className="flex-1">
-              <div
-                className="font-large !font-user-message grid grid-cols-1 gap-2 py-0.5 relative [&_ul]:!space-y-0 [&_ol]:!space-y-0 [&_ul]:pl-8 [&_ol]:pl-8"
-                data-testid="user-message"
-              >
-                {children}
-              </div>
-            </div>
-          </div>
+    <div className="group/msg flex justify-end items-start gap-g3 w-full transition-opacity duration-200" data-official-source="index-BELzQL5P.js:Cowork human message bubble">
+      <div className="flex flex-col items-end gap-g6 max-w-[75%] min-w-0">
+        <div className="relative flex max-w-full flex-col gap-g4 rounded-r7 bg-bg-200 px-p8 py-p6 text-text-100 shadow-sm select-text">
+          {children}
         </div>
       </div>
     </div>
@@ -62,25 +49,20 @@ export function OfficialCoworkUserMessage({ children }: { children: ReactNode })
 
 export function OfficialCoworkThinkingBlock({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
-  useEffect(() => {
-    setExpanded(false);
-  }, [text]);
   return (
-    <div className="flex flex-col w-full" data-official-source="index-BELzQL5P.js:O9e/L9e ThinkingCell Cowork">
+    <div className="flex flex-col w-full" data-official-source="index-BELzQL5P.js:O9e ThinkingCell Cowork">
       <button
         aria-expanded={expanded}
         className="relative group/tool flex self-start max-w-full items-center py-0 gap-g1 text-left outline-none hide-focus-ring focus:ring-focus rounded-r3 text-assistant-secondary"
         onClick={() => setExpanded((value) => !value)}
         type="button"
       >
-        <span className="text-left relative text-sm font-claude-response leading-6 whitespace-nowrap text-text-300 text-ellipsis overflow-hidden basis-0 grow min-w-0">Thought process</span>
+        <span className="text-body truncate min-w-0">Thought process</span>
         <CoworkToolChevron expanded={expanded} />
       </button>
       <OfficialCoworkCollapse expanded={expanded}>
-        <div className="mt-[var(--p6)] text-text-300 text-sm font-normal gap-0.5 relative font-claude-response">
-          <div className="p-3 pt-0 pr-8 whitespace-pre-wrap break-words">
-            {text}
-          </div>
+        <div className="mt-[var(--p6)] rounded-r6 bg-t1 px-p7 py-p6 text-body text-assistant-secondary whitespace-pre-wrap break-words">
+          {text}
         </div>
       </OfficialCoworkCollapse>
     </div>

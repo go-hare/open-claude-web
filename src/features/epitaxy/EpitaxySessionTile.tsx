@@ -2376,9 +2376,6 @@ function renderTranscriptBody({ coworkStatus, entries, error, initialSessionId, 
     );
   }
   if (entries.length === 0 && !isResponding) return <div className="h-full flex items-center justify-center text-body text-t5">No messages yet.</div>;
-  if (surface === "cowork") {
-    return <CoworkTranscript key={transcriptKey} coworkStatus={coworkStatus} entries={entries} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} scrollRef={scrollRef} sessionId={initialSessionId} streamTokenEstimate={streamTokenEstimate} surface={surface} tasks={tasks} />;
-  }
   return <Transcript key={transcriptKey} coworkStatus={coworkStatus} entries={entries} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} streamTokenEstimate={streamTokenEstimate} surface={surface} tasks={tasks} />;
 }
 
@@ -2409,84 +2406,6 @@ type TranscriptProps = {
   surface: SessionSurface;
   tasks: OfficialBackgroundTask[];
 };
-
-const CoworkTranscript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function CoworkTranscript({ coworkStatus, entries, isResponding, onScrollState, pendingTurnStartedAt, scrollRef, sessionId, streamTokenEstimate, surface, tasks }, ref) {
-  const localScrollRef = useRef<HTMLDivElement | null>(null);
-  const contentRef = useRef<HTMLDivElement | null>(null);
-  const rowsRef = useRef<TranscriptRow[]>([]);
-  const initialCount = useRef(entries.length);
-  const rows = useMemo(() => buildTranscriptRows(entries), [entries]);
-  const lastEntryIdx = entries.length - 1;
-
-  useLayoutEffect(() => {
-    rowsRef.current = rows;
-  }, [rows]);
-
-  useLayoutEffect(() => {
-    scrollRef.current = localScrollRef.current;
-    return () => {
-      scrollRef.current = null;
-    };
-  }, [scrollRef]);
-
-  useLayoutEffect(() => {
-    const node = localScrollRef.current;
-    const content = contentRef.current;
-    if (!node) return undefined;
-    const updateScrollState = () => {
-      if (node.offsetParent === null) return;
-      const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-      onScrollState({ showScrollButton: distanceFromBottom > 200, showBottomFade: distanceFromBottom > 8 });
-    };
-    node.addEventListener("scroll", updateScrollState, { passive: true });
-    const observer = new ResizeObserver(updateScrollState);
-    observer.observe(node);
-    if (content) observer.observe(content);
-    updateScrollState();
-    return () => {
-      node.removeEventListener("scroll", updateScrollState);
-      observer.disconnect();
-      onScrollState({ showScrollButton: false, showBottomFade: false });
-    };
-  }, [onScrollState]);
-
-  useLayoutEffect(() => {
-    const node = localScrollRef.current;
-    if (node) scrollElementToBottom(node);
-  }, [rows.length]);
-
-  useImperativeHandle(ref, () => ({
-    scrollToBottom: (behavior) => {
-      const node = localScrollRef.current;
-      if (node) scrollElementToBottom(node, behavior);
-    },
-    scrollToEntry: (entryId) => {
-      const node = localScrollRef.current;
-      if (!node) return;
-      const target = Array.from(node.querySelectorAll<HTMLElement>("[data-epitaxy-entry]")).find((element) => element.dataset.epitaxyEntry === entryId);
-      target?.scrollIntoView({ block: "start" });
-    },
-  }), []);
-
-  return (
-    <div ref={localScrollRef} data-testid="epitaxy-virtual-transcript" className="h-full overflow-y-auto overflow-x-hidden" data-official-source="index-BELzQL5P.js:v$t/yUt Cowork transcript scroller">
-      <div className="mx-auto flex w-full flex-1 flex-col max-w-3xl md:px-2" data-official-source="index-BELzQL5P.js:v$t message column max-w-3xl md:px-2">
-        <div
-          ref={contentRef}
-          className="flex-1 flex flex-col px-4 max-w-3xl mx-auto w-full pt-1"
-          data-official-source="index-BELzQL5P.js:C$t flex-1 flex flex-col px-4 max-w-3xl mx-auto w-full"
-          style={{ "--chat-item-gap": "0.75rem", "--chat-turn-gap": "1rem" } as CSSProperties}
-        >
-          {rows.map((row, index) => (
-            <div className="[content-visibility:auto] [contain-intrinsic-size:auto_400px] empty:hidden" data-index={index} key={row.id}>
-              <TranscriptRowContent coworkStatus={coworkStatus} initialCount={initialCount.current} isResponding={isResponding} lastEntryIdx={lastEntryIdx} pendingTurnStartedAt={pendingTurnStartedAt} row={row} sessionId={sessionId} streamTokenEstimate={streamTokenEstimate} surface={surface} tasks={tasks} />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-});
 
 const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ coworkStatus, entries, isResponding, onScrollState, pendingTurnStartedAt, restoreKey, scrollRef, sessionId, streamTokenEstimate, surface, tasks }, ref) {
   const rowsRef = useRef<TranscriptRow[]>([]);
@@ -3344,18 +3263,12 @@ function OfficialUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
   }, [actions, entry.id]);
   const onFork = !isCoworkSurface && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
   const onRewind = actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
-  const userTextClassName = isCoworkSurface
-    ? "whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty"
-    : "text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty";
-  const userEventClassName = isCoworkSurface
-    ? "text-text-300 whitespace-pre-wrap [overflow-wrap:anywhere]"
-    : "text-body text-t7 whitespace-pre-wrap [overflow-wrap:anywhere]";
   const messageBody = (
     <div className="flex flex-col gap-g4">
       {fileItems.length > 0 ? <UserUploadedFiles files={fileItems.map((item) => item.file)} /> : null}
-      {textItems.map((item) => <p className={userTextClassName} key={item.id}>{renderInlineMarkdown(item.text, item.id)}</p>)}
+      {textItems.map((item) => <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty" key={item.id}>{renderInlineMarkdown(item.text, item.id)}</p>)}
       {bashItems.map((item) => <UserBashBlock item={item} key={item.id} />)}
-      {eventItems.map((item) => <p className={userEventClassName} key={item.id}>{item.content}</p>)}
+      {eventItems.map((item) => <p className="text-body text-t7 whitespace-pre-wrap [overflow-wrap:anywhere]" key={item.id}>{item.content}</p>)}
     </div>
   );
 
@@ -3379,28 +3292,6 @@ function UserUploadedFiles({ files }: { files: CoworkUploadedFile[] }) {
           <span className="max-w-[220px] truncate">{file.fileName}</span>
         </button>
       ))}
-    </div>
-  );
-}
-
-const officialCoworkClaudeResponseClass = "font-claude-response relative leading-[1.65rem] [&_pre>div]:bg-bg-000/50 [&_pre>div]:border-0.5 [&_pre>div]:border-border-400 [&_.ignore-pre-bg>div]:bg-transparent [&_.standard-markdown_:is(p,blockquote,h1,h2,h3,h4,h5,h6)]:pl-2 [&_.standard-markdown_:is(p,blockquote,ul,ol,h1,h2,h3,h4,h5,h6)]:pr-8 [&_.progressive-markdown_:is(p,blockquote,h1,h2,h3,h4,h5,h6)]:pl-2 [&_.progressive-markdown_:is(p,blockquote,ul,ol,h1,h2,h3,h4,h5,h6)]:pr-8";
-
-function OfficialCoworkAssistantMessage({ children, isStreaming }: { children: ReactNode; isStreaming: boolean }) {
-  return (
-    <div className="group" data-official-source="index-BELzQL5P.js:Rst AssistantMessage outer Re.div group">
-      <div className="group relative pb-3" data-is-streaming={isStreaming || undefined} data-official-source="index-BELzQL5P.js:YYe ClaudeResponseBubble relative pb-3">
-        <div className={officialCoworkClaudeResponseClass} data-official-source="index-BELzQL5P.js:ZYe Claude response markdown wrapper">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OfficialCoworkAssistantText({ isStreaming, text }: { isStreaming: boolean; text: string }) {
-  return (
-    <div className={isStreaming ? "progressive-markdown" : "standard-markdown"} data-official-source="index-BELzQL5P.js:z9e ab className standard/progressive-markdown">
-      <MarkdownContent isStreaming={isStreaming} text={text} />
     </div>
   );
 }
@@ -3433,22 +3324,6 @@ function OfficialAssistantEntryMessage({ entry, isStreaming = false }: { entry: 
     }
     : undefined;
   if (visibleItems.length === 0) return null;
-
-  if (isCoworkSurface) {
-    return (
-      <OfficialCoworkAssistantMessage isStreaming={isStreaming}>
-        {visibleItems.map((item) => {
-          if (item.kind === "thinking") return <OfficialCoworkThinkingBlock text={item.text} key={item.id} />;
-          if (item.kind === "text") return <OfficialCoworkAssistantText isStreaming={isStreaming} key={item.id} text={item.text} />;
-          if (item.kind === "tools") return <AssistantToolsBlock item={item} key={item.id} />;
-          if (item.kind === "error") return <div className="rounded-r3 border border-[var(--fill-destructive-default)] px-p3 py-p2 text-code text-destructive-default whitespace-pre-wrap break-words" key={item.id}>{item.text}</div>;
-          if (item.kind === "bash") return <UserBashBlock item={item} key={item.id} />;
-          if (item.kind === "uploaded-file") return null;
-          return <div className="text-body text-t6 whitespace-pre-wrap break-words" key={item.id}>{item.content}</div>;
-        })}
-      </OfficialCoworkAssistantMessage>
-    );
-  }
 
   return (
     <OfficialAssistantMessage copyText={copyText} createdAt={isStreaming ? undefined : entry.timestamp} onFork={onFork} onRateMessage={onRateMessage} onRewind={onRewind} rateMessageUuid={entry.id} showPinAction={!isCoworkSurface}>

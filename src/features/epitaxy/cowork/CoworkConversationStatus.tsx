@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import type { ChatMessage, SessionSummary } from "../../../adapters/desktopBridge/types";
 
 export type CoworkApiRetryStatus = {
@@ -40,7 +40,7 @@ export function CoworkConversationStatus({
   return (
     <div className={`ml-1 flex items-center transition-transform duration-300 ease-out ${isWorking ? "mt-2 -translate-y-2.5" : "mt-6"}`} data-cowork-conversation-status>
       <div className="p-1 -translate-x-px">
-        <CoworkClaudeAvatar />
+        <CoworkSparkSpinner isWorking={isWorking || compacting} />
       </div>
       <CoworkWaitingText isWorking={isWorking} startedAt={startedAt} status={status} />
     </div>
@@ -49,49 +49,11 @@ export function CoworkConversationStatus({
 
 function CoworkWaitingText({ isWorking, startedAt, status }: { isWorking: boolean; startedAt?: number | null; status: CoworkConversationStatusState | null }) {
   const retryText = useCoworkRetryText(status?.apiRetryStatus);
-  const waitingText = useCoworkStatusMessage(Boolean(isWorking || status?.apiRetryStatus), status?.statusMessage);
+  const waitingText = useCoworkWaitingText(Boolean(isWorking || status?.apiRetryStatus), startedAt, status?.statusMessage);
   if (status?.connectionState === "disconnected") return <div className="text-text-400 ml-2 pb-1.5 text-xs">Reconnecting...</div>;
   if (status?.compactionStatus === "compacting" || status?.compactionStatus === "complete") return <CoworkCompactionProgress status={status.compactionStatus} />;
   const text = retryText ?? waitingText;
-  return text ? <CoworkStatusMessageText isWaitingState={Boolean(isWorking && !retryText)} startedAt={startedAt} text={text} /> : null;
-}
-
-function CoworkClaudeAvatar() {
-  return (
-    <img
-      alt=""
-      aria-hidden="true"
-      className="block h-8 w-8 select-none"
-      draggable={false}
-      src="/assets/v1/cd02a42d9-Vq_H3mgS.svg"
-    />
-  );
-}
-
-function CoworkStatusMessageText({
-  isWaitingState,
-  startedAt,
-  text,
-}: {
-  isWaitingState: boolean;
-  startedAt?: number | null;
-  text: string;
-}) {
-  const elapsed = useCoworkElapsedSeconds(startedAt);
-  const showElapsed = elapsed >= 5;
-  const displayText = waitingStateMessage(text, elapsed, isWaitingState);
-
-  return (
-    <div className="ml-2 pb-1.5 font-base text-text-500">
-      {displayText}
-      {showElapsed ? (
-        <>
-          <span className="text-text-500/50 mx-1"> · </span>
-          <span className="tabular-nums">{formatCoworkElapsed(elapsed)}</span>
-        </>
-      ) : null}
-    </div>
-  );
+  return text ? <div className="font-claude-response text-text-300 ml-2 pb-1.5 text-sm italic tabular-nums">{text}</div> : null;
 }
 
 function CoworkCompactionProgress({ status }: { status: string }) {
@@ -106,6 +68,28 @@ function CoworkCompactionProgress({ status }: { status: string }) {
         <div className="text-text-400 text-xs tabular-nums">{progress}%</div>
       </div>
     </div>
+  );
+}
+
+function CoworkSparkSpinner({ isWorking }: { isWorking: boolean }) {
+  return (
+    <span className="inline-block overflow-hidden shrink-0 text-accent-main-100" style={{ width: 16, height: 16 }} aria-hidden="true">
+      <span
+        className={`block ${isWorking ? "epitaxy-spark-working" : ""}`}
+        style={{
+          width: 16,
+          height: 1344,
+          background: "currentColor",
+          WebkitMaskImage: 'url("/assets/v1/epitaxy-spark-mask.webp")',
+          maskImage: 'url("/assets/v1/epitaxy-spark-mask.webp")',
+          WebkitMaskSize: "100% 100%",
+          maskSize: "100% 100%",
+          "--spark-frames": 84,
+          "--spark-duration": "5040ms",
+          transform: "translateY(-4.7619047619%)",
+        } as CSSProperties}
+      />
+    </span>
   );
 }
 
@@ -177,34 +161,27 @@ function useCoworkRetryText(retry: CoworkApiRetryStatus | undefined) {
     : `Server is busy. Retrying now (attempt ${retry.attempt} of ${retry.maxRetries})`;
 }
 
-function useCoworkElapsedSeconds(startedAt?: number | null) {
+function useCoworkWaitingText(isWaiting: boolean, startedAt?: number | null, statusMessage?: string) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
+    if (!isWaiting) {
+      setElapsed(0);
+      return undefined;
+    }
     const update = () => setElapsed(Math.max(0, Math.floor((Date.now() - (startedAt ?? Date.now())) / 1000)));
     update();
     const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
-  }, [startedAt]);
+  }, [isWaiting, startedAt]);
 
-  return elapsed;
+  return statusMessage ?? coworkWaitingCopy(elapsed);
 }
 
-function useCoworkStatusMessage(isWaiting: boolean, statusMessage?: string) {
-  if (statusMessage) return statusMessage;
-  return isWaiting ? "Working on it..." : "";
-}
-
-function waitingStateMessage(text: string, seconds: number, isWaitingState: boolean) {
-  if (!isWaitingState) return text;
-  if (seconds >= 60) return "Working through a complex response...";
-  if (seconds >= 30) return "Still thinking...";
-  return text;
-}
-
-function formatCoworkElapsed(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return minutes > 0 ? `${minutes}m ${remainingSeconds}s` : `${remainingSeconds}s`;
+function coworkWaitingCopy(seconds: number) {
+  if (seconds >= 30) return "A bit longer, thanks for your patience...";
+  if (seconds >= 15) return "Still working on it, stand by...";
+  if (seconds >= 5) return "Gathering my thoughts, be right there...";
+  return "";
 }
 
 function parseCoworkCompactionStatus(messages: ChatMessage[]) {
