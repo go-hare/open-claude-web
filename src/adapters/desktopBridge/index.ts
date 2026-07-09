@@ -44,6 +44,7 @@ export type {
   CreateScheduledTaskInput,
   EffortLevel,
   FileSystemBridge,
+  LocalEnvironmentVariables,
   LocalSessionEnvironmentBridge,
   PermissionMode,
   ScheduledTaskSummary,

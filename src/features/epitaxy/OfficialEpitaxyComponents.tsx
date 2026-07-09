@@ -13,6 +13,7 @@ export type OfficialDropdownItem = {
   checked?: boolean;
   closeOnClick?: boolean;
   disabled?: boolean;
+  hint?: ReactNode;
   icon?: string;
   items?: OfficialDropdownItem[];
   keepOpen?: boolean;
@@ -20,7 +21,7 @@ export type OfficialDropdownItem = {
   noQuickKey?: boolean;
   onSelect?: () => void;
   separatorBefore?: boolean;
-  shortcut?: string;
+  shortcut?: string | string[];
   status?: ReactNode;
   subtitle?: ReactNode;
   suffix?: ReactNode;
@@ -51,7 +52,7 @@ type OfficialDropdownButtonProps = {
   ariaLabel?: string;
   className?: string;
   disabled?: boolean;
-  extraSections?: Array<{ header?: ReactNode; items: OfficialDropdownItem[]; triggerKey?: string }>;
+  extraSections?: Array<{ header?: ReactNode; items: OfficialDropdownItem[]; triggerKey?: ReactNode | string | string[] }>;
   header?: ReactNode;
   icon?: string;
   items?: OfficialDropdownItem[];
@@ -65,7 +66,7 @@ type OfficialDropdownButtonProps = {
   side?: "top" | "right" | "bottom" | "left";
   sideOffset?: number;
   size?: "small" | "base" | "large";
-  triggerKey?: string;
+  triggerKey?: ReactNode | string | string[];
   variant?: "uncontained" | "contained" | "muted";
 };
 
@@ -1220,33 +1221,35 @@ function renderMenuItemStatus(status: ReactNode | boolean) {
   return status || null;
 }
 
-function OfficialShortcut({ keys }: { keys: string }) {
-  if (/^[1-9]$/.test(keys)) {
-    return <span className="shrink-0 pl-p2 text-body text-t6 tabular-nums">{keys}</span>;
+function OfficialShortcut({ keys }: { keys: string | string[] }) {
+  const normalizedKeys = Array.isArray(keys) ? keys.join(" ") : keys;
+  if (/^[1-9]$/.test(normalizedKeys)) {
+    return <span className="shrink-0 pl-p2 text-body text-t6 tabular-nums">{normalizedKeys}</span>;
   }
 
   return (
     <span className="flex items-center gap-px shrink-0 text-footnote text-t6">
-      {splitShortcutKeys(keys).map((key, index) => (
+      {splitShortcutKeys(normalizedKeys).map((key, index) => (
         <kbd className="font-ui flex items-center justify-center h-[16px]" key={`${key}-${index}`}>{key}</kbd>
       ))}
     </span>
   );
 }
 
-function OfficialMenuHeader({ children, triggerKey }: { children: ReactNode; triggerKey?: string }) {
+function OfficialMenuHeader({ children, triggerKey }: { children: ReactNode; triggerKey?: ReactNode | string | string[] }) {
   return (
     <div className="flex items-center gap-g3 px-p8 py-p2 min-h-[20px] text-footnote text-t6" role="presentation">
       <span className="flex-1 pr-p8">{children}</span>
-      {triggerKey ? <OfficialTriggerShortcut keys={triggerKey} /> : null}
+      {typeof triggerKey === "string" || Array.isArray(triggerKey) ? <OfficialTriggerShortcut keys={triggerKey} /> : triggerKey}
     </div>
   );
 }
 
-function OfficialTriggerShortcut({ keys }: { keys: string }) {
+function OfficialTriggerShortcut({ keys }: { keys: string | string[] }) {
+  const normalizedKeys = Array.isArray(keys) ? keys.join(" ") : keys;
   return (
     <span className="inline-flex items-center gap-g3">
-      {shortcutChordGroups(keys).map((group, groupIndex) => (
+      {shortcutChordGroups(normalizedKeys).map((group, groupIndex) => (
         <span className="contents" key={`${group.join("-")}-${groupIndex}`}>
           {groupIndex > 0 ? <span className="text-footnote opacity-60">then</span> : null}
           {group.map((key, keyIndex) => (

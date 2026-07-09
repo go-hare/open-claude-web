@@ -143,8 +143,15 @@ export type WorkspaceContext = {
   mode: "local" | "remote";
   projectName: string;
   branchName: string;
+  branchPickerDisabled?: boolean;
+  branches?: string[];
+  defaultBranch?: string;
   hasWorktree: boolean;
   cwd?: string;
+  folders?: string[];
+  sourceBranch?: string;
+  worktree?: boolean;
+  worktreeSupported?: boolean;
 };
 
 export type WorkspaceTrustResult = {
@@ -247,6 +254,8 @@ export type LocalSessionEnvironmentBridge = {
   save: (env: Record<string, string>) => Promise<boolean>;
 };
 
+export type LocalEnvironmentVariables = Record<string, string>;
+
 export type LocalSessionsBridge = {
   list: () => Promise<SessionSummary[]>;
   getSession: (id: string) => Promise<SessionSummary | null>;
@@ -282,8 +291,10 @@ export type LocalSessionsBridge = {
   submitFeedback?: (input?: unknown) => Promise<unknown>;
   checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<WorkspaceTrustResult>;
   checkTrust?: (folder: string) => Promise<WorkspaceTrustResult>;
+  isFolderTrusted?: (folder: string) => Promise<WorkspaceTrustResult>;
   respondToToolPermission?: (requestId: string, decision: "always" | "deny" | "once", updatedInput?: unknown) => Promise<unknown>;
   saveTrust?: (folder: string) => Promise<unknown>;
+  addTrustedFolder?: (folder: string) => Promise<unknown>;
   startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<ShellPtyStartResult>;
   stop?: (id: string) => Promise<unknown>;
   stopShellPty?: (sessionId: string) => Promise<unknown>;
