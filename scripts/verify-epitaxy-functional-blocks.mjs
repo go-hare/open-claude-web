@@ -18,6 +18,7 @@ const files = {
   coworkActivityPanel: path.join(root, "src/features/epitaxy/cowork/CoworkSessionActivityPanel.tsx"),
   coworkActivityShell: path.join(root, "src/features/epitaxy/cowork/CoworkActivityPanelShell.tsx"),
   coworkOfficialComponents: path.join(root, "src/features/epitaxy/cowork/OfficialCoworkComponents.tsx"),
+  coworkConversationStatus: path.join(root, "src/features/epitaxy/cowork/CoworkConversationStatus.tsx"),
   coworkAddMenu: path.join(root, "src/features/epitaxy/cowork/CoworkAddMenuItems.ts"),
   coworkBrowserExtensionDetail: path.join(root, "src/features/epitaxy/cowork/CoworkBrowserExtensionDetailPanel.tsx"),
   coworkBrowserPicker: path.join(root, "src/features/epitaxy/cowork/CoworkBrowserPickerButton.tsx"),
@@ -421,6 +422,42 @@ const checks = [
       && /isCoworkDirectoryPermissionRequest/.test(source.tile)
       && !/variant=\{isCoworkSurface/.test(source.tile)
       && !/variant\?: "code" \| "cowork"/.test(source.components),
+  },
+  {
+    group: "协作对话",
+    name: "Cowork transcript uses official main-chat wrappers instead of Code markdown",
+    test: () => /function CoworkTranscript/.test(source.tile)
+      && /index-BELzQL5P\.js:v\$t\/yUt Cowork transcript scroller/.test(source.tile)
+      && /index-BELzQL5P\.js:C\$t flex-1 flex flex-col px-4 max-w-3xl mx-auto w-full/.test(source.tile)
+      && /OfficialCoworkAssistantMessage/.test(source.tile)
+      && /OfficialCoworkAssistantText/.test(source.tile)
+      && /index-BELzQL5P\.js:Rst AssistantMessage outer Re\.div group/.test(source.tile)
+      && /index-BELzQL5P\.js:YYe ClaudeResponseBubble relative pb-3/.test(source.tile)
+      && /index-BELzQL5P\.js:ZYe Claude response markdown wrapper/.test(source.tile)
+      && /index-BELzQL5P\.js:z9e ab className standard\/progressive-markdown/.test(source.tile)
+      && /font-claude-response relative leading-\[1\.65rem\]/.test(source.tile)
+      && /className=\{isStreaming \? "progressive-markdown" : "standard-markdown"\}/.test(source.tile)
+      && /if \(isCoworkSurface\) \{[\s\S]*<OfficialCoworkAssistantMessage/.test(source.tile)
+      && /data-user-message-bubble/.test(source.coworkOfficialComponents)
+      && /index-BELzQL5P\.js:pat HumanMessage/.test(source.coworkOfficialComponents)
+      && /index-BELzQL5P\.js:KYe UserMessageBubble/.test(source.coworkOfficialComponents)
+      && /bg-bg-300 rounded-xl pl-2\.5 py-2\.5[\s\S]*!px-4 max-w-\[85%\]/.test(source.coworkOfficialComponents)
+      && /font-large !font-user-message grid grid-cols-1 gap-2 py-0\.5/.test(source.coworkOfficialComponents)
+      && /index-BELzQL5P\.js:O9e\/L9e ThinkingCell Cowork/.test(source.coworkOfficialComponents)
+      && /text-sm font-claude-response leading-6/.test(source.coworkOfficialComponents),
+  },
+  {
+    group: "协作对话",
+    name: "Cowork streaming status uses official Ace/logo scale and status font",
+    test: () => /src="\/assets\/v1\/cd02a42d9-Vq_H3mgS\.svg"/.test(source.coworkConversationStatus)
+      && /className="block h-8 w-8 select-none"/.test(source.coworkConversationStatus)
+      && /className="ml-2 pb-1\.5 font-base text-text-500"/.test(source.coworkConversationStatus)
+      && /Working on it\.\.\./.test(source.coworkConversationStatus)
+      && /Still thinking\.\.\./.test(source.coworkConversationStatus)
+      && /Working through a complex response\.\.\./.test(source.coworkConversationStatus)
+      && !/CoworkSparkSpinner/.test(source.coworkConversationStatus)
+      && !/text-accent-main-100/.test(source.coworkConversationStatus)
+      && !/font-claude-response text-text-300 ml-2 pb-1\.5 text-sm italic/.test(source.coworkConversationStatus),
   },
   {
     group: "文件预览",
