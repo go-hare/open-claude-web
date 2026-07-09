@@ -47,6 +47,27 @@ export function OfficialCoworkUserMessage({ children }: { children: ReactNode })
   );
 }
 
+export function OfficialCoworkAssistantMessage({ children }: { children: ReactNode }) {
+  return (
+    <article className="group/msg flex w-full flex-col items-start" data-official-source="index-BELzQL5P.js:v$t local_agent_mode assistant message">
+      <div className="flex w-full flex-col gap-g6 select-text">
+        {children}
+      </div>
+    </article>
+  );
+}
+
+export function OfficialCoworkResponseMarkdown({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="font-claude-response-body text-text-100 flex max-w-[72ch] flex-col gap-4 [overflow-wrap:anywhere] [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-border-300 [&_blockquote]:pl-4 [&_code]:font-mono [&_code]:text-[0.9em] [&_em]:italic [&_li]:pl-1 [&_ol]:my-0 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:m-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-bg-200 [&_pre]:p-3 [&_strong]:font-semibold [&_ul]:my-0 [&_ul]:list-disc [&_ul]:pl-6"
+      data-official-source="index-BELzQL5P.js:font-claude-response-body Cowork response text"
+    >
+      {children}
+    </div>
+  );
+}
+
 export function OfficialCoworkThinkingBlock({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   return (

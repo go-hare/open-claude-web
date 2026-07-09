@@ -1,14 +1,15 @@
 import type { SessionSummary } from "../adapters/desktopBridge";
 
 export const coworkSessionsBasePath = "/local_sessions";
-export const codeSessionsBasePath = "/epitaxy";
+export const codeSessionsBasePath = "/code";
 export type SessionNavigationMode = "code" | "cowork";
 
-const epitaxyReservedSessionSegments = new Set([
+const codeReservedSessionSegments = new Set([
   "agents",
   "apps",
   "dev",
   "dispatch",
+  "disabled",
   "pull-requests",
   "remote-agents",
   "scheduled",
@@ -31,8 +32,8 @@ export function canOpenSessionInSplit(mode: SessionNavigationMode, session: Pick
 export function selectedSessionIdFromPath(pathname: string) {
   const coworkMatch = /^\/local_sessions\/([^/?#]+)/.exec(pathname);
   if (coworkMatch?.[1]) return decodeURIComponent(coworkMatch[1]);
-  const codeMatch = /^\/epitaxy\/([^/?#]+)/.exec(pathname);
-  if (!codeMatch?.[1] || epitaxyReservedSessionSegments.has(codeMatch[1])) return null;
+  const codeMatch = /^\/code\/([^/?#]+)/.exec(pathname);
+  if (!codeMatch?.[1] || codeReservedSessionSegments.has(codeMatch[1])) return null;
   return decodeURIComponent(codeMatch[1]);
 }
 

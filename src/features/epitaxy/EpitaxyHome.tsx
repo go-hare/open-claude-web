@@ -12,7 +12,7 @@ import { CoworkNewTaskPage } from "./CoworkNewTaskPage";
 export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const frame = useFrameContext();
-  const routeMode = route.id === "cowork-home" ? "cowork" : route.id === "epitaxy-home" ? "code" : undefined;
+  const routeMode = route.id === "cowork-home" ? "cowork" : route.id === "code-home" ? "code" : undefined;
   const mode = routeMode ?? frame?.mode ?? "code";
 
   useEffect(() => {

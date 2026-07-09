@@ -18,7 +18,7 @@ export function CustomizeSideNav({ activePath, onBrowsePlugins, onNavigate }: Cu
         <button
           type="button"
           aria-label="Back"
-          onClick={() => onNavigate("/epitaxy")}
+          onClick={() => onNavigate("/code")}
           className="cds-reset inline-flex size-8 items-center justify-center rounded-lg text-text-300 hover:bg-bg-300 hover:text-text-100 focus-visible:shadow-focus"
         >
           <Icon name="arrowLeft" />

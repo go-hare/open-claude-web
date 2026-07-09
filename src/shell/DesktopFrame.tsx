@@ -244,8 +244,6 @@ function modeFromPath(pathname: string) {
   ) return "cowork";
   if (
     pathname === "/" ||
-    pathname === "/epitaxy" ||
-    pathname.startsWith("/epitaxy/") ||
     pathname === "/code" ||
     pathname.startsWith("/code/") ||
     pathname.startsWith("/claude-code-desktop")

@@ -132,6 +132,14 @@ type OfficialTranscriptProps = {
   scrollRef?: (node: HTMLDivElement | null) => void;
 };
 
+export function OfficialAwaitingDot() {
+  return (
+    <span aria-hidden="true" className="grid size-[20px] shrink-0 place-items-center">
+      <span className="size-[6px] rounded-full bg-extended-yellow" />
+    </span>
+  );
+}
+
 const buttonVariantClasses: Record<NonNullable<OfficialButtonProps["variant"]>, string> = {
   uncontained: "text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled busy:text-uncontained-busy pressed:text-uncontained-selected pressed:hover:text-uncontained-selected ring-focus",
   contained: "text-contained-default hover:text-contained-hover disabled:text-contained-disabled disabled:hover:text-contained-disabled busy:text-contained-busy pressed:text-contained-selected pressed:hover:text-contained-selected ring-focus",
@@ -687,6 +695,7 @@ export function OfficialAssistantMessage({
   children,
   copyText,
   createdAt,
+  showAwaitingDot = false,
   onFork,
   onRateMessage,
   onRewind,
@@ -702,10 +711,12 @@ export function OfficialAssistantMessage({
   onRewind?: () => void;
   rateMessageUuid?: string;
   rating?: OfficialMessageRating;
+  showAwaitingDot?: boolean;
   showPinAction?: boolean;
 }) {
   return (
     <article className="group/msg relative flex flex-col w-full">
+      {showAwaitingDot ? <span className="absolute left-[-28px] top-0" data-official-source="c11959232-h_zsw3wI.js:Kb showAwaitingDot _h"><OfficialAwaitingDot /></span> : null}
       <div className="flex flex-col gap-[var(--chat-item-gap)] select-text">
         {children}
       </div>

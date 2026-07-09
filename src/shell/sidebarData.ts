@@ -22,7 +22,7 @@ export const newSessionItemByMode: Record<FrameMode, SidebarNavItem> = {
     key: "new-session",
     label: "新会话",
     icon: "Add",
-    href: "/epitaxy",
+    href: "/code",
     shortcut: "⌘N",
     visibleIn: ["code"],
   },

@@ -36,7 +36,7 @@ export function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLay
   useCommandHeldAttribute(hostRef);
   usePaneSplitBounds(hostRef);
 
-  const isSessionRoute = currentRoute.id === "epitaxy-session" || currentRoute.id === "cowork-session";
+  const isSessionRoute = currentRoute.id === "code-session" || currentRoute.id === "cowork-session";
   const contentClassName = isSessionRoute
     ? "flex-1 min-h-0 relative flex flex-col overflow-hidden"
     : "flex-1 min-h-0 relative flex flex-col overflow-x-clip overflow-y-auto";
@@ -94,8 +94,8 @@ export function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLay
 
 function FrameHeader({ currentKey, currentRoute, mode }: { currentKey: string; currentRoute: AppRoute; mode: FrameMode }) {
   const currentRef = paneRefFromPath(window.location.pathname, currentRoute.title);
-  if (currentRoute.id === "epitaxy-session" || currentRoute.id === "cowork-session") return null;
-  const isNewSessionHome = currentRoute.id === "epitaxy-home" || currentRoute.id === "cowork-home";
+  if (currentRoute.id === "code-session" || currentRoute.id === "cowork-session") return null;
+  const isNewSessionHome = currentRoute.id === "code-home" || currentRoute.id === "cowork-home";
   const openSplit = () => {
     if (currentRef) paneStore.addPane(mode, currentKey, currentRef);
   };

@@ -63,9 +63,9 @@ function redirectTarget(routePath: string, pathname: string, search: string) {
 
 function claudeCodeDesktopRedirectTarget(pathname: string, search: string) {
   const suffix = pathname.startsWith("/claude-code-desktop") ? pathname.slice("/claude-code-desktop".length).replace(/\/+$/, "") : "";
-  if (!suffix || suffix === "/onboarding") return `/epitaxy${search}`;
+  if (!suffix || suffix === "/onboarding") return `/code${search}`;
   if (suffix.startsWith("/scheduled/remote/")) return `${scheduledTaskDetailPath(suffix.slice("/scheduled/remote/".length))}${search}`;
-  return `/epitaxy${suffix}${search}`;
+  return `/code${suffix}${search}`;
 }
 
 export function ServiceStatusPage({ route }: RouteViewProps) {

@@ -31,7 +31,7 @@ type PersistedPaneStore = {
 
 const PANE_STORE_KEY = "desktop-frame.paneStore.v1";
 export const PANE_SLOTS: PaneSlot[] = ["tr", "br", "bl"];
-const EPITAXY_RESERVED_SEGMENTS = new Set(["agents", "apps", "dev", "dispatch", "pull-requests", "remote-agents", "scheduled", "tasks"]);
+const CODE_RESERVED_SEGMENTS = new Set(["agents", "apps", "dev", "dispatch", "disabled", "pull-requests", "remote-agents", "scheduled", "tasks"]);
 export const PANE_SPLIT_BOUNDS = {
   MIN: 0.15,
   MAX: 0.85,
@@ -70,16 +70,16 @@ export function paneRefFromPath(path: string, title?: string | null): PaneRef | 
   const pathname = path.split("?")[0] ?? path;
   const coworkMatch = /^\/local_sessions\/([^/?#]+)/.exec(pathname);
   if (coworkMatch?.[1]) return { kind: "cowork", id: decodeURIComponent(coworkMatch[1]), title };
-  if (!pathname.startsWith("/epitaxy/")) return null;
+  if (!pathname.startsWith("/code/")) return null;
   const segments = pathname.split("/").filter(Boolean);
-  if (EPITAXY_RESERVED_SEGMENTS.has(segments[1] ?? "")) return null;
+  if (CODE_RESERVED_SEGMENTS.has(segments[1] ?? "")) return null;
   const id = decodeURIComponent(segments[1] ?? "");
-  return id ? { kind: isCoworkLocalSessionId(id) ? "cowork" : "code", id, title } : null;
+  return id ? { kind: "code", id, title } : null;
 }
 
 export function paneRefToPath(ref: PaneRef) {
   if (ref.kind === "cowork") return `/local_sessions/${encodeURIComponent(ref.id)}`;
-  return `/epitaxy/${encodeURIComponent(ref.id)}`;
+  return `/code/${encodeURIComponent(ref.id)}`;
 }
 
 function subscribe(callback: () => void) {
@@ -284,11 +284,7 @@ function normalizePaneEntry(value: unknown): PaneEntry | null {
   if (!value || typeof value !== "object") return null;
   const entry = value as Partial<PaneEntry>;
   if (!entry.ref || typeof entry.ref.id !== "string" || !PANE_SLOTS.includes(entry.slot as PaneSlot)) return null;
-  const refKind = entry.ref.kind === "cowork" || isCoworkLocalSessionId(entry.ref.id) ? "cowork" : entry.ref.kind === "code" ? "code" : null;
+  const refKind = entry.ref.kind === "cowork" ? "cowork" : entry.ref.kind === "code" ? "code" : null;
   if (!refKind) return null;
   return { ref: { ...entry.ref, kind: refKind }, slot: entry.slot as PaneSlot };
-}
-
-function isCoworkLocalSessionId(id: string) {
-  return id.startsWith("local_") || id.startsWith("epitaxy_");
 }

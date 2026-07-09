@@ -33,15 +33,15 @@ const badgeClass = {
   disabled: "bg-bg-300 text-text-400",
 };
 
-export function CodeWebPage({ onNavigate }: RouteViewProps) {
+export function WebCodePage({ onNavigate }: RouteViewProps) {
   useEffect(() => {
-    if (window.location.pathname !== "/code/disabled") onNavigate("/code/disabled");
+    if (window.location.pathname !== "/webcode/disabled") onNavigate("/webcode/disabled");
   }, [onNavigate]);
 
-  return <CodeDisabledPage />;
+  return <WebCodeDisabledPage />;
 }
 
-function CodeDisabledPage() {
+function WebCodeDisabledPage() {
   return (
     <CodeFamilyLayout
       title="Code with Claude anywhere"

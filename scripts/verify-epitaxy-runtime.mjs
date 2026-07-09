@@ -78,7 +78,7 @@ function spawnLogged(command, args, options = {}) {
 async function startVite(port) {
   const viteBin = path.join(root, "node_modules/vite/bin/vite.js");
   viteProcess = spawnLogged(process.execPath, [viteBin, "--host", "127.0.0.1", "--port", String(port), "--strictPort"]);
-  await waitForHttp(`http://127.0.0.1:${port}/epitaxy/${sessionId}`);
+  await waitForHttp(`http://127.0.0.1:${port}/code/${sessionId}`);
 }
 
 async function startChrome(debugPort, appUrl) {
@@ -236,7 +236,7 @@ async function navigateInApp(cdp, pathname) {
 async function run() {
   const vitePort = await freePort();
   const debugPort = await freePort();
-  const appUrl = `http://127.0.0.1:${vitePort}/epitaxy/${sessionId}`;
+  const appUrl = `http://127.0.0.1:${vitePort}/code/${sessionId}`;
   await startVite(vitePort);
   const target = await startChrome(debugPort, appUrl);
   const cdp = new CdpClient(target.webSocketDebuggerUrl);
@@ -274,7 +274,7 @@ async function run() {
   assertCheck("工具块", "collapsed tool rows render from transcript", initial.toolRows, JSON.stringify(initial));
 
   runtimeExceptions.length = 0;
-  await navigateInApp(cdp, "/epitaxy");
+  await navigateInApp(cdp, "/code");
   await waitFor(cdp, "Code新任务", "Code home composer renders before typing", () => document.readyState === "complete"
     && Boolean(document.querySelector('[contenteditable="true"][aria-label="描述一个任务，或提一个问题"].tiptap'))
     && document.body.innerText.includes("描述一个任务，或提一个问题"));
@@ -291,8 +291,8 @@ async function run() {
   }, 8_000, codeHomeText);
   assertCheck("Code新任务", "Code home composer has no runtime exception", runtimeExceptions.length === 0, runtimeExceptions.join("\n"));
 
-  await navigateInApp(cdp, `/epitaxy/${sessionId}`);
-  await waitFor(cdp, "Code新任务", "Code session returns after Code home composer smoke", (id) => location.pathname === `/epitaxy/${id}`
+  await navigateInApp(cdp, `/code/${sessionId}`);
+  await waitFor(cdp, "Code新任务", "Code session returns after Code home composer smoke", (id) => location.pathname === `/code/${id}`
     && Boolean(document.querySelector('[contenteditable="true"][aria-label="Prompt"].tiptap')), 8_000, sessionId);
 
   const legacyCoworkRedirects = [
@@ -426,8 +426,8 @@ async function run() {
     };
   }, coworkUiSessionId, coworkAttachmentText);
   assertCheck("协作对话", "Cowork attachment payload matches official uploaded_files shape", coworkAttachmentPayload.hasFilePath && coworkAttachmentPayload.hasFileUuid && coworkAttachmentPayload.userSelectedFiles.some((item) => String(item).endsWith("sample.txt")), JSON.stringify(coworkAttachmentPayload));
-  await navigateInApp(cdp, `/epitaxy/${sessionId}`);
-  await waitFor(cdp, "协作新任务", "Code session is restored after Cowork UI submit", (id) => location.pathname === `/epitaxy/${id}` && ["Permission mode", "Add", "Workspace", "Model", "Send"].every((label) => document.querySelector(`[aria-label="${label}"]`)), 8_000, sessionId);
+  await navigateInApp(cdp, `/code/${sessionId}`);
+  await waitFor(cdp, "协作新任务", "Code session is restored after Cowork UI submit", (id) => location.pathname === `/code/${id}` && ["Permission mode", "Add", "Workspace", "Model", "Send"].every((label) => document.querySelector(`[aria-label="${label}"]`)), 8_000, sessionId);
 
   const coworkSession = await cdp.evaluate(async () => {
     const { fakeDesktopBridge } = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
@@ -463,8 +463,8 @@ async function run() {
     };
   });
   assertCheck("协作路由", "fake bridge creates a Cowork local_* session", coworkSession.id === coworkSession.requestedSessionId && coworkSession.id?.startsWith("local_") && coworkSession.kind === "epitaxy" && coworkSession.sessionKind === "cowork", JSON.stringify(coworkSession));
-  await navigateInApp(cdp, `/epitaxy/${coworkSession.id}`);
-  await waitFor(cdp, "协作路由", "Cowork legacy /epitaxy/local_* redirects to /local_sessions", (id) => location.pathname === `/local_sessions/${id}`, 8_000, coworkSession.id);
+  await navigateInApp(cdp, `/local_sessions/${coworkSession.id}`);
+  await waitFor(cdp, "协作路由", "Cowork canonical /local_sessions renders Cowork session", (id) => location.pathname === `/local_sessions/${id}`, 8_000, coworkSession.id);
   await waitFor(cdp, "协作路由", "Cowork session renders official Cowork composer and long Add label", () => Boolean(document.querySelector('[data-official-source="index-BELzQL5P.js:CAt Cowork composer"]')) && Boolean(document.querySelector('[data-official-source="index-BELzQL5P.js:local_agent_mode Cowork session header"]')) && Boolean(document.querySelector('[contenteditable="true"][aria-label="Prompt"].tiptap')) && Boolean(document.querySelector('[aria-label="Add files, connectors, and more"]')) && document.body.innerText.includes("Write a message...") && !document.body.innerText.includes("找不到这个会话"));
   await waitFor(cdp, "协作活动面板", "Cowork Context shows official scheduled task link", () => document.body.innerText.includes("上下文") && document.body.innerText.includes("Nightly report"));
   const scheduledTaskClicked = await cdp.evaluate(clickElementByText, "button", "Nightly report");
@@ -736,8 +736,8 @@ async function run() {
   assertCheck("权限审批", "Cowork directory Allow button is clickable", coworkDirectoryAllowClicked);
   await waitFor(cdp, "权限审批", "Cowork directory permission card resolves", () => window.__epitaxyRuntime.bodyExcludes("Runtime Cowork directory approval smoke", "/Users/apple/Downloads"));
 
-  await navigateInApp(cdp, `/epitaxy/${sessionId}`);
-  await waitFor(cdp, "协作路由", "Code session returns to canonical /epitaxy route with controls", (id) => location.pathname === `/epitaxy/${id}` && ["Permission mode", "Add", "Workspace", "Model", "Send"].every((label) => document.querySelector(`[aria-label="${label}"]`)), 8_000, sessionId);
+  await navigateInApp(cdp, `/code/${sessionId}`);
+  await waitFor(cdp, "协作路由", "Code session returns to canonical /code route with controls", (id) => location.pathname === `/code/${id}` && ["Permission mode", "Add", "Workspace", "Model", "Send"].every((label) => document.querySelector(`[aria-label="${label}"]`)), 8_000, sessionId);
 
   await cdp.evaluate(() => {
     const editor = document.querySelector('[contenteditable="true"][aria-label="Prompt"]');
@@ -806,17 +806,23 @@ async function run() {
     emit({ type: "message_start", message: { id: "runtime-stream-smoke" } });
     emit({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
     emit({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text } });
-    emit({ type: "content_block_stop", index: 0 });
-    emit({ type: "message_stop" });
     return true;
   }, sessionId, streamText);
   await waitFor(cdp, "对话流渲染", "stream delta is rendered through smoother", () => window.__epitaxyRuntime.bodyIncludes("Runtime stream smoke phrase"));
+  await waitFor(cdp, "对话流渲染", "Code assistant awaiting dot uses official Kb/_h slot", () => Boolean(document.querySelector('[data-official-source="c11959232-h_zsw3wI.js:Kb showAwaitingDot _h"]')));
+  await cdp.evaluate(async (activeSessionId) => {
+    const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    const emit = (event) => bridge.emitFakeLocalSessionEvent({ sessionId: activeSessionId, type: "stream_event", uuid: "runtime-stream-smoke", event }, "code");
+    emit({ type: "content_block_stop", index: 0 });
+    emit({ type: "message_stop" });
+    return true;
+  }, sessionId);
   await cdp.evaluate(async (activeSessionId) => {
     const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
     bridge.emitFakeLocalSessionEvent({ sessionId: activeSessionId, type: "message", message: { type: "result" } }, "code");
     return true;
   }, sessionId);
-  await waitFor(cdp, "对话流渲染", "stream finalization keeps page mounted without connecting flash", (activeSessionId) => location.pathname === `/epitaxy/${activeSessionId}` && window.__epitaxyRuntime.bodyExcludes("Connecting to session") && window.__epitaxyRuntime.bodyIncludes("runtime composer submit"), 12_000, sessionId);
+  await waitFor(cdp, "对话流渲染", "stream finalization keeps page mounted without connecting flash", (activeSessionId) => location.pathname === `/code/${activeSessionId}` && window.__epitaxyRuntime.bodyExcludes("Connecting to session") && window.__epitaxyRuntime.bodyIncludes("runtime composer submit"), 12_000, sessionId);
 
   const screenshot = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true });
   await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));

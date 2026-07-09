@@ -35,7 +35,9 @@ import {
 import { createCoworkAddMenuItems } from "./cowork/CoworkAddMenuItems";
 import {
   OfficialCoworkComposer,
+  OfficialCoworkAssistantMessage,
   OfficialCoworkDirectoryApprovalCard,
+  OfficialCoworkResponseMarkdown,
   OfficialCoworkSessionHeader,
   OfficialCoworkThinkingBlock,
   OfficialCoworkUserMessage,
@@ -1084,7 +1086,7 @@ function OfficialSubagentPane({ session, subagentView }: { session: SessionSumma
     return (
       <div className="h-full overflow-y-auto px-p8 py-p6 select-text">
         <div className="epitaxy-chat-column flex flex-col gap-[var(--chat-turn-gap)]">
-          {task.prompt ? <OfficialUserEntryMessage entry={{ author: "user", id: `${subagentView.toolUseId}-prompt`, items: [{ id: `${subagentView.toolUseId}-prompt-t`, kind: "text", text: task.prompt }] }} /> : null}
+          {task.prompt ? <CodeUserEntryMessage entry={{ author: "user", id: `${subagentView.toolUseId}-prompt`, items: [{ id: `${subagentView.toolUseId}-prompt-t`, kind: "text", text: task.prompt }] }} /> : null}
           {task.result ? (
             <div className="epitaxy-markdown">
               <MarkdownContent text={task.result} />
@@ -1104,8 +1106,8 @@ function OfficialSubagentPane({ session, subagentView }: { session: SessionSumma
       <div className="h-full overflow-y-auto px-p8 py-p6">
         <div className="epitaxy-chat-column flex flex-col gap-[var(--chat-turn-gap)]">
           {entries.map((entry, index) => entry.author === "user"
-            ? <OfficialUserEntryMessage entry={entry} key={entry.id} />
-            : <OfficialAssistantEntryMessage entry={entry} isStreaming={isRunning && index === entries.length - 1} key={entry.id} />)}
+            ? <CodeUserEntryMessage entry={entry} key={entry.id} />
+            : <CodeAssistantEntryMessage entry={entry} isStreaming={isRunning && index === entries.length - 1} key={entry.id} showAwaitingDot={isRunning && index === entries.length - 1} />)}
           <div className="flex items-center h-h3"><OfficialSparkSpinner isWorking={isRunning} size="m" /></div>
         </div>
       </div>
@@ -2376,7 +2378,69 @@ function renderTranscriptBody({ coworkStatus, entries, error, initialSessionId, 
     );
   }
   if (entries.length === 0 && !isResponding) return <div className="h-full flex items-center justify-center text-body text-t5">No messages yet.</div>;
-  return <Transcript key={transcriptKey} coworkStatus={coworkStatus} entries={entries} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} streamTokenEstimate={streamTokenEstimate} surface={surface} tasks={tasks} />;
+  if (surface === "cowork") {
+    return (
+      <CoworkConversationBody
+        coworkStatus={coworkStatus}
+        entries={entries}
+        isResponding={isResponding}
+        onScrollState={onScrollState}
+        pendingTurnStartedAt={pendingTurnStartedAt}
+        scrollRef={scrollRef}
+      />
+    );
+  }
+  return <Transcript key={transcriptKey} entries={entries} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} />;
+}
+
+function CoworkConversationBody({ coworkStatus, entries, isResponding, onScrollState, pendingTurnStartedAt, scrollRef }: {
+  coworkStatus: CoworkConversationStatusState | null;
+  entries: TranscriptEntry[];
+  isResponding: boolean;
+  onScrollState: (state: OfficialTranscriptScrollState) => void;
+  pendingTurnStartedAt?: number | null;
+  scrollRef: MutableRefObject<HTMLDivElement | null>;
+}) {
+  const localScrollRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    scrollRef.current = localScrollRef.current;
+    return () => {
+      scrollRef.current = null;
+    };
+  }, [scrollRef]);
+
+  useLayoutEffect(() => {
+    const node = localScrollRef.current;
+    if (!node) return undefined;
+    const updateScrollState = () => {
+      if (node.offsetParent === null) return;
+      const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+      onScrollState({ showScrollButton: distanceFromBottom > 200, showBottomFade: distanceFromBottom > 8 });
+    };
+    node.addEventListener("scroll", updateScrollState, { passive: true });
+    const observer = new ResizeObserver(updateScrollState);
+    observer.observe(node);
+    updateScrollState();
+    return () => {
+      node.removeEventListener("scroll", updateScrollState);
+      observer.disconnect();
+      onScrollState({ showScrollButton: false, showBottomFade: false });
+    };
+  }, [onScrollState]);
+
+  return (
+    <div ref={localScrollRef} data-testid="cowork-conversation-body" className="h-full overflow-y-auto overflow-x-hidden">
+      <div className="epitaxy-chat-column epitaxy-chat-size flex min-h-full flex-col gap-[var(--chat-turn-gap)] py-[48px]">
+        {entries.map((entry) => (
+          entry.author === "user"
+            ? <div data-epitaxy-entry={entry.id} className="origin-right" key={entry.id}><CoworkUserEntryMessage entry={entry} /></div>
+            : <div data-epitaxy-entry={entry.id} key={entry.id}><CoworkAssistantEntryMessage entry={entry} /></div>
+        ))}
+        <CoworkConversationStatus isWorking={isResponding} startedAt={pendingTurnStartedAt} status={coworkStatus} />
+      </div>
+    </div>
+  );
 }
 
 type TranscriptRow =
@@ -2394,7 +2458,6 @@ type OfficialTranscriptRestore = {
 const officialTranscriptScrollRestores = new Map<string, OfficialTranscriptRestore>();
 
 type TranscriptProps = {
-  coworkStatus: CoworkConversationStatusState | null;
   entries: TranscriptEntry[];
   isResponding: boolean;
   onScrollState: (state: OfficialTranscriptScrollState) => void;
@@ -2403,11 +2466,10 @@ type TranscriptProps = {
   scrollRef: MutableRefObject<HTMLDivElement | null>;
   sessionId?: string;
   streamTokenEstimate: number;
-  surface: SessionSurface;
   tasks: OfficialBackgroundTask[];
 };
 
-const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ coworkStatus, entries, isResponding, onScrollState, pendingTurnStartedAt, restoreKey, scrollRef, sessionId, streamTokenEstimate, surface, tasks }, ref) {
+const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isResponding, onScrollState, pendingTurnStartedAt, restoreKey, scrollRef, sessionId, streamTokenEstimate, tasks }, ref) {
   const rowsRef = useRef<TranscriptRow[]>([]);
   const initialCount = useRef(entries.length);
   const rows = useMemo(() => buildTranscriptRows(entries), [entries]);
@@ -2490,7 +2552,7 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
             return (
               <div data-index={virtualRow.index} key={virtualRow.key} ref={officialVirtualizer.measureElement}>
                 <div className={virtualRow.index < rows.length - 1 ? "epitaxy-chat-size pb-[var(--chat-turn-gap)] empty:pb-0" : "epitaxy-chat-size"}>
-                  <TranscriptRowContent coworkStatus={coworkStatus} initialCount={initialCount.current} isResponding={isResponding} lastEntryIdx={lastEntryIdx} pendingTurnStartedAt={pendingTurnStartedAt} row={row} sessionId={sessionId} streamTokenEstimate={streamTokenEstimate} surface={surface} tasks={tasks} />
+                  <TranscriptRowContent initialCount={initialCount.current} isResponding={isResponding} lastEntryIdx={lastEntryIdx} pendingTurnStartedAt={pendingTurnStartedAt} row={row} sessionId={sessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} />
                 </div>
               </div>
             );
@@ -2866,16 +2928,18 @@ function buildTranscriptRows(entries: TranscriptEntry[]): TranscriptRow[] {
   return rows;
 }
 
-function TranscriptRowContent({ coworkStatus, initialCount, isResponding, lastEntryIdx, pendingTurnStartedAt, row, sessionId, streamTokenEstimate, surface, tasks }: { coworkStatus: CoworkConversationStatusState | null; initialCount: number; isResponding: boolean; lastEntryIdx: number; pendingTurnStartedAt?: number | null; row: TranscriptRow; sessionId?: string; streamTokenEstimate: number; surface: SessionSurface; tasks: OfficialBackgroundTask[] }) {
+function TranscriptRowContent({ initialCount, isResponding, lastEntryIdx, pendingTurnStartedAt, row, sessionId, streamTokenEstimate, tasks }: { initialCount: number; isResponding: boolean; lastEntryIdx: number; pendingTurnStartedAt?: number | null; row: TranscriptRow; sessionId?: string; streamTokenEstimate: number; tasks: OfficialBackgroundTask[] }) {
   if (row.kind === "running-tasks") return <OfficialRunningTasks isResponding={isResponding} tasks={tasks} />;
-  if (row.kind === "loader" && surface === "cowork") return <CoworkConversationStatus isWorking={isResponding} startedAt={pendingTurnStartedAt} status={coworkStatus} />;
   if (row.kind === "loader") return <OfficialWorkingStatus isWorking={isResponding} sessionId={sessionId} startedAt={pendingTurnStartedAt} tokenEstimate={streamTokenEstimate} />;
 
   const isNewUserEntry = row.kind === "user" && row.entryIdx >= initialCount;
   const isStreaming = row.kind === "assistant" && isResponding && row.entryIdx === lastEntryIdx;
-  const content = row.kind === "user" ? <OfficialUserEntryMessage entry={row.entry} /> : <OfficialAssistantEntryMessage entry={row.entry} isStreaming={isStreaming} />;
+  const showCodeAwaitingDot = isStreaming;
+  const content = row.kind === "user"
+    ? <CodeUserEntryMessage entry={row.entry} />
+    : <CodeAssistantEntryMessage entry={row.entry} isStreaming={isStreaming} showAwaitingDot={showCodeAwaitingDot} />;
   if (row.kind === "user") {
-    return <div data-epitaxy-entry={row.entry.id} className={`${surface === "cowork" ? "origin-right" : "origin-left"} ${isNewUserEntry ? "epitaxy-user-enter" : ""}`}>{content}</div>;
+    return <div data-epitaxy-entry={row.entry.id} className={`origin-left ${isNewUserEntry ? "epitaxy-user-enter" : ""}`}>{content}</div>;
   }
   return <div data-epitaxy-entry={row.entry.id}>{content}</div>;
 }
@@ -3243,9 +3307,8 @@ function estimateOfficialStreamSnapshotTokens(snapshot: OfficialStreamSnapshot) 
   return Math.round(charCount / 4);
 }
 
-function OfficialUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
+function CodeUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
-  const isCoworkSurface = actions?.sessionSurface === "cowork";
   const textItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "text" }> => item.kind === "text");
   const bashItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "bash" }> => item.kind === "bash");
   const eventItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "event" }> => item.kind === "event");
@@ -3261,7 +3324,7 @@ function OfficialUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
     await actions.bridge.rewind(actions.sessionId, entry.id);
     await actions.reload();
   }, [actions, entry.id]);
-  const onFork = !isCoworkSurface && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
+  const onFork = actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
   const onRewind = actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
   const messageBody = (
     <div className="flex flex-col gap-g4">
@@ -3272,14 +3335,27 @@ function OfficialUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
     </div>
   );
 
-  if (isCoworkSurface) {
-    return <OfficialCoworkUserMessage>{messageBody}</OfficialCoworkUserMessage>;
-  }
   return (
     <OfficialUserMessage copyText={copyText} createdAt={entry.timestamp} onFork={onFork} onRewind={onRewind}>
       {messageBody}
     </OfficialUserMessage>
   );
+}
+
+function CoworkUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
+  const textItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "text" }> => item.kind === "text");
+  const bashItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "bash" }> => item.kind === "bash");
+  const eventItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "event" }> => item.kind === "event");
+  const fileItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "uploaded-file" }> => item.kind === "uploaded-file");
+  const messageBody = (
+    <div className="flex flex-col gap-g4">
+      {fileItems.length > 0 ? <UserUploadedFiles files={fileItems.map((item) => item.file)} /> : null}
+      {textItems.map((item) => <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty" key={item.id}>{renderInlineMarkdown(item.text, item.id)}</p>)}
+      {bashItems.map((item) => <UserBashBlock item={item} key={item.id} />)}
+      {eventItems.map((item) => <p className="text-body text-t7 whitespace-pre-wrap [overflow-wrap:anywhere]" key={item.id}>{item.content}</p>)}
+    </div>
+  );
+  return <OfficialCoworkUserMessage>{messageBody}</OfficialCoworkUserMessage>;
 }
 
 function UserUploadedFiles({ files }: { files: CoworkUploadedFile[] }) {
@@ -3296,10 +3372,9 @@ function UserUploadedFiles({ files }: { files: CoworkUploadedFile[] }) {
   );
 }
 
-function OfficialAssistantEntryMessage({ entry, isStreaming = false }: { entry: TranscriptEntry; isStreaming?: boolean }) {
+function CodeAssistantEntryMessage({ entry, isStreaming = false, showAwaitingDot = false }: { entry: TranscriptEntry; isStreaming?: boolean; showAwaitingDot?: boolean }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
-  const isCoworkSurface = actions?.sessionSurface === "cowork";
-  const visibleItems = entry.items.filter((item) => isCoworkSurface ? item.kind !== "uploaded-file" : isVisibleTranscriptEntryItem(item));
+  const visibleItems = entry.items.filter(isVisibleAssistantEntryItem);
   const copyText = visibleItems.flatMap((item) => item.kind === "text" ? [item.text] : []).join("\n\n") || undefined;
   const forkFromHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.forkSession) return;
@@ -3311,8 +3386,8 @@ function OfficialAssistantEntryMessage({ entry, isStreaming = false }: { entry: 
     await actions.bridge.rewind(actions.sessionId, entry.id);
     await actions.reload();
   }, [actions, entry.id]);
-  const onFork = !isCoworkSurface && !isStreaming && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
-  const onRewind = !isCoworkSurface && !isStreaming && actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
+  const onFork = !isStreaming && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
+  const onRewind = !isStreaming && actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
   const onRateMessage = !isStreaming && actions?.sessionId && actions.bridge.submitTranscriptFeedback
     ? (messageUuid: string, rating: "negative" | "positive") => {
       void actions.bridge.submitTranscriptFeedback?.(actions.sessionId, {
@@ -3326,9 +3401,9 @@ function OfficialAssistantEntryMessage({ entry, isStreaming = false }: { entry: 
   if (visibleItems.length === 0) return null;
 
   return (
-    <OfficialAssistantMessage copyText={copyText} createdAt={isStreaming ? undefined : entry.timestamp} onFork={onFork} onRateMessage={onRateMessage} onRewind={onRewind} rateMessageUuid={entry.id} showPinAction={!isCoworkSurface}>
+    <OfficialAssistantMessage copyText={copyText} createdAt={isStreaming ? undefined : entry.timestamp} onFork={onFork} onRateMessage={onRateMessage} onRewind={onRewind} rateMessageUuid={entry.id} showAwaitingDot={showAwaitingDot}>
       {visibleItems.map((item) => {
-        if (item.kind === "thinking") return <OfficialCoworkThinkingBlock text={item.text} key={item.id} />;
+        if (item.kind === "thinking") return <CodeThinkingBlock text={item.text} key={item.id} />;
         if (item.kind === "text") {
           return (
             <div className="epitaxy-markdown" key={item.id}>
@@ -3339,11 +3414,37 @@ function OfficialAssistantEntryMessage({ entry, isStreaming = false }: { entry: 
         if (item.kind === "tools") return <AssistantToolsBlock item={item} key={item.id} />;
         if (item.kind === "error") return <div className="rounded-r3 border border-[var(--fill-destructive-default)] px-p3 py-p2 text-code text-destructive-default whitespace-pre-wrap break-words" key={item.id}>{item.text}</div>;
         if (item.kind === "bash") return <UserBashBlock item={item} key={item.id} />;
-        if (item.kind === "uploaded-file") return null;
         return <div className="text-body text-t6 whitespace-pre-wrap break-words" key={item.id}>{item.content}</div>;
       })}
     </OfficialAssistantMessage>
   );
+}
+
+function CoworkAssistantEntryMessage({ entry, isStreaming = false }: { entry: TranscriptEntry; isStreaming?: boolean }) {
+  const visibleItems = entry.items.filter(isVisibleAssistantEntryItem);
+  if (visibleItems.length === 0) return null;
+  return (
+    <OfficialCoworkAssistantMessage>
+      {visibleItems.map((item) => {
+        if (item.kind === "thinking") return <OfficialCoworkThinkingBlock text={item.text} key={item.id} />;
+        if (item.kind === "text") {
+          return (
+            <OfficialCoworkResponseMarkdown key={item.id}>
+              <MarkdownContent isStreaming={isStreaming} text={item.text} />
+            </OfficialCoworkResponseMarkdown>
+          );
+        }
+        if (item.kind === "tools") return <AssistantToolsBlock item={item} key={item.id} />;
+        if (item.kind === "error") return <div className="rounded-r3 border border-[var(--fill-destructive-default)] px-p3 py-p2 text-code text-destructive-default whitespace-pre-wrap break-words" key={item.id}>{item.text}</div>;
+        if (item.kind === "bash") return <UserBashBlock item={item} key={item.id} />;
+        return <div className="text-body text-t6 whitespace-pre-wrap break-words" key={item.id}>{item.content}</div>;
+      })}
+    </OfficialCoworkAssistantMessage>
+  );
+}
+
+function CodeThinkingBlock({ text }: { text: string }) {
+  return <div className="text-body text-t6 italic whitespace-pre-wrap break-words">{text}</div>;
 }
 
 function AssistantToolsBlock({ item }: { item: Extract<TranscriptEntryItem, { kind: "tools" }> }) {
@@ -4061,8 +4162,8 @@ function normalizeToolStatus(status: unknown, isError?: boolean, output?: string
   return "running";
 }
 
-function isVisibleTranscriptEntryItem(item: TranscriptEntryItem): item is Exclude<TranscriptEntryItem, { kind: "thinking" | "uploaded-file" }> {
-  return item.kind !== "thinking" && item.kind !== "uploaded-file";
+function isVisibleAssistantEntryItem(item: TranscriptEntryItem): item is Exclude<TranscriptEntryItem, { kind: "uploaded-file" }> {
+  return item.kind !== "uploaded-file";
 }
 
 type MarkdownBlock =

@@ -59,7 +59,7 @@ export function SettingsDFrame({
         <button
           aria-label="Back to Claude"
           className={headerButtonClass}
-          onClick={() => onNavigate("/epitaxy")}
+          onClick={() => onNavigate("/code")}
           type="button"
         >
           <Icon name="arrowLeft" />
