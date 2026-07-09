@@ -1,0 +1,185 @@
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { desktopBridge } from "../../../adapters/desktopBridge";
+import type { ChatMessage, ConnectedOfficeFile, LocalSessionsBridge, SessionSummary } from "../../../adapters/desktopBridge/types";
+import { Icon } from "../../../shell/icons";
+import { CoworkActivityPanelShell } from "./CoworkActivityPanelShell";
+import { CoworkActivitySection } from "./CoworkActivitySection";
+import { CoworkContextContent, CoworkWorkingFolderContent } from "./CoworkActivityContent";
+import { CoworkBrowserExtensionDetailPanel } from "./CoworkBrowserExtensionDetailPanel";
+import { CoworkConnectedOfficeFilesSection, useCoworkConnectedOfficeFiles } from "./CoworkConnectedOfficeFilesSection";
+import { CoworkBrowseFilesButton, CoworkFileExplorerModal } from "./CoworkFileExplorerModal";
+import { CoworkProgressSection } from "./CoworkProgressSection";
+import { CoworkScheduledRunsSection, useCoworkScheduledRuns } from "./CoworkScheduledRunsSection";
+import type { CoworkBackgroundTask, CoworkOpenFileTarget, CoworkTodoItem } from "./coworkActivityTypes";
+import { coworkFolderSectionTitle, coworkSessionFolders, parseCoworkResourceActivity, splitCoworkResourceSections, type CoworkResourceSections } from "./coworkResourceActivity";
+import { parseCoworkTodos } from "./coworkTodoActivity";
+
+export type { CoworkBackgroundTask } from "./coworkActivityTypes";
+
+export function CoworkSessionActivityPanel({ bridge, messages, onNavigate, onOpenFile, session, sessionId, tasks }: {
+  bridge: LocalSessionsBridge;
+  messages: ChatMessage[];
+  onNavigate: (path: string) => void;
+  onOpenFile: (target: CoworkOpenFileTarget) => void;
+  session: SessionSummary | null;
+  sessionId: string;
+  tasks: CoworkBackgroundTask[];
+}) {
+  const todos = useMemo(() => parseCoworkTodos(messages), [messages]);
+  const resources = useMemo(() => parseCoworkResourceActivity(messages), [messages]);
+  const folders = useMemo(() => coworkSessionFolders(session), [session]);
+  const resourceSections = useMemo(() => splitCoworkResourceSections(resources, folders), [resources, folders]);
+  const { connectedFiles: connectedOfficeFiles } = useCoworkConnectedOfficeFiles(sessionId);
+  const scheduledRuns = useCoworkScheduledRuns(bridge, session?.scheduledTaskId);
+  const [progressOpen, setProgressOpen] = useState(true);
+  const [runsOpen, setRunsOpen] = useState(true);
+  const [foldersOpen, setFoldersOpen] = useState(() => hasFolderActivity(folders, resourceSections, connectedOfficeFiles));
+  const [contextOpen, setContextOpen] = useState(true);
+  const [officeFilesOpen, setOfficeFilesOpen] = useState(true);
+  const [selectedDetail, setSelectedDetail] = useState<CoworkActivityDetail>(null);
+  const hasActivity = hasCoworkActivity({ connectedOfficeFiles, folders, mountedProjects: session?.mountedProjects ?? [], resources, scheduledRuns, session, tasks, todos });
+  const allTodosCompleted = useMemo(() => todos.length > 0 && todos.every((todo) => todo.status === "completed"), [todos]);
+  const previousAllTodosCompletedRef = useRef(allTodosCompleted);
+
+  useEffect(() => {
+    if (hasFolderActivity(folders, resourceSections, connectedOfficeFiles)) setFoldersOpen(true);
+  }, [connectedOfficeFiles, folders, resourceSections]);
+
+  useEffect(() => {
+    const previouslyAllCompleted = previousAllTodosCompletedRef.current;
+    if (allTodosCompleted && !previouslyAllCompleted) setProgressOpen(false);
+    else if (!allTodosCompleted && previouslyAllCompleted && todos.length > 0) setProgressOpen(true);
+    previousAllTodosCompletedRef.current = allTodosCompleted;
+  }, [allTodosCompleted, todos.length]);
+
+  if (!hasActivity) return null;
+
+  return (
+    <CoworkActivityPanelShell sessionId={sessionId}>
+      {selectedDetail?.type === "browser_extension" ? (
+        <CoworkBrowserExtensionDetailPanel highlightId={selectedDetail.highlightId} onClose={() => setSelectedDetail(null)} resources={resources} />
+      ) : (
+        <CoworkActivityPanelBody
+          allTodosCompleted={allTodosCompleted}
+          connectedOfficeFiles={connectedOfficeFiles}
+          contextOpen={contextOpen}
+          folders={folders}
+          foldersOpen={foldersOpen}
+          onContextToggle={() => setContextOpen((value) => !value)}
+          onFoldersToggle={() => setFoldersOpen((value) => !value)}
+          onNavigate={onNavigate}
+          onOfficeFilesToggle={() => setOfficeFilesOpen((value) => !value)}
+          onOpenBrowserExtension={(target) => setSelectedDetail({ type: "browser_extension", highlightId: target.highlightId })}
+          onOpenFile={onOpenFile}
+          onProgressToggle={() => setProgressOpen((value) => !value)}
+          onRunsToggle={() => setRunsOpen((value) => !value)}
+          officeFilesOpen={officeFilesOpen}
+          progressOpen={progressOpen}
+          resourceSections={resourceSections}
+          runsOpen={runsOpen}
+          scheduledRuns={scheduledRuns}
+          selectedPath={selectedDetail?.type === "browser_extension" ? "browser_extension://all" : undefined}
+          session={session}
+          sessionId={sessionId}
+          tasks={tasks}
+          todos={todos}
+        />
+      )}
+    </CoworkActivityPanelShell>
+  );
+}
+
+function CoworkActivityPanelBody({ allTodosCompleted, connectedOfficeFiles, contextOpen, folders, foldersOpen, officeFilesOpen, onContextToggle, onFoldersToggle, onNavigate, onOfficeFilesToggle, onOpenBrowserExtension, onOpenFile, onProgressToggle, onRunsToggle, progressOpen, resourceSections, runsOpen, scheduledRuns, selectedPath, session, sessionId, tasks, todos }: CoworkActivityPanelBodyProps) {
+  const hasFolderRows = hasFolderActivity(folders, resourceSections, connectedOfficeFiles);
+  const instructionFolder = useMemo(() => coworkInstructionFolder(session), [session]);
+  const [fileExplorerOpen, setFileExplorerOpen] = useState(false);
+  const folderHeaderAction = useMemo(() => {
+    const canBrowseFiles = folders.length > 0 && Boolean(desktopBridge.FileSystem.listFilesInFolder);
+    const canGoToFolder = folders.length === 1 && Boolean(desktopBridge.FileSystem.showInFolder || desktopBridge.FileSystem.openLocalFile);
+    if (!canBrowseFiles && !canGoToFolder) return undefined;
+    return (
+      <span className="-my-1 flex items-center gap-1">
+        {canBrowseFiles ? <CoworkBrowseFilesButton onBrowse={(event) => { event.stopPropagation(); setFileExplorerOpen(true); }} /> : null}
+        {canGoToFolder ? <CoworkGoToFolderButton folder={folders[0]} /> : null}
+      </span>
+    );
+  }, [folders]);
+  return (
+    <>
+      {scheduledRuns.length > 0 ? <CoworkScheduledRunsSection currentSessionId={sessionId} isExpanded={runsOpen} onNavigate={onNavigate} onToggle={onRunsToggle} runs={scheduledRuns} /> : null}
+      <CoworkProgressSection allTodosCompleted={allTodosCompleted} isExpanded={progressOpen} onToggle={onProgressToggle} tasks={tasks} todos={todos} />
+      <CoworkActivitySection contentClassName={hasFolderRows ? undefined : "!pb-3"} headerLeftAction={folderHeaderAction} isExpanded={foldersOpen} maxContentHeight="24rem" title={coworkFolderSectionTitle(folders)} onToggle={onFoldersToggle}>
+        <CoworkWorkingFolderContent folders={folders} hasConnectedOfficeFiles={connectedOfficeFiles.length > 0} instructionFolder={instructionFolder} resources={resourceSections.workingResources} scratchpadResources={resourceSections.scratchpadResources} sessionId={sessionId} onOpenFile={onOpenFile} />
+        <CoworkConnectedOfficeFilesSection files={connectedOfficeFiles} isExpanded={officeFilesOpen} onToggle={onOfficeFilesToggle} />
+      </CoworkActivitySection>
+      <CoworkActivitySection isExpanded={contextOpen} title="Context" onToggle={onContextToggle}>
+        <CoworkContextContent mountedProjects={session?.mountedProjects ?? []} onNavigate={onNavigate} onOpenBrowserExtension={onOpenBrowserExtension} onOpenFile={onOpenFile} resources={resourceSections.contextResources} scheduledTaskId={session?.scheduledTaskId} selectedPath={selectedPath} userSelectedFolders={session?.userSelectedFolders?.filter(Boolean) ?? []} />
+      </CoworkActivitySection>
+      <CoworkFileExplorerModal folders={folders} isOpen={fileExplorerOpen} onClose={() => setFileExplorerOpen(false)} onOpenFile={onOpenFile} sessionId={sessionId} />
+    </>
+  );
+}
+
+function CoworkGoToFolderButton({ folder }: { folder?: string }) {
+  if (!folder) return null;
+  const openFolder = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    void (desktopBridge.FileSystem.showInFolder?.(folder) ?? desktopBridge.FileSystem.openLocalFile?.(folder));
+  };
+  return (
+    <button
+      aria-label="Go to folder"
+      className="inline-flex size-5 items-center justify-center rounded-small text-text-400 hover:bg-bg-200 hover:text-text-200"
+      onClick={openFolder}
+      type="button"
+    >
+      <Icon name="Folder" size="xs" />
+    </button>
+  );
+}
+
+type CoworkActivityPanelBodyProps = {
+  allTodosCompleted: boolean;
+  connectedOfficeFiles: ConnectedOfficeFile[];
+  contextOpen: boolean;
+  folders: string[];
+  foldersOpen: boolean;
+  officeFilesOpen: boolean;
+  onContextToggle: () => void;
+  onFoldersToggle: () => void;
+  onNavigate: (path: string) => void;
+  onOfficeFilesToggle: () => void;
+  onOpenBrowserExtension: (target: { highlightId?: string }) => void;
+  onOpenFile: (target: CoworkOpenFileTarget) => void;
+  onProgressToggle: () => void;
+  onRunsToggle: () => void;
+  progressOpen: boolean;
+  resourceSections: CoworkResourceSections;
+  runsOpen: boolean;
+  scheduledRuns: SessionSummary[];
+  selectedPath?: string;
+  session: SessionSummary | null;
+  sessionId: string;
+  tasks: CoworkBackgroundTask[];
+  todos: CoworkTodoItem[];
+};
+
+type CoworkActivityDetail = {
+  highlightId?: string;
+  type: "browser_extension";
+} | null;
+
+function hasFolderActivity(folders: string[], sections: CoworkResourceSections, connectedOfficeFiles: unknown[]) {
+  return folders.length > 0 || sections.workingResources.length > 0 || sections.scratchpadResources.length > 0 || connectedOfficeFiles.length > 0;
+}
+
+function hasCoworkActivity({ connectedOfficeFiles, folders, mountedProjects, resources, scheduledRuns, session, tasks, todos }: { connectedOfficeFiles: unknown[]; folders: string[]; mountedProjects: unknown[]; resources: unknown[]; scheduledRuns: unknown[]; session: SessionSummary | null; tasks: unknown[]; todos: unknown[] }) {
+  return todos.length > 0 || tasks.length > 0 || resources.length > 0 || folders.length > 0 || connectedOfficeFiles.length > 0 || mountedProjects.length > 0 || scheduledRuns.length > 0 || Boolean(session?.scheduledTaskId);
+}
+
+function coworkInstructionFolder(session: SessionSummary | null) {
+  const userSelectedFolders = session?.userSelectedFolders?.filter(Boolean) ?? [];
+  if (userSelectedFolders.length > 0) return userSelectedFolders[0];
+  const folders = session?.folders?.filter(Boolean) ?? [];
+  return folders[0];
+}

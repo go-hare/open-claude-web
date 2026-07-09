@@ -1,0 +1,179 @@
+import { useState, type ReactNode } from "react";
+import { desktopBridge } from "../../../adapters/desktopBridge";
+import type { SessionSummary } from "../../../adapters/desktopBridge/types";
+import { Icon } from "../../../shell/icons";
+import { CoworkInstructionEditorModal } from "./CoworkInstructionEditorModal";
+import { basename } from "./coworkResourcePaths";
+import { coworkResourceOperationLabel, type CoworkResourceActivity } from "./coworkResourceActivity";
+import type { CoworkOpenFileTarget } from "./coworkActivityTypes";
+
+export function CoworkWorkingFolderContent({ folders, instructionFolder, onOpenFile, resources, scratchpadResources, sessionId }: { folders: string[]; instructionFolder?: string; onOpenFile: (target: CoworkOpenFileTarget) => void; resources: CoworkResourceActivity[]; scratchpadResources: CoworkResourceActivity[]; sessionId: string }) {
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const canEditInstructions = Boolean(instructionFolder && desktopBridge.FileSystem.writeLocalFile);
+  if (folders.length === 0 && resources.length === 0 && scratchpadResources.length === 0) return <CoworkEmptyArtifactsState />;
+  return (
+    <>
+      <div className="flex flex-col gap-2">
+        {canEditInstructions && instructionFolder ? <CoworkFolderInstructionsRow onOpen={() => setInstructionsOpen(true)} /> : null}
+        <CoworkFolderRows folders={folders} />
+        <CoworkResourceList onOpenFile={onOpenFile} resources={resources} />
+        <CoworkScratchpadList onOpenFile={onOpenFile} resources={scratchpadResources} />
+      </div>
+      {canEditInstructions && instructionFolder ? <CoworkInstructionEditorModal folderPath={instructionFolder} isOpen={instructionsOpen} onClose={() => setInstructionsOpen(false)} sessionId={sessionId} /> : null}
+    </>
+  );
+}
+
+export function CoworkContextContent({ resources, session, sessionId }: { resources: CoworkResourceActivity[]; session: SessionSummary | null; sessionId: string }) {
+  const rows = buildContextRows(session, sessionId);
+  if (resources.length === 0 && rows.length === 0) return <CoworkEmptyContextState />;
+  return (
+    <div className="flex flex-col gap-2">
+      {rows.map((row) => <CoworkContextRow key={row.key} row={row} />)}
+      {resources.length > 0 ? <CoworkContextResources resources={resources} /> : null}
+    </div>
+  );
+}
+
+function CoworkFolderRows({ folders }: { folders: string[] }) {
+  return folders.map((folder) => (
+    <div className="flex items-center gap-2.5 py-1.5 px-1 rounded -mx-1 text-left" key={folder}>
+      <CoworkResourceIcon name="Folder1" />
+      <span className="flex-1 text-sm truncate text-text-200">{basename(folder) ?? folder}</span>
+    </div>
+  ));
+}
+
+function CoworkFolderInstructionsRow({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button className="flex w-full cursor-pointer items-center gap-2.5 rounded px-1 py-1.5 -mx-1 text-left hover:bg-bg-200" onClick={onOpen} type="button">
+      <CoworkResourceIcon name="BookText" />
+      <span className="flex-1 truncate text-sm text-text-200">
+        Instructions <span className="text-text-500">· CLAUDE.md</span>
+      </span>
+    </button>
+  );
+}
+
+function CoworkResourceList({ onOpenFile, resources }: { onOpenFile: (target: CoworkOpenFileTarget) => void; resources: CoworkResourceActivity[] }) {
+  if (resources.length === 0) return null;
+  return <div className="flex flex-col gap-1">{resources.slice(0, 10).map((resource) => <CoworkFileResourceRow key={`${resource.latestId}-${resource.filePath}`} onOpenFile={onOpenFile} resource={resource} />)}</div>;
+}
+
+function CoworkScratchpadList({ onOpenFile, resources }: { onOpenFile: (target: CoworkOpenFileTarget) => void; resources: CoworkResourceActivity[] }) {
+  if (resources.length === 0) return null;
+  return (
+    <div className="mt-2 border-t-0.5 border-border-300 pt-2">
+      <div className="flex items-center gap-1 py-1.5 px-1 -mx-1 rounded font-small text-text-500"><Icon name="CaretRight" size="sm" /><span>Scratchpad</span></div>
+      <div className="flex flex-col gap-1 pl-5">
+        {resources.slice(0, 10).map((resource) => <CoworkFileResourceRow key={`scratchpad-${resource.latestId}-${resource.filePath}`} onOpenFile={onOpenFile} resource={resource} />)}
+      </div>
+    </div>
+  );
+}
+
+function CoworkFileResourceRow({ onOpenFile, resource }: { onOpenFile: (target: CoworkOpenFileTarget) => void; resource: CoworkResourceActivity }) {
+  return (
+    <button className="flex items-center gap-2.5 py-1.5 px-1 rounded -mx-1 cursor-pointer hover:bg-bg-200 w-full text-left" onClick={() => onOpenFile({ path: resource.filePath })} type="button">
+      <CoworkResourceIcon name="Document" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm text-text-200">{resource.displayName}</span>
+        <span className="block truncate text-xs text-text-500">{coworkResourceOperationLabel(resource.operation)} · {resource.filePath}</span>
+      </span>
+    </button>
+  );
+}
+
+function CoworkResourceIcon({ name }: { name: "BookText" | "Document" | "Folder1" }) {
+  return (
+    <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-alpha-1 rounded-md text-text-500">
+      <Icon name={name} customSize={name === "Folder1" || name === "BookText" ? 16 : undefined} size={name === "Document" ? "xs" : undefined} />
+    </div>
+  );
+}
+
+function buildContextRows(session: SessionSummary | null, sessionId: string) {
+  return [
+    session?.model ? { key: "model", label: "Model", value: modelLabel(session.model) } : null,
+    session?.permissionMode ? { key: "mode", label: "Mode", value: permissionModeLabel(session.permissionMode) } : null,
+    { key: "session", label: "Session", value: sessionId },
+  ].filter(Boolean) as Array<{ key: string; label: string; value: ReactNode }>;
+}
+
+function CoworkContextRow({ row }: { row: { label: string; value: ReactNode } }) {
+  return (
+    <div className="flex items-center gap-2.5 py-1.5 px-1 rounded -mx-1">
+      <span className="text-sm text-text-500">{row.label}</span>
+      <span className="ml-auto min-w-0 truncate text-sm text-text-200">{row.value}</span>
+    </div>
+  );
+}
+
+function CoworkContextResources({ resources }: { resources: CoworkResourceActivity[] }) {
+  return (
+    <div className="mt-1 flex flex-col gap-1">
+      {resources.slice(0, 6).map((resource) => (
+        <div className="flex items-center gap-2.5 py-1.5 px-1 rounded -mx-1" key={`ctx-${resource.latestId}-${resource.filePath}`}>
+          <CoworkResourceIcon name="Document" />
+          <span className="min-w-0 flex-1 truncate text-sm text-text-200">{resource.displayName}</span>
+          <span className="shrink-0 text-xs text-text-500">{coworkResourceOperationLabel(resource.operation)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CoworkEmptyArtifactsState() {
+  return (
+    <div className="flex flex-col items-start gap-3">
+      <img alt="" className="dark:hidden" draggable={false} height={43} src="/images/illustrations/session-artifacts.svg" width={63} />
+      <img alt="" className="hidden dark:block" draggable={false} height={43} src="/images/illustrations/session-artifacts-dark.svg" width={63} />
+      <p className="text-text-500 font-small">View and open files created during this task.</p>
+    </div>
+  );
+}
+
+function CoworkEmptyContextState() {
+  return (
+    <div className="flex flex-col gap-3">
+      <img alt="" className="dark:hidden" draggable={false} height={56} src="/images/illustrations/session-context.svg" width={114} />
+      <img alt="" className="hidden dark:block" draggable={false} height={56} src="/images/illustrations/session-context-dark.svg" width={114} />
+      <p className="text-text-500 font-small">Track tools and referenced files used in this task.</p>
+    </div>
+  );
+}
+
+const codeModelOptions = [
+  { label: "Default", value: "default" },
+  { label: "Sonnet", value: "sonnet" },
+  { label: "Opus", value: "opus" },
+];
+
+const permissionModeOptions = [
+  { label: "询问权限", value: "default" },
+  { label: "接受编辑", value: "acceptEdits" },
+  { label: "规划模式", value: "plan" },
+  { label: "绕过权限", value: "bypassPermissions" },
+];
+
+function modelLabel(value: string) {
+  const normalized = normalizeCodeModelValue(value);
+  return codeModelOptions.find((option) => option.value === normalized)?.label ?? formatClaudeModelLabel(value);
+}
+
+function normalizeCodeModelValue(value?: string) {
+  if (!value || value === "opus-4") return "default";
+  if (value === "sonnet-4") return "sonnet";
+  return value;
+}
+
+function formatClaudeModelLabel(value: string) {
+  const match = value.match(/^claude-([a-z]+)-(\d+)(?:-(\d+))?/i);
+  if (!match) return value;
+  const family = `${match[1].charAt(0).toUpperCase()}${match[1].slice(1)}`;
+  return `${family} ${match[2]}${match[3] ? `.${match[3]}` : ""}`;
+}
+
+function permissionModeLabel(value: string) {
+  return permissionModeOptions.find((option) => option.value === value)?.label ?? value;
+}

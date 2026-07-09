@@ -25,7 +25,7 @@ export function CoworkActivityPanelShell({
       style={{ width: expanded ? coworkActivityPanelWidth : 0, transition: "width 200ms cubic-bezier(0, 0, 0.2, 1)", willChange: "width" }}
     >
       <div
-        className="h-full pl-2 pr-2 pt-0 flex flex-col"
+        className="h-full pl-2 pr-2 flex flex-col pt-0"
         data-official-source="index-BELzQL5P.js:xQt y?pt-0:pt-12 inner panel"
         style={{ width: coworkActivityPanelWidth }}
       >

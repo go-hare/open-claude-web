@@ -89,9 +89,9 @@ function CoworkScheduledRunRow({
   const className = isCurrent ? "bg-bg-200 text-text-100" : "text-text-300 hover:bg-bg-200";
   return (
     <li>
-      <button className={`flex w-full items-center justify-between rounded-lg px-2 py-2 -mx-2 text-left text-sm transition-colors ${className}`} onClick={() => onNavigate(sessionPath(run))} type="button">
+      <button className={`flex items-center justify-between py-2 px-2 -mx-2 rounded-lg transition-colors text-sm w-full text-left ${className}`} onClick={() => onNavigate(sessionPath(run))} type="button">
         <span className="min-w-0 truncate">{formatCoworkRunTime(coworkRunTimestamp(run))}</span>
-        {unread ? <span aria-label="Unread completed run" className="ml-2 h-2 w-2 shrink-0 rounded-full bg-text-300" /> : null}
+        {unread ? <span aria-label="Unread completed run" className="size-2 rounded-full bg-accent-100 flex-shrink-0" /> : null}
       </button>
     </li>
   );

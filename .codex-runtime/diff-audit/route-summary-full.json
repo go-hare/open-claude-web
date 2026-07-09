@@ -1,0 +1,513 @@
+[
+  {
+    "top": "/",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/"
+    ]
+  },
+  {
+    "top": ":shortlink",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/:shortlink"
+    ]
+  },
+  {
+    "top": "admin-settings",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/admin-settings"
+    ]
+  },
+  {
+    "top": "analytics",
+    "official": 1,
+    "covered": 1,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "artifacts",
+    "official": 3,
+    "covered": 2,
+    "missing": 1,
+    "missingPaths": [
+      "/artifacts/my"
+    ]
+  },
+  {
+    "top": "ask-your-org",
+    "official": 2,
+    "covered": 2,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "chats",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/chats"
+    ]
+  },
+  {
+    "top": "claude-code-desktop",
+    "official": 2,
+    "covered": 2,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "claude-ship",
+    "official": 4,
+    "covered": 0,
+    "missing": 4,
+    "missingPaths": [
+      "/claude-ship",
+      "/claude-ship",
+      "/claude-ship/projects",
+      "/claude-ship/:id"
+    ]
+  },
+  {
+    "top": "cli_landing",
+    "official": 2,
+    "covered": 0,
+    "missing": 2,
+    "missingPaths": [
+      "/cli_landing",
+      "/cli_landing"
+    ]
+  },
+  {
+    "top": "code",
+    "official": 28,
+    "covered": 28,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "conway",
+    "official": 2,
+    "covered": 0,
+    "missing": 2,
+    "missingPaths": [
+      "/conway",
+      "/conway/popout"
+    ]
+  },
+  {
+    "top": "cowork-artifact",
+    "official": 2,
+    "covered": 0,
+    "missing": 2,
+    "missingPaths": [
+      "/cowork-artifact",
+      "/cowork-artifact/:id"
+    ]
+  },
+  {
+    "top": "crawl",
+    "official": 1,
+    "covered": 1,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "create",
+    "official": 22,
+    "covered": 0,
+    "missing": 22,
+    "missingPaths": [
+      "/create",
+      "/create/team/name",
+      "/create/team/invites",
+      "/create/connectors",
+      "/create/enterprise",
+      "/create/enterprise",
+      "/create/enterprise/qualification",
+      "/create/enterprise/explanation",
+      "/create/enterprise/setup-type",
+      "/create/enterprise/seats",
+      "/create/team/billing",
+      "/create/enterprise/review",
+      "/create/team/pending/:organization_id",
+      "/create/team/pending",
+      "/create/enterprise/pending/:organization_id",
+      "/create/enterprise/pending",
+      "/create/team",
+      "/create/team",
+      "/create/team/start",
+      "/create/team/verify",
+      "/create/enterprise/start",
+      "/create/enterprise/verify"
+    ]
+  },
+  {
+    "top": "customize",
+    "official": 1,
+    "covered": 1,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "desktop_landing",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/desktop_landing"
+    ]
+  },
+  {
+    "top": "device-code-verify",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/device-code-verify"
+    ]
+  },
+  {
+    "top": "directory",
+    "official": 2,
+    "covered": 2,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "downgrade",
+    "official": 4,
+    "covered": 0,
+    "missing": 4,
+    "missingPaths": [
+      "/downgrade",
+      "/downgrade",
+      "/downgrade/pro",
+      "/downgrade/max"
+    ]
+  },
+  {
+    "top": "epitaxy",
+    "official": 10,
+    "covered": 9,
+    "missing": 1,
+    "missingPaths": [
+      "/epitaxy/dev/:panelId"
+    ]
+  },
+  {
+    "top": "excel-ppt-cowork",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/excel-ppt-cowork"
+    ]
+  },
+  {
+    "top": "excel-ppt-setup",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/excel-ppt-setup"
+    ]
+  },
+  {
+    "top": "experiments",
+    "official": 6,
+    "covered": 0,
+    "missing": 6,
+    "missingPaths": [
+      "/experiments/code",
+      "/experiments/code/:uri",
+      "/experiments/code/shared/:shared_uri",
+      "/experiments/symphony",
+      "/experiments/symphony",
+      "/experiments/symphony/:workflowId"
+    ]
+  },
+  {
+    "top": "gift",
+    "official": 2,
+    "covered": 0,
+    "missing": 2,
+    "missingPaths": [
+      "/gift",
+      "/gift/redeem"
+    ]
+  },
+  {
+    "top": "interviewer",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/interviewer"
+    ]
+  },
+  {
+    "top": "invites",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/invites"
+    ]
+  },
+  {
+    "top": "join",
+    "official": 2,
+    "covered": 0,
+    "missing": 2,
+    "missingPaths": [
+      "/join/:token",
+      "/join/org/:token"
+    ]
+  },
+  {
+    "top": "knowledge",
+    "official": 1,
+    "covered": 1,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "labs-verification",
+    "official": 7,
+    "covered": 0,
+    "missing": 7,
+    "missingPaths": [
+      "/labs-verification",
+      "/labs-verification/attestation",
+      "/labs-verification/email",
+      "/labs-verification/lab-url",
+      "/labs-verification/checking",
+      "/labs-verification/approved",
+      "/labs-verification/manual-review"
+    ]
+  },
+  {
+    "top": "local_sessions",
+    "official": 2,
+    "covered": 0,
+    "missing": 2,
+    "missingPaths": [
+      "/local_sessions",
+      "/local_sessions/:sessionId"
+    ]
+  },
+  {
+    "top": "logged-in",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/logged-in"
+    ]
+  },
+  {
+    "top": "login",
+    "official": 3,
+    "covered": 0,
+    "missing": 3,
+    "missingPaths": [
+      "/login",
+      "/login/app-google-auth",
+      "/login/popup-google-auth"
+    ]
+  },
+  {
+    "top": "logout",
+    "official": 2,
+    "covered": 0,
+    "missing": 2,
+    "missingPaths": [
+      "/logout",
+      "/logout/all-sessions"
+    ]
+  },
+  {
+    "top": "meeting-assistant",
+    "official": 1,
+    "covered": 1,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "no-organization",
+    "official": 1,
+    "covered": 1,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "offers",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/offers/:offerCode"
+    ]
+  },
+  {
+    "top": "pricing",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/pricing"
+    ]
+  },
+  {
+    "top": "project",
+    "official": 2,
+    "covered": 1,
+    "missing": 1,
+    "missingPaths": [
+      "/project/:uuid/setup"
+    ]
+  },
+  {
+    "top": "projects",
+    "official": 3,
+    "covered": 3,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "recents",
+    "official": 1,
+    "covered": 1,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "referral",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/referral/:code"
+    ]
+  },
+  {
+    "top": "scheduled-task",
+    "official": 3,
+    "covered": 0,
+    "missing": 3,
+    "missingPaths": [
+      "/scheduled-task",
+      "/scheduled-task",
+      "/scheduled-task/:id"
+    ]
+  },
+  {
+    "top": "scoop",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/scoop"
+    ]
+  },
+  {
+    "top": "security",
+    "official": 1,
+    "covered": 1,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "settings",
+    "official": 1,
+    "covered": 1,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "setup-desktop-3p",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/setup-desktop-3p"
+    ]
+  },
+  {
+    "top": "share",
+    "official": 2,
+    "covered": 0,
+    "missing": 2,
+    "missingPaths": [
+      "/share",
+      "/share/:snapshot_uuid"
+    ]
+  },
+  {
+    "top": "space",
+    "official": 2,
+    "covered": 2,
+    "missing": 0,
+    "missingPaths": []
+  },
+  {
+    "top": "submit_quick_entry",
+    "official": 1,
+    "covered": 0,
+    "missing": 1,
+    "missingPaths": [
+      "/submit_quick_entry"
+    ]
+  },
+  {
+    "top": "task",
+    "official": 3,
+    "covered": 1,
+    "missing": 2,
+    "missingPaths": [
+      "/task/examples",
+      "/task/:uuid"
+    ]
+  },
+  {
+    "top": "team-promo",
+    "official": 5,
+    "covered": 0,
+    "missing": 5,
+    "missingPaths": [
+      "/team-promo/:offerCode",
+      "/team-promo/:offerCode",
+      "/team-promo/:offerCode/start",
+      "/team-promo/:offerCode/verify",
+      "/team-promo/:offerCode/checkout"
+    ]
+  },
+  {
+    "top": "upgrade",
+    "official": 10,
+    "covered": 0,
+    "missing": 10,
+    "missingPaths": [
+      "/upgrade",
+      "/upgrade",
+      "/upgrade/trial",
+      "/upgrade/pro",
+      "/upgrade/pro/annual",
+      "/upgrade/pro/from-existing",
+      "/upgrade/max",
+      "/upgrade/max/from-existing",
+      "/upgrade/team/annual",
+      "/upgrade/nonprofit"
+    ]
+  }
+]

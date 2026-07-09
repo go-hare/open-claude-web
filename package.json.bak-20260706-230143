@@ -1,0 +1,28 @@
+{
+  "name": "claude-deepseek-react-shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Clean React/TypeScript shell rebuilt from Claude-Deepseek ion-dist architecture notes.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5176",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false",
+    "preview": "vite preview --host 127.0.0.1 --port 4176"
+  },
+  "dependencies": {
+    "@base-ui-components/react": "^1.0.0-rc.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-webgl": "^0.19.0",
+    "@xterm/xterm": "^6.0.0",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}

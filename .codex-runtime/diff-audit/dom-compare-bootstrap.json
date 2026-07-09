@@ -1,0 +1,3969 @@
+[
+  {
+    "route": "/",
+    "official": {
+      "url": "http://127.0.0.1:61905/task/new",
+      "title": "Claude",
+      "bodyText": "Skip to content\nClick to collapse⌘B\nDrag to resize\nResearch preview\n\n\n新会话\n⇧⌘O\n\n自定义\n\n更多\n最近\n\nClaude-Deepseek\n·\nGateway\n\n\n来把待办清掉吧\n\n\n\n\n今天我可以帮你做什么？\n随便挑个任务开始吧\n优化我的一周\n整理我的截图\n从文件中发现洞察\n用插件自定义",
+      "bodyTextLength": 189,
+      "htmlAttrs": {
+        "data-build-id": "spa-dev",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "lang": "zh-CN",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "收起侧边栏",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "",
+          "aria": "搜索",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "\n新会话\n⇧⌘O",
+          "aria": null,
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "\n自定义",
+          "aria": null,
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "\n更多",
+          "aria": "More navigation items",
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "",
+          "aria": "Filter",
+          "cls": "cds-reset group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whites"
+        },
+        {
+          "text": "Claude-Deepseek\n·\nGateway\n",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "外观",
+          "cls": "cds-reset group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whites"
+        },
+        {
+          "text": "",
+          "aria": "添加文件、连接器等",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "",
+          "aria": "开始任务",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "随便挑个任务开始吧",
+          "aria": null,
+          "cls": "flex items-center gap-2 font-small text-text-500 hover:text-text-100 transition-colors"
+        },
+        {
+          "text": "",
+          "aria": "隐藏建议",
+          "cls": "text-text-500 hover:text-text-200 transition-colors opacity-0 group-hover/suggestions:opacity-100"
+        },
+        {
+          "text": "优化我的一周",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "整理我的截图",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "从文件中发现洞察",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "用插件自定义",
+          "aria": null,
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "root",
+          "text": "Skip to contentClick to collapse⌘BDrag to resizeResearch preview新会话⇧⌘O自定义更多最近Claude-Deepseek·Gateway来把待办清掉吧今天我可以帮你做什么？随便挑个任务开始吧优化我的一周整理我的截图从文件中发现洞察用插件自定义"
+        },
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": ""
+        }
+      ],
+      "rootHtmlLength": 43361,
+      "consoleLogs": [
+        {
+          "type": "info",
+          "args": [
+            "[O11Y]",
+            "[DatadogRUM] Initialized",
+            "Object"
+          ]
+        }
+      ],
+      "apiResponses": [
+        {
+          "url": "http://127.0.0.1:61905/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/account_profile",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/billing/00000000-0000-4000-8000-000000000001/individual_plan_pricing/v2",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=8589abc9-986b-4fb6-b0c9-0910321000d5&batch_time=1783431012693&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=c0fbacf7-3ef5-45d2-a272-1eacd1f445a7&batch_time=1783431012698&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=c696fd16-acad-47f6-b7ce-a93e840703a3&batch_time=1783431012701&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=e17cc11f-be14-4bd0-bb9f-10da6f5f599c&batch_time=1783431012700&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=d09ea2d1-d106-4276-9b0b-eaabb5531868&batch_time=1783431012699&_dd.api=fetch",
+          "status": 202
+        }
+      ]
+    },
+    "current": {
+      "url": "http://127.0.0.1:5176/",
+      "title": "Claude Deepseek React Shell",
+      "bodyText": "Skip to content\n收起侧边栏⌘B\n拖动调整大小\n协作\n代码\n新会话\n⌘N\n定时任务\n自定义\n更多\n已固定\n拖动以固定\n最近\nGeneral coding session\n\nCoding Session 2\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\n2\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nCowork 3P\n·\nGateway\nCowork 3P，接下来做点什么？\n概览\n模型\n全部\n30天\n7天\n会话数\n14\n消息数\n16\n总 Tokens\n2.05K\n活跃天数\n1\n当前连续天数\n1d\n最长连续天数\n1d\n高峰时段\n21时\n最常用模型\nDefault\n本地\nclaude-code\nmain\nworktree\n\n\n\n\n描述一个任务，或提一个问题\n接受编辑\nDefault\n· Medium\nArrow keys move the tile. Perpendicular arrows preview a split; press Enter to commit or Escape to cancel.",
+      "bodyTextLength": 701,
+      "htmlAttrs": {
+        "lang": "zh-CN",
+        "data-build-id": "react-shell",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "cds-root h-screen antialiased scroll-smooth",
+        "style": "color-scheme: light;"
+      },
+      "buttons": [
+        {
+          "text": "协作",
+          "aria": "协作",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "代码",
+          "aria": "代码",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "新会话\n⌘N",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "定时任务",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "自定义",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "更多",
+          "aria": "更多",
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "已固定",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "最近",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "",
+          "aria": "筛选",
+          "cls": "df-chrome-btn relative -my-1"
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Coding Session 2",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for Coding Session 2",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "2",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for 2",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Cowork 3P\n·\nGateway",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "外观",
+          "cls": "df-chrome-btn text-text-500"
+        },
+        {
+          "text": "概览",
+          "aria": null,
+          "cls": "group/tab relative isolate inline-flex items-center justify-center border-0 outline-none bg-transpar"
+        },
+        {
+          "text": "模型",
+          "aria": null,
+          "cls": "group/tab relative isolate inline-flex items-center justify-center border-0 outline-none bg-transpar"
+        },
+        {
+          "text": "全部",
+          "aria": null,
+          "cls": "group/tab relative isolate inline-flex items-center justify-center border-0 outline-none bg-transpar"
+        },
+        {
+          "text": "30天",
+          "aria": null,
+          "cls": "group/tab relative isolate inline-flex items-center justify-center border-0 outline-none bg-transpar"
+        },
+        {
+          "text": "7天",
+          "aria": null,
+          "cls": "group/tab relative isolate inline-flex items-center justify-center border-0 outline-none bg-transpar"
+        },
+        {
+          "text": "本地",
+          "aria": null,
+          "cls": "relative inline-flex items-center gap-g5 h-[24px] px-p5 rounded-r5 bg-fill-contained-default text-co"
+        },
+        {
+          "text": "claude-code",
+          "aria": null,
+          "cls": "relative inline-flex items-center gap-g5 h-[24px] px-p5 rounded-r5 bg-fill-contained-default text-co"
+        },
+        {
+          "text": "main",
+          "aria": "Branch",
+          "cls": "relative inline-flex items-center h-[24px] bg-transparent text-contained-default text-body hover:bg-"
+        },
+        {
+          "text": "worktree",
+          "aria": null,
+          "cls": "relative inline-flex items-center h-[24px] bg-transparent text-contained-default text-body hover:bg-"
+        },
+        {
+          "text": "",
+          "aria": "Add another folder",
+          "cls": "relative inline-flex items-center gap-g5 h-[24px] px-p5 rounded-r5 bg-fill-contained-default text-co"
+        },
+        {
+          "text": "",
+          "aria": null,
+          "cls": "absolute right-[-16px] bottom-[-13px] w-[80px] h-[80px] -scale-x-100 border-0 bg-transparent p-0 out"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "h-full",
+          "text": "Skip to content收起侧边栏⌘B拖动调整大小协作代码新会话⌘N定时任务自定义更多已固定拖动以固定最近General coding sessionCoding Session 2General coding sessionGeneral coding sessionGeneral coding sessionGeneral coding sessionGeneral codi"
+        }
+      ],
+      "rootHtmlLength": 78489,
+      "consoleLogs": [
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "info",
+          "args": [
+            "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools",
+            "font-weight:bold"
+          ]
+        }
+      ],
+      "apiResponses": []
+    },
+    "diff": {
+      "officialTextLen": 189,
+      "currentTextLen": 701,
+      "officialUrl": "http://127.0.0.1:61905/task/new",
+      "currentUrl": "http://127.0.0.1:5176/",
+      "titleDiff": true,
+      "textEqual": false
+    }
+  },
+  {
+    "route": "/task/new",
+    "official": {
+      "url": "http://127.0.0.1:61905/task/new",
+      "title": "Claude",
+      "bodyText": "Skip to content\nClick to collapse⌘B\nDrag to resize\nResearch preview\n\n\n新会话\n⇧⌘O\n\n自定义\n\n更多\n最近\n\nClaude-Deepseek\n·\nGateway\n\n\n来把待办清掉吧\n\n\n\n\n今天我可以帮你做什么？\n随便挑个任务开始吧\n优化我的一周\n整理我的截图\n从文件中发现洞察\n用插件自定义",
+      "bodyTextLength": 189,
+      "htmlAttrs": {
+        "data-build-id": "spa-dev",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "lang": "zh-CN",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "收起侧边栏",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "",
+          "aria": "搜索",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "\n新会话\n⇧⌘O",
+          "aria": null,
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "\n自定义",
+          "aria": null,
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "\n更多",
+          "aria": "More navigation items",
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "",
+          "aria": "Filter",
+          "cls": "cds-reset group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whites"
+        },
+        {
+          "text": "Claude-Deepseek\n·\nGateway\n",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "外观",
+          "cls": "cds-reset group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whites"
+        },
+        {
+          "text": "",
+          "aria": "添加文件、连接器等",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "",
+          "aria": "开始任务",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "随便挑个任务开始吧",
+          "aria": null,
+          "cls": "flex items-center gap-2 font-small text-text-500 hover:text-text-100 transition-colors"
+        },
+        {
+          "text": "",
+          "aria": "隐藏建议",
+          "cls": "text-text-500 hover:text-text-200 transition-colors opacity-0 group-hover/suggestions:opacity-100"
+        },
+        {
+          "text": "优化我的一周",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "整理我的截图",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "从文件中发现洞察",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "用插件自定义",
+          "aria": null,
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "root",
+          "text": "Skip to contentClick to collapse⌘BDrag to resizeResearch preview新会话⇧⌘O自定义更多最近Claude-Deepseek·Gateway来把待办清掉吧今天我可以帮你做什么？随便挑个任务开始吧优化我的一周整理我的截图从文件中发现洞察用插件自定义"
+        },
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": ""
+        }
+      ],
+      "rootHtmlLength": 43362,
+      "consoleLogs": [
+        {
+          "type": "info",
+          "args": [
+            "[O11Y]",
+            "[DatadogRUM] Initialized",
+            "Object"
+          ]
+        }
+      ],
+      "apiResponses": [
+        {
+          "url": "http://127.0.0.1:61905/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/account_profile",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/billing/00000000-0000-4000-8000-000000000001/individual_plan_pricing/v2",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=02e8224b-8275-4e70-96d5-b713c7aec012&batch_time=1783431023851&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=40bccd14-f971-4b32-a145-69527f3fcd16&batch_time=1783431023875&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=b083cf89-0eca-4d2d-a322-4dd7b390b42f&batch_time=1783431023878&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=7bb94a1c-c5c2-43bb-a90d-3b5f7f76dcad&batch_time=1783431023881&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=2e44fcb0-b504-483e-8973-5b565e82325f&batch_time=1783431023880&_dd.api=fetch",
+          "status": 202
+        }
+      ]
+    },
+    "current": {
+      "url": "http://127.0.0.1:5176/task/new",
+      "title": "Claude Deepseek React Shell",
+      "bodyText": "Skip to content\n收起侧边栏⌘B\n拖动调整大小\n协作\n代码\n新任务\n项目\n定时任务\n自定义\n已固定\n拖动以固定\n最近\n✳\nOrganize Downloads folder\n\n✳\nUntitled\n\nCowork 3P\n·\nGateway\n来把待办清掉吧\n\n了解如何安全使用协作.\n\n在项目中工作\nOpus 4\n\n随便挑个任务开始吧\n优化我的一周\n整理我的截图\n\n从文件中发现洞察\n用插件自定义",
+      "bodyTextLength": 208,
+      "htmlAttrs": {
+        "lang": "zh-CN",
+        "data-build-id": "react-shell",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "cds-root h-screen antialiased scroll-smooth",
+        "style": "color-scheme: light;"
+      },
+      "buttons": [
+        {
+          "text": "协作",
+          "aria": "协作",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "代码",
+          "aria": "代码",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "新任务",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "项目",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "定时任务",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "自定义",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "已固定",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "最近",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "✳\nOrganize Downloads folder",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for Organize Downloads folder",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "✳\nUntitled",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for Untitled",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Cowork 3P\n·\nGateway",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "添加文件、连接器等",
+          "cls": "group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select"
+        },
+        {
+          "text": "在项目中工作",
+          "aria": null,
+          "cls": "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outli"
+        },
+        {
+          "text": "Opus 4",
+          "aria": null,
+          "cls": "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outli"
+        },
+        {
+          "text": "",
+          "aria": "开始任务",
+          "cls": "group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select"
+        },
+        {
+          "text": "\n随便挑个任务开始吧",
+          "aria": null,
+          "cls": "flex items-center gap-2 font-small text-text-500 hover:text-text-100 transition-colors"
+        },
+        {
+          "text": "优化我的一周",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "整理我的截图",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "\n从文件中发现洞察",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "用插件自定义",
+          "aria": null,
+          "cls": "group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "h-full",
+          "text": "Skip to content收起侧边栏⌘B拖动调整大小协作代码新任务项目定时任务自定义已固定拖动以固定最近✳Organize Downloads folder✳UntitledCowork 3P·Gateway来把待办清掉吧了解如何安全使用协作.在项目中工作Opus 4随便挑个任务开始吧优化我的一周整理我的截图从文件中发现洞察用插件自定义"
+        }
+      ],
+      "rootHtmlLength": 34245,
+      "consoleLogs": [
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "info",
+          "args": [
+            "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools",
+            "font-weight:bold"
+          ]
+        }
+      ],
+      "apiResponses": []
+    },
+    "diff": {
+      "officialTextLen": 189,
+      "currentTextLen": 208,
+      "officialUrl": "http://127.0.0.1:61905/task/new",
+      "currentUrl": "http://127.0.0.1:5176/task/new",
+      "titleDiff": true,
+      "textEqual": false
+    }
+  },
+  {
+    "route": "/epitaxy",
+    "official": {
+      "url": "http://127.0.0.1:61905/code/disabled",
+      "title": "Claude",
+      "bodyText": "Code with Claude anywhere\n\nPowerful agentic coding in your IDE, terminal, or on the go. 了解更多\n\nTerminal\nOriginal\n\nBest-in-class coding agent that runs in your terminal, edits files, runs scripts, and more.\n\nnpm install -g @anthropic/claude-cli\nIDE extension\nNew\n\nAll the power of Claude Code, right at home in VS Code, Cursor, or Windsurf.\n\nInstall in VS Code\nWeb\n预览\n\nRun coding tasks seamlessly across your browser and phone.\n\nDisabled by org admin\n\n←\nBack to Claude",
+      "bodyTextLength": 466,
+      "htmlAttrs": {
+        "data-build-id": "spa-dev",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "lang": "zh-CN",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "Copy installation command",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "Install in VS Code",
+          "aria": null,
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "root",
+          "text": "Code with Claude anywherePowerful agentic coding in your IDE, terminal, or on the go. 了解更多TerminalOriginalBest-in-class coding agent that runs in your terminal, edits files, runs scripts, and more.npm"
+        },
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": ""
+        }
+      ],
+      "rootHtmlLength": 6064,
+      "consoleLogs": [
+        {
+          "type": "info",
+          "args": [
+            "[O11Y]",
+            "[DatadogRUM] Initialized",
+            "Object"
+          ]
+        }
+      ],
+      "apiResponses": [
+        {
+          "url": "http://127.0.0.1:61905/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/account_profile",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/billing/00000000-0000-4000-8000-000000000001/individual_plan_pricing/v2",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=7a4e0b26-52ba-455b-b6af-0332053baaef&batch_time=1783431034921&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=65f5dd7b-5a10-4280-a9a2-43ef713169bd&batch_time=1783431034936&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=33ed5ba3-6316-48e9-a228-0ffb0629321e&batch_time=1783431034935&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=c94a8e5b-2feb-4ad7-80d8-769885c7c4c9&batch_time=1783431034938&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=62ac4204-34e7-4ea1-80e9-1d5c9b0a6e4b&batch_time=1783431034937&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/billing/00000000-0000-4000-8000-000000000001/individual_plan_pricing/v2",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=88410862-e4f6-4097-85fc-d4e20dff8b20&batch_time=1783431035235&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=646e762d-0b65-4ab7-af3b-3a4ae76a32ca&batch_time=1783431035251&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=cefa9704-f03d-47bf-94f5-2d25fe4fbcd4&batch_time=1783431035358&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=998d21a4-4fa0-472a-8a48-f77e9ea963ba&batch_time=1783431035267&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=eb75891c-43ae-4687-a76f-7c673a0d70a4&batch_time=1783431035359&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=87e7cf7f-3677-4e79-ba7d-281dedc0d5c8&batch_time=1783431035831&_dd.api=fetch",
+          "status": 202
+        }
+      ]
+    },
+    "current": {
+      "url": "http://127.0.0.1:5176/epitaxy",
+      "title": "Claude Deepseek React Shell",
+      "bodyText": "Skip to content\n收起侧边栏⌘B\n拖动调整大小\n协作\n代码\n新会话\n⌘N\n定时任务\n自定义\n更多\n已固定\n拖动以固定\n最近\nGeneral coding session\n\nCoding Session 2\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\n2\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nCowork 3P\n·\nGateway\nCowork 3P，接下来做点什么？\n概览\n模型\n全部\n30天\n7天\n会话数\n14\n消息数\n16\n总 Tokens\n2.05K\n活跃天数\n1\n当前连续天数\n1d\n最长连续天数\n1d\n高峰时段\n21时\n最常用模型\nDefault\n本地\nclaude-code\nmain\nworktree\n\n\n\n\n描述一个任务，或提一个问题\n接受编辑\nDefault\n· Medium\nArrow keys move the tile. Perpendicular arrows preview a split; press Enter to commit or Escape to cancel.",
+      "bodyTextLength": 701,
+      "htmlAttrs": {
+        "lang": "zh-CN",
+        "data-build-id": "react-shell",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "cds-root h-screen antialiased scroll-smooth",
+        "style": "color-scheme: light;"
+      },
+      "buttons": [
+        {
+          "text": "协作",
+          "aria": "协作",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "代码",
+          "aria": "代码",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "新会话\n⌘N",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "定时任务",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "自定义",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "更多",
+          "aria": "更多",
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "已固定",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "最近",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "",
+          "aria": "筛选",
+          "cls": "df-chrome-btn relative -my-1"
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Coding Session 2",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for Coding Session 2",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "2",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for 2",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Cowork 3P\n·\nGateway",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "外观",
+          "cls": "df-chrome-btn text-text-500"
+        },
+        {
+          "text": "概览",
+          "aria": null,
+          "cls": "group/tab relative isolate inline-flex items-center justify-center border-0 outline-none bg-transpar"
+        },
+        {
+          "text": "模型",
+          "aria": null,
+          "cls": "group/tab relative isolate inline-flex items-center justify-center border-0 outline-none bg-transpar"
+        },
+        {
+          "text": "全部",
+          "aria": null,
+          "cls": "group/tab relative isolate inline-flex items-center justify-center border-0 outline-none bg-transpar"
+        },
+        {
+          "text": "30天",
+          "aria": null,
+          "cls": "group/tab relative isolate inline-flex items-center justify-center border-0 outline-none bg-transpar"
+        },
+        {
+          "text": "7天",
+          "aria": null,
+          "cls": "group/tab relative isolate inline-flex items-center justify-center border-0 outline-none bg-transpar"
+        },
+        {
+          "text": "本地",
+          "aria": null,
+          "cls": "relative inline-flex items-center gap-g5 h-[24px] px-p5 rounded-r5 bg-fill-contained-default text-co"
+        },
+        {
+          "text": "claude-code",
+          "aria": null,
+          "cls": "relative inline-flex items-center gap-g5 h-[24px] px-p5 rounded-r5 bg-fill-contained-default text-co"
+        },
+        {
+          "text": "main",
+          "aria": "Branch",
+          "cls": "relative inline-flex items-center h-[24px] bg-transparent text-contained-default text-body hover:bg-"
+        },
+        {
+          "text": "worktree",
+          "aria": null,
+          "cls": "relative inline-flex items-center h-[24px] bg-transparent text-contained-default text-body hover:bg-"
+        },
+        {
+          "text": "",
+          "aria": "Add another folder",
+          "cls": "relative inline-flex items-center gap-g5 h-[24px] px-p5 rounded-r5 bg-fill-contained-default text-co"
+        },
+        {
+          "text": "",
+          "aria": null,
+          "cls": "absolute right-[-16px] bottom-[-13px] w-[80px] h-[80px] -scale-x-100 border-0 bg-transparent p-0 out"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "h-full",
+          "text": "Skip to content收起侧边栏⌘B拖动调整大小协作代码新会话⌘N定时任务自定义更多已固定拖动以固定最近General coding sessionCoding Session 2General coding sessionGeneral coding sessionGeneral coding sessionGeneral coding sessionGeneral codi"
+        }
+      ],
+      "rootHtmlLength": 78489,
+      "consoleLogs": [
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "info",
+          "args": [
+            "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools",
+            "font-weight:bold"
+          ]
+        }
+      ],
+      "apiResponses": []
+    },
+    "diff": {
+      "officialTextLen": 466,
+      "currentTextLen": 701,
+      "officialUrl": "http://127.0.0.1:61905/code/disabled",
+      "currentUrl": "http://127.0.0.1:5176/epitaxy",
+      "titleDiff": true,
+      "textEqual": false
+    }
+  },
+  {
+    "route": "/epitaxy/dev/foo",
+    "official": {
+      "url": "http://127.0.0.1:61905/code/disabled",
+      "title": "Claude",
+      "bodyText": "Code with Claude anywhere\n\nPowerful agentic coding in your IDE, terminal, or on the go. 了解更多\n\nTerminal\nOriginal\n\nBest-in-class coding agent that runs in your terminal, edits files, runs scripts, and more.\n\nnpm install -g @anthropic/claude-cli\nIDE extension\nNew\n\nAll the power of Claude Code, right at home in VS Code, Cursor, or Windsurf.\n\nInstall in VS Code\nWeb\n预览\n\nRun coding tasks seamlessly across your browser and phone.\n\nDisabled by org admin\n\n←\nBack to Claude",
+      "bodyTextLength": 466,
+      "htmlAttrs": {
+        "data-build-id": "spa-dev",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "lang": "zh-CN",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "Copy installation command",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "Install in VS Code",
+          "aria": null,
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "root",
+          "text": "Code with Claude anywherePowerful agentic coding in your IDE, terminal, or on the go. 了解更多TerminalOriginalBest-in-class coding agent that runs in your terminal, edits files, runs scripts, and more.npm"
+        },
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": ""
+        }
+      ],
+      "rootHtmlLength": 6064,
+      "consoleLogs": [
+        {
+          "type": "info",
+          "args": [
+            "[O11Y]",
+            "[DatadogRUM] Initialized",
+            "Object"
+          ]
+        }
+      ],
+      "apiResponses": [
+        {
+          "url": "http://127.0.0.1:61905/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/account_profile",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/billing/00000000-0000-4000-8000-000000000001/individual_plan_pricing/v2",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=93a66758-c315-42e9-b999-78d88b352fac&batch_time=1783431046088&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=d17cb2ae-e5de-466a-bc7d-88a4b441f9c1&batch_time=1783431046085&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=52be7261-ea90-4ea8-8cae-6c601e6fdcf4&batch_time=1783431046087&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=0f2f8bbb-ff18-4bbc-9462-4ddf00f75f45&batch_time=1783431046100&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=62642e2a-2461-4bcf-b441-99f45a55ac21&batch_time=1783431046088&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/billing/00000000-0000-4000-8000-000000000001/individual_plan_pricing/v2",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=58dc612d-60b1-45fb-a02f-edf966bbf901&batch_time=1783431046466&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=486d5f56-d8b4-4ea5-a766-e7af94a9b115&batch_time=1783431046468&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=454f468c-42cc-43f9-ab5e-8e8259d1107e&batch_time=1783431046467&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=30a47b8b-c676-4212-bfd6-cd1f75cb95a5&batch_time=1783431046496&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=c9f1bd04-8c43-4ed3-9d0b-35d4b02ec66c&batch_time=1783431046503&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=f33c7e75-08af-43b7-8756-54e1a419d1ff&batch_time=1783431046894&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=cf4d1be5-1633-4629-9c96-ee8bb41323d2&batch_time=1783431049994&_dd.api=fetch",
+          "status": 202
+        }
+      ]
+    },
+    "current": {
+      "url": "http://127.0.0.1:5176/epitaxy/dev/foo",
+      "title": "Claude Deepseek React Shell",
+      "bodyText": "Skip to content\n收起侧边栏⌘B\n拖动调整大小\n协作\n代码\n新会话\n⌘N\n定时任务\n自定义\n更多\n已固定\n拖动以固定\n最近\nGeneral coding session\n\nCoding Session 2\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\n2\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nCowork 3P\n·\nGateway\n调试\n\nPage not found\nClaude can help with many things, but finding this page isn’t one of them.\nGo back home",
+      "bodyTextLength": 519,
+      "htmlAttrs": {
+        "lang": "zh-CN",
+        "data-build-id": "react-shell",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "cds-root h-screen antialiased scroll-smooth",
+        "style": "color-scheme: light;"
+      },
+      "buttons": [
+        {
+          "text": "协作",
+          "aria": "协作",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "代码",
+          "aria": "代码",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "新会话\n⌘N",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "定时任务",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "自定义",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "更多",
+          "aria": "更多",
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "已固定",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "最近",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "",
+          "aria": "筛选",
+          "cls": "df-chrome-btn relative -my-1"
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Coding Session 2",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for Coding Session 2",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "2",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for 2",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Cowork 3P\n·\nGateway",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "外观",
+          "cls": "df-chrome-btn text-text-500"
+        },
+        {
+          "text": "",
+          "aria": "更多",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "h-full",
+          "text": "Skip to content收起侧边栏⌘B拖动调整大小协作代码新会话⌘N定时任务自定义更多已固定拖动以固定最近General coding sessionCoding Session 2General coding sessionGeneral coding sessionGeneral coding sessionGeneral coding sessionGeneral codi"
+        }
+      ],
+      "rootHtmlLength": 44904,
+      "consoleLogs": [
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "info",
+          "args": [
+            "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools",
+            "font-weight:bold"
+          ]
+        }
+      ],
+      "apiResponses": []
+    },
+    "diff": {
+      "officialTextLen": 466,
+      "currentTextLen": 519,
+      "officialUrl": "http://127.0.0.1:61905/code/disabled",
+      "currentUrl": "http://127.0.0.1:5176/epitaxy/dev/foo",
+      "titleDiff": true,
+      "textEqual": false
+    }
+  },
+  {
+    "route": "/epitaxy/scheduled",
+    "official": {
+      "url": "http://127.0.0.1:61905/code/disabled",
+      "title": "Claude",
+      "bodyText": "Code with Claude anywhere\n\nPowerful agentic coding in your IDE, terminal, or on the go. 了解更多\n\nTerminal\nOriginal\n\nBest-in-class coding agent that runs in your terminal, edits files, runs scripts, and more.\n\nnpm install -g @anthropic/claude-cli\nIDE extension\nNew\n\nAll the power of Claude Code, right at home in VS Code, Cursor, or Windsurf.\n\nInstall in VS Code\nWeb\n预览\n\nRun coding tasks seamlessly across your browser and phone.\n\nDisabled by org admin\n\n←\nBack to Claude",
+      "bodyTextLength": 466,
+      "htmlAttrs": {
+        "data-build-id": "spa-dev",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "lang": "zh-CN",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "Copy installation command",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "Install in VS Code",
+          "aria": null,
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "root",
+          "text": "Code with Claude anywherePowerful agentic coding in your IDE, terminal, or on the go. 了解更多TerminalOriginalBest-in-class coding agent that runs in your terminal, edits files, runs scripts, and more.npm"
+        },
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": ""
+        }
+      ],
+      "rootHtmlLength": 6064,
+      "consoleLogs": [
+        {
+          "type": "info",
+          "args": [
+            "[O11Y]",
+            "[DatadogRUM] Initialized",
+            "Object"
+          ]
+        }
+      ],
+      "apiResponses": [
+        {
+          "url": "http://127.0.0.1:61905/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/account_profile",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/billing/00000000-0000-4000-8000-000000000001/individual_plan_pricing/v2",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=3857b954-8c34-4a9c-94be-e37417bfaf3b&batch_time=1783431057233&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=e026b11e-e74e-48a4-a34f-2ca5c1ebf1e2&batch_time=1783431057235&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=94275d0a-f6af-427b-b711-8e0f2f099a09&batch_time=1783431057236&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=25477f13-acdf-4da8-a085-e37f666f4732&batch_time=1783431057237&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=f849ae17-5f2c-4ffe-8d5f-3485826b199d&batch_time=1783431057238&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/billing/00000000-0000-4000-8000-000000000001/individual_plan_pricing/v2",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=4df5af89-eca7-48bf-8a69-32772a4e6bbb&batch_time=1783431057551&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=3380b634-4b44-4a4d-a6eb-22bb74f39dae&batch_time=1783431057567&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=564a3858-da08-40a8-8237-6595af60a84c&batch_time=1783431057592&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=d8a36976-ff50-4b3c-b567-f82f60d9c608&batch_time=1783431057636&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=27357a33-f22f-4830-95bc-703bbd0d88d7&batch_time=1783431057637&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=09d2eb49-f07f-4ae0-9485-6f0a93e6e682&batch_time=1783431057903&_dd.api=fetch",
+          "status": 202
+        }
+      ]
+    },
+    "current": {
+      "url": "http://127.0.0.1:5176/epitaxy/scheduled",
+      "title": "Claude Deepseek React Shell",
+      "bodyText": "Skip to content\n收起侧边栏⌘B\n拖动调整大小\n协作\n代码\n新会话\n⌘N\n定时任务\n自定义\n更多\n已固定\n拖动以固定\n最近\nGeneral coding session\n\nCoding Session 2\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\n2\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nCowork 3P\n·\nGateway\n定时任务\n\nScheduled tasks\n\nRun tasks on a schedule or whenever you need them. Type /schedule in any session to set one up.\n\n新任务\n\nNo scheduled tasks yet.",
+      "bodyTextLength": 562,
+      "htmlAttrs": {
+        "lang": "zh-CN",
+        "data-build-id": "react-shell",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "cds-root h-screen antialiased scroll-smooth",
+        "style": "color-scheme: light;"
+      },
+      "buttons": [
+        {
+          "text": "协作",
+          "aria": "协作",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "代码",
+          "aria": "代码",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "新会话\n⌘N",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "定时任务",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "自定义",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "更多",
+          "aria": "更多",
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "已固定",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "最近",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "",
+          "aria": "筛选",
+          "cls": "df-chrome-btn relative -my-1"
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Coding Session 2",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for Coding Session 2",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "2",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for 2",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Cowork 3P\n·\nGateway",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "外观",
+          "cls": "df-chrome-btn text-text-500"
+        },
+        {
+          "text": "",
+          "aria": "更多",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "新任务",
+          "aria": null,
+          "cls": "group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "h-full",
+          "text": "Skip to content收起侧边栏⌘B拖动调整大小协作代码新会话⌘N定时任务自定义更多已固定拖动以固定最近General coding sessionCoding Session 2General coding sessionGeneral coding sessionGeneral coding sessionGeneral coding sessionGeneral codi"
+        }
+      ],
+      "rootHtmlLength": 45221,
+      "consoleLogs": [
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "info",
+          "args": [
+            "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools",
+            "font-weight:bold"
+          ]
+        }
+      ],
+      "apiResponses": []
+    },
+    "diff": {
+      "officialTextLen": 466,
+      "currentTextLen": 562,
+      "officialUrl": "http://127.0.0.1:61905/code/disabled",
+      "currentUrl": "http://127.0.0.1:5176/epitaxy/scheduled",
+      "titleDiff": true,
+      "textEqual": false
+    }
+  },
+  {
+    "route": "/settings",
+    "official": {
+      "url": "http://127.0.0.1:61905/settings",
+      "title": "Claude",
+      "bodyText": "设置\n通用\n隐私\n功能\n连接器\nClaude Code",
+      "bodyTextLength": 27,
+      "htmlAttrs": {
+        "data-build-id": "spa-dev",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "lang": "zh-CN",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "Back to Claude",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "root",
+          "text": "设置通用隐私功能连接器Claude Code"
+        },
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": ""
+        }
+      ],
+      "rootHtmlLength": 4217,
+      "consoleLogs": [
+        {
+          "type": "info",
+          "args": [
+            "[O11Y]",
+            "[DatadogRUM] Initialized",
+            "Object"
+          ]
+        }
+      ],
+      "apiResponses": [
+        {
+          "url": "http://127.0.0.1:61905/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/account_profile",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=3de4e7e5-446e-4e5f-b818-6417261043e1&batch_time=1783431068252&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=3276128b-43f1-4158-9976-2bdd4c257805&batch_time=1783431068254&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=9350d806-0f0e-4a5d-85cc-3d7d41f8bd35&batch_time=1783431068257&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=6fdeb0eb-5e7f-45d9-b585-371591db0aec&batch_time=1783431068259&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=cc67cb6a-db4e-4941-af39-8f155a731e5c&batch_time=1783431068258&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=7116ba12-a8b6-4791-87eb-6f0d74c252c0&batch_time=1783431068579&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=f7b5014d-4ec4-48c8-b663-dac04c831e0d&batch_time=1783431068613&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=f9dfebcb-3d5a-42e9-92fd-a767a3d1b06e&batch_time=1783431068720&_dd.api=fetch",
+          "status": 202
+        }
+      ]
+    },
+    "current": {
+      "url": "http://127.0.0.1:5176/settings/general",
+      "title": "Claude Deepseek React Shell",
+      "bodyText": "设置\n通用\n隐私\n功能\n连接器\nClaude Code\nCowork\n桌面应用\n通用\n扩展\n开发者\nWorkbench Org\nOrganization settings\n个人资料\n头像\nC\n\n全名\nClaude 应该怎么称呼你？\n哪项最符合你的工作？\n选择\n给 Claude 的说明\nClaude 会在聊天和协作中参考这些内容，前提是它们符合 Anthropic 的使用准则。了解更多\n偏好设置\n外观\n\n\n聊天字体\nAnthropic Serif\n通知\n代码通知\nClaude can choose to notify you about important updates from a Code session.\nCode permission requests\n当 Claude 在 Code 会话中需要你批准运行命令时，向你发送推送通知。\nSecurity scan emails\nGet an email when a Claude Code security scan finishes.\nDispatch messages\n当 Claude 在 Dispatch 中给你发消息时，向你的手机发送推送通知。",
+      "bodyTextLength": 513,
+      "htmlAttrs": {
+        "lang": "zh-CN",
+        "data-build-id": "react-shell",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "cds-root h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "Back to Claude",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "C\n",
+          "aria": "随机头像",
+          "cls": "relative block overflow-hidden rounded-full outline-none focus-visible:shadow-focus"
+        },
+        {
+          "text": "选择",
+          "aria": null,
+          "cls": "cds-reset inline-flex h-control min-w-0 cursor-default items-center gap-1.5 rounded bg-transparent p"
+        },
+        {
+          "text": "",
+          "aria": null,
+          "cls": "cds-reset relative z-[1] inline-flex items-center justify-center gap-1.5 select-none border-0 bg-tra"
+        },
+        {
+          "text": "",
+          "aria": null,
+          "cls": "cds-reset relative z-[1] inline-flex items-center justify-center gap-1.5 select-none border-0 bg-tra"
+        },
+        {
+          "text": "",
+          "aria": null,
+          "cls": "cds-reset relative z-[1] inline-flex items-center justify-center gap-1.5 select-none border-0 bg-tra"
+        },
+        {
+          "text": "Anthropic Serif",
+          "aria": null,
+          "cls": "cds-reset inline-flex h-control min-w-0 cursor-default items-center gap-1.5 rounded bg-transparent p"
+        },
+        {
+          "text": "",
+          "aria": null,
+          "cls": "cds-reset relative inline-flex shrink-0 rounded-full border-0 outline-none bg-switch-track hover:bg-"
+        },
+        {
+          "text": "",
+          "aria": null,
+          "cls": "cds-reset relative inline-flex shrink-0 rounded-full border-0 outline-none bg-switch-track hover:bg-"
+        },
+        {
+          "text": "",
+          "aria": null,
+          "cls": "cds-reset relative inline-flex shrink-0 rounded-full border-0 outline-none bg-switch-track hover:bg-"
+        },
+        {
+          "text": "",
+          "aria": null,
+          "cls": "cds-reset relative inline-flex shrink-0 rounded-full border-0 outline-none bg-switch-track hover:bg-"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": "设置通用隐私功能连接器Claude CodeCowork桌面应用通用扩展开发者Workbench OrgOrganization settings个人资料头像C全名Claude 应该怎么称呼你？哪项最符合你的工作？选择给 Claude 的说明Claude 会在聊天和协作中参考这些内容，前提是它们符合 Anthropic 的使用准则。了解更多偏好设置外观聊天字体Anthropic Serif通"
+        }
+      ],
+      "rootHtmlLength": 21321,
+      "consoleLogs": [
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "info",
+          "args": [
+            "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools",
+            "font-weight:bold"
+          ]
+        }
+      ],
+      "apiResponses": []
+    },
+    "diff": {
+      "officialTextLen": 27,
+      "currentTextLen": 513,
+      "officialUrl": "http://127.0.0.1:61905/settings",
+      "currentUrl": "http://127.0.0.1:5176/settings/general",
+      "titleDiff": true,
+      "textEqual": false
+    }
+  },
+  {
+    "route": "/customize",
+    "official": {
+      "url": "http://127.0.0.1:61905/customize",
+      "title": "Claude",
+      "bodyText": "自定义\nSkills\n连接器\nPlugins\nCustomize Claude\n\nSkills, connectors, and plugins shape how Claude works with you.\n\nConnect your apps\nLet Claude read and write to the tools you already use.\nCreate new skills\nTeach Claude your processes, team norms, and expertise.\nBrowse plugins\nAdd pre-built knowledge for your field.",
+      "bodyTextLength": 309,
+      "htmlAttrs": {
+        "data-build-id": "spa-dev",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "lang": "zh-CN",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "Back to Claude",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "Plugins",
+          "aria": null,
+          "cls": "flex items-center rounded-lg text-sm transition-all justify-center p-2 text-text-100 hover:bg-bg-300"
+        },
+        {
+          "text": "",
+          "aria": "Expand navigation",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "Connect your apps\nLet Claude read and write to the tools you already use.",
+          "aria": null,
+          "cls": "flex w-full items-center gap-4 rounded-3xl border border-border-300 bg-bg-000 p-5 text-left shadow-s"
+        },
+        {
+          "text": "Browse plugins\nAdd pre-built knowledge for your field.",
+          "aria": null,
+          "cls": "flex w-full items-center gap-4 rounded-3xl border border-border-300 bg-bg-000 p-5 text-left shadow-s"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "root",
+          "text": "自定义Skills连接器PluginsCustomize ClaudeSkills, connectors, and plugins shape how Claude works with you.Connect your appsLet Claude read and write to the tools you already use.Create new skillsTeach Claude"
+        },
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": ""
+        }
+      ],
+      "rootHtmlLength": 33504,
+      "consoleLogs": [
+        {
+          "type": "info",
+          "args": [
+            "[O11Y]",
+            "[DatadogRUM] Initialized",
+            "Object"
+          ]
+        }
+      ],
+      "apiResponses": [
+        {
+          "url": "http://127.0.0.1:61905/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/account_profile",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=7e13c60e-0aed-46e2-b363-71fac429ab95&batch_time=1783431079359&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=993036af-2a1b-4d34-916b-80041746c814&batch_time=1783431079361&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=4677d8f3-4838-4f72-83c4-de6c2eef18de&batch_time=1783431079362&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=eb84c1c9-1a8c-48ee-9b1d-889d3bb04dae&batch_time=1783431079375&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=a1f952aa-b61d-4f60-8d1f-c2e237e53689&batch_time=1783431079374&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=ab0b4906-4270-444b-9404-be1f28755936&batch_time=1783431082289&_dd.api=fetch",
+          "status": 202
+        }
+      ]
+    },
+    "current": {
+      "url": "http://127.0.0.1:5176/customize",
+      "title": "Claude Deepseek React Shell",
+      "bodyText": "自定义\n连接器\nPersonal plugins\n\nGive Claude role-level expertise with plugins\n\nBrowse plugins\n\nCustomize Claude\n\nSkills, connectors, and plugins shape how Claude works with you.\n\nConnect your apps\nLet Claude read and write to the tools you already use.\nBrowse plugins\nAdd pre-built knowledge for your field.",
+      "bodyTextLength": 302,
+      "htmlAttrs": {
+        "lang": "zh-CN",
+        "data-build-id": "react-shell",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "cds-root h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "Back",
+          "cls": "cds-reset inline-flex size-8 items-center justify-center rounded-lg text-text-300 hover:bg-bg-300 ho"
+        },
+        {
+          "text": "连接器",
+          "aria": null,
+          "cls": "cds-reset flex items-center rounded-lg text-sm transition-all gap-3 px-4 py-1.5 text-text-100 hover:"
+        },
+        {
+          "text": "",
+          "aria": "Add plugin",
+          "cls": "cds-reset inline-flex size-5 items-center justify-center rounded-md text-text-500 hover:bg-bg-300 ho"
+        },
+        {
+          "text": "Browse plugins",
+          "aria": null,
+          "cls": "cds-reset inline-flex h-8 items-center justify-center rounded-lg border border-border-300 bg-bg-000 "
+        },
+        {
+          "text": "Connect your apps\nLet Claude read and write to the tools you already use.",
+          "aria": null,
+          "cls": "flex w-full items-center gap-4 rounded-3xl border border-border-300 bg-bg-000 p-5 text-left shadow-s"
+        },
+        {
+          "text": "Browse plugins\nAdd pre-built knowledge for your field.",
+          "aria": null,
+          "cls": "flex w-full items-center gap-4 rounded-3xl border border-border-300 bg-bg-000 p-5 text-left shadow-s"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "flex h-full w-full flex-col",
+          "text": "自定义连接器Personal pluginsGive Claude role-level expertise with pluginsBrowse pluginsCustomize ClaudeSkills, connectors, and plugins shape how Claude works with you.Connect your appsLet Claude read and w"
+        }
+      ],
+      "rootHtmlLength": 7853,
+      "consoleLogs": [
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "info",
+          "args": [
+            "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools",
+            "font-weight:bold"
+          ]
+        }
+      ],
+      "apiResponses": []
+    },
+    "diff": {
+      "officialTextLen": 309,
+      "currentTextLen": 302,
+      "officialUrl": "http://127.0.0.1:61905/customize",
+      "currentUrl": "http://127.0.0.1:5176/customize",
+      "titleDiff": true,
+      "textEqual": false
+    }
+  },
+  {
+    "route": "/code",
+    "official": {
+      "url": "http://127.0.0.1:61905/code/disabled",
+      "title": "Claude",
+      "bodyText": "Code with Claude anywhere\n\nPowerful agentic coding in your IDE, terminal, or on the go. 了解更多\n\nTerminal\nOriginal\n\nBest-in-class coding agent that runs in your terminal, edits files, runs scripts, and more.\n\nnpm install -g @anthropic/claude-cli\nIDE extension\nNew\n\nAll the power of Claude Code, right at home in VS Code, Cursor, or Windsurf.\n\nInstall in VS Code\nWeb\n预览\n\nRun coding tasks seamlessly across your browser and phone.\n\nDisabled by org admin\n\n←\nBack to Claude",
+      "bodyTextLength": 466,
+      "htmlAttrs": {
+        "data-build-id": "spa-dev",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "lang": "zh-CN",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "Copy installation command",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "Install in VS Code",
+          "aria": null,
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "root",
+          "text": "Code with Claude anywherePowerful agentic coding in your IDE, terminal, or on the go. 了解更多TerminalOriginalBest-in-class coding agent that runs in your terminal, edits files, runs scripts, and more.npm"
+        },
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": ""
+        }
+      ],
+      "rootHtmlLength": 6064,
+      "consoleLogs": [
+        {
+          "type": "info",
+          "args": [
+            "[O11Y]",
+            "[DatadogRUM] Initialized",
+            "Object"
+          ]
+        }
+      ],
+      "apiResponses": [
+        {
+          "url": "http://127.0.0.1:61905/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/account_profile",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/billing/00000000-0000-4000-8000-000000000001/individual_plan_pricing/v2",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=3afe63cc-c9ae-4cae-8f82-74ab457c8607&batch_time=1783431090577&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=b8243591-c030-4ea1-9f54-7e18bb125c6b&batch_time=1783431090580&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=bc2c7660-a0f9-43e3-b744-6deb6969cc06&batch_time=1783431090581&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=4b9d8a30-4cb4-46a7-8099-8de9684870a5&batch_time=1783431090582&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=55b9447c-0f10-452a-8bba-f4d99f2b995c&batch_time=1783431090582&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=29a41487-733b-44d4-863a-93a556fd80ea&batch_time=1783431090923&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=c75f6613-7fbc-4a6b-bc5a-d07cb4b962eb&batch_time=1783431090924&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=20c592b4-76a7-4370-9850-399326f9e2fb&batch_time=1783431090943&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=55948b31-82df-48c7-bf87-a537df2c5826&batch_time=1783431090965&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=2bc88201-60f6-4023-9bf5-8bfa4c8c18b0&batch_time=1783431090979&_dd.api=fetch",
+          "status": 202
+        }
+      ]
+    },
+    "current": {
+      "url": "http://127.0.0.1:5176/code/disabled",
+      "title": "Claude Deepseek React Shell",
+      "bodyText": "Code with Claude anywhere\n\nPowerful agentic coding in your IDE, terminal, or on the go. 了解更多\n\nTerminal\nOriginal\n\nBest-in-class coding agent that runs in your terminal, edits files, runs scripts, and more.\n\nnpm install -g @anthropic/claude-cli\nIDE extension\nNew\n\nAll the power of Claude Code, right at home in VS Code, Cursor, or Windsurf.\n\nInstall in VS Code\nWeb\n预览\n\nRun coding tasks seamlessly across your browser and phone.\n\nDisabled by org admin\n\n←\nBack to Claude",
+      "bodyTextLength": 466,
+      "htmlAttrs": {
+        "lang": "zh-CN",
+        "data-build-id": "react-shell",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "cds-root h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "Copy installation command",
+          "cls": "inline-flex items-center justify-center relative isolate shrink-0 can-focus select-none disabled:poi"
+        },
+        {
+          "text": "Install in VS Code",
+          "aria": null,
+          "cls": "inline-flex items-center justify-center relative isolate shrink-0 can-focus select-none disabled:poi"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "flex min-h-screen w-full items-center justify-center bg-bg-100 px-4 py-12 ",
+          "text": "Code with Claude anywherePowerful agentic coding in your IDE, terminal, or on the go. 了解更多TerminalOriginalBest-in-class coding agent that runs in your terminal, edits files, runs scripts, and more.npm"
+        }
+      ],
+      "rootHtmlLength": 5867,
+      "consoleLogs": [
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "info",
+          "args": [
+            "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools",
+            "font-weight:bold"
+          ]
+        }
+      ],
+      "apiResponses": []
+    },
+    "diff": {
+      "officialTextLen": 466,
+      "currentTextLen": 466,
+      "officialUrl": "http://127.0.0.1:61905/code/disabled",
+      "currentUrl": "http://127.0.0.1:5176/code/disabled",
+      "titleDiff": true,
+      "textEqual": true
+    }
+  },
+  {
+    "route": "/analytics",
+    "official": {
+      "url": "http://127.0.0.1:61905/settings",
+      "title": "Claude",
+      "bodyText": "设置\n通用\n隐私\n功能\n连接器\nClaude Code",
+      "bodyTextLength": 27,
+      "htmlAttrs": {
+        "data-build-id": "spa-dev",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "lang": "zh-CN",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "Back to Claude",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "root",
+          "text": "设置通用隐私功能连接器Claude Code"
+        },
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": ""
+        }
+      ],
+      "rootHtmlLength": 4217,
+      "consoleLogs": [
+        {
+          "type": "info",
+          "args": [
+            "[O11Y]",
+            "[DatadogRUM] Initialized",
+            "Object"
+          ]
+        }
+      ],
+      "apiResponses": [
+        {
+          "url": "http://127.0.0.1:61905/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/account_profile",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=0de4e433-a55f-4d5d-9e9d-7e5a5419b75f&batch_time=1783431101676&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=82b2f07e-8d8d-4214-b4ad-34674557aeb8&batch_time=1783431101677&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=bfd6c66a-688f-4769-b6ac-7795f75630e4&batch_time=1783431101678&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=afe0775e-bef3-4d52-a443-ead69e2333da&batch_time=1783431101681&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=09a5a374-8c21-4500-bc29-8ed0a4f64d86&batch_time=1783431101693&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=e37807e0-6cea-45c2-baa2-71fefef02fe9&batch_time=1783431102018&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=a4c16084-b8ab-4621-a6b3-29cdba826e21&batch_time=1783431101989&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=5064842a-942e-4ea7-8d79-14048a61dfc9&batch_time=1783431102044&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=1771f729-cfe4-4aa8-bdd1-2cde78fe2550&batch_time=1783431102045&_dd.api=fetch",
+          "status": 202
+        }
+      ]
+    },
+    "current": {
+      "url": "http://127.0.0.1:5176/analytics/activity",
+      "title": "Claude Deepseek React Shell",
+      "bodyText": "Analytics\nAll activity\nApps\nClaude.ai\nClaude Code\nAnalytics API\nAPI keys\nAll activity\n\nView usage and activity metrics for your organization\n\nData in UTC · Updated daily\n\nUsage\n\nUnable to load activity data. Try again later.\n\nUnable to load chart data. Try again later.\n无法加载连接器数据。请稍后重试。",
+      "bodyTextLength": 287,
+      "htmlAttrs": {
+        "lang": "zh-CN",
+        "data-build-id": "react-shell",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "cds-root h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "Back to Claude",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "",
+          "aria": null,
+          "cls": "inline-flex items-center"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": "AnalyticsAll activityAppsClaude.aiClaude CodeAnalytics APIAPI keysAll activityView usage and activity metrics for your organizationData in UTC · Updated dailyUsageUnable to load activity data. Try ag"
+        }
+      ],
+      "rootHtmlLength": 4661,
+      "consoleLogs": [
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "info",
+          "args": [
+            "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools",
+            "font-weight:bold"
+          ]
+        }
+      ],
+      "apiResponses": []
+    },
+    "diff": {
+      "officialTextLen": 27,
+      "currentTextLen": 287,
+      "officialUrl": "http://127.0.0.1:61905/settings",
+      "currentUrl": "http://127.0.0.1:5176/analytics/activity",
+      "titleDiff": true,
+      "textEqual": false
+    }
+  },
+  {
+    "route": "/directory",
+    "official": {
+      "url": "http://127.0.0.1:61905/directory",
+      "title": "Claude",
+      "bodyText": "Skip to content\nClick to collapse⌘B\nDrag to resize\nResearch preview\n\n\n新会话\n⇧⌘O\n\n自定义\n\n更多\n最近\n\nClaude-Deepseek\n·\nGateway\n\n\nEvening, Claude-Deepseek\n\n\n\n\nDeepSeek Chat\nWrite\nLearn\nCode\nLife stuff\nClaude’s choice\nDirectory\nPlugins\n\nYour organization hasn't provided plugins. Contact your organization administrator to add them.",
+      "bodyTextLength": 327,
+      "htmlAttrs": {
+        "data-build-id": "spa-dev",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "lang": "zh-CN",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "收起侧边栏",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "",
+          "aria": "搜索",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "\n新会话\n⇧⌘O",
+          "aria": null,
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "\n自定义",
+          "aria": null,
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "\n更多",
+          "aria": "More navigation items",
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "",
+          "aria": "Filter",
+          "cls": "cds-reset group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whites"
+        },
+        {
+          "text": "Claude-Deepseek\n·\nGateway\n",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "外观",
+          "cls": "cds-reset group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whites"
+        },
+        {
+          "text": "",
+          "aria": "添加文件、连接器等",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "DeepSeek Chat",
+          "aria": "Model: DeepSeek Chat",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "",
+          "aria": "Send message",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "Write",
+          "aria": null,
+          "cls": "active:scale-[0.995]\n      border-0.5\n      border-border-300\n      hover:border-bg-300\n      cursor"
+        },
+        {
+          "text": "Learn",
+          "aria": null,
+          "cls": "active:scale-[0.995]\n      border-0.5\n      border-border-300\n      hover:border-bg-300\n      cursor"
+        },
+        {
+          "text": "Code",
+          "aria": null,
+          "cls": "active:scale-[0.995]\n      border-0.5\n      border-border-300\n      hover:border-bg-300\n      cursor"
+        },
+        {
+          "text": "Life stuff",
+          "aria": null,
+          "cls": "active:scale-[0.995]\n      border-0.5\n      border-border-300\n      hover:border-bg-300\n      cursor"
+        },
+        {
+          "text": "Claude’s choice",
+          "aria": null,
+          "cls": "active:scale-[0.995]\n      border-0.5\n      border-border-300\n      hover:border-bg-300\n      cursor"
+        },
+        {
+          "text": "",
+          "aria": "Close",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "Plugins",
+          "aria": null,
+          "cls": "flex items-center rounded-lg text-sm transition-all gap-3 px-4 py-1.5 bg-bg-300 text-text-100 font-s"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "root",
+          "text": "Skip to contentClick to collapse⌘BDrag to resizeResearch preview新会话⇧⌘O自定义更多最近Claude-Deepseek·GatewayEvening, Claude-DeepseekDeepSeek ChatWriteLearnCodeLife stuffClaude’s choice"
+        },
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": ""
+        }
+      ],
+      "rootHtmlLength": 38742,
+      "consoleLogs": [
+        {
+          "type": "info",
+          "args": [
+            "[O11Y]",
+            "[DatadogRUM] Initialized",
+            "Object"
+          ]
+        }
+      ],
+      "apiResponses": [
+        {
+          "url": "http://127.0.0.1:61905/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/account_profile",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/organizations/00000000-0000-4000-8000-000000000001/notification/preferences",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/billing/00000000-0000-4000-8000-000000000001/individual_plan_pricing/v2",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=e1ebd651-2358-4578-a4e0-d8de4cc88949&batch_time=1783431113054&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=1e942d6a-d307-493b-a701-e17b01e3b970&batch_time=1783431113052&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=1fd7f567-b328-4b16-a1dc-3f370f270307&batch_time=1783431113062&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=e16017f9-e57d-4ac9-95e6-fb8f4155c919&batch_time=1783431113143&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=4c3f62b4-ecd6-42a4-89af-1c9d01b0e56f&batch_time=1783431113144&_dd.api=fetch",
+          "status": 202
+        }
+      ]
+    },
+    "current": {
+      "url": "http://127.0.0.1:5176/directory",
+      "title": "Claude Deepseek React Shell",
+      "bodyText": "Skip to content\n收起侧边栏⌘B\n拖动调整大小\n协作\n代码\n新会话\n⌘N\n定时任务\n自定义\n更多\n已固定\n拖动以固定\n最近\nGeneral coding session\n\nCoding Session 2\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\n2\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nCowork 3P\n·\nGateway\nDirectory\nDirectory\n×\nPlugins\n\nYour organization hasn't provided plugins. Contact your organization administrator to add them.",
+      "bodyTextLength": 538,
+      "htmlAttrs": {
+        "lang": "zh-CN",
+        "data-build-id": "react-shell",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "cds-root h-screen antialiased scroll-smooth",
+        "style": "color-scheme: light;"
+      },
+      "buttons": [
+        {
+          "text": "协作",
+          "aria": "协作",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "代码",
+          "aria": "代码",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "新会话\n⌘N",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "定时任务",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "自定义",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "更多",
+          "aria": "更多",
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "已固定",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "最近",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "",
+          "aria": "筛选",
+          "cls": "df-chrome-btn relative -my-1"
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Coding Session 2",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for Coding Session 2",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "2",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for 2",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Cowork 3P\n·\nGateway",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "外观",
+          "cls": "df-chrome-btn text-text-500"
+        },
+        {
+          "text": "×",
+          "aria": "Close",
+          "cls": "inline-flex items-center justify-center relative isolate shrink-0 can-focus select-none disabled:poi"
+        },
+        {
+          "text": "Plugins",
+          "aria": null,
+          "cls": "flex items-center rounded-lg text-sm transition-all gap-3 px-4 py-1.5 bg-bg-300 text-text-100 font-s"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "h-full",
+          "text": "Skip to content收起侧边栏⌘B拖动调整大小协作代码新会话⌘N定时任务自定义更多已固定拖动以固定最近General coding sessionCoding Session 2General coding sessionGeneral coding sessionGeneral coding sessionGeneral coding sessionGeneral codi"
+        }
+      ],
+      "rootHtmlLength": 44718,
+      "consoleLogs": [
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "info",
+          "args": [
+            "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools",
+            "font-weight:bold"
+          ]
+        }
+      ],
+      "apiResponses": []
+    },
+    "diff": {
+      "officialTextLen": 327,
+      "currentTextLen": 538,
+      "officialUrl": "http://127.0.0.1:61905/directory",
+      "currentUrl": "http://127.0.0.1:5176/directory",
+      "titleDiff": true,
+      "textEqual": false
+    }
+  },
+  {
+    "route": "/project/foo/setup",
+    "official": {
+      "url": "http://127.0.0.1:61905/project/foo/setup",
+      "title": "Claude",
+      "bodyText": "Skip to content\nClick to collapse⌘B\nDrag to resize\nResearch preview\n\n\n新会话\n⇧⌘O\n\n自定义\n\n更多\n最近\n\nClaude-Deepseek\n·\nGateway\n\n\nLoading...",
+      "bodyTextLength": 136,
+      "htmlAttrs": {
+        "data-build-id": "spa-dev",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "lang": "zh-CN",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "收起侧边栏",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "",
+          "aria": "搜索",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "\n新会话\n⇧⌘O",
+          "aria": null,
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "\n自定义",
+          "aria": null,
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "\n更多",
+          "aria": "More navigation items",
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "",
+          "aria": "Filter",
+          "cls": "cds-reset group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whites"
+        },
+        {
+          "text": "Claude-Deepseek\n·\nGateway\n",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "外观",
+          "cls": "cds-reset group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whites"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "root",
+          "text": "Skip to contentClick to collapse⌘BDrag to resizeResearch preview新会话⇧⌘O自定义更多最近Claude-Deepseek·GatewayLoading..."
+        },
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": ""
+        }
+      ],
+      "rootHtmlLength": 23342,
+      "consoleLogs": [
+        {
+          "type": "info",
+          "args": [
+            "[O11Y]",
+            "[DatadogRUM] Initialized",
+            "Object"
+          ]
+        }
+      ],
+      "apiResponses": [
+        {
+          "url": "http://127.0.0.1:61905/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/account_profile",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/billing/00000000-0000-4000-8000-000000000001/individual_plan_pricing/v2",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=5aaeeae1-02a4-4865-9da3-054f3af94d03&batch_time=1783431124008&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=9294d783-db1f-4c66-a1fc-f2aa3122e1ed&batch_time=1783431124008&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=7605b1fc-80ff-45c4-a247-64a42681f005&batch_time=1783431124006&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=1de80197-7cbf-4221-ace6-9024127d1ccd&batch_time=1783431124010&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=298a52b7-acbb-44ff-ad3e-0f42a7677659&batch_time=1783431124010&_dd.api=fetch",
+          "status": 202
+        }
+      ]
+    },
+    "current": {
+      "url": "http://127.0.0.1:5176/project/foo/setup",
+      "title": "Claude Deepseek React Shell",
+      "bodyText": "Skip to content\n收起侧边栏⌘B\n拖动调整大小\n协作\n代码\n新会话\n⌘N\n定时任务\n自定义\n更多\n已固定\n拖动以固定\n最近\nGeneral coding session\n\nCoding Session 2\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\n2\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nGeneral coding session\n\nCowork 3P\n·\nGateway\nProject",
+      "bodyTextLength": 419,
+      "htmlAttrs": {
+        "lang": "zh-CN",
+        "data-build-id": "react-shell",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "cds-root h-screen antialiased scroll-smooth",
+        "style": "color-scheme: light;"
+      },
+      "buttons": [
+        {
+          "text": "协作",
+          "aria": "协作",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "代码",
+          "aria": "代码",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "新会话\n⌘N",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "定时任务",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "自定义",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "更多",
+          "aria": "更多",
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "已固定",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "最近",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "",
+          "aria": "筛选",
+          "cls": "df-chrome-btn relative -my-1"
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Coding Session 2",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for Coding Session 2",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "2",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for 2",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "General coding session",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for General coding session",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Cowork 3P\n·\nGateway",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "外观",
+          "cls": "df-chrome-btn text-text-500"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "h-full",
+          "text": "Skip to content收起侧边栏⌘B拖动调整大小协作代码新会话⌘N定时任务自定义更多已固定拖动以固定最近General coding sessionCoding Session 2General coding sessionGeneral coding sessionGeneral coding sessionGeneral coding sessionGeneral codi"
+        }
+      ],
+      "rootHtmlLength": 43071,
+      "consoleLogs": [
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "info",
+          "args": [
+            "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools",
+            "font-weight:bold"
+          ]
+        }
+      ],
+      "apiResponses": []
+    },
+    "diff": {
+      "officialTextLen": 136,
+      "currentTextLen": 419,
+      "officialUrl": "http://127.0.0.1:61905/project/foo/setup",
+      "currentUrl": "http://127.0.0.1:5176/project/foo/setup",
+      "titleDiff": true,
+      "textEqual": false
+    }
+  },
+  {
+    "route": "/task/examples",
+    "official": {
+      "url": "http://127.0.0.1:61905/task/new",
+      "title": "Claude",
+      "bodyText": "Skip to content\nClick to collapse⌘B\nDrag to resize\nResearch preview\n\n\n新会话\n⇧⌘O\n\n自定义\n\n更多\n最近\n\nClaude-Deepseek\n·\nGateway\n\n\n来把待办清掉吧\n\n\n\n\n今天我可以帮你做什么？\n随便挑个任务开始吧\n优化我的一周\n整理我的截图\n从文件中发现洞察\n用插件自定义",
+      "bodyTextLength": 189,
+      "htmlAttrs": {
+        "data-build-id": "spa-dev",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "lang": "zh-CN",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "h-screen antialiased scroll-smooth"
+      },
+      "buttons": [
+        {
+          "text": "",
+          "aria": "收起侧边栏",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "",
+          "aria": "搜索",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "\n新会话\n⇧⌘O",
+          "aria": null,
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "\n自定义",
+          "aria": null,
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "\n更多",
+          "aria": "More navigation items",
+          "cls": "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-cent"
+        },
+        {
+          "text": "",
+          "aria": "Filter",
+          "cls": "cds-reset group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whites"
+        },
+        {
+          "text": "Claude-Deepseek\n·\nGateway\n",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "外观",
+          "cls": "cds-reset group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whites"
+        },
+        {
+          "text": "",
+          "aria": "添加文件、连接器等",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "",
+          "aria": "开始任务",
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        },
+        {
+          "text": "随便挑个任务开始吧",
+          "aria": null,
+          "cls": "flex items-center gap-2 font-small text-text-500 hover:text-text-100 transition-colors"
+        },
+        {
+          "text": "",
+          "aria": "隐藏建议",
+          "cls": "text-text-500 hover:text-text-200 transition-colors opacity-0 group-hover/suggestions:opacity-100"
+        },
+        {
+          "text": "优化我的一周",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "整理我的截图",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "从文件中发现洞察",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "用插件自定义",
+          "aria": null,
+          "cls": "inline-flex\n  items-center\n  justify-center\n  relative\n  isolate\n  shrink-0\n  can-focus\n  select-non"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "root",
+          "text": "Skip to contentClick to collapse⌘BDrag to resizeResearch preview新会话⇧⌘O自定义更多最近Claude-Deepseek·Gateway来把待办清掉吧今天我可以帮你做什么？随便挑个任务开始吧优化我的一周整理我的截图从文件中发现洞察用插件自定义"
+        },
+        {
+          "tag": "DIV",
+          "cls": "",
+          "text": ""
+        }
+      ],
+      "rootHtmlLength": 43362,
+      "consoleLogs": [
+        {
+          "type": "info",
+          "args": [
+            "[O11Y]",
+            "[DatadogRUM] Initialized",
+            "Object"
+          ]
+        }
+      ],
+      "apiResponses": [
+        {
+          "url": "http://127.0.0.1:61905/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/account_profile",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:61905/api/billing/00000000-0000-4000-8000-000000000001/individual_plan_pricing/v2",
+          "status": 200
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=3766832d-d929-4498-9b52-ae61e3df8ed9&batch_time=1783431135246&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=c11d7a7c-a179-4b51-abb0-dd4c70c4cf34&batch_time=1783431135244&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=5fbc6b61-0193-4355-85a0-10f8725beb7c&batch_time=1783431135269&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=e5864132-915e-4521-a418-23ef712ee072&batch_time=1783431135270&_dd.api=fetch",
+          "status": 202
+        },
+        {
+          "url": "https://browser-intake-us5-datadoghq.com/api/v2/rum?ddsource=browser&dd-api-key=pub71869dceb5b70dba6123af9ca357d1f9&dd-evp-origin-version=6.31.0&dd-evp-origin=browser&dd-request-id=51b9ec0e-8e06-470f-b6e4-04f427fcc82d&batch_time=1783431135273&_dd.api=fetch",
+          "status": 202
+        }
+      ]
+    },
+    "current": {
+      "url": "http://127.0.0.1:5176/task/examples",
+      "title": "Claude Deepseek React Shell",
+      "bodyText": "Skip to content\n收起侧边栏⌘B\n拖动调整大小\n协作\n代码\n新任务\n项目\n定时任务\n自定义\n已固定\n拖动以固定\n最近\n✳\nOrganize Downloads folder\n\n✳\nUntitled\n\nCowork 3P\n·\nGateway\n来把待办清掉吧\n\n了解如何安全使用协作.\n\n在项目中工作\nOpus 4\n\n随便挑个任务开始吧\n优化我的一周\n整理我的截图\n\n从文件中发现洞察\n用插件自定义",
+      "bodyTextLength": 208,
+      "htmlAttrs": {
+        "lang": "zh-CN",
+        "data-build-id": "react-shell",
+        "data-git-hash": "local",
+        "data-build-timestamp": "1778285308",
+        "data-version": "1.0.0",
+        "data-env": "",
+        "data-color-version": "v2",
+        "data-theme": "claude",
+        "data-mode": "light",
+        "class": "cds-root h-screen antialiased scroll-smooth",
+        "style": "color-scheme: light;"
+      },
+      "buttons": [
+        {
+          "text": "协作",
+          "aria": "协作",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "代码",
+          "aria": "代码",
+          "cls": "df-pill hide-focus-ring"
+        },
+        {
+          "text": "新任务",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "项目",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "定时任务",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "自定义",
+          "aria": null,
+          "cls": "group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded"
+        },
+        {
+          "text": "已固定",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "最近",
+          "aria": null,
+          "cls": "group/label flex min-w-0 flex-1 items-center gap-1 text-left hover:text-text-300 transition-colors d"
+        },
+        {
+          "text": "✳\nOrganize Downloads folder",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for Organize Downloads folder",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "✳\nUntitled",
+          "aria": null,
+          "cls": "flex flex-1 min-w-0 items-center gap-1.5 text-left border-0 bg-transparent p-0 text-inherit"
+        },
+        {
+          "text": "",
+          "aria": "More options for Untitled",
+          "cls": "draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 "
+        },
+        {
+          "text": "Cowork 3P\n·\nGateway",
+          "aria": null,
+          "cls": "cds-reset flex h-6 max-w-full items-center gap-1.5 rounded-[var(--df-radius-pill)] pl-0.5 pr-1.5 out"
+        },
+        {
+          "text": "",
+          "aria": "添加文件、连接器等",
+          "cls": "group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select"
+        },
+        {
+          "text": "在项目中工作",
+          "aria": null,
+          "cls": "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outli"
+        },
+        {
+          "text": "Opus 4",
+          "aria": null,
+          "cls": "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outli"
+        },
+        {
+          "text": "",
+          "aria": "开始任务",
+          "cls": "group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select"
+        },
+        {
+          "text": "\n随便挑个任务开始吧",
+          "aria": null,
+          "cls": "flex items-center gap-2 font-small text-text-500 hover:text-text-100 transition-colors"
+        },
+        {
+          "text": "优化我的一周",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "整理我的截图",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "\n从文件中发现洞察",
+          "aria": null,
+          "cls": "w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group te"
+        },
+        {
+          "text": "用插件自定义",
+          "aria": null,
+          "cls": "group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select"
+        }
+      ],
+      "topNodes": [
+        {
+          "tag": "DIV",
+          "cls": "h-full",
+          "text": "Skip to content收起侧边栏⌘B拖动调整大小协作代码新任务项目定时任务自定义已固定拖动以固定最近✳Organize Downloads folder✳UntitledCowork 3P·Gateway来把待办清掉吧了解如何安全使用协作.在项目中工作Opus 4随便挑个任务开始吧优化我的一周整理我的截图从文件中发现洞察用插件自定义"
+        }
+      ],
+      "rootHtmlLength": 34245,
+      "consoleLogs": [
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connecting..."
+          ]
+        },
+        {
+          "type": "debug",
+          "args": [
+            "[vite] connected."
+          ]
+        },
+        {
+          "type": "info",
+          "args": [
+            "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools",
+            "font-weight:bold"
+          ]
+        }
+      ],
+      "apiResponses": []
+    },
+    "diff": {
+      "officialTextLen": 189,
+      "currentTextLen": 208,
+      "officialUrl": "http://127.0.0.1:61905/task/new",
+      "currentUrl": "http://127.0.0.1:5176/task/examples",
+      "titleDiff": true,
+      "textEqual": false
+    }
+  }
+]

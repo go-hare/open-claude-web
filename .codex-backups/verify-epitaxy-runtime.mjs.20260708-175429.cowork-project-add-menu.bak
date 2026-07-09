@@ -1,0 +1,733 @@
+#!/usr/bin/env node
+import { spawn } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import net from "node:net";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const chromeDefaultPath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const screenshotPath = path.join(tmpdir(), "open-claude-web-epitaxy-runtime-smoke.png");
+const sessionId = "code_demo_0";
+const streamText = "Runtime stream smoke phrase";
+const composerText = "runtime composer submit";
+const coworkFollowupText = "Runtime Cowork follow-up reply smoke";
+const coworkAttachmentText = "Runtime Cowork attachment reply smoke";
+
+const checks = [];
+let viteProcess;
+let chromeProcess;
+let chromeProfileDir;
+
+function pass(group, name) {
+  checks.push({ group, name, status: "PASS" });
+  console.log(`PASS [${group}] ${name}`);
+}
+
+function fail(group, name, detail) {
+  checks.push({ group, name, status: "FAIL", detail });
+  console.error(`FAIL [${group}] ${name}${detail ? `: ${detail}` : ""}`);
+}
+
+function assertCheck(group, name, condition, detail) {
+  if (condition) pass(group, name);
+  else fail(group, name, detail);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+async function waitForHttp(url, timeoutMs = 15_000) {
+  const started = Date.now();
+  let lastError;
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return response;
+      lastError = new Error(`${url} -> ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await delay(100);
+  }
+  throw lastError ?? new Error(`Timed out waiting for ${url}`);
+}
+
+function spawnLogged(command, args, options = {}) {
+  const child = spawn(command, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"], ...options });
+  child.stdout.on("data", (chunk) => process.stdout.write(chunk));
+  child.stderr.on("data", (chunk) => process.stderr.write(chunk));
+  return child;
+}
+
+async function startVite(port) {
+  const viteBin = path.join(root, "node_modules/vite/bin/vite.js");
+  viteProcess = spawnLogged(process.execPath, [viteBin, "--host", "127.0.0.1", "--port", String(port), "--strictPort"]);
+  await waitForHttp(`http://127.0.0.1:${port}/epitaxy/${sessionId}`);
+}
+
+async function startChrome(debugPort, appUrl) {
+  const chromePath = process.env.CHROME_BIN || chromeDefaultPath;
+  chromeProfileDir = await mkdtemp(path.join(tmpdir(), "open-claude-runtime-chrome-"));
+  chromeProcess = spawn(chromePath, [
+    "--headless=new",
+    "--disable-gpu",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-background-networking",
+    "--remote-allow-origins=*",
+    `--remote-debugging-port=${debugPort}`,
+    `--user-data-dir=${chromeProfileDir}`,
+    "about:blank",
+  ], { stdio: ["ignore", "ignore", "pipe"] });
+  chromeProcess.stderr.on("data", (chunk) => process.stderr.write(chunk));
+  await waitForHttp(`http://127.0.0.1:${debugPort}/json/version`);
+  let targetResponse = await fetch(`http://127.0.0.1:${debugPort}/json/new?${encodeURIComponent(appUrl)}`, { method: "PUT" });
+  if (!targetResponse.ok) {
+    targetResponse = await fetch(`http://127.0.0.1:${debugPort}/json/new?${encodeURIComponent(appUrl)}`);
+  }
+  if (!targetResponse.ok) throw new Error(`Unable to create Chrome target: ${targetResponse.status}`);
+  return targetResponse.json();
+}
+
+class CdpClient {
+  constructor(wsUrl) {
+    this.nextId = 1;
+    this.pending = new Map();
+    this.events = new Map();
+    this.ws = new WebSocket(wsUrl);
+  }
+
+  async open() {
+    await new Promise((resolve, reject) => {
+      this.ws.addEventListener("open", resolve, { once: true });
+      this.ws.addEventListener("error", reject, { once: true });
+    });
+    this.ws.addEventListener("message", (event) => this.handleMessage(event));
+  }
+
+  handleMessage(event) {
+    const payload = JSON.parse(event.data);
+    if (payload.id) {
+      const pending = this.pending.get(payload.id);
+      if (!pending) return;
+      this.pending.delete(payload.id);
+      if (payload.error) pending.reject(new Error(payload.error.message ?? JSON.stringify(payload.error)));
+      else pending.resolve(payload.result);
+      return;
+    }
+    const listeners = this.events.get(payload.method);
+    if (listeners) for (const listener of listeners) listener(payload.params ?? {});
+  }
+
+  on(method, listener) {
+    const listeners = this.events.get(method) ?? new Set();
+    listeners.add(listener);
+    this.events.set(method, listeners);
+    return () => listeners.delete(listener);
+  }
+
+  send(method, params = {}) {
+    const id = this.nextId++;
+    this.ws.send(JSON.stringify({ id, method, params }));
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+    });
+  }
+
+  async evaluate(fn, ...args) {
+    const expression = `(${fn})(...${JSON.stringify(args)})`;
+    const result = await this.send("Runtime.evaluate", {
+      awaitPromise: true,
+      expression,
+      returnByValue: true,
+      userGesture: true,
+    });
+    if (result.exceptionDetails) {
+      throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? "Runtime.evaluate failed");
+    }
+    return result.result?.value;
+  }
+
+  close() {
+    this.ws.close();
+  }
+}
+
+async function waitFor(cdp, group, name, predicate, timeoutMs = 8_000, ...args) {
+  const started = Date.now();
+  let lastValue;
+  while (Date.now() - started < timeoutMs) {
+    lastValue = await cdp.evaluate(predicate, ...args);
+    if (lastValue === true) {
+      pass(group, name);
+      return;
+    }
+    await delay(120);
+  }
+  fail(group, name, `timed out; last=${JSON.stringify(lastValue)}`);
+}
+
+function clickElementByText(selector, ...values) {
+  const element = Array.from(document.querySelectorAll(selector)).find((item) => values.every((value) => item.innerText.includes(value)));
+  if (!element) return false;
+  element.click();
+  return true;
+}
+
+function clickButtonByLabel(label) {
+  const element = Array.from(document.querySelectorAll("button")).find((item) => item.getAttribute("aria-label") === label || item.innerText.trim() === label);
+  if (!element) return false;
+  element.click();
+  return true;
+}
+
+async function key(cdp, keyName, code, modifiers = 0) {
+  const windowsVirtualKeyCode = keyName === "Enter" ? 13 : keyName === "Escape" ? 27 : 0;
+  await cdp.send("Input.dispatchKeyEvent", { code, key: keyName, modifiers, type: "keyDown", windowsVirtualKeyCode });
+  if (keyName === "Enter" && (modifiers & 8) !== 0) {
+    await cdp.send("Input.dispatchKeyEvent", { key: keyName, modifiers, text: "\r", type: "char", unmodifiedText: "\r", windowsVirtualKeyCode });
+  }
+  await cdp.send("Input.dispatchKeyEvent", { code, key: keyName, modifiers, type: "keyUp", windowsVirtualKeyCode });
+}
+
+async function insertText(cdp, text) {
+  await cdp.send("Input.insertText", { text });
+}
+
+async function navigateInApp(cdp, pathname) {
+  await cdp.evaluate((nextPathname) => {
+    window.history.pushState({}, "", nextPathname);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    return true;
+  }, pathname);
+}
+
+async function run() {
+  const vitePort = await freePort();
+  const debugPort = await freePort();
+  const appUrl = `http://127.0.0.1:${vitePort}/epitaxy/${sessionId}`;
+  await startVite(vitePort);
+  const target = await startChrome(debugPort, appUrl);
+  const cdp = new CdpClient(target.webSocketDebuggerUrl);
+  await cdp.open();
+  await cdp.send("Page.enable");
+  await cdp.send("Runtime.enable");
+  await cdp.send("Input.setIgnoreInputEvents", { ignore: false });
+  await cdp.evaluate(() => {
+    window.__epitaxyRuntime = {
+      bodyExcludes: (...values) => {
+        const text = document.body.innerText;
+        return values.every((value) => !text.includes(value));
+      },
+      bodyIncludes: (...values) => {
+        const text = document.body.innerText;
+        return values.every((value) => text.includes(value));
+      },
+    };
+    return true;
+  });
+  await waitFor(cdp, "运行时加载", "session page renders without connecting flash", () => document.readyState === "complete" && window.__epitaxyRuntime.bodyIncludes("claude-desktop", "General coding session") && window.__epitaxyRuntime.bodyExcludes("Connecting to session"));
+
+  const initial = await cdp.evaluate(() => ({
+    actionButtons: ["Copy message", "Rewind to here", "Fork from here", "Good response", "Bad response"].every((label) => document.querySelector(`button[aria-label="${label}"]`)),
+    composerControls: Boolean(document.querySelector('[contenteditable="true"][aria-label="Prompt"].tiptap'))
+      && ["Permission mode", "Add", "Workspace", "Model", "Send"].every((label) => document.querySelector(`[aria-label="${label}"]`)),
+    toolRows: window.__epitaxyRuntime.bodyIncludes("Creating", "fake-plan.md", "Proposing plan"),
+  }));
+  assertCheck("小细节按钮", "copy/rewind/fork/thumb buttons exist in real DOM", initial.actionButtons, JSON.stringify(initial));
+  assertCheck("底部输入框", "official TipTap composer and control buttons exist in real DOM", initial.composerControls, JSON.stringify(initial));
+  assertCheck("工具块", "collapsed tool rows render from transcript", initial.toolRows, JSON.stringify(initial));
+
+  const legacyCoworkRedirects = [
+    ["/new", "Legacy /new redirects to /task/new instead of Code"],
+    ["/chat/runtime-chat-smoke", "Legacy /chat/$uuid redirects to /task/new instead of Code"],
+    ["/cowork/agent", "Legacy /cowork/agent redirects to /task/new instead of Code"],
+  ];
+  for (const [legacyPath, checkName] of legacyCoworkRedirects) {
+    await navigateInApp(cdp, legacyPath);
+    await waitFor(cdp, "协作路由", checkName, () => location.pathname === "/task/new"
+      && Boolean(document.querySelector('[data-frame-mode="cowork"]'))
+      && Boolean(document.querySelector('[contenteditable="true"][aria-label="今天我可以帮你做什么？"].tiptap'))
+      && !location.pathname.startsWith("/epitaxy")
+      && !document.body.innerText.includes("General coding session"));
+  }
+
+  await navigateInApp(cdp, "/task/new");
+  await waitFor(cdp, "协作新任务", "Cowork new task page renders official composer", () => Boolean(document.querySelector('[contenteditable="true"][aria-label="今天我可以帮你做什么？"].tiptap')) && Boolean(document.querySelector('[aria-label="Add files, connectors, and more"]')) && Boolean(document.querySelector('[aria-label="开始任务"]')));
+  await cdp.evaluate(() => {
+    const editor = document.querySelector('[contenteditable="true"][aria-label="今天我可以帮你做什么？"]');
+    editor?.focus();
+    return Boolean(editor);
+  });
+  await insertText(cdp, "Runtime Cowork UI submit smoke");
+  const coworkUiSubmitted = await cdp.evaluate(clickButtonByLabel, "开始任务");
+  assertCheck("协作新任务", "Cowork new task submits through UI start button", coworkUiSubmitted);
+  await waitFor(cdp, "协作新任务", "Cowork UI submit lands on /local_sessions", () => location.pathname.startsWith("/local_sessions/local_") && document.body.innerText.includes("Runtime Cowork UI submit smoke") && Boolean(document.querySelector('[contenteditable="true"][aria-label="Prompt"].tiptap')) && !location.pathname.startsWith("/epitaxy/"));
+  const coworkPath = await cdp.evaluate(() => location.pathname);
+  await cdp.evaluate(() => {
+    const editor = document.querySelector('[contenteditable="true"][aria-label="Prompt"]');
+    editor?.focus();
+    return Boolean(editor);
+  });
+  await insertText(cdp, coworkFollowupText);
+  const coworkFollowupSubmitted = await cdp.evaluate(clickButtonByLabel, "Send");
+  assertCheck("协作对话", "Cowork follow-up reply submits with session composer", coworkFollowupSubmitted);
+  await waitFor(cdp, "协作对话", "Cowork follow-up reply stays inside /local_sessions", (expectedPath, expectedText) => location.pathname === expectedPath && document.body.innerText.includes(expectedText) && Boolean(document.querySelector('[aria-label="Add files, connectors, and more"]')) && !location.pathname.startsWith("/epitaxy/"), 8_000, coworkPath, coworkFollowupText);
+  const coworkUiSessionId = coworkPath.split("/").filter(Boolean).at(-1);
+  const coworkAddMenuOpened = await cdp.evaluate(clickButtonByLabel, "Add files, connectors, and more");
+  assertCheck("协作对话", "Cowork composer Add menu opens", coworkAddMenuOpened);
+  await waitFor(cdp, "协作对话", "Cowork Add menu shows official file action", () => document.body.innerText.includes("Add files or photos"));
+  await waitFor(cdp, "协作输入框", "Cowork Add menu shows official connector and mode groups", () => {
+    const text = document.body.innerText;
+    return ["Add from Google Drive", "Add from GitHub", "Skills", "Add connectors", "Plugins", "Web search", "Research", "Use style"].every((value) => text.includes(value));
+  });
+  const coworkDriveMenuOpened = await cdp.evaluate(clickElementByText, "[role='menuitem'], [role='menuitemradio']", "Add from Google Drive");
+  assertCheck("协作输入框", "Cowork Add menu Google Drive submenu opens", coworkDriveMenuOpened);
+  await waitFor(cdp, "协作输入框", "Cowork Add menu Google Drive submenu exposes official empty state", () => {
+    const text = document.body.innerText;
+    return ["Search Drive", "Search documents...", "No recent Drive documents"].every((value) => text.includes(value));
+  });
+  const coworkAddConnectorsClicked = await cdp.evaluate(clickElementByText, "[role='menuitem'], [role='menuitemradio']", "Add connectors");
+  assertCheck("协作输入框", "Cowork Add connectors action is clickable", coworkAddConnectorsClicked);
+  await waitFor(cdp, "协作输入框", "Cowork Add connectors action opens official customize route", () => location.pathname === "/customize/connectors" && document.body.innerText.includes("Unlock more with Claude"));
+  await navigateInApp(cdp, coworkPath);
+  await waitFor(cdp, "协作对话", "Cowork session restored after Add connectors route smoke", (expectedPath) => location.pathname === expectedPath && Boolean(document.querySelector('[aria-label="Add files, connectors, and more"]')), 8_000, coworkPath);
+  const coworkAddMenuReopened = await cdp.evaluate(clickButtonByLabel, "Add files, connectors, and more");
+  assertCheck("协作对话", "Cowork composer Add menu reopens after connector route smoke", coworkAddMenuReopened);
+  const coworkAddFilesClicked = await cdp.evaluate(clickElementByText, "[role='menuitem'], [role='menuitemradio']", "Add files or photos");
+  assertCheck("协作对话", "Cowork Add files action is clickable", coworkAddFilesClicked);
+  await waitFor(cdp, "协作对话", "Cowork selected local file chip appears", () => document.body.innerText.includes("sample.txt"));
+  await cdp.evaluate(() => {
+    const editor = document.querySelector('[contenteditable="true"][aria-label="Prompt"]');
+    editor?.focus();
+    return Boolean(editor);
+  });
+  await insertText(cdp, coworkAttachmentText);
+  const coworkAttachmentSubmitted = await cdp.evaluate(clickButtonByLabel, "Send");
+  assertCheck("协作对话", "Cowork attachment reply submits", coworkAttachmentSubmitted);
+  await waitFor(cdp, "协作对话", "Cowork attachment reply stays inside /local_sessions", (expectedPath, expectedText) => location.pathname === expectedPath && document.body.innerText.includes(expectedText) && document.body.innerText.includes("sample.txt") && !location.pathname.startsWith("/epitaxy/"), 8_000, coworkPath, coworkAttachmentText);
+  const coworkAttachmentPayload = await cdp.evaluate(async (activeSessionId, expectedText) => {
+    const { fakeDesktopBridge } = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    const transcript = await fakeDesktopBridge.LocalAgentModeSessions.getTranscript?.(activeSessionId);
+    const message = transcript?.find((item) => item.text?.includes(expectedText));
+    return {
+      hasFilePath: Boolean(message?.text?.includes("<file_path>") && message.text.includes("sample.txt")),
+      hasFileUuid: Boolean(message?.text?.includes("<file_uuid>")),
+      userSelectedFiles: Array.isArray(message?.raw?.userSelectedFiles) ? message.raw.userSelectedFiles : [],
+    };
+  }, coworkUiSessionId, coworkAttachmentText);
+  assertCheck("协作对话", "Cowork attachment payload matches official uploaded_files shape", coworkAttachmentPayload.hasFilePath && coworkAttachmentPayload.hasFileUuid && coworkAttachmentPayload.userSelectedFiles.some((item) => String(item).endsWith("sample.txt")), JSON.stringify(coworkAttachmentPayload));
+  await navigateInApp(cdp, `/epitaxy/${sessionId}`);
+  await waitFor(cdp, "协作新任务", "Code session is restored after Cowork UI submit", (id) => location.pathname === `/epitaxy/${id}` && ["Permission mode", "Add", "Workspace", "Model", "Send"].every((label) => document.querySelector(`[aria-label="${label}"]`)), 8_000, sessionId);
+
+  const coworkSession = await cdp.evaluate(async () => {
+    const { fakeDesktopBridge } = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    await fakeDesktopBridge.CCDScheduledTasks.create?.({
+      name: "nightly-report",
+      description: "Runtime scheduled task route smoke",
+      prompt: "Runtime scheduled task route smoke",
+      cronExpression: "0 9 * * *",
+      cwd: "/Users/apple/Downloads",
+    });
+    const requestedSessionId = `local_runtime_${Date.now()}`;
+    const session = await fakeDesktopBridge.LocalAgentModeSessions.start({
+      kind: "epitaxy",
+      message: "Runtime Cowork route smoke",
+      model: "default",
+      permissionMode: "default",
+      prompt: "Runtime Cowork route smoke",
+      scheduledTaskId: "nightly-report",
+      sessionId: requestedSessionId,
+      userSelectedFolders: ["/Users/apple/Downloads"],
+      mountedProjects: [{ uuid: "runtime-mounted-project", name: "Gateway docs", hostPath: "/Users/apple/Downloads" }],
+      workspace: {
+        branchName: "main",
+        cwd: "/Users/apple/Downloads",
+        projectName: "Gateway",
+      },
+    });
+    return {
+      id: session?.id,
+      kind: session?.kind,
+      requestedSessionId,
+      sessionKind: session?.sessionKind,
+    };
+  });
+  assertCheck("协作路由", "fake bridge creates a Cowork local_* session", coworkSession.id === coworkSession.requestedSessionId && coworkSession.id?.startsWith("local_") && coworkSession.kind === "epitaxy" && coworkSession.sessionKind === "cowork", JSON.stringify(coworkSession));
+  await navigateInApp(cdp, `/epitaxy/${coworkSession.id}`);
+  await waitFor(cdp, "协作路由", "Cowork legacy /epitaxy/local_* redirects to /local_sessions", (id) => location.pathname === `/local_sessions/${id}`, 8_000, coworkSession.id);
+  await waitFor(cdp, "协作路由", "Cowork session renders Reply composer and long Add label", () => Boolean(document.querySelector('[contenteditable="true"][aria-label="Prompt"].tiptap')) && Boolean(document.querySelector('[aria-label="Add files, connectors, and more"]')) && !document.body.innerText.includes("找不到这个会话"));
+  await waitFor(cdp, "协作活动面板", "Cowork Context shows official scheduled task link", () => document.body.innerText.includes("Context") && document.body.innerText.includes("Nightly report"));
+  const scheduledTaskClicked = await cdp.evaluate(clickElementByText, "button", "Nightly report");
+  assertCheck("协作活动面板", "Cowork scheduled task link uses official /scheduled-task route", scheduledTaskClicked);
+  await waitFor(cdp, "协作活动面板", "Cowork scheduled task link opens official route", () => location.pathname === "/scheduled-task/nightly-report" && document.body.innerText.includes("nightly-report"));
+  await navigateInApp(cdp, `/local_sessions/${coworkSession.id}`);
+  await waitFor(cdp, "协作路由", "Cowork session restored after scheduled task route smoke", (id) => location.pathname === `/local_sessions/${id}` && document.body.innerText.includes("Nightly report"), 8_000, coworkSession.id);
+  await waitFor(cdp, "协作活动面板", "Cowork Context shows official mounted projects list", () => document.body.innerText.includes("项目") && document.body.innerText.includes("Gateway docs"));
+  const coworkProjectClicked = await cdp.evaluate(clickElementByText, "button", "Gateway docs");
+  assertCheck("协作活动面板", "Cowork mounted project row is clickable", coworkProjectClicked);
+  await waitFor(cdp, "协作活动面板", "Cowork connected Office files section renders", () => document.body.innerText.includes("Connected files") && document.body.innerText.includes("Budget.xlsx"));
+  const coworkOfficeFileClicked = await cdp.evaluate(clickElementByText, "button", "Connected");
+  assertCheck("协作活动面板", "Cowork connected Office file badge is clickable", coworkOfficeFileClicked);
+  const coworkBrowseFilesClicked = await cdp.evaluate(clickButtonByLabel, "Browse files");
+  assertCheck("协作活动面板", "Cowork working folder exposes official Browse files action", coworkBrowseFilesClicked);
+  await waitFor(cdp, "协作活动面板", "Cowork Browse files modal lists local files", () => Boolean(document.querySelector('[aria-modal="true"]')) && document.body.innerText.includes("Browse files") && document.body.innerText.includes("sample.txt") && document.body.innerText.includes("Select a file to preview it."));
+  const coworkBrowseFileSelected = await cdp.evaluate(clickElementByText, "button", "sample.txt");
+  assertCheck("协作活动面板", "Cowork Browse files modal selects local file", coworkBrowseFileSelected);
+  await waitFor(cdp, "协作活动面板", "Cowork Browse files modal shows file preview action", () => Boolean(document.querySelector('[aria-modal="true"]')) && document.body.innerText.includes("/Users/apple/Downloads/sample.txt") && document.body.innerText.includes("Open file"));
+  await cdp.evaluate(() => {
+    const close = document.querySelector('[aria-modal="true"] button[aria-label="Close"]');
+    close?.click();
+    return Boolean(close);
+  });
+  await delay(120);
+  const coworkInstructionsClicked = await cdp.evaluate(clickElementByText, "button", "Instructions", "CLAUDE.md");
+  assertCheck("协作活动面板", "Cowork folder instructions row is clickable", coworkInstructionsClicked);
+  await waitFor(cdp, "协作活动面板", "Cowork folder instructions editor opens official CLAUDE.md modal", () => Boolean(document.querySelector('[aria-modal="true"] textarea[aria-label="Instructions"]')) && document.body.innerText.includes("Folder instructions") && document.body.innerText.includes("Use this to give Claude instructions for working in this folder."));
+  await cdp.evaluate(() => {
+    const textarea = document.querySelector('textarea[aria-label="Instructions"]');
+    textarea?.focus();
+    return Boolean(textarea);
+  });
+  await insertText(cdp, "Runtime Cowork folder instruction smoke");
+  const coworkInstructionsSaved = await cdp.evaluate(clickButtonByLabel, "Save");
+  assertCheck("协作活动面板", "Cowork folder instructions Save is clickable", coworkInstructionsSaved);
+  await waitFor(cdp, "协作活动面板", "Cowork folder instructions editor saves through bridge", async (activeSessionId) => {
+    if (document.querySelector('[aria-modal="true"]')) return false;
+    const { fakeDesktopBridge } = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    const result = await fakeDesktopBridge.FileSystem.readLocalFile?.(activeSessionId, encodeURIComponent("/Users/apple/Downloads/CLAUDE.md"));
+    const content = typeof result === "string" ? result : result?.content ?? "";
+    return content.includes("Runtime Cowork folder instruction smoke");
+  }, 8_000, coworkSession.id);
+  await cdp.evaluate(async (activeSessionId) => {
+    const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    bridge.emitFakeLocalSessionEvent({
+      sessionId: activeSessionId,
+      type: "message",
+      message: {
+        id: "runtime-cowork-context-resources",
+        message: {
+          content: [
+            { id: "runtime-web-search", input: { query: "official cowork context grouping" }, name: "WebSearch", type: "tool_use" },
+            { id: "runtime-browser-extension", input: {}, name: "mcp__a8f3c7e2-4b9d-4f1a-8c3e-9d2a5b7f8e1c__navigate", type: "tool_use" },
+            { id: "runtime-mcp-tool", input: {}, name: "mcp__calendar__list_events", type: "tool_use" },
+            { id: "runtime-skill", input: { skill: "triage" }, name: "Skill", type: "tool_use" },
+            { id: "runtime-memory", input: { file_path: "/local-agent-mode-sessions/demo/session/memory/user_profile.md" }, name: "Read", type: "tool_use" },
+          ],
+        },
+        timestamp: new Date().toISOString(),
+        type: "assistant",
+      },
+    }, "epitaxy");
+    return true;
+  }, coworkSession.id);
+  await waitFor(cdp, "协作活动面板", "Cowork Context groups connectors, skills and memory like official", () => {
+    const text = document.body.innerText;
+    return ["Connectors", "Web search", "calendar", "Skills", "triage", "Memory", "User profile"].every((value) => text.includes(value));
+  });
+  await waitFor(cdp, "协作活动面板", "Cowork Context shows Claude in Chrome browser extension resource", () => {
+    const text = document.body.innerText;
+    return text.includes("Claude in Chrome") && Boolean(document.querySelector('button[aria-label="Switch browser"]'));
+  });
+  const browserPickerOpened = await cdp.evaluate(clickButtonByLabel, "Switch browser");
+  assertCheck("协作活动面板", "Cowork BrowserPickerButton opens", browserPickerOpened);
+  await waitFor(cdp, "协作活动面板", "Cowork BrowserPickerButton lists connected browsers", () => {
+    const elementText = Array.from(document.querySelectorAll("button,span,div")).map((item) => item.textContent ?? "").join("\n");
+    return ["Connected browsers", "Chrome · Work", "Chrome · Research"].every((value) => elementText.includes(value))
+      && Boolean(document.querySelector('button[aria-label="Refresh browser list"]'));
+  });
+  const browserSelected = await cdp.evaluate(clickElementByText, "button", "Chrome · Research");
+  assertCheck("协作活动面板", "Cowork BrowserPickerButton selects a connected browser", browserSelected);
+  await waitFor(cdp, "协作活动面板", "Cowork BrowserPickerButton persisted selected browser", async () => {
+    const { fakeDesktopBridge } = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    return await fakeDesktopBridge.BrowserUse.getSelectedBrowserId?.() === "chrome-research-0002";
+  });
+  const browserPickerReopened = await cdp.evaluate(clickButtonByLabel, "Switch browser");
+  assertCheck("协作活动面板", "Cowork BrowserPickerButton reopens after select", browserPickerReopened);
+  await waitFor(cdp, "协作活动面板", "Cowork BrowserPickerButton shows selected browser", () => {
+    const selected = document.querySelector('button[aria-current="true"]');
+    return selected?.textContent?.includes("Chrome · Research") === true;
+  });
+  const broadcastClicked = await cdp.evaluate(clickElementByText, "button", "Broadcast connection request…");
+  assertCheck("协作活动面板", "Cowork BrowserPickerButton broadcasts connection request", broadcastClicked);
+  await waitFor(cdp, "协作活动面板", "Cowork BrowserPickerButton called switch_browser bridge", async () => {
+    const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    return bridge.getFakeBrowserSwitchCount() > 0;
+  });
+  const browserExtensionResourceClicked = await cdp.evaluate(clickElementByText, "[data-cowork-context-resource]", "Claude in Chrome");
+  assertCheck("协作活动面板", "Cowork BrowserExtension resource is clickable", browserExtensionResourceClicked);
+  await waitFor(cdp, "协作活动面板", "Cowork BrowserExtension detail panel opens", () => {
+    const detail = document.querySelector('[data-official-source="index-BELzQL5P.js:RRt BrowserExtensionActivityDetailWrapper"]');
+    const text = detail?.textContent ?? "";
+    return Boolean(detail) && ["Claude in Chrome", "1 tool call", "Navigate"].every((value) => text.includes(value));
+  });
+  await waitFor(cdp, "协作活动面板", "Cowork BrowserExtension detail shows connected browsers summary", () => {
+    const detail = document.querySelector('[data-official-source="index-BELzQL5P.js:RRt BrowserExtensionActivityDetailWrapper"]');
+    const text = detail?.textContent ?? "";
+    return ["Connected browsers", "Chrome instances signed in to your account that Claude can automate.", "Chrome · Work", "Device ID:"].every((value) => text.includes(value));
+  });
+  const browserExtensionDetailClosed = await cdp.evaluate(clickButtonByLabel, "Close panel");
+  assertCheck("协作活动面板", "Cowork BrowserExtension detail close button is clickable", browserExtensionDetailClosed);
+  await waitFor(cdp, "协作活动面板", "Cowork BrowserExtension detail closes back to Context", () => {
+    return !document.querySelector('[data-official-source="index-BELzQL5P.js:RRt BrowserExtensionActivityDetailWrapper"]')
+      && document.body.innerText.includes("Context")
+      && Boolean(document.querySelector('[data-cowork-context-resource="browser_extension://all"]'));
+  });
+  const contextMemoryClicked = await cdp.evaluate(() => {
+    const element = Array.from(document.querySelectorAll(".cursor-pointer")).find((item) => item.innerText.includes("User profile"));
+    element?.click();
+    return Boolean(element);
+  });
+  assertCheck("协作活动面板", "Cowork Context memory resource is clickable", contextMemoryClicked);
+  await waitFor(cdp, "协作活动面板", "Cowork Context memory resource opens file pane", () => document.body.innerText.includes("Preview for /local-agent-mode-sessions/demo/session/memory/user_profile.md"));
+  const coworkGoToFolderClicked = await cdp.evaluate(clickButtonByLabel, "Go to folder");
+  assertCheck("协作活动面板", "Cowork working folder exposes official Go to folder action", coworkGoToFolderClicked);
+  const coworkMultiFolderSession = await cdp.evaluate(async () => {
+    const { fakeDesktopBridge } = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    const requestedSessionId = `local_runtime_multi_${Date.now()}`;
+    const session = await fakeDesktopBridge.LocalAgentModeSessions.start({
+      kind: "epitaxy",
+      message: "Runtime Cowork multi folder smoke",
+      model: "default",
+      permissionMode: "default",
+      prompt: "Runtime Cowork multi folder smoke",
+      sessionId: requestedSessionId,
+      userSelectedFolders: ["/Users/apple/Downloads", "/Users/apple/Documents"],
+      workspace: {
+        branchName: "main",
+        cwd: "/Users/apple/Downloads",
+        projectName: "Gateway",
+      },
+    });
+    return { id: session?.id, requestedSessionId };
+  });
+  await navigateInApp(cdp, `/local_sessions/${coworkMultiFolderSession.id}`);
+  await cdp.evaluate(() => {
+    localStorage.removeItem("suggested_connectors_dismissed_v1");
+    localStorage.removeItem("suggested_connectors_clicked_v1");
+    return true;
+  });
+  await waitFor(cdp, "协作活动面板", "Cowork multi-folder session renders Working folders", (id) => location.pathname === `/local_sessions/${id}` && document.body.innerText.includes("Working folders"), 8_000, coworkMultiFolderSession.id);
+  await waitFor(cdp, "协作活动面板", "Cowork empty Context shows official Suggested connectors", () => {
+    const text = document.body.innerText;
+    return ["Context", "Suggested connectors", "Cowork uses connectors to browse websites, manage tasks, and more.", "Claude in Chrome", "Notion", "Linear", "Canva", "See all connectors"].every((value) => text.includes(value))
+      && Boolean(document.querySelector('button[aria-label="Dismiss suggested connectors"]'));
+  });
+  const seeAllConnectorsClicked = await cdp.evaluate(clickElementByText, "button", "See all connectors");
+  assertCheck("协作活动面板", "Cowork Suggested connectors See all is clickable", seeAllConnectorsClicked);
+  await waitFor(cdp, "协作活动面板", "Cowork Suggested connectors See all opens connectors route", () => location.pathname === "/customize/connectors" && document.body.innerText.includes("Unlock more with Claude"));
+  await navigateInApp(cdp, `/local_sessions/${coworkMultiFolderSession.id}`);
+  await waitFor(cdp, "协作活动面板", "Cowork session restored after Suggested connectors route smoke", (id) => location.pathname === `/local_sessions/${id}` && document.body.innerText.includes("Working folders"), 8_000, coworkMultiFolderSession.id);
+  await cdp.evaluate(async (activeSessionId) => {
+    const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    bridge.emitFakeLocalSessionEvent({
+      sessionId: activeSessionId,
+      type: "message",
+      message: {
+        id: "runtime-cowork-multi-folder-resources",
+        message: {
+          content: [
+            { id: "runtime-folder-a", input: { file_path: "/Users/apple/Downloads/multi-a.txt" }, name: "Read", type: "tool_use" },
+            { id: "runtime-folder-b", input: { file_path: "/Users/apple/Documents/multi-b.txt" }, name: "Read", type: "tool_use" },
+            { id: "runtime-scratchpad", input: { file_path: "/tmp/runtime-scratchpad.md" }, name: "Write", type: "tool_use" },
+          ],
+        },
+        timestamp: new Date().toISOString(),
+        type: "assistant",
+      },
+    }, "epitaxy");
+    return true;
+  }, coworkMultiFolderSession.id);
+  await waitFor(cdp, "协作活动面板", "Cowork multi-folder groups default to first folder expanded", () => {
+    const text = document.body.innerText;
+    return text.includes("Downloads") && text.includes("multi-a.txt") && text.includes("Documents") && !text.includes("multi-b.txt");
+  });
+  const secondFolderExpanded = await cdp.evaluate(clickElementByText, "button", "Documents");
+  assertCheck("协作活动面板", "Cowork multi-folder group header is expandable", secondFolderExpanded);
+  await waitFor(cdp, "协作活动面板", "Cowork multi-folder second group reveals nested resources", () => document.body.innerText.includes("multi-b.txt"));
+  const scratchpadCollapsed = await cdp.evaluate(() => {
+    const button = Array.from(document.querySelectorAll("button")).find((item) => item.innerText.includes("Scratchpad"));
+    button?.click();
+    return Boolean(button);
+  });
+  assertCheck("协作活动面板", "Cowork Scratchpad section collapse control is clickable", scratchpadCollapsed);
+  await waitFor(cdp, "协作活动面板", "Cowork Scratchpad collapse hides working scratch resource", () => {
+    const button = Array.from(document.querySelectorAll("button")).find((item) => item.innerText.includes("Scratchpad"));
+    return button?.getAttribute("aria-expanded") === "false" && document.body.innerText.includes("Scratchpad") && !document.body.innerText.includes("runtime-scratchpad.md");
+  });
+  await navigateInApp(cdp, `/local_sessions/${coworkSession.id}`);
+  await waitFor(cdp, "协作路由", "Cowork single-folder session restored after multi-folder smoke", (id) => location.pathname === `/local_sessions/${id}` && document.body.innerText.includes("Nightly report"), 8_000, coworkSession.id);
+  await cdp.evaluate(async (activeSessionId) => {
+    const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    const emitTodo = (status) => bridge.emitFakeLocalSessionEvent({
+      sessionId: activeSessionId,
+      type: "message",
+      message: {
+        id: `runtime-cowork-todo-${status}`,
+        message: {
+          content: [{
+            id: `tool-runtime-cowork-todo-${status}`,
+            input: { todos: [{ content: "Runtime Cowork progress auto-collapse", id: "runtime-cowork-progress", status }] },
+            name: "TodoWrite",
+            type: "tool_use",
+          }],
+        },
+        timestamp: new Date().toISOString(),
+        type: "assistant",
+      },
+    }, "epitaxy");
+    emitTodo("in_progress");
+    return true;
+  }, coworkSession.id);
+  await waitFor(cdp, "协作活动面板", "Progress stays expanded while Cowork todo is in progress", () => {
+    const header = Array.from(document.querySelectorAll('[role="button"][aria-expanded]')).find((item) => item.innerText.includes("Progress"));
+    return header?.getAttribute("aria-expanded") === "true" && document.body.innerText.includes("Runtime Cowork progress auto-collapse");
+  });
+  await cdp.evaluate(async (activeSessionId) => {
+    const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    bridge.emitFakeLocalSessionEvent({
+      sessionId: activeSessionId,
+      type: "message",
+      message: {
+        id: "runtime-cowork-todo-completed",
+        message: {
+          content: [{
+            id: "tool-runtime-cowork-todo-completed",
+            input: { todos: [{ content: "Runtime Cowork progress auto-collapse", id: "runtime-cowork-progress", status: "completed" }] },
+            name: "TodoWrite",
+            type: "tool_use",
+          }],
+        },
+        timestamp: new Date().toISOString(),
+        type: "assistant",
+      },
+    }, "epitaxy");
+    return true;
+  }, coworkSession.id);
+  await waitFor(cdp, "协作活动面板", "completed Cowork todos auto-collapse with official count", () => {
+    const header = Array.from(document.querySelectorAll('[role="button"][aria-expanded]')).find((item) => item.innerText.includes("Progress"));
+    return header?.getAttribute("aria-expanded") === "false" && header.innerText.includes("1 of 1");
+  });
+  await navigateInApp(cdp, `/epitaxy/${sessionId}`);
+  await waitFor(cdp, "协作路由", "Code session returns to canonical /epitaxy route with controls", (id) => location.pathname === `/epitaxy/${id}` && ["Permission mode", "Add", "Workspace", "Model", "Send"].every((label) => document.querySelector(`[aria-label="${label}"]`)), 8_000, sessionId);
+
+  await cdp.evaluate(() => {
+    const editor = document.querySelector('[contenteditable="true"][aria-label="Prompt"]');
+    editor?.focus();
+    return Boolean(editor);
+  });
+  await insertText(cdp, "first line");
+  await key(cdp, "Enter", "Enter", 8);
+  await insertText(cdp, "second line");
+  const multiline = await cdp.evaluate(() => {
+    const text = document.querySelector('[contenteditable="true"][aria-label="Prompt"]')?.innerText ?? "";
+    return text.includes("first line") && text.includes("second line") && text.includes("\n");
+  });
+  assertCheck("底部输入框", "Shift+Enter keeps newline instead of submitting", multiline);
+  await cdp.evaluate(() => {
+    const editor = document.querySelector('[contenteditable="true"][aria-label="Prompt"]');
+    if (!editor) return false;
+    editor.focus();
+    document.execCommand("selectAll");
+    document.execCommand("delete");
+    return true;
+  });
+  await insertText(cdp, "!echo runtime");
+  await waitFor(cdp, "底部输入框", "bash escape mode turns on", () => window.__epitaxyRuntime.bodyIncludes("Bash mode"));
+  await key(cdp, "Escape", "Escape");
+  await waitFor(cdp, "底部输入框", "Escape exits bash mode and clears input", () => window.__epitaxyRuntime.bodyIncludes("Chat mode") && (document.querySelector('[contenteditable="true"][aria-label="Prompt"]')?.innerText ?? "").trim() === "");
+  await cdp.evaluate(() => document.querySelector('[contenteditable="true"][aria-label="Prompt"]')?.focus());
+  await insertText(cdp, composerText);
+  await key(cdp, "Enter", "Enter");
+  await waitFor(cdp, "底部输入框", "Enter submits through session bridge and reloads transcript", () => window.__epitaxyRuntime.bodyIncludes("runtime composer submit"));
+
+  const toolClicked = await cdp.evaluate(clickElementByText, "[role='button']", "Creating", "fake-plan.md");
+  assertCheck("文件预览", "tool row can be expanded by click", toolClicked);
+  await waitFor(cdp, "文件预览", "expanded tool details show file_path and content", () => window.__epitaxyRuntime.bodyIncludes("file_path:", "fake-plan.md", "Inspect official JS"));
+  const filePathClicked = await cdp.evaluate(() => {
+    const button = Array.from(document.querySelectorAll("button")).find((item) => item.innerText.includes("fake-plan.md"));
+    if (!button) return false;
+    button.click();
+    return true;
+  });
+  assertCheck("文件预览", "file path button can be clicked", filePathClicked);
+  await waitFor(cdp, "文件预览", "file pane opens and reads session file", () => window.__epitaxyRuntime.bodyIncludes("Preview for", "fake-plan.md"));
+
+  await cdp.evaluate(async (activeSessionId) => {
+    const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    bridge.emitFakeToolPermissionRequest({
+      type: "tool_permission_request",
+      sessionId: activeSessionId,
+      request: {
+        description: "Runtime approval smoke",
+        input: { command: "echo approval" },
+        requestId: "runtime-approval-smoke",
+        toolName: "Bash",
+      },
+    }, "code");
+    return true;
+  }, sessionId);
+  await waitFor(cdp, "权限审批", "permission request card appears from bridge event", () => window.__epitaxyRuntime.bodyIncludes("Claude wants to use Bash", "Runtime approval smoke", "Allow once"));
+  const allowClicked = await cdp.evaluate(clickButtonByLabel, "Allow once");
+  assertCheck("权限审批", "Allow once button is clickable", allowClicked);
+  await waitFor(cdp, "权限审批", "permission card resolves and disappears", () => window.__epitaxyRuntime.bodyExcludes("Claude wants to use Bash"));
+
+  await cdp.evaluate(async (activeSessionId, text) => {
+    const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    const emit = (event) => bridge.emitFakeLocalSessionEvent({ sessionId: activeSessionId, type: "stream_event", uuid: "runtime-stream-smoke", event }, "code");
+    emit({ type: "message_start", message: { id: "runtime-stream-smoke" } });
+    emit({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+    emit({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text } });
+    emit({ type: "content_block_stop", index: 0 });
+    emit({ type: "message_stop" });
+    return true;
+  }, sessionId, streamText);
+  await waitFor(cdp, "对话流渲染", "stream delta is rendered through smoother", () => window.__epitaxyRuntime.bodyIncludes("Runtime stream smoke phrase"));
+  await cdp.evaluate(async (activeSessionId) => {
+    const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
+    bridge.emitFakeLocalSessionEvent({ sessionId: activeSessionId, type: "message", message: { type: "result" } }, "code");
+    return true;
+  }, sessionId);
+  await waitFor(cdp, "对话流渲染", "stream finalization keeps page mounted without connecting flash", (activeSessionId) => location.pathname === `/epitaxy/${activeSessionId}` && window.__epitaxyRuntime.bodyExcludes("Connecting to session") && window.__epitaxyRuntime.bodyIncludes("runtime composer submit"), 12_000, sessionId);
+
+  const screenshot = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+  await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
+  console.log(`Screenshot: ${screenshotPath}`);
+  cdp.close();
+}
+
+async function cleanup() {
+  if (chromeProcess && !chromeProcess.killed) chromeProcess.kill("SIGTERM");
+  if (viteProcess && !viteProcess.killed) viteProcess.kill("SIGTERM");
+  if (chromeProfileDir) await rm(chromeProfileDir, { force: true, recursive: true }).catch(() => {});
+}
+
+try {
+  await run();
+} catch (error) {
+  fail("运行时验证", "script execution", error instanceof Error ? error.message : String(error));
+} finally {
+  await cleanup();
+}
+
+const failed = checks.filter((check) => check.status === "FAIL");
+if (failed.length > 0) {
+  console.error(`\nRuntime verification failed: ${failed.length} failure(s).`);
+  process.exit(1);
+}
+console.log("\nRuntime verification passed.");

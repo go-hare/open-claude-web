@@ -1,0 +1,176 @@
+export type SessionKind =
+  | "chat"
+  | "cowork"
+  | "code"
+  | "project"
+  | "cowork-artifact"
+  | "cowork-space"
+  | "scheduled-task"
+  | "dispatch";
+
+export type ChatMessage = {
+  id: string;
+  role: "user" | "assistant" | "system";
+  text: string;
+  createdAt: string;
+};
+
+export type SessionSummary = {
+  id: string;
+  title: string;
+  createdAtMs?: number;
+  updatedAt: string;
+  updatedAtMs: number;
+  kind: "epitaxy" | "code";
+  sessionKind: SessionKind;
+  cwd?: string;
+  repo?: {
+    name?: string;
+    branch?: string;
+  };
+  isPinned?: boolean;
+  isArchived?: boolean;
+  isRunning?: boolean;
+  isUnread?: boolean;
+  messages?: ChatMessage[];
+};
+
+export type ScheduledTaskSummary = {
+  id: string;
+  title: string;
+  schedule: string;
+  enabled: boolean;
+  description?: string;
+  prompt?: string;
+  cronExpression?: string;
+  cwd?: string;
+  nextRunAt?: string;
+  fireAt?: string;
+  lastRunAt?: string;
+  useWorktree?: boolean;
+  sourceBranch?: string;
+  permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "auto";
+  model?: string;
+  approvedPermissions?: Array<{ toolName: string }>;
+  userSelectedFolders?: string[];
+  missedRuns?: Array<{ time: string; reason?: string }>;
+};
+
+export type CreateScheduledTaskInput = {
+  name: string;
+  description: string;
+  prompt: string;
+  cronExpression?: string;
+  cwd?: string;
+  permissionMode?: ScheduledTaskSummary["permissionMode"];
+  model?: string;
+  useWorktree?: boolean;
+  sourceBranch?: string;
+};
+
+
+export type DesktopPreferences = {
+  autoCreatePullRequests?: boolean;
+  autoUpdateExtensions?: boolean;
+  bypassPermissionsModeEnabled?: boolean;
+  ccBranchPrefix?: string;
+  chillingSlothLocation?: "default" | { customPath: string };
+  coworkSpaceContextEnabled?: boolean;
+  dockBounceEnabled?: boolean;
+  enabledCoworkMemory?: boolean;
+  keepAwakeEnabled?: boolean;
+  launchEnabled?: boolean;
+  launchPreviewPersistSession?: boolean;
+  menuBarEnabled?: boolean;
+  quickEntryShortcut?: string;
+  useBuiltInNodeForMcp?: boolean;
+};
+
+export type PreferenceKey = keyof DesktopPreferences;
+
+export type WorkspaceContext = {
+  mode: "local" | "remote";
+  projectName: string;
+  branchName: string;
+  hasWorktree: boolean;
+  cwd?: string;
+};
+
+export type StartSessionInput = {
+  kind: SessionSummary["kind"];
+  prompt: string;
+  workspace: WorkspaceContext;
+  permissionMode: "default" | "bypass";
+};
+
+
+export type GitCommandResult = {
+  ok?: boolean;
+  success?: boolean;
+  stdout?: string;
+  stderr?: string;
+  error?: string;
+  code?: unknown;
+};
+
+export type ShellPtyStartResult = {
+  ok: boolean;
+  error?: string;
+  buffered?: string;
+};
+
+export type ShellPtyEvent =
+  | { type: "shell_pty_data"; sessionId: string; data: string }
+  | { type: "shell_pty_close"; sessionId: string; code?: unknown; signal?: unknown };
+
+export type LocalSessionsBridge = {
+  list: () => Promise<SessionSummary[]>;
+  getSession: (id: string) => Promise<SessionSummary | null>;
+  getTranscript?: (id: string) => Promise<ChatMessage[]>;
+  getGitDiff?: (idOrCwd: string, args?: string[]) => Promise<GitCommandResult>;
+  getGitDiffStats?: (idOrCwd: string) => Promise<GitCommandResult>;
+  getWorkingTreeStatus?: (idOrCwd: string) => Promise<GitCommandResult>;
+  startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<ShellPtyStartResult>;
+  stopShellPty?: (sessionId: string) => Promise<unknown>;
+  writeShellPty?: (sessionId: string, data: string) => Promise<unknown>;
+  resizeShellPty?: (sessionId: string, cols: number, rows: number) => Promise<unknown>;
+  getShellPtyBuffer?: (sessionId: string) => Promise<string>;
+  onShellPtyEvent?: (listener: (event: ShellPtyEvent) => void) => () => void;
+  start: (input: StartSessionInput) => Promise<SessionSummary>;
+  sendMessage?: (id: string, text: string) => Promise<SessionSummary | null>;
+  create: (kind: SessionSummary["kind"]) => Promise<SessionSummary>;
+  archive: (id: string) => Promise<void>;
+  delete: (id: string) => Promise<void>;
+  setFocusedSession?: (id: string | null) => Promise<void>;
+  onEvent?: (listener: (event: unknown) => void) => () => void;
+};
+
+export type ScheduledTasksBridge = {
+  list: () => Promise<ScheduledTaskSummary[]>;
+  get: (id: string) => Promise<ScheduledTaskSummary | null>;
+  create?: (input: CreateScheduledTaskInput) => Promise<ScheduledTaskSummary | null>;
+  updateStatus?: (id: string, status: "enabled" | "disabled" | "deleted") => Promise<void>;
+  onEvent?: (listener: (event: unknown) => void) => () => void;
+};
+
+export type PreferencesBridge = {
+  getWorkspaceContext: () => Promise<WorkspaceContext>;
+  getPreferences?: () => Promise<DesktopPreferences>;
+  setPreference?: <K extends PreferenceKey>(key: K, value: DesktopPreferences[K]) => Promise<void>;
+  onPreferencesChanged?: (listener: (preferences: DesktopPreferences) => void) => () => void;
+  getDirectoryPath?: (multiple?: boolean) => Promise<string[] | null>;
+};
+
+export type WindowBridge = {
+  close: () => Promise<void>;
+  getFullscreen: () => Promise<boolean>;
+  getZoomFactor: () => Promise<number>;
+};
+
+export type DesktopBridge = {
+  LocalSessions: LocalSessionsBridge;
+  LocalAgentModeSessions: LocalSessionsBridge;
+  CCDScheduledTasks: ScheduledTasksBridge;
+  Preferences: PreferencesBridge;
+  Window: WindowBridge;
+};

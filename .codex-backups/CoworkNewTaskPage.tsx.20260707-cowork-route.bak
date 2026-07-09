@@ -1,0 +1,228 @@
+import { useCallback, useState, type CSSProperties, type ReactNode } from "react";
+import { desktopBridge, type WorkspaceContext } from "../../adapters/desktopBridge";
+import { Icon } from "../../shell/icons";
+
+type PromptSuggestion = {
+  id: string;
+  label: string;
+  prompt: string;
+  icon: ReactNode;
+};
+
+const supportUrl = "https://support.claude.com/en/articles/13364135-use-claude-cowork-safely";
+
+const coworkSuggestions: PromptSuggestion[] = [
+  {
+    id: "initial-1",
+    label: "优化我的一周",
+    prompt: `帮我规划并优化这一周。我已经打开日历，准备让你查看和编辑。\n\n先查看我的日历并总结：\n- 会议总数\n- 最忙的日期\n- 哪些地方有 2 小时以上的空档\n\n在提出调整前，先问我本周目标、需要多少专注时间、是否有日历外截止日期、哪些会议可拒绝或缩短，以及要保护的个人边界。`,
+    icon: <SuggestionCalendarIcon />,
+  },
+  {
+    id: "initial-2",
+    label: "整理我的截图",
+    prompt: `帮我整理桌面上最近的截图。\n\n先扫描桌面并告诉我：\n- 截图或图片总数\n- 日期范围\n\n然后只处理最近 14 天的截图，识别内容、建议描述性文件名，并提出应放入的文件夹或可删除项。先给我计划，等我确认后再整理前 10 个文件作为预览。`,
+    icon: <SuggestionFolderIcon />,
+  },
+  {
+    id: "initial-3",
+    label: "从文件中发现洞察",
+    prompt: `帮我从一组文件里发现模式和洞察。\n\n先扫描文件夹并总结：\n- 文件总数\n- 日期范围\n- 内容类型\n\n分析前先问我希望发现什么、应优先哪些文件或时间段、最终输出什么格式。先找出 3-5 个模式，每个模式给 2-3 个具体例子。`,
+    icon: <SuggestionDataIcon />,
+  },
+];
+
+export function CoworkNewTaskPage({ onNavigate, workspace }: { onNavigate: (path: string) => void; workspace: WorkspaceContext }) {
+  const [prompt, setPrompt] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = useCallback(async (nextPrompt = prompt) => {
+    const normalized = nextPrompt.trim();
+    if (!normalized || busy) return;
+    setBusy(true);
+    try {
+      const session = await desktopBridge.LocalAgentModeSessions.start({
+        kind: "epitaxy",
+        prompt: normalized,
+        workspace,
+        permissionMode: "default",
+      });
+      onNavigate(`/epitaxy/${encodeURIComponent(session.id)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, onNavigate, prompt, workspace]);
+
+  return (
+    <main className="mx-auto mt-4 w-full flex-1 px-4 md:px-8 lg:mt-6 max-w-7xl h-full !mt-0 !px-0 !max-w-none">
+      <div className="flex h-full">
+        <div className="relative isolate flex h-full min-w-0 flex-1 flex-col overflow-x-clip overflow-y-auto">
+          <CoworkGridBackground />
+          <div className="flex flex-1 flex-col items-center justify-start px-4 pb-6 pt-24 md:px-14">
+            <div className="w-full max-w-2xl">
+              <div className="mb-4">
+                <CoworkHeader />
+                <CoworkPromptBox busy={busy} onSubmit={() => void submit()} prompt={prompt} setPrompt={setPrompt} />
+              </div>
+            </div>
+            <CoworkSuggestions onSelect={(suggestion) => {
+              setPrompt(suggestion.prompt);
+              void submit(suggestion.prompt);
+            }} />
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function CoworkHeader() {
+  return (
+    <div className="mb-6 pl-2">
+      <div className="flex items-start">
+        <img alt="" aria-hidden="true" className="!w-7 -ml-10 mr-3 mt-1 shrink-0 hidden md:block" src="/assets/v1/cd02a42d9-Vq_H3mgS.svg" />
+        <h1 className="font-claude-response-title text-text-100">来把待办清掉吧</h1>
+      </div>
+      <p className="font-small text-text-500 mt-2">
+        <a className="underline-offset-2 hover:underline" href={supportUrl} rel="noreferrer" target="_blank">了解如何安全使用协作</a>.
+      </p>
+    </div>
+  );
+}
+
+function CoworkPromptBox({ busy, onSubmit, prompt, setPrompt }: { busy: boolean; onSubmit: () => void; prompt: string; setPrompt: (value: string) => void }) {
+  return (
+    <div
+      className="epitaxy-prompt !box-content flex flex-col bg-bg-000 mx-2 md:mx-0 items-stretch transition-all duration-200 rounded-[20px] cursor-text relative z-[1] border border-transparent md:w-full shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-300)/0.15)] hover:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] focus-within:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/7.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)]"
+      onClick={(event) => {
+        if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+        event.currentTarget.querySelector("textarea")?.focus();
+      }}
+    >
+      <div className="flex flex-col m-3.5 gap-3">
+        <div className="relative font-large">
+          <textarea
+            aria-label="今天我可以帮你做什么？"
+            className="w-full resize-none border-0 bg-transparent text-text-100 placeholder:text-text-500 outline-none"
+            disabled={busy}
+            style={{ minHeight: 48, maxHeight: 218, padding: 0 }}
+            onChange={(event) => setPrompt(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                event.preventDefault();
+                onSubmit();
+              }
+            }}
+            placeholder="今天我可以帮你做什么？"
+            value={prompt}
+          />
+        </div>
+        <div className="relative flex gap-2 w-full items-center">
+          <div className="relative flex-1 flex items-center shrink min-w-0 gap-1">
+            <button className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-uncontained-default hover:text-uncontained-hover h-base text-body rounded-base justify-center aspect-square px-p3" type="button" aria-label="添加文件、连接器等">
+              <span className="btn-squish absolute inset-0 -z-[1] rounded-[inherit]" aria-hidden="true" />
+              <Icon name="Add" customSize={20} />
+            </button>
+            <button className="group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover h-small rounded-small text-footnote justify-between pl-p3 pr-p2" type="button">
+              <span className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none" aria-hidden="true" />
+              <Icon name="Folder" customSize={16} />
+              <span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap ml-g2">在项目中工作</span>
+            </button>
+          </div>
+          <button className="group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover h-small rounded-small text-footnote justify-between pl-p3 pr-p2 shrink-0" type="button">
+            <span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap">Opus 4</span>
+            <Icon name="CaretDown" size="xs" />
+          </button>
+          <button
+            aria-label="开始任务"
+            className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-primary-default disabled:text-primary-disabled h-base text-body rounded-base justify-center aspect-square px-p3 disabled:opacity-50"
+            disabled={busy || prompt.trim().length === 0}
+            onClick={onSubmit}
+            type="button"
+          >
+            <span className="btn-squish absolute inset-0 -z-[1] rounded-[inherit]" style={{ backgroundColor: "#e6b5a6" }} aria-hidden="true" />
+            <Icon name="ArrowUp" customSize={20} bold />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CoworkSuggestions({ onSelect }: { onSelect: (suggestion: PromptSuggestion) => void }) {
+  return (
+    <section className="w-full max-w-2xl mt-8 group/suggestions">
+      <div className="flex items-center justify-between mb-2 px-2">
+        <button className="flex items-center gap-2 font-small text-text-500 hover:text-text-100 transition-colors" type="button">
+          <Icon name="Shuffle" customSize={20} />
+          <span>随便挑个任务开始吧</span>
+        </button>
+      </div>
+      <div className="flex flex-col [&>button:hover+hr]:opacity-0 [&>hr:has(+button:hover)]:opacity-0">
+        {coworkSuggestions.map((suggestion, index) => (
+          <FragmentWithSeparator isLast={index === coworkSuggestions.length - 1} key={suggestion.id}>
+            <button
+              onClick={() => onSelect(suggestion)}
+              className="w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group text-left"
+              type="button"
+            >
+              <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center">{suggestion.icon}</div>
+              <div className="flex-1 min-w-0"><span className="font-base text-text-200">{suggestion.label}</span></div>
+              <Icon name="CaretRight" customSize={16} className="hidden group-hover:block flex-shrink-0 text-text-500" />
+            </button>
+          </FragmentWithSeparator>
+        ))}
+      </div>
+      <button className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-uncontained-default hover:text-uncontained-hover h-small text-footnote rounded-small justify-center px-p3 !text-text-500 mt-1" type="button">
+        用插件自定义
+      </button>
+    </section>
+  );
+}
+
+function FragmentWithSeparator({ children, isLast }: { children: ReactNode; isLast: boolean }) {
+  return (
+    <>
+      {children}
+      {!isLast ? <hr className="border-t-0.5 border-border-300 mx-2 transition-opacity" /> : null}
+    </>
+  );
+}
+
+function CoworkGridBackground() {
+  return (
+    <div className="absolute inset-0 -z-10 pointer-events-none" aria-hidden="true">
+      <div className="absolute inset-0 opacity-70" style={gridStyle} />
+    </div>
+  );
+}
+
+const gridStyle: CSSProperties = {
+  backgroundImage: "radial-gradient(circle, hsl(var(--text-500) / 0.22) 1px, transparent 1.25px)",
+  backgroundSize: "16px 16px",
+  maskImage: "radial-gradient(ellipse at center, black 0%, black 54%, transparent 80%)",
+};
+
+function SuggestionCalendarIcon() {
+  return (
+    <span className="inline-flex size-10 items-center justify-center rounded-r4 border-0.5 border-border-300 bg-bg-000 text-t6 shadow-sm">
+      <Icon name="Calendar" customSize={24} />
+    </span>
+  );
+}
+
+function SuggestionFolderIcon() {
+  return (
+    <span className="inline-flex size-10 items-center justify-center rounded-r4 border-0.5 border-border-300 bg-bg-000 text-t6 shadow-sm">
+      <Icon name="Folder" customSize={26} />
+    </span>
+  );
+}
+
+function SuggestionDataIcon() {
+  return (
+    <span className="inline-flex size-10 items-center justify-center rounded-r4 border-0.5 border-border-300 bg-bg-000 text-t6 shadow-sm">
+      <Icon name="Spreadsheet" customSize={24} />
+    </span>
+  );
+}

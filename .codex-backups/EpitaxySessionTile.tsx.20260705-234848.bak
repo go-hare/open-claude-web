@@ -1,0 +1,980 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { FitAddon } from "@xterm/addon-fit";
+import { Terminal } from "@xterm/xterm";
+import "@xterm/xterm/css/xterm.css";
+import { desktopBridge, type SessionSummary } from "../../adapters/desktopBridge";
+import type { ChatMessage, LocalSessionsBridge } from "../../adapters/desktopBridge/types";
+import { Icon } from "../../shell/icons";
+import type { PaneSlot } from "../../stores/paneStore";
+import { EpitaxyTileLayout } from "./EpitaxyFrameSurface";
+import {
+  OfficialAssistantMessage,
+  OfficialButton,
+  OfficialChatTileShell,
+  OfficialDropdownButton,
+  OfficialComposerDropdown,
+  OfficialSessionHeader,
+  OfficialTranscript,
+  OfficialTranscriptRow,
+  OfficialUserMessage,
+  type OfficialViewPane,
+} from "./OfficialEpitaxyComponents";
+
+type EpitaxySessionType = "local" | "remote" | "bridge";
+type SessionSource = "code" | "epitaxy";
+
+type EpitaxySessionRef = {
+  id: string;
+  type: EpitaxySessionType;
+};
+
+type EpitaxyFramePageProps = {
+  hideComposer?: boolean;
+  landingActions?: ReactNode;
+  landingBody?: ReactNode;
+  onNavigate: (path: string) => void;
+  sessionId: string;
+};
+
+type EpitaxySessionTileProps = {
+  isLonePane?: boolean;
+  onClose?: () => void;
+  onMovePane?: (slot: PaneSlot) => void;
+  onNavigate: (path: string) => void;
+  paneIndex?: number;
+  sessionId: string;
+  slot?: PaneSlot;
+};
+
+const draftPersistKey = "epitaxy-draft";
+
+export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, onNavigate, sessionId }: EpitaxyFramePageProps) {
+  const activeSessionId = sessionId || undefined;
+  const sessionType = useEpitaxySessionType(activeSessionId);
+  const sessionRef = useMemo(() => activeSessionId ? { id: activeSessionId, type: sessionType } : null, [activeSessionId, sessionType]);
+
+  useFocusedSession(activeSessionId);
+
+  const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft?: boolean, dragHandle?: ReactNode) => (
+    <OfficialChatTileShell>
+      <EpitaxyChatPanel
+        draftPersistKey={activeSessionId ? `epitaxy-${activeSessionId}` : draftPersistKey}
+        dragHandle={dragHandle}
+        hideComposer={hideComposer}
+        initialSessionId={activeSessionId}
+        isPanelActive
+        isTopLeft={isTopLeft}
+        landingActions={landingActions}
+        landingBody={landingBody}
+        sessionRef={sessionRef}
+        sessionType={activeSessionId ? sessionType : undefined}
+      />
+    </OfficialChatTileShell>
+  ), [activeSessionId, hideComposer, landingActions, landingBody, onNavigate, sessionRef, sessionType]);
+
+  return (
+    <div className="epitaxy-root select-none h-full w-full flex flex-col">
+      <div className="flex-1 min-h-0">
+        <EpitaxyTileLayout>{renderChatTile()}</EpitaxyTileLayout>
+      </div>
+    </div>
+  );
+}
+
+export function EpitaxySessionTile({ isLonePane = false, onClose, onMovePane, onNavigate, paneIndex = 0, sessionId, slot }: EpitaxySessionTileProps) {
+  return (
+    <EpitaxySecondPane
+      isLonePane={isLonePane}
+      onClose={onClose}
+      onMovePane={onMovePane}
+      onNavigate={onNavigate}
+      paneIndex={paneIndex}
+      sessionId={sessionId}
+      slot={slot}
+    />
+  );
+}
+
+function EpitaxySecondPane({ isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, slot }: EpitaxySessionTileProps) {
+  const sessionType = useEpitaxySessionType(sessionId);
+  const sessionRef = useMemo(() => ({ id: sessionId, type: sessionType }), [sessionId, sessionType]);
+  const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft?: boolean, dragHandle?: ReactNode) => (
+    <OfficialChatTileShell>
+      <EpitaxyChatPanel
+        draftPersistKey={`epitaxy-pane-${sessionId}`}
+        dragHandle={dragHandle}
+        initialSessionId={sessionId}
+        isLonePane={isLonePane}
+        isPanelActive={false}
+        isTopLeft={isTopLeft}
+        onClose={onClose}
+        onMovePane={onMovePane}
+        onSessionRemoved={onClose ?? (() => onNavigate("/epitaxy"))}
+        paneIndex={paneIndex}
+        sessionRef={sessionRef}
+        sessionType={sessionType}
+        slot={slot}
+      />
+    </OfficialChatTileShell>
+  ), [isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, sessionRef, sessionType, slot]);
+
+  return (
+    <div className="epitaxy-root select-none flex-1 min-h-0 flex flex-col overflow-hidden">
+      <EpitaxyTileLayout>{renderChatTile()}</EpitaxyTileLayout>
+    </div>
+  );
+}
+
+type EpitaxyChatPanelProps = {
+  draftPersistKey: string;
+  dragHandle?: ReactNode;
+  hideComposer?: boolean;
+  initialSessionId?: string;
+  isLonePane?: boolean;
+  isPanelActive: boolean;
+  isTopLeft?: boolean;
+  landingActions?: ReactNode;
+  landingBody?: ReactNode;
+  onClose?: () => void;
+  onMovePane?: (slot: PaneSlot) => void;
+  onSessionRemoved?: () => void;
+  paneIndex?: number;
+  sessionRef: EpitaxySessionRef | null;
+  sessionType?: EpitaxySessionType;
+  slot?: PaneSlot;
+};
+
+function EpitaxyChatPanel({
+  dragHandle,
+  hideComposer = false,
+  initialSessionId,
+  isLonePane = false,
+  isPanelActive,
+  isTopLeft,
+  landingActions,
+  landingBody,
+  onClose,
+  onMovePane,
+  onSessionRemoved,
+  paneIndex = 0,
+  sessionRef,
+  sessionType = "local",
+  slot,
+}: EpitaxyChatPanelProps) {
+  const { error, isLoading, isSessionNotFound, messages, reload, session, source } = useEpitaxySessionData(initialSessionId);
+  const [activeView, setActiveView] = useState<OfficialViewPane | undefined>(() => initialSessionId ? "preview" : undefined);
+  const title = session?.title ?? (initialSessionId ? "Untitled" : "Claude Code");
+  const effectiveSessionRef = sessionRef ?? (initialSessionId ? { id: initialSessionId, type: sessionType } : null);
+  const selectView = useCallback((view: OfficialViewPane) => {
+    setActiveView((current) => current === view ? undefined : view);
+  }, []);
+
+  useEpitaxyViewShortcuts(selectView);
+  useEffect(() => {
+    if (!initialSessionId) setActiveView(undefined);
+  }, [initialSessionId]);
+
+  const chatBody = (
+    <>
+      {!initialSessionId && landingActions ? <div className="relative"><div className="epitaxy-chat-column epitaxy-chat-size pointer-events-none absolute inset-x-0 top-[12px] flex justify-end"><div className="pointer-events-auto">{landingActions}</div></div></div> : null}
+      <div className="contents">
+        <div className="flex-1 min-h-0 relative isolate [--epitaxy-scrim-inset-end:16px]">
+          <div aria-hidden="true" className="epitaxy-top-scrim" />
+          <div aria-hidden="true" className="epitaxy-bottom-scrim" style={{ opacity: messages.length > 0 ? 1 : 0 }} />
+          {renderTranscriptBody({ error, initialSessionId, isLoading, isSessionNotFound, landingBody, messages, reload })}
+        </div>
+        {!hideComposer && initialSessionId && !isSessionNotFound ? (
+          <ExistingSessionComposer
+            disabled={isLoading || Boolean(error)}
+            onSubmit={async (text) => {
+              await sendMessageToSession(source, initialSessionId, text);
+              await reload();
+            }}
+          />
+        ) : null}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="relative h-full min-w-0 flex">
+      <div className="relative h-full min-w-0 flex flex-col flex-1">
+        <EpitaxyChatHeader
+          activeView={activeView}
+          dragHandle={dragHandle}
+          isTitleLoading={isLoading && !session}
+          isTopLeft={isTopLeft}
+          onClose={onClose}
+          onSessionRemoved={onSessionRemoved}
+          onViewSelect={selectView}
+          paneIndex={paneIndex}
+          session={session}
+          sessionRef={effectiveSessionRef}
+          title={title}
+        />
+        {chatBody}
+      </div>
+      {activeView ? (
+        <EpitaxySidePaneTile
+          activeView={activeView}
+          isTopLeft={isTopLeft}
+          onClose={() => setActiveView(undefined)}
+          session={session}
+          sessionRef={effectiveSessionRef}
+          source={source}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function EpitaxyChatHeader({ activeView, dragHandle, isTitleLoading, isTopLeft, onClose, onSessionRemoved, onViewSelect, paneIndex, session, sessionRef, title }: {
+  activeView?: OfficialViewPane;
+  dragHandle?: ReactNode;
+  isTitleLoading: boolean;
+  isTopLeft?: boolean;
+  onClose?: () => void;
+  onSessionRemoved?: () => void;
+  onViewSelect?: (view: OfficialViewPane) => void;
+  paneIndex: number;
+  session: SessionSummary | null;
+  sessionRef: EpitaxySessionRef | null;
+  title: string;
+}) {
+  return (
+    <OfficialSessionHeader
+      activeView={activeView}
+      dragHandle={dragHandle}
+      isTitleLoading={isTitleLoading}
+      isTopLeft={isTopLeft}
+      onSessionRemoved={onSessionRemoved}
+      onViewSelect={onViewSelect}
+      paneIndex={paneIndex}
+      session={session}
+      sessionRef={sessionRef}
+      title={title}
+    />
+  );
+}
+
+function useEpitaxyViewShortcuts(onSelect: (view: OfficialViewPane) => void) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (event.metaKey && event.shiftKey && event.code === "KeyP") {
+        event.preventDefault();
+        onSelect("preview");
+        return;
+      }
+      if (event.metaKey && event.shiftKey && event.code === "KeyD") {
+        event.preventDefault();
+        onSelect("diff");
+        return;
+      }
+      if (event.ctrlKey && event.code === "Backquote") {
+        event.preventDefault();
+        onSelect("terminal");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onSelect]);
+}
+
+function EpitaxySidePaneTile({
+  activeView,
+  isTopLeft,
+  onClose,
+  session,
+  sessionRef,
+  source,
+}: {
+  activeView: OfficialViewPane;
+  isTopLeft?: boolean;
+  onClose: () => void;
+  session: SessionSummary | null;
+  sessionRef: EpitaxySessionRef | null;
+  source: SessionSource | null;
+}) {
+  const codeSurface = activeView === "terminal" || activeView === "diff";
+  const bridge = bridgeForSource(source, session);
+
+  return (
+    <>
+      <div aria-hidden="true" className="relative w-[8px] shrink-0 cursor-col-resize">
+        <div className="absolute inset-y-[8px] left-1/2 w-px -translate-x-1/2 rounded-full bg-t2" />
+      </div>
+      <aside
+        className={`${codeSurface ? "epitaxy-code-surface " : ""}min-w-0 shrink-0 relative isolate flex flex-col rounded-r6`}
+        style={{ height: "100%", maxWidth: 560, minWidth: 320, width: "42%" }}
+      >
+        <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated" />
+        <div data-top-left={isTopLeft || undefined} className="relative flex items-center justify-between gap-g6 h-[32px] pl-[8px] pr-[4px] shrink-0">
+          <div className="draggable absolute inset-0 -z-[1]" aria-hidden="true" />
+          {renderSidePaneTitle(activeView, session, sessionRef)}
+          <div className="relative z-[1] flex items-center gap-g1 shrink-0 draggable-none">
+            <OfficialButton ariaLabel="Close" icon="XCrossCloseMedium" onClick={onClose} />
+          </div>
+        </div>
+        <div className="flex-1 min-h-0 overflow-hidden rounded-b-r6">
+          <ViewPaneBody activeView={activeView} bridge={bridge} session={session} sessionRef={sessionRef} />
+        </div>
+      </aside>
+    </>
+  );
+}
+
+const viewPaneConfig: Record<OfficialViewPane, { icon: string; label: string }> = {
+  preview: { icon: "Play", label: "预览" },
+  diff: { icon: "ChangesDiffPlusMinusBox", label: "Diff" },
+  terminal: { icon: "TerminalOpenCommandLine", label: "Terminal" },
+  tasks: { icon: "Blocks", label: "任务" },
+  plan: { icon: "CheckList", label: "Plan" },
+};
+
+function renderSidePaneTitle(activeView: OfficialViewPane, session: SessionSummary | null, sessionRef: EpitaxySessionRef | null) {
+  if (activeView === "preview" && sessionRef?.type === "local") {
+    return (
+      <div className="relative z-[1] flex items-center gap-g3 min-w-0 draggable-none">
+        <OfficialDropdownButton
+          align="start"
+          className="-ml-[5px]"
+          header="Servers"
+          label="预览"
+          mode="text"
+          side="bottom"
+        />
+      </div>
+    );
+  }
+
+  if (activeView === "diff" && sessionRef) {
+    return (
+      <div className="relative z-[1] flex items-center gap-g3 min-w-0 draggable-none">
+        <OfficialButton ariaLabel="Show files" className="-ml-[4px]" icon="FolderOpenFront" pressed />
+        <span className="flex items-center gap-g3 text-body text-t6 min-w-0 -ml-[2px]">
+          <span className="text-t7 truncate">{session?.repo?.branch ?? "HEAD"}</span>
+          <span className="text-t4">→</span>
+          <span className="text-t7 truncate">working tree</span>
+        </span>
+      </div>
+    );
+  }
+
+  if (activeView === "terminal") {
+    return (
+      <div className="relative z-[1] flex items-center gap-g1 min-w-0 draggable-none">
+        <span className="text-body text-uncontained-default select-none truncate max-w-[200px] pl-[1px]">Terminal</span>
+        <OfficialButton ariaLabel="New terminal" className="w-[20px]" icon="PlusSmall" />
+      </div>
+    );
+  }
+
+  const label = activeView === "preview" && session?.title ? "预览" : viewPaneConfig[activeView].label;
+  return <span className="text-body text-t7 select-none truncate draggable-none pl-[1px] relative z-[1]">{label}</span>;
+}
+
+function ViewPaneBody({ activeView, bridge, session, sessionRef }: { activeView: OfficialViewPane; bridge: LocalSessionsBridge; session: SessionSummary | null; sessionRef: EpitaxySessionRef | null }) {
+  switch (activeView) {
+    case "preview":
+      return <OfficialPreviewPane session={session} />;
+    case "diff":
+      return sessionRef ? <OfficialDiffPane bridge={bridge} session={session} sessionRef={sessionRef} /> : null;
+    case "terminal":
+      return sessionRef ? <OfficialShellPtyPane bridge={bridge} sessionRef={sessionRef} /> : null;
+    case "tasks":
+      return sessionRef ? <div className="h-full overflow-y-auto"><div className="flex flex-col items-center justify-center gap-g4 py-[64px] text-body text-t5"><Icon name="Blocks" size="lg" />No tasks.</div></div> : null;
+    case "plan":
+      return sessionRef ? (
+        <div className="flex h-full flex-col items-center justify-center gap-g3 px-[32px] text-center text-t6">
+          <Icon name="CheckList" size="lg" />
+          <div className="text-body">No plan yet.</div>
+          <div className="text-caption">Claude writes the plan here as it explores. Keep chatting.</div>
+        </div>
+      ) : null;
+  }
+}
+
+function OfficialPreviewPane({ session }: { session: SessionSummary | null }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-g8 px-p8">
+      <img alt="" className="select-none" draggable={false} height={94} src="/assets/v1/clawd-laptop-official.gif" width={140} />
+      <div role="status" className="flex items-center gap-g3 text-body text-t7">
+        <OfficialSpinner />
+        <span>{session ? "Setting up preview" : "Run your dev server to inspect network requests, debug with logs, and see changes live."}</span>
+      </div>
+    </div>
+  );
+}
+
+function OfficialDiffPane({ bridge, session, sessionRef }: { bridge: LocalSessionsBridge; session: SessionSummary | null; sessionRef: EpitaxySessionRef }) {
+  const [state, setState] = useState<{ diff: string; error?: string; isLoading: boolean; stats: string }>({ diff: "", isLoading: true, stats: "" });
+
+  useEffect(() => {
+    let alive = true;
+    setState({ diff: "", isLoading: true, stats: "" });
+    void Promise.all([
+      bridge.getGitDiff?.(sessionRef.id, []) ?? Promise.resolve({ ok: false, error: "getGitDiff unavailable", stdout: "", stderr: "" }),
+      bridge.getGitDiffStats?.(sessionRef.id) ?? Promise.resolve({ ok: false, error: "getGitDiffStats unavailable", stdout: "", stderr: "" }),
+    ]).then(([diffResult, statsResult]) => {
+      if (!alive) return;
+      const diffOk = diffResult.ok !== false && !diffResult.error;
+      const statsOk = statsResult.ok !== false && !statsResult.error;
+      setState({
+        diff: diffOk ? diffResult.stdout ?? "" : "",
+        error: diffOk ? undefined : diffResult.error ?? diffResult.stderr ?? "Failed to load diff",
+        isLoading: false,
+        stats: statsOk ? statsResult.stdout ?? "" : "",
+      });
+    }).catch((error) => {
+      if (alive) setState({ diff: "", error: error instanceof Error ? error.message : "Failed to load diff", isLoading: false, stats: "" });
+    });
+    return () => { alive = false; };
+  }, [bridge, sessionRef.id]);
+
+  if (state.isLoading) {
+    return <div role="status" className="h-full flex items-center justify-center text-t5"><OfficialSpinner /><span className="sr-only">Loading diff</span></div>;
+  }
+
+  if (state.error) {
+    return <div className="h-full flex items-center justify-center text-body text-t5 px-p8 text-center">{state.error}</div>;
+  }
+
+  if (!state.diff.trim()) {
+    return <div className="h-full flex items-center justify-center text-body text-t5">No changes to show.</div>;
+  }
+
+  const files = parseDiffFiles(state.diff);
+
+  return (
+    <div className="h-full select-text flex min-w-0 text-body text-t8">
+      {files.length > 0 ? (
+        <aside className="w-[200px] shrink-0 overflow-y-auto border-r border-border-300 py-p4">
+          {files.map((file) => (
+            <button key={file.path} className="group/btn relative isolate flex h-small w-full items-center gap-g3 border-0 bg-transparent px-p6 text-left text-footnote text-t7 outline-none hide-focus-ring ring-focus" type="button">
+              <span aria-hidden="true" className="absolute inset-y-0 left-[6px] right-[6px] -z-[1] rounded-r4 group-hover/btn:bg-fill-uncontained-hover" />
+              <Icon name="Document" size="xs" />
+              <span className="truncate">{file.path}</span>
+            </button>
+          ))}
+        </aside>
+      ) : null}
+      <div className="flex-1 min-w-0 overflow-auto">
+        {state.stats.trim() ? <pre className="m-0 border-b border-border-300 p-p6 text-code text-t6 whitespace-pre-wrap">{state.stats.trim()}</pre> : null}
+        <pre className="m-0 min-w-max p-p6 text-code text-t8 leading-[18px] whitespace-pre-wrap">{state.diff}</pre>
+      </div>
+    </div>
+  );
+}
+
+function OfficialShellPtyPane({ bridge, sessionRef }: { bridge: LocalSessionsBridge; sessionRef: EpitaxySessionRef }) {
+  const [error, setError] = useState<string | null>(null);
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const terminalRef = useRef<{ fitAddon: FitAddon; terminal: Terminal } | null>(null);
+  const bufferRef = useRef("");
+
+  useEffect(() => {
+    let alive = true;
+    let started = false;
+    let resizeFrame = 0;
+    let resizeObserver: ResizeObserver | null = null;
+    let pollTimer = 0;
+    let dataDisposable: { dispose: () => void } | undefined;
+    setError(null);
+
+    bufferRef.current = "";
+    hostRef.current?.replaceChildren();
+
+    const terminal = new Terminal({
+      cursorBlink: true,
+      fontFamily: "\"SF Mono\", Menlo, Monaco, \"Courier New\", monospace",
+      fontSize: 12,
+      scrollback: 1000,
+      theme: officialLightTerminalTheme,
+    });
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminalRef.current = { fitAddon, terminal };
+
+    if (hostRef.current) terminal.open(hostRef.current);
+    dataDisposable = terminal.onData((data) => {
+      void bridge.writeShellPty?.(sessionRef.id, data);
+    });
+
+    const unsubscribe = bridge.onShellPtyEvent?.((event) => {
+      if (event.sessionId !== sessionRef.id) return;
+      if (event.type === "shell_pty_data" && event.data) {
+        bufferRef.current += event.data;
+        terminal.write(event.data);
+      }
+      if (event.type === "shell_pty_close") setError("Shell exited.");
+    });
+
+    const replayBufferedOutput = (nextBuffer?: string) => {
+      if (!nextBuffer || nextBuffer === bufferRef.current) return;
+      if (nextBuffer.startsWith(bufferRef.current)) {
+        terminal.write(nextBuffer.slice(bufferRef.current.length));
+      } else {
+        terminal.write(terminalReconnectReplay + nextBuffer);
+      }
+      bufferRef.current = nextBuffer;
+    };
+
+    const syncBuffer = () => {
+      void bridge.getShellPtyBuffer?.(sessionRef.id).then((nextBuffer) => {
+        if (alive) replayBufferedOutput(nextBuffer);
+      }).catch(() => {});
+    };
+
+    const startPty = () => {
+      if (started) return;
+      started = true;
+      try {
+        fitAddon.fit();
+      } catch {
+        // xterm cannot fit before layout is available; ResizeObserver will retry.
+      }
+      const { cols, rows } = terminal;
+      void bridge.startShellPty?.(sessionRef.id, Math.max(cols, 80), Math.max(rows, 24)).then((result) => {
+        if (!alive) return;
+        if (!result?.ok) {
+          setError(result?.error ?? "Failed to start shell");
+          return;
+        }
+        replayBufferedOutput(result.buffered);
+        requestAnimationFrame(() => terminal.focus());
+      }).catch((err) => {
+        if (alive) setError(err instanceof Error ? err.message : "Failed to start shell");
+      });
+    };
+
+    const refit = () => {
+      resizeFrame = 0;
+      if (!alive || !hostRef.current || hostRef.current.offsetHeight === 0) return;
+      try {
+        fitAddon.fit();
+      } catch {
+        return;
+      }
+      const { cols, rows } = terminal;
+      if (cols > 0 && rows > 0) {
+        if (started) void bridge.resizeShellPty?.(sessionRef.id, cols, rows);
+        else startPty();
+      }
+    };
+
+    if (hostRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        if (!resizeFrame) resizeFrame = requestAnimationFrame(refit);
+      });
+      resizeObserver.observe(hostRef.current);
+    }
+
+    requestAnimationFrame(refit);
+    pollTimer = window.setInterval(syncBuffer, 600);
+
+    return () => {
+      alive = false;
+      if (resizeFrame) cancelAnimationFrame(resizeFrame);
+      if (pollTimer) window.clearInterval(pollTimer);
+      resizeObserver?.disconnect();
+      unsubscribe?.();
+      dataDisposable?.dispose();
+      terminal.dispose();
+      terminalRef.current = null;
+    };
+  }, [bridge, sessionRef.id]);
+
+  return (
+    <div style={{ height: "100%", padding: "var(--p6)", backgroundColor: officialLightTerminalTheme.background }} className="relative w-full">
+      <div
+        ref={hostRef}
+        className="h-full w-full [&_.xterm-viewport]:!bg-transparent [&_textarea]:[caret-color:transparent]"
+        onMouseDown={() => terminalRef.current?.terminal.focus()}
+      />
+      {error ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-g3 bg-bg-100 text-text-400">
+          <p className="text-body text-t6">{error}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const terminalReconnectReplay = "\x1b[3J\x1b[2J\x1b[H\x1b[2m[shell reconnected — replaying buffered output]\x1b[0m\r\n";
+
+const officialLightTerminalTheme = {
+  background: "#ffffff",
+  foreground: "#1a1a1a",
+  cursor: "#0073e6",
+  cursorAccent: "#ffffff",
+  black: "#1a1a1a",
+  red: "#ff3a30",
+  green: "#1e9e3c",
+  yellow: "#98801f",
+  blue: "#0073e6",
+  magenta: "#cd2054",
+  cyan: "#8e6bd9",
+  white: "#999999",
+  brightBlack: "#666666",
+  brightRed: "#ff5047",
+  brightGreen: "#1e9e3c",
+  brightYellow: "#98801f",
+  brightBlue: "#0078f0",
+  brightMagenta: "#cd2054",
+  brightCyan: "#8e6bd9",
+  brightWhite: "#d6d6d6",
+};
+
+function parseDiffFiles(diff: string) {
+  const files: Array<{ path: string }> = [];
+  const seen = new Set<string>();
+  for (const match of diff.matchAll(/^diff --git a\/(.*?) b\/(.*?)$/gm)) {
+    const path = match[2] || match[1];
+    if (path && !seen.has(path)) {
+      seen.add(path);
+      files.push({ path });
+    }
+  }
+  return files;
+}
+
+function bridgeForSource(source: SessionSource | null, session: SessionSummary | null): LocalSessionsBridge {
+  if (source === "epitaxy" || session?.kind === "epitaxy") return desktopBridge.LocalSessions;
+  return desktopBridge.LocalAgentModeSessions;
+}
+
+function OfficialSpinner() {
+  return (
+    <span className="relative inline-block shrink-0 align-middle size-[16px]" aria-hidden="true">
+      <span className="absolute inset-0 rounded-full" style={{ border: "2px solid var(--t2)" }} />
+      <span className="absolute inset-0 rounded-full animate-[spin_2s_linear_infinite]" style={{ background: "conic-gradient(transparent 40%, var(--spinner-arc, var(--t6)))", mask: "radial-gradient(farthest-side, transparent calc(100% - 2px), rgb(0, 0, 0) calc(100% - 1.5px))" }} />
+    </span>
+  );
+}
+
+function renderTranscriptBody({ error, initialSessionId, isLoading, isSessionNotFound, landingBody, messages, reload }: {
+  error: Error | null;
+  initialSessionId?: string;
+  isLoading: boolean;
+  isSessionNotFound: boolean;
+  landingBody?: ReactNode;
+  messages: ChatMessage[];
+  reload: () => Promise<void>;
+}) {
+  if (isSessionNotFound) return <SessionNotFound onBack={reload} />;
+  if (isLoading) return <LoadingConversation />;
+  if (error) return <SessionError error={error} onRetry={reload} />;
+  if (!initialSessionId) return <div className="h-full overflow-y-auto overflow-x-hidden">{landingBody ?? null}</div>;
+  if (messages.length === 0) return <div className="h-full flex items-center justify-center text-body text-t5">No messages yet.</div>;
+  return <Transcript messages={messages} />;
+}
+
+function Transcript({ messages }: { messages: ChatMessage[] }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [messages.length]);
+
+  return (
+    <OfficialTranscript scrollRef={(node) => { scrollRef.current = node; }}>
+      <div className="pt-p8 pb-[64px]">
+        {messages.map((message, index) => (
+          <OfficialTranscriptRow key={message.id} last={index === messages.length - 1}>
+            <TranscriptMessage message={message} />
+          </OfficialTranscriptRow>
+        ))}
+      </div>
+    </OfficialTranscript>
+  );
+}
+
+function TranscriptMessage({ message }: { message: ChatMessage }) {
+  if (message.role === "user") {
+    return (
+      <OfficialUserMessage createdAt={message.createdAt}>
+        <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty">{message.text}</p>
+      </OfficialUserMessage>
+    );
+  }
+
+  if (message.role === "system") {
+    return <div className="text-body text-t6 italic whitespace-pre-wrap break-words select-text">{message.text}</div>;
+  }
+
+  return <OfficialAssistantMessage createdAt={message.createdAt}>{message.text}</OfficialAssistantMessage>;
+}
+
+function ExistingSessionComposer({ disabled, onSubmit }: { disabled: boolean; onSubmit: (text: string) => Promise<void> }) {
+  const [text, setText] = useState("");
+  const [isSubmitting, setSubmitting] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const isBashMode = text.trimStart().startsWith("!");
+  const canSubmit = text.trim().length > 0 && !disabled && !isSubmitting;
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    const payload = text.trim();
+    setSubmitting(true);
+    try {
+      await onSubmit(payload);
+      setText("");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div data-skip-approval-enter={undefined} className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]">
+      <button type="button" aria-label="Scroll to bottom" className="inline-flex items-center h-[24px] px-p3 rounded-r5 bg-fill-contained-default text-contained-default effect-contained-default hover:bg-fill-contained-hover hover:text-contained-hover cursor-default border-0 outline-none hide-focus-ring ring-focus absolute -top-[32px] left-1/2 -translate-x-1/2 z-[1] transition-opacity duration-150 opacity-0 pointer-events-none" />
+      <div
+        className={`epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300 ${isBashMode ? "[&_.tiptap]:font-mono [&_.tiptap]:text-[length:var(--text-code)]" : ""}`}
+        onClick={(event) => {
+          if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+          textareaRef.current?.focus();
+        }}
+      >
+        <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" data-surface="prompt" />
+        {isBashMode ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-r7 shadow-[inset_0_0_0_1px_var(--extended-purple)]" /> : null}
+        <span className="sr-only" role="status">{isBashMode ? "Bash mode. Press Escape to return to chat." : "Chat mode"}</span>
+        <div aria-hidden="true" className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}><div className="min-h-0 overflow-hidden" /></div>
+        <div className="relative flex w-full">
+          {isBashMode ? <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
+          <div className="epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0">
+            <textarea
+              aria-label="Prompt"
+              className="tiptap block w-full resize-none bg-transparent placeholder:text-t5"
+              disabled={disabled || isSubmitting}
+              onChange={(event) => setText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && isBashMode) {
+                  event.preventDefault();
+                  setText("");
+                  return;
+                }
+                if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  void submit();
+                }
+              }}
+              placeholder="Type / for commands"
+              ref={textareaRef}
+              rows={1}
+              value={text}
+            />
+          </div>
+          <div className="flex self-end p-p7 pl-p3">
+            <OfficialButton ariaLabel="Send" disabled={!canSubmit} icon={isSubmitting ? "Stop" : "ArrowReturn"} onClick={() => void submit()} />
+          </div>
+        </div>
+      </div>
+      <div className="w-full flex items-center gap-g5 py-[4px]">
+        <div className="flex items-center gap-g5 min-w-0">
+          <OfficialComposerDropdown><span className="text-extended-yellow">绕过权限</span></OfficialComposerDropdown>
+          <OfficialComposerDropdown icon="Add" onClick={() => setText((current) => (current.startsWith("!") ? current : `! ${current}`))} />
+        </div>
+        <div className="ml-auto flex items-center gap-g4">
+          <OfficialComposerDropdown>Opus 4</OfficialComposerDropdown>
+          <OfficialButton ariaLabel="Usage" className="h-small text-footnote rounded-small shrink-0" customIcon={
+            <span className="size-[12px] rounded-full border-2 border-border-400" aria-hidden="true" />
+          } />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoadingConversation() {
+  return (
+    <div role="status" className="h-full flex items-center justify-center text-t5">
+      <span className="relative inline-block shrink-0 align-middle size-5" aria-hidden="true">
+        <span className="absolute inset-0 rounded-full" style={{ border: "2px solid var(--t2)" }} />
+        <span className="absolute inset-0 rounded-full animate-[spin_2s_linear_infinite]" style={{ background: "conic-gradient(transparent 40%, var(--spinner-arc, var(--t6)))", mask: "radial-gradient(farthest-side, transparent calc(100% - 2px), rgb(0, 0, 0) calc(100% - 1.5px))" }} />
+      </span>
+      <span className="sr-only">Loading conversation</span>
+    </div>
+  );
+}
+
+function SessionNotFound({ onBack }: { onBack: () => Promise<void> }) {
+  return (
+    <div className="h-full flex items-center justify-center text-body text-t5">
+      <div className="flex flex-col items-center gap-g5">
+        <span>找不到这个会话。</span>
+        <button className={composerDropdownButtonClass} onClick={() => void onBack()} type="button">重试</button>
+      </div>
+    </div>
+  );
+}
+
+function SessionError({ error, onRetry }: { error: Error; onRetry: () => Promise<void> }) {
+  return (
+    <div className="h-full flex items-center justify-center text-body text-t5">
+      <div className="flex max-w-[360px] flex-col items-center gap-g5 text-center">
+        <span>Something went wrong loading this session.</span>
+        <code className="text-code text-t6 break-words">{error.message}</code>
+        <button className={composerDropdownButtonClass} onClick={() => void onRetry()} type="button">Retry</button>
+      </div>
+    </div>
+  );
+}
+
+function useEpitaxySessionType(sessionId?: string): EpitaxySessionType {
+  const [sessionType, setSessionType] = useState<EpitaxySessionType>(() => inferSessionType(sessionId));
+
+  useEffect(() => {
+    let alive = true;
+    setSessionType(inferSessionType(sessionId));
+    if (!sessionId) return () => { alive = false; };
+
+    Promise.allSettled([
+      desktopBridge.LocalAgentModeSessions.list(),
+      desktopBridge.LocalSessions.list(),
+    ]).then(([codeSessions, localSessions]) => {
+      if (!alive) return;
+      const codeMatch = codeSessions.status === "fulfilled" ? codeSessions.value.find((session) => session.id === sessionId) : undefined;
+      if (codeMatch) {
+        setSessionType(inferSessionType(sessionId, codeMatch));
+        return;
+      }
+      const localMatch = localSessions.status === "fulfilled" ? localSessions.value.find((session) => session.id === sessionId) : undefined;
+      setSessionType(inferSessionType(sessionId, localMatch));
+    });
+
+    return () => { alive = false; };
+  }, [sessionId]);
+
+  return sessionType;
+}
+
+function useFocusedSession(sessionId?: string) {
+  useEffect(() => {
+    void desktopBridge.LocalAgentModeSessions.setFocusedSession?.(sessionId ?? null);
+    void desktopBridge.LocalSessions.setFocusedSession?.(sessionId ?? null);
+    return () => {
+      void desktopBridge.LocalAgentModeSessions.setFocusedSession?.(null);
+      void desktopBridge.LocalSessions.setFocusedSession?.(null);
+    };
+  }, [sessionId]);
+}
+
+type SessionDataState = {
+  error: Error | null;
+  isLoading: boolean;
+  isSessionNotFound: boolean;
+  messages: ChatMessage[];
+  session: SessionSummary | null;
+  source: SessionSource | null;
+};
+
+function useEpitaxySessionData(sessionId?: string) {
+  const [state, setState] = useState<SessionDataState>({
+    error: null,
+    isLoading: Boolean(sessionId),
+    isSessionNotFound: false,
+    messages: [],
+    session: null,
+    source: null,
+  });
+
+  const reload = useCallback(async () => {
+    if (!sessionId) {
+      setState({ error: null, isLoading: false, isSessionNotFound: false, messages: [], session: null, source: null });
+      return;
+    }
+    setState((current) => ({ ...current, error: null, isLoading: true }));
+    try {
+      const next = await loadEpitaxySession(sessionId);
+      setState({
+        error: null,
+        isLoading: false,
+        isSessionNotFound: !next,
+        messages: next?.messages ?? [],
+        session: next?.session ?? null,
+        source: next?.source ?? null,
+      });
+    } catch (caught) {
+      setState((current) => ({
+        ...current,
+        error: caught instanceof Error ? caught : new Error(String(caught)),
+        isLoading: false,
+      }));
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    let alive = true;
+    void reload().finally(() => {
+      if (!alive) return;
+    });
+    return () => { alive = false; };
+  }, [reload]);
+
+  useEffect(() => {
+    if (!sessionId) return undefined;
+    const handleEvent = (event: unknown) => {
+      if (isSessionEventForId(event, sessionId)) void reload();
+    };
+    const offCode = desktopBridge.LocalAgentModeSessions.onEvent?.(handleEvent);
+    const offLocal = desktopBridge.LocalSessions.onEvent?.(handleEvent);
+    return () => {
+      offCode?.();
+      offLocal?.();
+    };
+  }, [reload, sessionId]);
+
+  return { ...state, reload };
+}
+
+async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMessage[]; session: SessionSummary; source: SessionSource } | null> {
+  const sources: Array<{ bridge: LocalSessionsBridge; source: SessionSource }> = [
+    { bridge: desktopBridge.LocalAgentModeSessions, source: "code" },
+    { bridge: desktopBridge.LocalSessions, source: "epitaxy" },
+  ];
+
+  for (const item of sources) {
+    const session = await item.bridge.getSession(sessionId).catch(() => null);
+    if (!session) continue;
+    const transcript = await item.bridge.getTranscript?.(sessionId).catch(() => undefined);
+    const messages = transcript?.length ? transcript : session.messages ?? [];
+    return { messages, session: { ...session, messages }, source: item.source };
+  }
+
+  return null;
+}
+
+async function sendMessageToSession(source: SessionSource | null, sessionId: string, text: string) {
+  const bridge = source === "epitaxy" ? desktopBridge.LocalSessions : desktopBridge.LocalAgentModeSessions;
+  if (bridge.sendMessage) {
+    await bridge.sendMessage(sessionId, text);
+    return;
+  }
+  await desktopBridge.LocalAgentModeSessions.sendMessage?.(sessionId, text);
+}
+
+function inferSessionType(sessionId?: string, session?: SessionSummary): EpitaxySessionType {
+  if (!sessionId) return "local";
+  if (session?.kind === "code" || session?.kind === "epitaxy") return "local";
+  if (sessionId.startsWith("bridge_")) return "bridge";
+  if (sessionId.startsWith("local_") || sessionId.startsWith("code_") || sessionId.startsWith("epitaxy_")) return "local";
+  return "remote";
+}
+
+function basename(value?: string): string | undefined {
+  return value?.split(/[\\/]/).filter(Boolean).at(-1);
+}
+
+function isSessionEventForId(event: unknown, sessionId: string) {
+  const raw = asRecord(event);
+  if (raw.sessionId === sessionId || raw.id === sessionId) return true;
+  const session = asRecord(raw.session);
+  return session.id === sessionId || session.sessionId === sessionId;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+}
+
+const composerDropdownButtonClass = "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled aria-[expanded=true]:text-[var(--text-uncontained-selected)] aria-[expanded=true]:hover:text-[var(--text-uncontained-selected)] h-small rounded-small text-footnote justify-between pl-p5 pr-p2";

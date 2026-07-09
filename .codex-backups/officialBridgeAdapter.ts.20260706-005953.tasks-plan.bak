@@ -1,0 +1,577 @@
+import type {
+  ChatMessage,
+  CodeStats,
+  CreateScheduledTaskInput,
+  DesktopBridge,
+  DesktopPreferences,
+  GitCommandResult,
+  LocalSessionsBridge,
+  ScheduledTaskSummary,
+  ShellPtyEvent,
+  ShellPtyStartResult,
+  SessionSummary,
+  StartSessionInput,
+  WorkspaceContext,
+} from "./types";
+
+type RemoveListener = () => void;
+type RawEventSubscription = (listener: (event: unknown) => void) => RemoveListener;
+
+type RawLocalSessionsBridge = {
+  getAll?: (...args: unknown[]) => Promise<unknown[]>;
+  addFolderToSession?: (id: string, folder: string) => Promise<unknown>;
+  getCodeStats?: () => Promise<unknown>;
+  getDefaultEffort?: () => Promise<unknown>;
+  getDefaultPermissionMode?: (cwd?: string) => Promise<unknown>;
+  getEffort?: (id: string) => Promise<unknown>;
+  getSession?: (id: string, options?: Record<string, unknown>) => Promise<unknown | null>;
+  getTranscript?: (id: string) => Promise<unknown[]>;
+  getGitInfo?: (idOrCwd: string) => Promise<unknown>;
+  getGitDiff?: (idOrCwd: string, args?: string[]) => Promise<unknown>;
+  getGitDiffStats?: (idOrCwd: string) => Promise<unknown>;
+  getPermissionMode?: (id: string) => Promise<unknown>;
+  getSupportedCommands?: () => Promise<unknown>;
+  getWorkingTreeStatus?: (idOrCwd: string) => Promise<unknown>;
+  setEffort?: (id: string, effort: string) => Promise<unknown>;
+  setModel?: (id: string, model: string) => Promise<unknown>;
+  setPermissionMode?: (id: string, mode: string) => Promise<unknown>;
+  startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<unknown>;
+  stopShellPty?: (sessionId: string) => Promise<unknown>;
+  writeShellPty?: (sessionId: string, data: string) => Promise<unknown>;
+  resizeShellPty?: (sessionId: string, cols: number, rows: number) => Promise<unknown>;
+  getShellPtyBuffer?: (sessionId: string) => Promise<unknown>;
+  start?: (input?: Record<string, unknown>) => Promise<unknown>;
+  sendMessage?: (id: string, text: string) => Promise<unknown>;
+  setFocusedSession?: (id: string | null) => Promise<unknown>;
+  archive?: (id: string) => Promise<unknown>;
+  delete?: (id: string) => Promise<unknown>;
+  searchSessions?: (query: string, options?: Record<string, unknown>) => Promise<unknown[]>;
+  onEvent?: RawEventSubscription;
+  onOnEvent?: RawEventSubscription;
+};
+
+type RawScheduledTasksBridge = {
+  getAllScheduledTasks?: () => Promise<unknown[]>;
+  getScheduledTaskFileContent?: (id: string) => Promise<unknown>;
+  updateScheduledTaskStatus?: (id: string, status: string) => Promise<unknown>;
+  createScheduledTask?: (input: CreateScheduledTaskInput) => Promise<unknown>;
+  onScheduledTaskEvent?: RawEventSubscription;
+  onOnScheduledTaskEvent?: RawEventSubscription;
+};
+
+export type RawClaudeWebBridge = {
+  LocalSessions?: RawLocalSessionsBridge;
+  LocalAgentModeSessions?: RawLocalSessionsBridge;
+  CCDScheduledTasks?: RawScheduledTasksBridge;
+  WindowControl?: {
+    close?: () => Promise<unknown>;
+  };
+  WindowState?: {
+    getFullscreen?: () => Promise<unknown>;
+    getZoomFactor?: () => Promise<unknown>;
+  };
+};
+
+export type RawClaudeSettingsBridge = {
+  AppPreferences?: {
+    getPreferences?: () => Promise<Record<string, unknown>>;
+    setPreference?: (key: string, value: unknown) => Promise<unknown>;
+    preferencesChanged?: (listener: (preferences: Record<string, unknown>) => void) => RemoveListener;
+    onPreferencesChanged?: (listener: (preferences: Record<string, unknown>) => void) => RemoveListener;
+  };
+  FilePickers?: {
+    getDirectoryPath?: (options?: unknown) => Promise<string[]>;
+  };
+};
+
+const emptyWorkspace: WorkspaceContext = {
+  mode: "local",
+  projectName: "local",
+  branchName: "main",
+  hasWorktree: false,
+};
+
+export function createDesktopBridgeFromOfficialNamespaces(
+  web: RawClaudeWebBridge,
+  settings?: RawClaudeSettingsBridge,
+): DesktopBridge {
+  return {
+    LocalSessions: createLocalSessionsBridge(web.LocalSessions, "epitaxy"),
+    LocalAgentModeSessions: createLocalSessionsBridge(web.LocalAgentModeSessions, "code"),
+    CCDScheduledTasks: createScheduledTasksBridge(web.CCDScheduledTasks),
+    Preferences: {
+      getWorkspaceContext: () => getWorkspaceContext(web),
+      getPreferences: async () => normalizePreferences(await settings?.AppPreferences?.getPreferences?.()),
+      setPreference: async (key, value) => {
+        await settings?.AppPreferences?.setPreference?.(key, value);
+      },
+      onPreferencesChanged: (listener) => {
+        const subscribe = settings?.AppPreferences?.preferencesChanged ?? settings?.AppPreferences?.onPreferencesChanged;
+        return subscribe?.((preferences) => listener(normalizePreferences(preferences))) ?? (() => {});
+      },
+      getDirectoryPath: async (multiple = false) => {
+        const paths = await settings?.FilePickers?.getDirectoryPath?.(multiple);
+        return paths?.length ? paths : null;
+      },
+    },
+    Window: {
+      close: async () => {
+        await web.WindowControl?.close?.();
+      },
+      getFullscreen: async () => Boolean(await web.WindowState?.getFullscreen?.()),
+      getZoomFactor: async () => Number(await web.WindowState?.getZoomFactor?.()) || 1,
+    },
+  };
+}
+
+function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targetKind: SessionSummary["kind"]): LocalSessionsBridge {
+  return {
+    list: async () => {
+      const items = await raw?.getAll?.();
+      return normalizeSessionList(items, targetKind);
+    },
+    getSession: async (id) => {
+      const item = await raw?.getSession?.(id, { skipReplay: true });
+      if (!item) return null;
+      const session = await enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw);
+      if (session.messages?.length) return session;
+      const transcript = await raw?.getTranscript?.(id).catch(() => undefined);
+      return transcript ? { ...session, messages: normalizeMessages(transcript) } : session;
+    },
+    getTranscript: async (id) => normalizeMessages(await raw?.getTranscript?.(id).catch(() => [])) ?? [],
+    addFolderToSession: async (id, folder) => {
+      const item = await raw?.addFolderToSession?.(id, folder);
+      return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
+    },
+    getCodeStats: async () => normalizeCodeStats(await raw?.getCodeStats?.().catch(() => null)),
+    getDefaultEffort: async () => normalizeEffort(await raw?.getDefaultEffort?.().catch(() => null)),
+    getDefaultPermissionMode: async (cwd) => String(await raw?.getDefaultPermissionMode?.(cwd).catch(() => "default") ?? "default"),
+    getEffort: async (id) => String(await raw?.getEffort?.(id).catch(() => "medium") ?? "medium"),
+    getGitDiff: async (idOrCwd, args = []) => normalizeGitCommandResult(await raw?.getGitDiff?.(idOrCwd, args)),
+    getGitDiffStats: async (idOrCwd) => normalizeGitCommandResult(await raw?.getGitDiffStats?.(idOrCwd)),
+    getPermissionMode: async (id) => String(await raw?.getPermissionMode?.(id).catch(() => "default") ?? "default"),
+    getSupportedCommands: async () => {
+      const commands = await raw?.getSupportedCommands?.().catch(() => []);
+      return Array.isArray(commands) ? commands.filter((command): command is string => typeof command === "string") : [];
+    },
+    getWorkingTreeStatus: async (idOrCwd) => normalizeGitCommandResult(await raw?.getWorkingTreeStatus?.(idOrCwd)),
+    setEffort: async (id, effort) => {
+      const item = await raw?.setEffort?.(id, effort);
+      return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
+    },
+    setModel: async (id, model) => {
+      const item = await raw?.setModel?.(id, model);
+      return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
+    },
+    setPermissionMode: async (id, mode) => {
+      const item = await raw?.setPermissionMode?.(id, mode);
+      return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
+    },
+    startShellPty: async (sessionId, cols, rows) => normalizeShellPtyStartResult(await raw?.startShellPty?.(sessionId, cols, rows), await raw?.getShellPtyBuffer?.(sessionId).catch(() => "")),
+    stopShellPty: async (sessionId) => {
+      await raw?.stopShellPty?.(sessionId);
+    },
+    writeShellPty: async (sessionId, data) => {
+      await raw?.writeShellPty?.(sessionId, data);
+    },
+    resizeShellPty: async (sessionId, cols, rows) => {
+      await raw?.resizeShellPty?.(sessionId, cols, rows);
+    },
+    getShellPtyBuffer: async (sessionId) => String(await raw?.getShellPtyBuffer?.(sessionId).catch(() => "") ?? ""),
+    onShellPtyEvent: (listener) => {
+      const subscribe = raw?.onEvent ?? raw?.onOnEvent;
+      return subscribe?.((event) => {
+        const normalized = normalizeShellPtyEvent(event);
+        if (normalized) listener(normalized);
+      }) ?? (() => {});
+    },
+    start: async (input) => {
+      const item = await raw?.start?.(toStartPayload(input, targetKind));
+      return enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw);
+    },
+    sendMessage: async (id, text) => {
+      const item = await raw?.sendMessage?.(id, text);
+      return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
+    },
+    create: async (kind) => {
+      const item = await raw?.start?.({ kind, title: kind === "code" ? "General coding session" : "New session" });
+      return enrichSessionWithGitInfo(normalizeSession(item, kind), raw);
+    },
+    archive: async (id) => {
+      await raw?.archive?.(id);
+    },
+    delete: async (id) => {
+      await raw?.delete?.(id);
+    },
+    setFocusedSession: async (id) => {
+      await raw?.setFocusedSession?.(id);
+    },
+    onEvent: (listener) => {
+      const subscribe = raw?.onEvent ?? raw?.onOnEvent;
+      return subscribe?.(listener) ?? (() => {});
+    },
+  };
+}
+
+function createScheduledTasksBridge(raw: RawScheduledTasksBridge | undefined): DesktopBridge["CCDScheduledTasks"] {
+  return {
+    list: async () => normalizeScheduledTasks(await raw?.getAllScheduledTasks?.()),
+    get: async (id) => {
+      const tasks = normalizeScheduledTasks(await raw?.getAllScheduledTasks?.());
+      return tasks.find((task) => task.id === id) ?? null;
+    },
+    create: async (input) => {
+      const task = await raw?.createScheduledTask?.(input);
+      return task ? normalizeScheduledTask(task) : null;
+    },
+    updateStatus: async (id, status) => {
+      await raw?.updateScheduledTaskStatus?.(id, status);
+    },
+    onEvent: (listener) => {
+      const subscribe = raw?.onScheduledTaskEvent ?? raw?.onOnScheduledTaskEvent;
+      return subscribe?.(listener) ?? (() => {});
+    },
+  };
+}
+
+function normalizeSessionList(items: unknown, targetKind: SessionSummary["kind"]): SessionSummary[] {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => normalizeSession(item, targetKind))
+    .filter((session) => !session.isArchived)
+    .sort((left, right) => right.updatedAtMs - left.updatedAtMs);
+}
+
+function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): SessionSummary {
+  const raw = asRecord(item);
+  const original = asRecord(raw._originalSession);
+  const id = stringValue(raw.id) ?? stringValue(raw.sessionId) ?? stringValue(original.sessionId) ?? `session_${Date.now()}`;
+  const cwd = stringValue(raw.cwd)
+    ?? stringValue(raw.originCwd)
+    ?? firstString(raw.folders)
+    ?? firstString(raw.userSelectedFolders)
+    ?? stringValue(original.cwd)
+    ?? firstString(original.folders)
+    ?? firstString(original.userSelectedFolders);
+  const updatedAtMs = timestampValue(raw.updatedAt)
+    ?? timestampValue(raw.lastActivityAt)
+    ?? timestampValue(raw.timestamp)
+    ?? timestampValue(original.lastActivityAt)
+    ?? timestampValue(raw.createdAt)
+    ?? Date.now();
+  const createdAtMs = timestampValue(raw.createdAt) ?? timestampValue(original.createdAt) ?? updatedAtMs;
+  const kind = targetKind === "code" || raw.kind === "code" ? "code" : "epitaxy";
+  const title = stringValue(raw.title)
+    ?? stringValue(raw.worktreeName)
+    ?? firstMessageText(raw.messages)
+    ?? (kind === "code" ? "General coding session" : "New session");
+
+  return {
+    id,
+    title,
+    createdAtMs,
+    updatedAt: relativeLabel(updatedAtMs),
+    updatedAtMs,
+    kind,
+    sessionKind: kind === "code" ? "code" : "cowork",
+    cwd,
+    effort: stringValue(raw.effort) ?? stringValue(original.effort),
+    folders: Array.isArray(raw.folders) ? raw.folders.filter((folder): folder is string => typeof folder === "string") : undefined,
+    model: stringValue(raw.model) ?? stringValue(original.model),
+    permissionMode: stringValue(raw.permissionMode) ?? stringValue(original.permissionMode),
+    repo: repoInfo(raw, cwd),
+    isPinned: Boolean(raw.isStarred),
+    isArchived: Boolean(raw.archived ?? raw.isArchived),
+    isRunning: isRunning(raw),
+    isUnread: Boolean(raw.isUnread),
+    messages: normalizeMessages(raw.messages),
+  };
+}
+
+
+async function enrichSessionWithGitInfo(session: SessionSummary, raw?: RawLocalSessionsBridge): Promise<SessionSummary> {
+  const gitInfo = await raw?.getGitInfo?.(session.id).catch(() => undefined);
+  const git = asRecord(gitInfo);
+  const root = stringValue(git.root);
+  const cwd = stringValue(git.cwd);
+  const branch = stringValue(git.branch);
+  const usableCwd = looksLikePath(cwd) ? cwd : session.cwd;
+  const repoName = basename(root) ?? basename(usableCwd);
+
+  if (!usableCwd && !repoName && !branch) return session;
+
+  return {
+    ...session,
+    cwd: usableCwd,
+    repo: {
+      ...session.repo,
+      name: session.repo?.name ?? repoName,
+      branch: session.repo?.branch ?? branch,
+    },
+  };
+}
+
+function looksLikePath(value?: string): boolean {
+  return Boolean(value && (/^(\/|~\/|[A-Za-z]:[\\/])/.test(value) || value.includes("/")));
+}
+
+function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["kind"]): Record<string, unknown> {
+  const cwd = input.workspace.cwd;
+  const permissionMode = input.permissionMode === "bypass" ? "bypassPermissions" : input.permissionMode ?? "default";
+  return {
+    kind: targetKind,
+    prompt: input.prompt,
+    cwd,
+    effort: input.effort,
+    folders: cwd ? [cwd] : [],
+    model: input.model,
+    userSelectedFolders: cwd ? [cwd] : [],
+    permissionMode,
+    title: input.prompt.trim().split("\n")[0] || (targetKind === "code" ? "General coding session" : "New session"),
+  };
+}
+
+function normalizeMessages(value: unknown): ChatMessage[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.map((message, index) => {
+    const raw = asRecord(message);
+    const author = stringValue(raw.author);
+    const role = raw.role === "assistant" || raw.role === "system"
+      ? raw.role
+      : author === "assistant"
+        ? "assistant"
+        : author === "system"
+          ? "system"
+          : "user";
+    const createdAt = stringValue(raw.createdAt) ?? stringValue(raw.timestamp) ?? new Date().toISOString();
+    return {
+      id: stringValue(raw.id) ?? `msg_${index}`,
+      role,
+      text: messageText(raw),
+      createdAt,
+    };
+  });
+}
+
+function messageText(raw: Record<string, unknown>): string {
+  const direct = stringValue(raw.text) ?? stringValue(raw.content);
+  if (direct) return direct;
+  const items = Array.isArray(raw.items) ? raw.items : [];
+  return items
+    .map((item) => {
+      const record = asRecord(item);
+      const kind = stringValue(record.kind);
+      if (kind === "text" || kind === "thinking" || kind === "error") {
+        return stringValue(record.text) ?? stringValue(record.content);
+      }
+      if (kind === "bash") {
+        const command = stringValue(record.command);
+        const output = stringValue(record.output);
+        return [command ? `$ ${command}` : undefined, output].filter(Boolean).join("\n");
+      }
+      if (kind === "event") return stringValue(record.content);
+      return undefined;
+    })
+    .filter((text): text is string => Boolean(text))
+    .join("\n\n");
+}
+
+
+function normalizeGitCommandResult(value: unknown): GitCommandResult {
+  const raw = asRecord(value);
+  return {
+    ok: raw.ok === true || raw.success === true,
+    success: raw.success === true || raw.ok === true,
+    stdout: stringValue(raw.stdout) ?? "",
+    stderr: stringValue(raw.stderr) ?? "",
+    error: stringValue(raw.error),
+    code: raw.code,
+  };
+}
+
+function normalizeCodeStats(value: unknown): CodeStats | null {
+  if (!value) return null;
+  const raw = asRecord(value);
+  const dailyActivity = Array.isArray(raw.dailyActivity)
+    ? raw.dailyActivity.map((item) => {
+      const entry = asRecord(item);
+      return {
+        date: stringValue(entry.date) ?? new Date().toISOString().slice(0, 10),
+        messageCount: numberValue(entry.messageCount),
+        sessionCount: numberValue(entry.sessionCount),
+        toolCallCount: numberValue(entry.toolCallCount),
+      };
+    })
+    : [];
+  const dailyModelTokens = Array.isArray(raw.dailyModelTokens)
+    ? raw.dailyModelTokens.map((item) => {
+      const entry = asRecord(item);
+      return {
+        date: stringValue(entry.date) ?? new Date().toISOString().slice(0, 10),
+        tokensByModel: numberRecord(entry.tokensByModel),
+      };
+    })
+    : [];
+  const rawModelUsage = asRecord(raw.modelUsage);
+  const modelUsage: CodeStats["modelUsage"] = {};
+  for (const [model, usage] of Object.entries(rawModelUsage)) {
+    const item = asRecord(usage);
+    modelUsage[model] = {
+      cacheCreationInputTokens: numberValue(item.cacheCreationInputTokens),
+      cacheReadInputTokens: numberValue(item.cacheReadInputTokens),
+      inputTokens: numberValue(item.inputTokens),
+      outputTokens: numberValue(item.outputTokens),
+    };
+  }
+  const streaks = asRecord(raw.streaks);
+  return {
+    dailyActivity,
+    dailyModelTokens,
+    modelUsage,
+    peakActivityHour: raw.peakActivityHour === null ? null : numberValue(raw.peakActivityHour),
+    streaks: {
+      currentStreak: numberValue(streaks.currentStreak),
+      longestStreak: numberValue(streaks.longestStreak),
+    },
+  };
+}
+
+function normalizeEffort(value: unknown): "low" | "medium" | "high" | "xhigh" | "max" | null {
+  return value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "max" ? value : null;
+}
+
+function normalizeShellPtyStartResult(value: unknown, bufferValue: unknown): ShellPtyStartResult {
+  const raw = asRecord(value);
+  if (value === true || raw.ok === true || raw.success === true) {
+    return { ok: true, buffered: stringValue(raw.buffered) ?? String(bufferValue ?? "") };
+  }
+  return { ok: false, error: stringValue(raw.error) ?? "Failed to start shell" };
+}
+
+function normalizeShellPtyEvent(event: unknown): ShellPtyEvent | null {
+  const raw = asRecord(event);
+  const sessionId = stringValue(raw.sessionId);
+  const type = stringValue(raw.type);
+  if (!sessionId || !type) return null;
+  if (type === "shell_pty_data" || type === "pty-data") {
+    return { type: "shell_pty_data", sessionId, data: stringValue(raw.data) ?? "" };
+  }
+  if (type === "shell_pty_close" || type === "pty-exit") {
+    return { type: "shell_pty_close", sessionId, code: raw.code, signal: raw.signal };
+  }
+  return null;
+}
+
+function normalizeScheduledTasks(items: unknown): ScheduledTaskSummary[] {
+  return (Array.isArray(items) ? items : []).map(normalizeScheduledTask);
+}
+
+function normalizeScheduledTask(item: unknown): ScheduledTaskSummary {
+  const raw = asRecord(item);
+  const id = stringValue(raw.id) ?? stringValue(raw.name) ?? `task_${Date.now()}`;
+  const enabled = raw.enabled === true || raw.status === "enabled";
+  return {
+    id,
+    title: stringValue(raw.title) ?? stringValue(raw.name) ?? id,
+    schedule: stringValue(raw.schedule) ?? stringValue(raw.cronExpression) ?? stringValue(raw.cron_expression) ?? "Manual",
+    enabled,
+    description: stringValue(raw.description),
+    prompt: stringValue(raw.prompt),
+    cronExpression: stringValue(raw.cronExpression) ?? stringValue(raw.cron_expression),
+    cwd: stringValue(raw.cwd),
+    nextRunAt: stringValue(raw.nextRunAt) ?? stringValue(raw.next_run_at),
+    fireAt: stringValue(raw.fireAt),
+    lastRunAt: stringValue(raw.lastRunAt) ?? stringValue(raw.last_run_at),
+    useWorktree: Boolean(raw.useWorktree),
+    sourceBranch: stringValue(raw.sourceBranch),
+    permissionMode: raw.permissionMode as ScheduledTaskSummary["permissionMode"],
+    model: stringValue(raw.model),
+    approvedPermissions: Array.isArray(raw.approvedPermissions) ? raw.approvedPermissions as Array<{ toolName: string }> : undefined,
+    userSelectedFolders: Array.isArray(raw.userSelectedFolders) ? raw.userSelectedFolders.filter((path): path is string => typeof path === "string") : undefined,
+  };
+}
+
+async function getWorkspaceContext(web: RawClaudeWebBridge): Promise<WorkspaceContext> {
+  const sessions = [
+    ...normalizeSessionList(await web.LocalAgentModeSessions?.getAll?.().catch(() => []), "code"),
+    ...normalizeSessionList(await web.LocalSessions?.getAll?.().catch(() => []), "epitaxy"),
+  ];
+  const current = sessions.find((session) => session.cwd) ?? sessions[0];
+  return current ? {
+    mode: "local",
+    projectName: current.repo?.name ?? basename(current.cwd) ?? emptyWorkspace.projectName,
+    branchName: current.repo?.branch ?? emptyWorkspace.branchName,
+    hasWorktree: Boolean(current.repo?.branch),
+    cwd: current.cwd,
+  } : emptyWorkspace;
+}
+
+function normalizePreferences(value: unknown): DesktopPreferences {
+  return asRecord(value) as DesktopPreferences;
+}
+
+function repoInfo(raw: Record<string, unknown>, cwd?: string): SessionSummary["repo"] {
+  const repo = asRecord(raw.repoInfo) ?? asRecord(raw.repo);
+  const name = stringValue(repo?.name) ?? basename(cwd);
+  const owner = stringValue(asRecord(repo?.owner)?.login) ?? stringValue(repo?.owner);
+  const branch = stringValue(repo?.branch) ?? stringValue(raw.branch) ?? stringValue(raw.sourceBranch);
+  return {
+    name: owner && name ? `${owner}/${name}` : name,
+    branch,
+  };
+}
+
+function isRunning(raw: Record<string, unknown>): boolean {
+  if (typeof raw.isRunning === "boolean") return raw.isRunning;
+  if (raw.stopped === true) return false;
+  const status = stringValue(raw.sessionStatus) ?? stringValue(raw.visibility);
+  return status === "running" || status === "pending" || status === "requires_action";
+}
+
+function firstMessageText(value: unknown): string | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const first = asRecord(value[0]);
+  return stringValue(first?.text) ?? stringValue(first?.content);
+}
+
+function firstString(value: unknown): string | undefined {
+  return Array.isArray(value) ? value.find((item): item is string => typeof item === "string" && item.length > 0) : undefined;
+}
+
+function timestampValue(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function relativeLabel(timestamp: number): string {
+  const delta = Date.now() - timestamp;
+  if (delta < 60_000) return "刚刚";
+  if (delta < 86_400_000) return "今天";
+  if (delta < 172_800_000) return "昨天";
+  return new Date(timestamp).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+}
+
+function basename(value?: string): string | undefined {
+  if (!value) return undefined;
+  return value.split(/[\\/]/).filter(Boolean).at(-1);
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function numberRecord(value: unknown): Record<string, number> {
+  const raw = asRecord(value);
+  const result: Record<string, number> = {};
+  for (const [key, item] of Object.entries(raw)) result[key] = numberValue(item);
+  return result;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+}

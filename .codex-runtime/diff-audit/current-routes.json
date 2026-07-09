@@ -1,0 +1,302 @@
+[
+  {
+    "id": "cowork-home",
+    "path": "/task/new",
+    "component": "EpitaxyHome",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "epitaxy-home",
+    "path": "/epitaxy",
+    "component": "EpitaxyHome",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "epitaxy-session",
+    "path": "/epitaxy/:sessionId",
+    "component": "EpitaxySessionPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "epitaxy-apps",
+    "path": "/epitaxy/apps",
+    "component": "EpitaxyNotFoundPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "epitaxy-dev",
+    "path": "/epitaxy/dev",
+    "component": "EpitaxyNotFoundPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "epitaxy-tasks-splat",
+    "path": "/epitaxy/tasks/*",
+    "component": "EpitaxyPlainNotFoundPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "epitaxy-pull-requests-splat",
+    "path": "/epitaxy/pull-requests/*",
+    "component": "EpitaxyPlainNotFoundPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "epitaxy-scheduled-new",
+    "path": "/epitaxy/scheduled/new",
+    "component": "ScheduledTaskEditor",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "epitaxy-scheduled-detail",
+    "path": "/epitaxy/scheduled/:taskId",
+    "component": "ScheduledTaskDetail",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "epitaxy-scheduled",
+    "path": "/epitaxy/scheduled",
+    "component": "ScheduledTasks",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "epitaxy-dispatch",
+    "path": "/epitaxy/dispatch",
+    "component": "DispatchPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "epitaxy-tasks",
+    "path": "/epitaxy/tasks",
+    "component": "TasksPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "epitaxy-pull-requests",
+    "path": "/epitaxy/pull-requests",
+    "component": "EpitaxyNotFoundPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "recents",
+    "path": "/recents",
+    "component": "RecentsPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "projects-create",
+    "path": "/projects/create",
+    "component": "ProjectCreatePage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "projects-no-permission",
+    "path": "/projects/no-permission",
+    "component": "ProjectsNoPermissionPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "project-detail",
+    "path": "/project/:uuid",
+    "component": "BlankProjectPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "projects",
+    "path": "/projects",
+    "component": "ProjectsPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "artifacts",
+    "path": "/artifacts",
+    "component": "ArtifactsComingSoonPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "space",
+    "path": "/space",
+    "component": "SpaceIndexPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "space-detail",
+    "path": "/space/:spaceId",
+    "component": "SpaceProjectNotFoundPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "knowledge",
+    "path": "/knowledge",
+    "component": "DFramePageNotFoundPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "meeting-assistant",
+    "path": "/meeting-assistant",
+    "component": "PageNotFound",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "analytics",
+    "path": "/analytics",
+    "component": "AnalyticsPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "code-home",
+    "path": "/code",
+    "component": "CodeWebPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "customize",
+    "path": "/customize",
+    "component": "CustomizePage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "settings",
+    "path": "/settings",
+    "component": "SettingsPage",
+    "file": "src/app/routes.tsx"
+  },
+  {
+    "id": "task-new",
+    "path": "/task/new",
+    "component": "BlankProjectPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "ask-your-org",
+    "path": "/ask-your-org",
+    "component": "RedirectPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "security-root",
+    "path": "/security",
+    "component": "RedirectPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "crawl-root",
+    "path": "/crawl",
+    "component": "RedirectPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "oauth-code-success",
+    "path": "/oauth/code/success",
+    "component": "RedirectPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "claude-code-desktop",
+    "path": "/claude-code-desktop",
+    "component": "RedirectPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "org-discovery",
+    "path": "/org-discovery",
+    "component": "RedirectPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "no-organization",
+    "path": "/no-organization",
+    "component": "NoOrganizationPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "downloads",
+    "path": "/downloads",
+    "component": "PageNotFound",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "download",
+    "path": "/download",
+    "component": "DownloadPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "desktop-tutorial",
+    "path": "/desktop/tutorial",
+    "component": "DesktopTutorialPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "chrome-installed",
+    "path": "/chrome/installed",
+    "component": "ChromeInstalledPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "chrome",
+    "path": "/chrome",
+    "component": "ChromePage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "claude-code-install-redirect",
+    "path": "/claude-code-install",
+    "component": "RedirectPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "claude-code-install",
+    "path": "/claude-code/install",
+    "component": "ClaudeCodeInstallPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "claude-code-onboard",
+    "path": "/claude-code/onboard/:shortCode",
+    "component": "ClaudeCodeOnboardNotFoundPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "directory",
+    "path": "/directory",
+    "component": "DirectoryPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "restricted-submit",
+    "path": "/restricted/submit",
+    "component": "ServiceStatusPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "restricted",
+    "path": "/restricted",
+    "component": "ServiceStatusPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "maintenance",
+    "path": "/maintenance",
+    "component": "ServiceStatusPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "unauthorized",
+    "path": "/unauthorized",
+    "component": "UnauthorizedPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "reported",
+    "path": "/reported",
+    "component": "ReportedPage",
+    "file": "src/app/publicRoutes.tsx"
+  },
+  {
+    "id": "oauth-device",
+    "path": "/oauth/device",
+    "component": "OAuthDevicePage",
+    "file": "src/app/publicRoutes.tsx"
+  }
+]

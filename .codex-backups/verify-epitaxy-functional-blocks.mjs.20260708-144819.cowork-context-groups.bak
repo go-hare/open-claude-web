@@ -1,0 +1,285 @@
+#!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const workspaceRoot = path.resolve(root, "..");
+
+const files = {
+  tile: path.join(root, "src/features/epitaxy/EpitaxySessionTile.tsx"),
+  components: path.join(root, "src/features/epitaxy/OfficialEpitaxyComponents.tsx"),
+  bridgeTypes: path.join(root, "src/adapters/desktopBridge/types.ts"),
+  bridgeAdapter: path.join(root, "src/adapters/desktopBridge/officialBridgeAdapter.ts"),
+  fakeBridge: path.join(root, "src/adapters/desktopBridge/fakeDesktopBridge.ts"),
+  coworkActivityPanel: path.join(root, "src/features/epitaxy/cowork/CoworkSessionActivityPanel.tsx"),
+  coworkActivityContent: path.join(root, "src/features/epitaxy/cowork/CoworkActivityContent.tsx"),
+  coworkActivitySection: path.join(root, "src/features/epitaxy/cowork/CoworkActivitySection.tsx"),
+  coworkFileExplorer: path.join(root, "src/features/epitaxy/cowork/CoworkFileExplorerModal.tsx"),
+  coworkInstructionEditor: path.join(root, "src/features/epitaxy/cowork/CoworkInstructionEditorModal.tsx"),
+  coworkProgress: path.join(root, "src/features/epitaxy/cowork/CoworkProgressSection.tsx"),
+  coworkNewTask: path.join(root, "src/features/epitaxy/cowork/CoworkNewTaskPage.tsx"),
+  coworkUploadedFiles: path.join(root, "src/features/epitaxy/cowork/coworkUploadedFiles.ts"),
+  desktopStore: path.join(workspaceRoot, "open-claude-desktop/electron/main/services/localSessions/localSessionStore.ts"),
+  desktopRunner: path.join(workspaceRoot, "open-claude-desktop/electron/main/services/localSessions/claudeCliRunner.ts"),
+  desktopHandlers: path.join(workspaceRoot, "open-claude-desktop/electron/main/ipc/localSessionsHandlers.ts"),
+  desktopFileSystemHandlers: path.join(workspaceRoot, "open-claude-desktop/electron/main/ipc/fileSystemHandlers.ts"),
+  desktopPermissionVerifier: path.join(workspaceRoot, "open-claude-desktop/scripts/verify-claude-permission-protocol.mjs"),
+  runtimeVerifier: path.join(root, "scripts/verify-epitaxy-runtime.mjs"),
+};
+
+function read(file) {
+  return fs.readFileSync(file, "utf8");
+}
+
+const source = Object.fromEntries(Object.entries(files).map(([key, file]) => [key, read(file)]));
+
+const checks = [
+  {
+    group: "小细节按钮",
+    name: "assistant message forwards fork/rewind into OfficialMessageActions",
+    test: () => /export function OfficialAssistantMessage\([\s\S]*onFork[\s\S]*onRewind/.test(source.components)
+      && /OfficialMessageActions copyText=\{copyText\} onFork=\{onFork\}[\s\S]*onRewind=\{onRewind\}/.test(source.components),
+  },
+  {
+    group: "小细节按钮",
+    name: "assistant transcript entries wire fork/rewind callbacks",
+    test: () => /function OfficialAssistantEntryMessage[\s\S]*actions\.bridge\.forkSession[\s\S]*actions\.onNavigate/.test(source.tile)
+      && /function OfficialAssistantEntryMessage[\s\S]*actions\.bridge\.rewind[\s\S]*actions\.reload/.test(source.tile),
+  },
+  {
+    group: "小细节按钮",
+    name: "assistant thumbs feedback is bridged to submitTranscriptFeedback",
+    test: () => /submitTranscriptFeedback[\s\S]*message_rating/.test(source.tile)
+      && /submitTranscriptFeedback\?:/.test(source.bridgeTypes)
+      && /raw\?\.submitTranscriptFeedback/.test(source.bridgeAdapter),
+  },
+  {
+    group: "底部输入框",
+    name: "composer uses TipTap and supports send, stop, Enter submit, Shift+Enter newline, bash escape",
+    test: () => /function ExistingSessionComposer/.test(source.tile)
+      && /useEditor\(/.test(source.tile)
+      && /<EditorContent/.test(source.tile)
+      && /const canStop = isResponding/.test(source.tile)
+      && /Stop response/.test(source.tile)
+      && /event\.key === "Enter" && !event\.shiftKey/.test(source.tile)
+      && /event\.key === "Escape" && isBashMode/.test(source.tile),
+  },
+  {
+    group: "底部输入框",
+    name: "composer exposes mode/add/workspace/model controls",
+    test: () => /ariaLabel="Permission mode"/.test(source.tile)
+      && /ariaLabel="Add"/.test(source.tile)
+      && /ariaLabel="Workspace"/.test(source.tile)
+      && /ariaLabel="Model"/.test(source.tile),
+  },
+  {
+    group: "协作路由",
+    name: "Cowork start uses official message/sessionId payload shape",
+    test: () => /message\?: string;/.test(source.bridgeTypes)
+      && /sessionId\?: string;/.test(source.bridgeTypes)
+      && /const message = input\.message \?\? input\.prompt/.test(source.bridgeAdapter)
+      && /sessionId: input\.sessionId/.test(source.bridgeAdapter)
+      && /const message = input\.message \?\? input\.prompt/.test(source.fakeBridge)
+      && /id: input\.sessionId \?\?/.test(source.fakeBridge)
+      && /const sessionId = createCoworkSessionId\(\)/.test(source.coworkNewTask)
+      && /message,\s*\n\s*messageUuid/.test(source.coworkNewTask)
+      && /sessionId,/.test(source.coworkNewTask)
+      && /sessionId\?: string;/.test(source.desktopStore)
+      && /const requestedId = typeof input\.sessionId === "string"/.test(source.desktopStore),
+  },
+  {
+    group: "协作活动面板",
+    name: "Cowork Progress follows official completed-todos auto-collapse behavior",
+    test: () => /const allTodosCompleted = useMemo/.test(source.coworkActivityPanel)
+      && /previousAllTodosCompletedRef/.test(source.coworkActivityPanel)
+      && /setProgressOpen\(false\)/.test(source.coworkActivityPanel)
+      && /setProgressOpen\(true\)/.test(source.coworkActivityPanel)
+      && /headerLeftAction/.test(source.coworkActivitySection)
+      && /\{todos\.length\} of \{todos\.length\}/.test(source.coworkProgress),
+  },
+  {
+    group: "协作活动面板",
+    name: "Cowork Working folder exposes official Go to folder action",
+    test: () => /showInFolder\?:/.test(source.bridgeTypes)
+      && /openLocalFile\?:/.test(source.bridgeTypes)
+      && /showInFolder: async/.test(source.bridgeAdapter)
+      && /openLocalFile: async/.test(source.bridgeAdapter)
+      && /showInFolder: async \(\) => true/.test(source.fakeBridge)
+      && /aria-label="Go to folder"/.test(source.coworkActivityPanel)
+      && /desktopBridge\.FileSystem\.showInFolder/.test(source.coworkActivityPanel),
+  },
+  {
+    group: "协作活动面板",
+    name: "Cowork Working folder exposes official Browse files explorer",
+    test: () => /listFilesInFolder\?:/.test(source.bridgeTypes)
+      && /LocalFileEntry/.test(source.bridgeTypes)
+      && /listFilesInFolder: async/.test(source.bridgeAdapter)
+      && /normalizeLocalFileEntries/.test(source.bridgeAdapter)
+      && /listFilesInFolder: async/.test(source.fakeBridge)
+      && /aria-label="Browse files"/.test(source.coworkFileExplorer)
+      && /title="Browse files"/.test(source.coworkFileExplorer)
+      && /Select a file to preview it\./.test(source.coworkFileExplorer)
+      && /CoworkBrowseFilesButton/.test(source.coworkActivityPanel)
+      && /listDirectoryEntries/.test(source.desktopFileSystemHandlers)
+      && /officialSignature/.test(source.desktopFileSystemHandlers),
+  },
+  {
+    group: "协作活动面板",
+    name: "Cowork Working folder exposes official CLAUDE.md instructions editor",
+    test: () => /readLocalFile\?:/.test(source.bridgeTypes)
+      && /writeLocalFile\?:/.test(source.bridgeTypes)
+      && /readLocalFile: async/.test(source.bridgeAdapter)
+      && /writeLocalFile: async/.test(source.bridgeAdapter)
+      && /readLocalFile: async/.test(source.fakeBridge)
+      && /writeLocalFile: async/.test(source.fakeBridge)
+      && /Instructions <span className="text-text-500">· CLAUDE\.md<\/span>/.test(source.coworkActivityContent)
+      && /CoworkInstructionEditorModal/.test(source.coworkActivityContent)
+      && /title="Folder instructions"/.test(source.coworkInstructionEditor)
+      && /Use this to give Claude instructions for working in this folder\./.test(source.coworkInstructionEditor)
+      && /placeholder=\{instructionsPlaceholder\}/.test(source.coworkInstructionEditor)
+      && /writeLocalFile\?\.\(sessionId, encodeURIComponent\(memoryFilePath\), content\)/.test(source.coworkInstructionEditor)
+      && /readLocalFile\?\.\(sessionId, encodeURIComponent\(memoryFilePath\)\)/.test(source.coworkInstructionEditor),
+  },
+  {
+    group: "协作对话",
+    name: "Cowork selected files use official uploaded_files file_uuid shape",
+    test: () => /createCoworkUploadedFile/.test(source.coworkUploadedFiles)
+      && /fileUuid: createMessageUuid\(\)/.test(source.coworkUploadedFiles)
+      && /<file_uuid>\$\{uploadedFile\.fileUuid\}<\/file_uuid>/.test(source.coworkUploadedFiles)
+      && /coworkUploadedFilePaths/.test(source.coworkNewTask)
+      && /coworkUploadedFilePaths/.test(source.tile),
+  },
+  {
+    group: "文件预览",
+    name: "tool file paths open file pane instead of preview pane",
+    test: () => /type OfficialFileViewTarget/.test(source.tile)
+      && /case "file":\n\s*return <OfficialFilePane/.test(source.tile)
+      && /actions\?\.openFile\(\{ path/.test(source.tile)
+      && !/ToolPathButton[\s\S]*actions\?\.openPreview\(\{ path/.test(source.tile),
+  },
+  {
+    group: "文件预览",
+    name: "file pane supports text/image/markdown/copy/open-in-editor actions",
+    test: () => /function OfficialFilePane/.test(source.tile)
+      && /readSessionImageAsDataUrl/.test(source.tile)
+      && /isMarkdownPreviewPath/.test(source.tile)
+      && /Copy contents/.test(source.tile)
+      && /Open in editor/.test(source.tile),
+  },
+  {
+    group: "权限审批",
+    name: "approval card exposes deny, always allow, allow once and shortcuts",
+    test: () => /Always allow/.test(source.tile)
+      && /Allow once/.test(source.tile)
+      && /decision: "always" \| "deny" \| "once"/.test(source.tile)
+      && /event\.key === "Escape"[\s\S]*decide\("deny"\)/.test(source.tile)
+      && /event\.shiftKey \? "always" : "once"/.test(source.tile),
+  },
+  {
+    group: "权限审批",
+    name: "desktop handler no longer returns unconditional fake success",
+    test: () => !/respondToToolPermission: async \(\) => true/.test(source.desktopHandlers)
+      && /sessionRunner\.respondToToolPermission/.test(source.desktopHandlers)
+      && /tool_permission_response_failed/.test(source.desktopHandlers),
+  },
+  {
+    group: "权限审批",
+    name: "desktop runner uses official stdio control_request/control_response protocol",
+    test: () => /"--input-format",\s*"stream-json"/.test(source.desktopRunner)
+      && /"--permission-prompt-tool",\s*"stdio"/.test(source.desktopRunner)
+      && /type: "control_response"/.test(source.desktopRunner)
+      && /type !== "control_request"/.test(source.desktopRunner)
+      && /setPendingToolPermission/.test(source.desktopRunner)
+      && /blocks denied Write/.test(source.desktopPermissionVerifier),
+  },
+  {
+    group: "权限审批",
+    name: "web keeps failed permission responses visible",
+    test: () => /toolPermissionResponseFailed/.test(source.tile)
+      && /setResolveError/.test(source.tile)
+      && /respondToToolPermission\(request\.requestId, decision, request\.input\)/.test(source.tile),
+  },
+  {
+    group: "对话流渲染",
+    name: "stream finalization does not hard reload transcript",
+    test: () => /const finalize = \(\) => \{[\s\S]*clearStreamState\(true\);[\s\S]*\};/.test(source.tile),
+  },
+  {
+    group: "对话流渲染",
+    name: "transcript parser filters raw stream events and merges stream snapshot",
+    test: () => /rawType === "stream_event"/.test(source.tile)
+      && /parseOfficialTranscriptEntries/.test(source.tile)
+      && /mergeOfficialStreamSnapshot/.test(source.tile),
+  },
+  {
+    group: "运行时验证",
+    name: "headless runtime verifier covers controls, composer, file pane, approval and stream",
+    test: () => /copy\/rewind\/fork\/thumb buttons exist in real DOM/.test(source.runtimeVerifier)
+      && /official TipTap composer and control buttons exist in real DOM/.test(source.runtimeVerifier)
+      && /Cowork new task page renders official composer/.test(source.runtimeVerifier)
+      && /Cowork UI submit lands on \/local_sessions/.test(source.runtimeVerifier)
+      && /Cowork follow-up reply stays inside \/local_sessions/.test(source.runtimeVerifier)
+      && /Cowork attachment payload matches official uploaded_files shape/.test(source.runtimeVerifier)
+      && /Cowork legacy \/epitaxy\/local_\* redirects to \/local_sessions/.test(source.runtimeVerifier)
+      && /Cowork session renders Reply composer and long Add label/.test(source.runtimeVerifier)
+      && /Cowork working folder exposes official Go to folder action/.test(source.runtimeVerifier)
+      && /Cowork working folder exposes official Browse files action/.test(source.runtimeVerifier)
+      && /Cowork Browse files modal lists local files/.test(source.runtimeVerifier)
+      && /Cowork folder instructions editor opens official CLAUDE\.md modal/.test(source.runtimeVerifier)
+      && /Cowork folder instructions editor saves through bridge/.test(source.runtimeVerifier)
+      && /completed Cowork todos auto-collapse with official count/.test(source.runtimeVerifier)
+      && /Shift\+Enter keeps newline/.test(source.runtimeVerifier)
+      && /file pane opens and reads session file/.test(source.runtimeVerifier)
+      && /permission request card appears from bridge event/.test(source.runtimeVerifier)
+      && /stream delta is rendered through smoother/.test(source.runtimeVerifier),
+  },
+  {
+    group: "运行时验证",
+    name: "fake bridge exposes event hooks for permission and stream runtime probes",
+    test: () => /export function emitFakeLocalSessionEvent/.test(source.fakeBridge)
+      && /export function emitFakeToolPermissionRequest/.test(source.fakeBridge)
+      && /onEvent: \(listener\)/.test(source.fakeBridge)
+      && /onToolPermissionRequest: \(listener\)/.test(source.fakeBridge),
+  },
+];
+
+const warnings = [
+  {
+    group: "底部输入框",
+    name: "composer is not backed by TipTap EditorContent",
+    test: () => /<textarea/.test(source.tile) || !/<EditorContent/.test(source.tile) || !/useEditor\(/.test(source.tile),
+  },
+  {
+    group: "权限审批",
+    name: "current CLI runner cannot truly complete permission response protocol yet",
+    test: () => /permission_response_protocol_unimplemented/.test(source.desktopRunner)
+      || !/"--permission-prompt-tool",\s*"stdio"/.test(source.desktopRunner),
+  },
+  {
+    group: "依赖基线",
+    name: "web React/react-intl versions still differ from official app baseline",
+    test: () => {
+      const pkg = JSON.parse(read(path.join(root, "package.json")));
+      return pkg.dependencies?.react !== "^18.3.1" || pkg.dependencies?.["react-intl"] !== "^6.7.2";
+    },
+  },
+];
+
+let failures = 0;
+for (const check of checks) {
+  const ok = Boolean(check.test());
+  if (!ok) failures += 1;
+  console.log(`${ok ? "PASS" : "FAIL"} [${check.group}] ${check.name}`);
+}
+
+for (const warning of warnings) {
+  if (warning.test()) console.log(`WARN [${warning.group}] ${warning.name}`);
+}
+
+if (failures > 0) {
+  console.error(`\n${failures} functional block verification check(s) failed.`);
+  process.exit(1);
+}
+
+console.log("\nFunctional block verification checks passed with warnings above if any.");

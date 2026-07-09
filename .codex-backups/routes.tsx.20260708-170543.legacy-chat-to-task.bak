@@ -1,0 +1,367 @@
+import type { ComponentType } from "react";
+import { AnalyticsPage } from "../features/analytics/AnalyticsPage";
+import { CodeWebPage } from "../features/codeWeb/CodeWebPage";
+import { CustomizePage } from "../features/customize/CustomizePage";
+import { DispatchPage } from "../features/dispatch/DispatchPage";
+import { EpitaxyHome } from "../features/epitaxy/EpitaxyHome";
+import { EpitaxyNotFoundPage } from "../features/epitaxy/EpitaxyNotFoundPage";
+import { EpitaxyPlainNotFoundPage } from "../features/epitaxy/EpitaxyPlainNotFoundPage";
+import { EpitaxySessionPage } from "../features/epitaxy/EpitaxySessionPage";
+import { ScheduledTaskDetail } from "../features/scheduled/ScheduledTaskDetail";
+import { ScheduledTaskEditor } from "../features/scheduled/ScheduledTaskEditor";
+import { ScheduledTasks } from "../features/scheduled/ScheduledTasks";
+import { publicRoutes } from "./publicRoutes";
+import { SettingsPage } from "../features/settings/SettingsPage";
+import { PageNotFound } from "../features/shared/PageNotFound";
+import { TasksPage } from "../features/tasks/TasksPage";
+import {
+  ArtifactsComingSoonPage,
+  BlankProjectPage,
+  DFramePageNotFoundPage,
+  ProjectCreatePage,
+  ProjectsNoPermissionPage,
+  ProjectsPage,
+  RecentsPage,
+  SpaceIndexPage,
+  SpaceProjectNotFoundPage,
+} from "../features/workspace/WorkspacePages";
+
+export type RouteKind = "epitaxy" | "code" | "customize" | "settings";
+
+export type RouteViewProps = {
+  route: AppRoute;
+  onNavigate: (path: string) => void;
+};
+
+export type AppRoute = {
+  id: string;
+  path: string;
+  title: string;
+  navKey: string;
+  kind: RouteKind;
+  frame?: "dframe" | "standalone";
+  sourceChunk: string;
+  Component: ComponentType<RouteViewProps>;
+  match?: (pathname: string) => boolean;
+};
+
+const startsWithPath = (pathname: string, prefix: string) => {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+};
+
+const epitaxyReservedSessionSegments = new Set([
+  "agents",
+  "apps",
+  "dev",
+  "dispatch",
+  "pull-requests",
+  "remote-agents",
+  "scheduled",
+  "tasks",
+]);
+
+const isReservedEpitaxySessionPath = (pathname: string) => {
+  if (!pathname.startsWith("/epitaxy/")) return false;
+  const segment = pathname.split("/")[2] ?? "";
+  return epitaxyReservedSessionSegments.has(segment);
+};
+
+export const routes: AppRoute[] = [
+  {
+    id: "cowork-home",
+    path: "/task/new",
+    title: "新任务",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js",
+    Component: EpitaxyHome,
+    match: (pathname) => pathname === "/task/new",
+  },
+  {
+    id: "epitaxy-home",
+    path: "/epitaxy",
+    title: "新会话",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "cf52a4cc1-Cp3wVf85.js + c11959232-h_zsw3wI.js",
+    Component: EpitaxyHome,
+    match: (pathname) => pathname === "/" || pathname === "/epitaxy",
+  },
+
+  {
+    id: "epitaxy-session",
+    path: "/epitaxy/:sessionId",
+    title: "本地会话",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "cf52a4cc1-Cp3wVf85.js + c11959232-h_zsw3wI.js",
+    Component: EpitaxySessionPage,
+    match: (pathname) => pathname.startsWith("/epitaxy/") && !isReservedEpitaxySessionPath(pathname),
+  },
+  {
+    id: "cowork-session",
+    path: "/local_sessions/:sessionId",
+    title: "本地任务",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js xos/bos local_sessions/$sessionId",
+    Component: EpitaxySessionPage,
+    match: (pathname) => pathname.startsWith("/local_sessions/"),
+  },
+  {
+    id: "scheduled-task-new",
+    path: "/scheduled-task/new",
+    title: "新建定时任务",
+    navKey: "scheduled",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Nds scheduled-task canonical + local editor",
+    Component: ScheduledTaskEditor,
+  },
+  {
+    id: "scheduled-task-detail",
+    path: "/scheduled-task/:taskId",
+    title: "定时任务详情",
+    navKey: "scheduled",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Nds scheduled-task/$id canonical",
+    Component: ScheduledTaskDetail,
+    match: (pathname) => startsWithPath(pathname, "/scheduled-task") && pathname !== "/scheduled-task" && pathname !== "/scheduled-task/new",
+  },
+  {
+    id: "scheduled-task",
+    path: "/scheduled-task",
+    title: "定时任务",
+    navKey: "scheduled",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Nds scheduled-task canonical",
+    Component: ScheduledTasks,
+  },
+  {
+    id: "epitaxy-apps",
+    path: "/epitaxy/apps",
+    title: "应用",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "cf52a4cc1-Cp3wVf85.js + c705e2e19-CdkFb_TH.js",
+    Component: EpitaxyNotFoundPage,
+    match: (pathname) => startsWithPath(pathname, "/epitaxy/apps"),
+  },
+  {
+    id: "epitaxy-dev",
+    path: "/epitaxy/dev",
+    title: "调试",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "cf52a4cc1-Cp3wVf85.js + c705e2e19-CdkFb_TH.js",
+    Component: EpitaxyNotFoundPage,
+    match: (pathname) => startsWithPath(pathname, "/epitaxy/dev"),
+  },
+  {
+    id: "epitaxy-agents",
+    path: "/epitaxy/agents",
+    title: "Agents",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Mje reserved epitaxy segments",
+    Component: EpitaxyNotFoundPage,
+    match: (pathname) => startsWithPath(pathname, "/epitaxy/agents"),
+  },
+  {
+    id: "epitaxy-remote-agents",
+    path: "/epitaxy/remote-agents",
+    title: "Remote agents",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Mje reserved epitaxy segments",
+    Component: EpitaxyNotFoundPage,
+    match: (pathname) => startsWithPath(pathname, "/epitaxy/remote-agents"),
+  },
+  {
+    id: "epitaxy-tasks-splat",
+    path: "/epitaxy/tasks/*",
+    title: "Not Found",
+    navKey: "tasks",
+    kind: "epitaxy",
+    sourceChunk: "main router fallback",
+    Component: EpitaxyPlainNotFoundPage,
+    match: (pathname) => pathname.startsWith("/epitaxy/tasks/"),
+  },
+  {
+    id: "epitaxy-pull-requests-splat",
+    path: "/epitaxy/pull-requests/*",
+    title: "Not Found",
+    navKey: "tasks",
+    kind: "epitaxy",
+    sourceChunk: "main router fallback",
+    Component: EpitaxyPlainNotFoundPage,
+    match: (pathname) => pathname.startsWith("/epitaxy/pull-requests/"),
+  },
+  {
+    id: "epitaxy-scheduled-new",
+    path: "/epitaxy/scheduled/new",
+    title: "新建定时任务",
+    navKey: "scheduled",
+    kind: "epitaxy",
+    sourceChunk: "cf52a4cc1-Cp3wVf85.js + c705e2e19-CdkFb_TH.js",
+    Component: ScheduledTaskEditor,
+  },
+  {
+    id: "epitaxy-scheduled-detail",
+    path: "/epitaxy/scheduled/:taskId",
+    title: "定时任务详情",
+    navKey: "scheduled",
+    kind: "epitaxy",
+    sourceChunk: "cf52a4cc1-Cp3wVf85.js + c705e2e19-CdkFb_TH.js",
+    Component: ScheduledTaskDetail,
+    match: (pathname) => startsWithPath(pathname, "/epitaxy/scheduled") && pathname !== "/epitaxy/scheduled" && pathname !== "/epitaxy/scheduled/new",
+  },
+  {
+    id: "epitaxy-scheduled",
+    path: "/epitaxy/scheduled",
+    title: "定时任务",
+    navKey: "scheduled",
+    kind: "epitaxy",
+    sourceChunk: "cf52a4cc1-Cp3wVf85.js + c705e2e19-CdkFb_TH.js",
+    Component: ScheduledTasks,
+  },
+  {
+    id: "epitaxy-dispatch",
+    path: "/epitaxy/dispatch",
+    title: "协作调度",
+    navKey: "dispatch",
+    kind: "epitaxy",
+    sourceChunk: "cf52a4cc1-Cp3wVf85.js + c705e2e19-CdkFb_TH.js",
+    Component: DispatchPage,
+  },
+  {
+    id: "epitaxy-dispatch-splat",
+    path: "/epitaxy/dispatch/*",
+    title: "Not Found",
+    navKey: "dispatch",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Mje reserved epitaxy segments",
+    Component: EpitaxyPlainNotFoundPage,
+    match: (pathname) => startsWithPath(pathname, "/epitaxy/dispatch") && pathname !== "/epitaxy/dispatch",
+  },
+  {
+    id: "epitaxy-tasks",
+    path: "/epitaxy/tasks",
+    title: "任务",
+    navKey: "tasks",
+    kind: "epitaxy",
+    sourceChunk: "cf52a4cc1-Cp3wVf85.js + c5da08b62-CJhbL6NF.js",
+    Component: TasksPage,
+  },
+  {
+    id: "epitaxy-pull-requests",
+    path: "/epitaxy/pull-requests",
+    title: "Pull requests",
+    navKey: "tasks",
+    kind: "epitaxy",
+    sourceChunk: "cf52a4cc1-Cp3wVf85.js + c5da08b62-CJhbL6NF.js",
+    Component: EpitaxyNotFoundPage,
+  },
+  {
+    id: "recents",
+    path: "/recents",
+    title: "Chats",
+    navKey: "recents",
+    kind: "epitaxy",
+    sourceChunk: "c1b9abf13-BWGqUBhA.js",
+    Component: RecentsPage,
+  },
+  {
+    id: "projects-create",
+    path: "/projects/create",
+    title: "Create a project",
+    navKey: "projects",
+    kind: "epitaxy",
+    sourceChunk: "c1b9abf13-BWGqUBhA.js + index-BELzQL5P.js",
+    Component: ProjectCreatePage,
+  },
+  {
+    id: "projects-no-permission",
+    path: "/projects/no-permission",
+    title: "Project access",
+    navKey: "projects",
+    kind: "epitaxy",
+    sourceChunk: "c1b9abf13-BWGqUBhA.js",
+    Component: ProjectsNoPermissionPage,
+  },
+  {
+    id: "project-detail",
+    path: "/project/:uuid",
+    title: "Project",
+    navKey: "projects",
+    kind: "epitaxy",
+    sourceChunk: "c1b9abf13-BWGqUBhA.js",
+    Component: BlankProjectPage,
+    match: (pathname) => startsWithPath(pathname, "/project"),
+  },
+  {
+    id: "projects",
+    path: "/projects",
+    title: "项目",
+    navKey: "projects",
+    kind: "epitaxy",
+    sourceChunk: "c1b9abf13-BWGqUBhA.js",
+    Component: ProjectsPage,
+  },
+  {
+    id: "artifacts",
+    path: "/artifacts",
+    title: "Artifacts",
+    navKey: "artifacts",
+    kind: "epitaxy",
+    sourceChunk: "c1b9abf13-BWGqUBhA.js",
+    Component: ArtifactsComingSoonPage,
+    match: (pathname) => startsWithPath(pathname, "/artifacts"),
+  },
+  { id: "space", path: "/space", title: "项目", navKey: "projects", kind: "epitaxy", sourceChunk: "ce28369f9-C9QQvDN-.js", Component: SpaceIndexPage },
+  { id: "space-detail", path: "/space/:spaceId", title: "Project", navKey: "projects", kind: "epitaxy", sourceChunk: "ce28369f9-C9QQvDN-.js", Component: SpaceProjectNotFoundPage, match: (pathname) => pathname.startsWith("/space/") },
+  { id: "knowledge", path: "/knowledge", title: "Page not found", navKey: "new-session", kind: "epitaxy", sourceChunk: "c4829262c-BTq0Z261.js", Component: DFramePageNotFoundPage },
+  { id: "meeting-assistant", path: "/meeting-assistant", title: "Page not found", navKey: "new-session", kind: "settings", frame: "standalone", sourceChunk: "c4829262c-BTq0Z261.js", Component: PageNotFound },
+  { id: "analytics", path: "/analytics", title: "Analytics", navKey: "settings", kind: "settings", frame: "standalone", sourceChunk: "ca768caa9-D20-r2DS.js", Component: AnalyticsPage, match: (pathname) => startsWithPath(pathname, "/analytics") },
+  ...publicRoutes,
+  {
+    id: "code-home",
+    path: "/code",
+    title: "代码",
+    navKey: "code",
+    kind: "code",
+    frame: "standalone",
+    sourceChunk: "c9500abe8-DTVxpCXN.js",
+    Component: CodeWebPage,
+    match: (pathname) => startsWithPath(pathname, "/code"),
+  },
+  {
+    id: "customize",
+    path: "/customize",
+    title: "自定义",
+    navKey: "customize",
+    kind: "customize",
+    frame: "standalone",
+    sourceChunk: "c63a78ed4-M1yh4U9h.js",
+    Component: CustomizePage,
+    match: (pathname) => startsWithPath(pathname, "/customize"),
+  },
+  {
+    id: "settings",
+    path: "/settings",
+    title: "设置",
+    navKey: "settings",
+    kind: "settings",
+    frame: "standalone",
+    sourceChunk: "cf4f70727-B4IcTbZO.js",
+    Component: SettingsPage,
+    match: (pathname) => startsWithPath(pathname, "/settings") || startsWithPath(pathname, "/admin-settings"),
+  },
+];
+
+export const matchRoute = (pathname: string) => {
+  const exact = routes.find((route) => route.path === pathname);
+  if (exact) return exact;
+
+  const custom = routes.find((route) => route.match?.(pathname));
+  return custom ?? routes[0];
+};

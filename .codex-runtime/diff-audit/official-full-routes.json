@@ -1,0 +1,1469 @@
+[
+  {
+    "var": "xos",
+    "parent": "gos",
+    "path": "local_sessions",
+    "id": null,
+    "component": "function(",
+    "fullPath": "/local_sessions",
+    "coveredBy": null
+  },
+  {
+    "var": "bos",
+    "parent": "xos",
+    "path": "$sessionId",
+    "id": null,
+    "component": "function(",
+    "fullPath": "/local_sessions/:sessionId",
+    "coveredBy": null
+  },
+  {
+    "var": "yos",
+    "parent": "gos",
+    "path": "task/new",
+    "id": null,
+    "component": "function(",
+    "fullPath": "/task/new",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "vos",
+    "parent": "gos",
+    "path": "task/examples",
+    "id": null,
+    "component": "function(",
+    "fullPath": "/task/examples",
+    "coveredBy": null
+  },
+  {
+    "var": "Cos",
+    "parent": "gos",
+    "path": "settings",
+    "id": null,
+    "component": "(wos=\"SettingsLayoutRoute\"",
+    "fullPath": "/settings",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "jos",
+    "parent": "gos",
+    "path": "customize",
+    "id": null,
+    "component": "(e=>Wis((",
+    "fullPath": "/customize",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Sos",
+    "parent": "gos",
+    "path": "recents",
+    "id": null,
+    "component": "Kis(\"RecentsRoute\"",
+    "fullPath": "/recents",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Eos",
+    "parent": "Nos",
+    "path": "projects",
+    "id": null,
+    "component": "Kis(\"ProjectsListRoute\"",
+    "fullPath": "/projects",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Ios",
+    "parent": "Nos",
+    "path": "projects/create",
+    "id": null,
+    "component": "Kis(\"ProjectsCreateRoute\"",
+    "fullPath": "/projects/create",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Tos",
+    "parent": "Nos",
+    "path": "projects/no-permission",
+    "id": null,
+    "component": "Kis(\"ProjectsNoPermissionRoute\"",
+    "fullPath": "/projects/no-permission",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Aos",
+    "parent": "Nos",
+    "path": "project/$uuid",
+    "id": null,
+    "component": "Kis(\"ProjectDetailRoute\"",
+    "fullPath": "/project/:uuid",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Los",
+    "parent": "Nos",
+    "path": "project/$uuid/setup",
+    "id": null,
+    "component": "Kis(\"ProjectSetupRoute\"",
+    "fullPath": "/project/:uuid/setup",
+    "coveredBy": null
+  },
+  {
+    "var": "Ros",
+    "parent": "gos",
+    "path": "artifacts",
+    "id": null,
+    "component": "Kis(\"ArtifactsNavLayoutRoute\"",
+    "fullPath": "/artifacts",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Oos",
+    "parent": "Ros",
+    "path": "/",
+    "id": null,
+    "component": "Kis(\"ArtifactsIndexRoute\"",
+    "fullPath": "/artifacts",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Dos",
+    "parent": "Ros",
+    "path": "my",
+    "id": null,
+    "component": "(e=>Wis((",
+    "fullPath": "/artifacts/my",
+    "coveredBy": null
+  },
+  {
+    "var": "Pos",
+    "parent": "fos",
+    "path": "/",
+    "id": null,
+    "component": "function(",
+    "fullPath": "/",
+    "coveredBy": null
+  },
+  {
+    "var": "zos",
+    "parent": "fos",
+    "path": "no-organization",
+    "id": null,
+    "component": "function(",
+    "fullPath": "/no-organization",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Fos",
+    "parent": "gos",
+    "path": "admin-settings",
+    "id": null,
+    "component": "(e=>Wis((",
+    "fullPath": "/admin-settings",
+    "coveredBy": null
+  },
+  {
+    "var": "qos",
+    "parent": "gos",
+    "path": "analytics",
+    "id": null,
+    "component": "(e=>Wis((",
+    "fullPath": "/analytics",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "os",
+    "parent": "gos",
+    "path": "chats",
+    "id": null,
+    "component": "(",
+    "fullPath": "/chats",
+    "coveredBy": null
+  },
+  {
+    "var": "Vos",
+    "parent": "gos",
+    "path": "task/$uuid",
+    "id": null,
+    "component": "(",
+    "fullPath": "/task/:uuid",
+    "coveredBy": null
+  },
+  {
+    "var": "Hos",
+    "parent": "gos",
+    "path": "submit_quick_entry",
+    "id": null,
+    "component": "(",
+    "fullPath": "/submit_quick_entry",
+    "coveredBy": null
+  },
+  {
+    "var": "Wos",
+    "parent": "gos",
+    "path": "space",
+    "id": null,
+    "component": "nos(\"SpaceIndexRoute\"",
+    "fullPath": "/space",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Gos",
+    "parent": "gos",
+    "path": "space/$spaceId",
+    "id": null,
+    "component": "nos(\"SpaceRoute\"",
+    "fullPath": "/space/:spaceId",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Kos",
+    "parent": "gos",
+    "path": "ask-your-org",
+    "id": null,
+    "component": "nos(\"AskYourOrgRoute\"",
+    "fullPath": "/ask-your-org",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Yos",
+    "parent": "gos",
+    "path": "ask-your-org/setup",
+    "id": null,
+    "component": "nos(\"AskYourOrgSetupRoute\"",
+    "fullPath": "/ask-your-org/setup",
+    "coveredBy": "/ask-your-org match"
+  },
+  {
+    "var": "Zos",
+    "parent": "gos",
+    "path": "experiments/code",
+    "id": null,
+    "component": "tos(\"ExperimentsCodeRedirectRoute\"",
+    "fullPath": "/experiments/code",
+    "coveredBy": null
+  },
+  {
+    "var": "Qos",
+    "parent": "gos",
+    "path": "experiments/code/$uri",
+    "id": null,
+    "component": "tos(\"ExperimentsCodeUriRedirectRoute\"",
+    "fullPath": "/experiments/code/:uri",
+    "coveredBy": null
+  },
+  {
+    "var": "Xos",
+    "parent": "gos",
+    "path": "experiments/code/shared/$shared_uri",
+    "id": null,
+    "component": "tos(\"ExperimentsCodeSharedRedirectRoute\"",
+    "fullPath": "/experiments/code/shared/:shared_uri",
+    "coveredBy": null
+  },
+  {
+    "var": "Jos",
+    "parent": "gos",
+    "path": "experiments/symphony",
+    "id": null,
+    "component": "tos(\"ExperimentsSymphonyLayoutRoute\"",
+    "fullPath": "/experiments/symphony",
+    "coveredBy": null
+  },
+  {
+    "var": "els",
+    "parent": "Jos",
+    "path": "/",
+    "id": null,
+    "component": "tos(\"ExperimentsSymphonyRoute\"",
+    "fullPath": "/experiments/symphony",
+    "coveredBy": null
+  },
+  {
+    "var": "tls",
+    "parent": "Jos",
+    "path": "$workflowId",
+    "id": null,
+    "component": "tos(\"ExperimentsSymphonyWorkflowRoute\"",
+    "fullPath": "/experiments/symphony/:workflowId",
+    "coveredBy": null
+  },
+  {
+    "var": "sls",
+    "parent": "gos",
+    "path": "knowledge",
+    "id": null,
+    "component": "tos(\"KnowledgeRoute\"",
+    "fullPath": "/knowledge",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "nls",
+    "parent": "gos",
+    "path": "meeting-assistant",
+    "id": null,
+    "component": "tos(\"MeetingAssistantRoute\"",
+    "fullPath": "/meeting-assistant",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "als",
+    "parent": "gos",
+    "path": "directory",
+    "id": null,
+    "component": "function(",
+    "fullPath": "/directory",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "rls",
+    "parent": "gos",
+    "path": "directory/$",
+    "id": null,
+    "component": "function(",
+    "fullPath": "/directory/$",
+    "coveredBy": "/directory match"
+  },
+  {
+    "var": "cls",
+    "parent": "lls",
+    "path": "logout",
+    "id": null,
+    "component": "Gis(\"LogoutRoute\"",
+    "fullPath": "/logout",
+    "coveredBy": null
+  },
+  {
+    "var": "dls",
+    "parent": "lls",
+    "path": "logout/all-sessions",
+    "id": null,
+    "component": "Gis(\"LogoutAllSessionsRoute\"",
+    "fullPath": "/logout/all-sessions",
+    "coveredBy": null
+  },
+  {
+    "var": "uls",
+    "parent": "lls",
+    "path": "login",
+    "id": null,
+    "component": "Gis(\"LoginRoute\"",
+    "fullPath": "/login",
+    "coveredBy": null
+  },
+  {
+    "var": "pls",
+    "parent": "lls",
+    "path": "login/app-google-auth",
+    "id": null,
+    "component": "Gis(\"LoginAppGoogleAuthRoute\"",
+    "fullPath": "/login/app-google-auth",
+    "coveredBy": null
+  },
+  {
+    "var": "mls",
+    "parent": "lls",
+    "path": "login/popup-google-auth",
+    "id": null,
+    "component": "Gis(\"LoginPopupGoogleAuthRoute\"",
+    "fullPath": "/login/popup-google-auth",
+    "coveredBy": null
+  },
+  {
+    "var": "hls",
+    "parent": "lls",
+    "path": "referral/$code",
+    "id": null,
+    "component": "Gis(\"ReferralRoute\"",
+    "fullPath": "/referral/:code",
+    "coveredBy": null
+  },
+  {
+    "var": "fls",
+    "parent": "lls",
+    "path": "join/$token",
+    "id": null,
+    "component": "Gis(\"JoinRoute\"",
+    "fullPath": "/join/:token",
+    "coveredBy": null
+  },
+  {
+    "var": "gls",
+    "parent": "lls",
+    "path": "join/org/$token",
+    "id": null,
+    "component": "Gis(\"JoinOrgRoute\"",
+    "fullPath": "/join/org/:token",
+    "coveredBy": null
+  },
+  {
+    "var": "xls",
+    "parent": "fos",
+    "path": "code",
+    "id": null,
+    "component": "Yis(\"CodeLayoutRoute\"",
+    "fullPath": "/code",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "yls",
+    "parent": "bls",
+    "path": "/",
+    "id": null,
+    "component": "Yis(\"CodeIndexRoute\"",
+    "fullPath": "/code",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "vls",
+    "parent": "bls",
+    "path": "$uri",
+    "id": null,
+    "component": "Yis(\"CodeSessionRoute\"",
+    "fullPath": "/code/:uri",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "wls",
+    "parent": "Cls",
+    "path": "onboarding",
+    "id": null,
+    "component": "Yis(\"CodeOnboardingRoute\"",
+    "fullPath": "/code/onboarding",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "kls",
+    "parent": "Cls",
+    "path": "memory",
+    "id": null,
+    "component": "Yis(\"CodeMemoryIndexRoute\"",
+    "fullPath": "/code/memory",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "_ls",
+    "parent": "Cls",
+    "path": "memory/$",
+    "id": null,
+    "component": "Yis(\"CodeMemoryRepoRoute\"",
+    "fullPath": "/code/memory/$",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "jls",
+    "parent": "bls",
+    "path": "security",
+    "id": null,
+    "component": "Yis(\"CodeSecurityRoute\"",
+    "fullPath": "/code/security",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Mls",
+    "parent": "bls",
+    "path": "tasks",
+    "id": null,
+    "component": "Yis(\"CodeTasksRoute\"",
+    "fullPath": "/code/tasks",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Sls",
+    "parent": "bls",
+    "path": "pull-requests",
+    "id": null,
+    "component": "Yis(\"CodeTasksRoute\"",
+    "fullPath": "/code/pull-requests",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Nls",
+    "parent": "gos",
+    "path": "security",
+    "id": null,
+    "component": "Yis(\"SecurityRoute\"",
+    "fullPath": "/security",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Els",
+    "parent": "gos",
+    "path": "crawl",
+    "id": null,
+    "component": "Yis(\"CrawlRoute\"",
+    "fullPath": "/crawl",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Ils",
+    "parent": "bls",
+    "path": "scheduled",
+    "id": null,
+    "component": "Zis(\"CodeScheduledLayoutRoute\"",
+    "fullPath": "/code/scheduled",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Tls",
+    "parent": "Ils",
+    "path": "/",
+    "id": null,
+    "component": "Zis(\"CodeScheduledIndexRoute\"",
+    "fullPath": "/code/scheduled",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Als",
+    "parent": "Ils",
+    "path": "new",
+    "id": null,
+    "component": "Zis(\"CodeScheduledNewRoute\"",
+    "fullPath": "/code/scheduled/new",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Lls",
+    "parent": "Ils",
+    "path": "$triggerId",
+    "id": null,
+    "component": "Zis(\"CodeScheduledDetailRoute\"",
+    "fullPath": "/code/scheduled/:triggerId",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Rls",
+    "parent": "bls",
+    "path": "hub",
+    "id": null,
+    "component": "Yis(\"CodeHubIndexRoute\"",
+    "fullPath": "/code/hub",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Ols",
+    "parent": "bls",
+    "path": "hub/$sessionId",
+    "id": null,
+    "component": "Yis(\"CodeHubRoute\"",
+    "fullPath": "/code/hub/:sessionId",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Dls",
+    "parent": "bls",
+    "path": "routines",
+    "id": null,
+    "component": "Zis(\"CodeRoutinesLayoutRoute\"",
+    "fullPath": "/code/routines",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Pls",
+    "parent": "Dls",
+    "path": "/",
+    "id": null,
+    "component": "Zis(\"CodeScheduledIndexRoute\"",
+    "fullPath": "/code/routines",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "zls",
+    "parent": "Dls",
+    "path": "new",
+    "id": null,
+    "component": "Zis(\"CodeScheduledNewRoute\"",
+    "fullPath": "/code/routines/new",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Fls",
+    "parent": "Dls",
+    "path": "$triggerId",
+    "id": null,
+    "component": "Zis(\"CodeScheduledDetailRoute\"",
+    "fullPath": "/code/routines/:triggerId",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Uls",
+    "parent": "bls",
+    "path": "agents",
+    "id": null,
+    "component": "Qis(\"CodeAgentsLayoutRoute\"",
+    "fullPath": "/code/agents",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "qls",
+    "parent": "Uls",
+    "path": "/",
+    "id": null,
+    "component": "Qis(\"CodeAgentsIndexRoute\"",
+    "fullPath": "/code/agents",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Bls",
+    "parent": "Uls",
+    "path": "new",
+    "id": null,
+    "component": "Qis(\"CodeAgentsNewRoute\"",
+    "fullPath": "/code/agents/new",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "ls",
+    "parent": "Uls",
+    "path": "$agentId",
+    "id": null,
+    "component": "Qis(\"CodeAgentsDetailRoute\"",
+    "fullPath": "/code/agents/:agentId",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Vls",
+    "parent": "xls",
+    "path": "disabled",
+    "id": null,
+    "component": "Yis(\"CodeDisabledRoute\"",
+    "fullPath": "/code/disabled",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Hls",
+    "parent": "xls",
+    "path": "enroll",
+    "id": null,
+    "component": "Yis(\"CodeEnrollRoute\"",
+    "fullPath": "/code/enroll",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Wls",
+    "parent": "xls",
+    "path": "family",
+    "id": null,
+    "component": "Yis(\"CodeFamilyRoute\"",
+    "fullPath": "/code/family",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Gls",
+    "parent": "xls",
+    "path": "share/$shareId",
+    "id": null,
+    "component": "Yis(\"CodeShareSessionLayoutRoute\"",
+    "fullPath": "/code/share/:shareId",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Kls",
+    "parent": "Gls",
+    "path": "/",
+    "id": null,
+    "component": "Yis(\"CodeShareSessionRoute\"",
+    "fullPath": "/code/share/:shareId",
+    "coveredBy": "/code match"
+  },
+  {
+    "var": "Yls",
+    "parent": "fos",
+    "path": "create",
+    "id": null,
+    "component": "Xis(\"CreateLayoutRoute\"",
+    "fullPath": "/create",
+    "coveredBy": null
+  },
+  {
+    "var": "Qls",
+    "parent": "Zls",
+    "path": "team/name",
+    "id": null,
+    "component": "Xis(\"CreateTeamNameRoute\"",
+    "fullPath": "/create/team/name",
+    "coveredBy": null
+  },
+  {
+    "var": "Xls",
+    "parent": "Zls",
+    "path": "team/invites",
+    "id": null,
+    "component": "Xis(\"CreateTeamInvitesRoute\"",
+    "fullPath": "/create/team/invites",
+    "coveredBy": null
+  },
+  {
+    "var": "Jls",
+    "parent": "Yls",
+    "path": "connectors",
+    "id": null,
+    "component": "Xis(\"CreateConnectorsRoute\"",
+    "fullPath": "/create/connectors",
+    "coveredBy": null
+  },
+  {
+    "var": "ecs",
+    "parent": "Yls",
+    "path": "enterprise",
+    "id": null,
+    "component": "Xis(\"CreateEnterpriseLayoutRoute\"",
+    "fullPath": "/create/enterprise",
+    "coveredBy": null
+  },
+  {
+    "var": "tcs",
+    "parent": "ecs",
+    "path": "/",
+    "id": null,
+    "component": "Xis(\"CreateEnterpriseIndexRoute\"",
+    "fullPath": "/create/enterprise",
+    "coveredBy": null
+  },
+  {
+    "var": "scs",
+    "parent": "ecs",
+    "path": "qualification",
+    "id": null,
+    "component": "Xis(\"CreateEnterpriseQualificationRoute\"",
+    "fullPath": "/create/enterprise/qualification",
+    "coveredBy": null
+  },
+  {
+    "var": "ncs",
+    "parent": "ecs",
+    "path": "explanation",
+    "id": null,
+    "component": "Xis(\"CreateEnterpriseExplanationRoute\"",
+    "fullPath": "/create/enterprise/explanation",
+    "coveredBy": null
+  },
+  {
+    "var": "acs",
+    "parent": "ecs",
+    "path": "setup-type",
+    "id": null,
+    "component": "Xis(\"CreateEnterpriseSetupTypeRoute\"",
+    "fullPath": "/create/enterprise/setup-type",
+    "coveredBy": null
+  },
+  {
+    "var": "rcs",
+    "parent": "ecs",
+    "path": "seats",
+    "id": null,
+    "component": "Xis(\"CreateEnterpriseSeatsRoute\"",
+    "fullPath": "/create/enterprise/seats",
+    "coveredBy": null
+  },
+  {
+    "var": "ics",
+    "parent": "Zls",
+    "path": "team/billing",
+    "id": null,
+    "component": "Xis(\"CreateTeamBillingRoute\"",
+    "fullPath": "/create/team/billing",
+    "coveredBy": null
+  },
+  {
+    "var": "ocs",
+    "parent": "ecs",
+    "path": "review",
+    "id": null,
+    "component": "Xis(\"CreateEnterpriseReviewRoute\"",
+    "fullPath": "/create/enterprise/review",
+    "coveredBy": null
+  },
+  {
+    "var": "lcs",
+    "parent": "Zls",
+    "path": "team/pending/$organization_id",
+    "id": null,
+    "component": "Xis(\"CreateTeamPendingRoute\"",
+    "fullPath": "/create/team/pending/:organization_id",
+    "coveredBy": null
+  },
+  {
+    "var": "ccs",
+    "parent": "Zls",
+    "path": "team/pending",
+    "id": null,
+    "component": "Xis(\"CreateTeamPendingResumeRoute\"",
+    "fullPath": "/create/team/pending",
+    "coveredBy": null
+  },
+  {
+    "var": "dcs",
+    "parent": "ecs",
+    "path": "pending/$organization_id",
+    "id": null,
+    "component": "Xis(\"CreateEnterprisePendingRoute\"",
+    "fullPath": "/create/enterprise/pending/:organization_id",
+    "coveredBy": null
+  },
+  {
+    "var": "ucs",
+    "parent": "ecs",
+    "path": "pending",
+    "id": null,
+    "component": "Xis(\"CreateEnterprisePendingResumeRoute\"",
+    "fullPath": "/create/enterprise/pending",
+    "coveredBy": null
+  },
+  {
+    "var": "pcs",
+    "parent": "fos",
+    "path": "claude-ship",
+    "id": null,
+    "component": "cos(\"ClaudeShipLayoutRoute\"",
+    "fullPath": "/claude-ship",
+    "coveredBy": null
+  },
+  {
+    "var": "mcs",
+    "parent": "pcs",
+    "path": "/",
+    "id": null,
+    "component": "cos(\"ClaudeShipPageRoute\"",
+    "fullPath": "/claude-ship",
+    "coveredBy": null
+  },
+  {
+    "var": "hcs",
+    "parent": "pcs",
+    "path": "projects",
+    "id": null,
+    "component": "cos(\"ClaudeShipProjectsPageRoute\"",
+    "fullPath": "/claude-ship/projects",
+    "coveredBy": null
+  },
+  {
+    "var": "fcs",
+    "parent": "pcs",
+    "path": "$id",
+    "id": null,
+    "component": "cos(\"ClaudeShipIdRedirectRoute\"",
+    "fullPath": "/claude-ship/:id",
+    "coveredBy": null
+  },
+  {
+    "var": "gcs",
+    "parent": "fos",
+    "path": "gift",
+    "id": null,
+    "component": "sos(\"GiftRoute\"",
+    "fullPath": "/gift",
+    "coveredBy": null
+  },
+  {
+    "var": "xcs",
+    "parent": "fos",
+    "path": "gift/redeem",
+    "id": null,
+    "component": "sos(\"GiftRedeemRoute\"",
+    "fullPath": "/gift/redeem",
+    "coveredBy": null
+  },
+  {
+    "var": "bcs",
+    "parent": "fos",
+    "path": "team-promo/$offerCode",
+    "id": null,
+    "component": "Xis(\"TeamPromoLayoutRoute\"",
+    "fullPath": "/team-promo/:offerCode",
+    "coveredBy": null
+  },
+  {
+    "var": "ycs",
+    "parent": "bcs",
+    "path": "/",
+    "id": null,
+    "component": "Xis(\"TeamPromoRoute\"",
+    "fullPath": "/team-promo/:offerCode",
+    "coveredBy": null
+  },
+  {
+    "var": "vcs",
+    "parent": "bcs",
+    "path": "start",
+    "id": null,
+    "component": "Xis(\"TeamPromoStartRoute\"",
+    "fullPath": "/team-promo/:offerCode/start",
+    "coveredBy": null
+  },
+  {
+    "var": "Ccs",
+    "parent": "bcs",
+    "path": "verify",
+    "id": null,
+    "component": "Xis(\"TeamPromoVerifyRoute\"",
+    "fullPath": "/team-promo/:offerCode/verify",
+    "coveredBy": null
+  },
+  {
+    "var": "wcs",
+    "parent": "bcs",
+    "path": "checkout",
+    "id": null,
+    "component": "Xis(\"TeamPromoCheckoutRoute\"",
+    "fullPath": "/team-promo/:offerCode/checkout",
+    "coveredBy": null
+  },
+  {
+    "var": "kcs",
+    "parent": "fos",
+    "path": "offers/$offerCode",
+    "id": null,
+    "component": "y3t((",
+    "fullPath": "/offers/:offerCode",
+    "coveredBy": null
+  },
+  {
+    "var": "_cs",
+    "parent": "fos",
+    "path": "create/team",
+    "id": null,
+    "component": "Xis(\"CreateTeamLayoutRoute\"",
+    "fullPath": "/create/team",
+    "coveredBy": null
+  },
+  {
+    "var": "jcs",
+    "parent": "_cs",
+    "path": "/",
+    "id": null,
+    "component": "Xis(\"CreateTeamIndexRoute\"",
+    "fullPath": "/create/team",
+    "coveredBy": null
+  },
+  {
+    "var": "Mcs",
+    "parent": "_cs",
+    "path": "start",
+    "id": null,
+    "component": "Xis(\"CreateTeamStartRoute\"",
+    "fullPath": "/create/team/start",
+    "coveredBy": null
+  },
+  {
+    "var": "Scs",
+    "parent": "_cs",
+    "path": "verify",
+    "id": null,
+    "component": "Xis(\"CreateTeamVerifyRoute\"",
+    "fullPath": "/create/team/verify",
+    "coveredBy": null
+  },
+  {
+    "var": "Ncs",
+    "parent": "fos",
+    "path": "create/enterprise/start",
+    "id": null,
+    "component": "Xis(\"CreateEnterpriseStartRoute\"",
+    "fullPath": "/create/enterprise/start",
+    "coveredBy": null
+  },
+  {
+    "var": "Ecs",
+    "parent": "fos",
+    "path": "create/enterprise/verify",
+    "id": null,
+    "component": "Xis(\"CreateEnterpriseVerifyRoute\"",
+    "fullPath": "/create/enterprise/verify",
+    "coveredBy": null
+  },
+  {
+    "var": "Ics",
+    "parent": "fos",
+    "path": "upgrade",
+    "id": null,
+    "component": "dos(\"UpgradeLayoutRoute\"",
+    "fullPath": "/upgrade",
+    "coveredBy": null
+  },
+  {
+    "var": "Tcs",
+    "parent": "Ics",
+    "path": "/",
+    "id": null,
+    "component": "dos(\"UpgradeIndexRoute\"",
+    "fullPath": "/upgrade",
+    "coveredBy": null
+  },
+  {
+    "var": "Acs",
+    "parent": "Ics",
+    "path": "trial",
+    "id": null,
+    "component": "dos(\"UpgradeTrialRoute\"",
+    "fullPath": "/upgrade/trial",
+    "coveredBy": null
+  },
+  {
+    "var": "Lcs",
+    "parent": "Ics",
+    "path": "pro",
+    "id": null,
+    "component": "dos(\"UpgradeProRoute\"",
+    "fullPath": "/upgrade/pro",
+    "coveredBy": null
+  },
+  {
+    "var": "Rcs",
+    "parent": "Ics",
+    "path": "pro/annual",
+    "id": null,
+    "component": "dos(\"UpgradeProAnnualRoute\"",
+    "fullPath": "/upgrade/pro/annual",
+    "coveredBy": null
+  },
+  {
+    "var": "Ocs",
+    "parent": "Ics",
+    "path": "pro/from-existing",
+    "id": null,
+    "component": "dos(\"UpgradeProFromExistingRoute\"",
+    "fullPath": "/upgrade/pro/from-existing",
+    "coveredBy": null
+  },
+  {
+    "var": "Dcs",
+    "parent": "Ics",
+    "path": "max",
+    "id": null,
+    "component": "dos(\"UpgradeMaxRoute\"",
+    "fullPath": "/upgrade/max",
+    "coveredBy": null
+  },
+  {
+    "var": "Pcs",
+    "parent": "Ics",
+    "path": "max/from-existing",
+    "id": null,
+    "component": "dos(\"UpgradeMaxFromExistingRoute\"",
+    "fullPath": "/upgrade/max/from-existing",
+    "coveredBy": null
+  },
+  {
+    "var": "zcs",
+    "parent": "Ics",
+    "path": "team/annual",
+    "id": null,
+    "component": "dos(\"UpgradeTeamAnnualRoute\"",
+    "fullPath": "/upgrade/team/annual",
+    "coveredBy": null
+  },
+  {
+    "var": "Fcs",
+    "parent": "Ics",
+    "path": "nonprofit",
+    "id": null,
+    "component": "dos(\"UpgradeNonprofitRoute\"",
+    "fullPath": "/upgrade/nonprofit",
+    "coveredBy": null
+  },
+  {
+    "var": "Ucs",
+    "parent": "fos",
+    "path": "downgrade",
+    "id": null,
+    "component": "dos(\"DowngradeLayoutRoute\"",
+    "fullPath": "/downgrade",
+    "coveredBy": null
+  },
+  {
+    "var": "qcs",
+    "parent": "Ucs",
+    "path": "/",
+    "id": null,
+    "component": "dos(\"DowngradeIndexRoute\"",
+    "fullPath": "/downgrade",
+    "coveredBy": null
+  },
+  {
+    "var": "Bcs",
+    "parent": "Ucs",
+    "path": "pro",
+    "id": null,
+    "component": "dos(\"DowngradeProRoute\"",
+    "fullPath": "/downgrade/pro",
+    "coveredBy": null
+  },
+  {
+    "var": "cs",
+    "parent": "Ucs",
+    "path": "max",
+    "id": null,
+    "component": "dos(\"DowngradeMaxRoute\"",
+    "fullPath": "/downgrade/max",
+    "coveredBy": null
+  },
+  {
+    "var": "Vcs",
+    "parent": "fos",
+    "path": "pricing",
+    "id": null,
+    "component": "dos(\"PricingRoute\"",
+    "fullPath": "/pricing",
+    "coveredBy": null
+  },
+  {
+    "var": "Hcs",
+    "parent": "fos",
+    "path": "invites",
+    "id": null,
+    "component": "uos(\"InvitesRoute\"",
+    "fullPath": "/invites",
+    "coveredBy": null
+  },
+  {
+    "var": "Wcs",
+    "parent": "fos",
+    "path": "logged-in",
+    "id": null,
+    "component": "uos(\"LoggedInRoute\"",
+    "fullPath": "/logged-in",
+    "coveredBy": null
+  },
+  {
+    "var": "Gcs",
+    "parent": "fos",
+    "path": "interviewer",
+    "id": null,
+    "component": "uos(\"InterviewerRoute\"",
+    "fullPath": "/interviewer",
+    "coveredBy": null
+  },
+  {
+    "var": "Kcs",
+    "parent": "fos",
+    "path": "share",
+    "id": null,
+    "component": "uos(\"ShareLayoutRoute\"",
+    "fullPath": "/share",
+    "coveredBy": null
+  },
+  {
+    "var": "Ycs",
+    "parent": "Kcs",
+    "path": "$snapshot_uuid",
+    "id": null,
+    "component": "uos(\"ShareSnapshotRoute\"",
+    "fullPath": "/share/:snapshot_uuid",
+    "coveredBy": null
+  },
+  {
+    "var": "Zcs",
+    "parent": "fos",
+    "path": "cli_landing",
+    "id": null,
+    "component": "uos(\"CliLandingLayoutRoute\"",
+    "fullPath": "/cli_landing",
+    "coveredBy": null
+  },
+  {
+    "var": "Qcs",
+    "parent": "Zcs",
+    "path": "/",
+    "id": null,
+    "component": "uos(\"CliLandingRoute\"",
+    "fullPath": "/cli_landing",
+    "coveredBy": null
+  },
+  {
+    "var": "Xcs",
+    "parent": "fos",
+    "path": "$shortlink",
+    "id": null,
+    "component": "(",
+    "fullPath": "/:shortlink",
+    "coveredBy": null
+  },
+  {
+    "var": "Jcs",
+    "parent": "fos",
+    "path": "excel-ppt-cowork",
+    "id": null,
+    "component": "(",
+    "fullPath": "/excel-ppt-cowork",
+    "coveredBy": null
+  },
+  {
+    "var": "eds",
+    "parent": "fos",
+    "path": "desktop_landing",
+    "id": null,
+    "component": "y3t((",
+    "fullPath": "/desktop_landing",
+    "coveredBy": null
+  },
+  {
+    "var": "tds",
+    "parent": "fos",
+    "path": "scoop",
+    "id": null,
+    "component": "y3t((",
+    "fullPath": "/scoop",
+    "coveredBy": null
+  },
+  {
+    "var": "sds",
+    "parent": "fos",
+    "path": "setup-desktop-3p",
+    "id": null,
+    "component": "y3t((",
+    "fullPath": "/setup-desktop-3p",
+    "coveredBy": null
+  },
+  {
+    "var": "nds",
+    "parent": "fos",
+    "path": "device-code-verify",
+    "id": null,
+    "component": "y3t((",
+    "fullPath": "/device-code-verify",
+    "coveredBy": null
+  },
+  {
+    "var": "ads",
+    "parent": "fos",
+    "path": "excel-ppt-setup",
+    "id": null,
+    "component": "y3t((",
+    "fullPath": "/excel-ppt-setup",
+    "coveredBy": null
+  },
+  {
+    "var": "ids",
+    "parent": "rds",
+    "path": "epitaxy",
+    "id": null,
+    "component": "aos(\"EpitaxyRoute\"",
+    "fullPath": "/epitaxy",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "ods",
+    "parent": "rds",
+    "path": "epitaxy/scheduled",
+    "id": null,
+    "component": "aos(\"EpitaxyScheduledRoute\"",
+    "fullPath": "/epitaxy/scheduled",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "lds",
+    "parent": "rds",
+    "path": "epitaxy/scheduled/new",
+    "id": null,
+    "component": "aos(\"EpitaxyScheduledNewRoute\"",
+    "fullPath": "/epitaxy/scheduled/new",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "cds",
+    "parent": "rds",
+    "path": "epitaxy/scheduled/$taskId",
+    "id": null,
+    "component": "aos(\"EpitaxyScheduledDetailRoute\"",
+    "fullPath": "/epitaxy/scheduled/:taskId",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "dds",
+    "parent": "rds",
+    "path": "epitaxy/dispatch",
+    "id": null,
+    "component": "aos(\"EpitaxyDispatchRoute\"",
+    "fullPath": "/epitaxy/dispatch",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "uds",
+    "parent": "rds",
+    "path": "epitaxy/apps",
+    "id": null,
+    "component": "aos(\"EpitaxyAppsRoute\"",
+    "fullPath": "/epitaxy/apps",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "pds",
+    "parent": "rds",
+    "path": "epitaxy/tasks",
+    "id": null,
+    "component": "aos(\"EpitaxyTasksRoute\"",
+    "fullPath": "/epitaxy/tasks",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "mds",
+    "parent": "rds",
+    "path": "epitaxy/pull-requests",
+    "id": null,
+    "component": "aos(\"EpitaxyTasksRoute\"",
+    "fullPath": "/epitaxy/pull-requests",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "hds",
+    "parent": "rds",
+    "path": "epitaxy/dev/$panelId",
+    "id": null,
+    "component": "aos(\"EpitaxyDevRoute\"",
+    "fullPath": "/epitaxy/dev/:panelId",
+    "coveredBy": null
+  },
+  {
+    "var": "fds",
+    "parent": "ids",
+    "path": "$sessionId",
+    "id": null,
+    "component": "(",
+    "fullPath": "/epitaxy/:sessionId",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "gds",
+    "parent": "fos",
+    "path": "conway",
+    "id": null,
+    "component": "ros(\"ConwayRoute\"",
+    "fullPath": "/conway",
+    "coveredBy": null
+  },
+  {
+    "var": "xds",
+    "parent": "fos",
+    "path": "conway/popout",
+    "id": null,
+    "component": "ros(\"ConwayPopoutRoute\"",
+    "fullPath": "/conway/popout",
+    "coveredBy": null
+  },
+  {
+    "var": "bds",
+    "parent": "fos",
+    "path": "labs-verification",
+    "id": null,
+    "component": "ios(\"LabsVerificationLayoutRoute\"",
+    "fullPath": "/labs-verification",
+    "coveredBy": null
+  },
+  {
+    "var": "yds",
+    "parent": "bds",
+    "path": "attestation",
+    "id": null,
+    "component": "ios(\"LabsVerificationAttestationRoute\"",
+    "fullPath": "/labs-verification/attestation",
+    "coveredBy": null
+  },
+  {
+    "var": "vds",
+    "parent": "bds",
+    "path": "email",
+    "id": null,
+    "component": "ios(\"LabsVerificationEmailRoute\"",
+    "fullPath": "/labs-verification/email",
+    "coveredBy": null
+  },
+  {
+    "var": "Cds",
+    "parent": "bds",
+    "path": "lab-url",
+    "id": null,
+    "component": "ios(\"LabsVerificationLabUrlRoute\"",
+    "fullPath": "/labs-verification/lab-url",
+    "coveredBy": null
+  },
+  {
+    "var": "wds",
+    "parent": "bds",
+    "path": "checking",
+    "id": null,
+    "component": "ios(\"LabsVerificationCheckingRoute\"",
+    "fullPath": "/labs-verification/checking",
+    "coveredBy": null
+  },
+  {
+    "var": "kds",
+    "parent": "bds",
+    "path": "approved",
+    "id": null,
+    "component": "ios(\"LabsVerificationApprovedRoute\"",
+    "fullPath": "/labs-verification/approved",
+    "coveredBy": null
+  },
+  {
+    "var": "_ds",
+    "parent": "bds",
+    "path": "manual-review",
+    "id": null,
+    "component": "ios(\"LabsVerificationManualReviewRoute\"",
+    "fullPath": "/labs-verification/manual-review",
+    "coveredBy": null
+  },
+  {
+    "var": "Mds",
+    "parent": "gos",
+    "path": "claude-code-desktop",
+    "id": null,
+    "component": "CGt",
+    "fullPath": "/claude-code-desktop",
+    "coveredBy": "exact"
+  },
+  {
+    "var": "Sds",
+    "parent": "gos",
+    "path": "claude-code-desktop/$",
+    "id": null,
+    "component": "CGt",
+    "fullPath": "/claude-code-desktop/$",
+    "coveredBy": "/claude-code-desktop match"
+  },
+  {
+    "var": "s",
+    "parent": "gos",
+    "path": "scheduled-task",
+    "id": null,
+    "component": "(",
+    "fullPath": "/scheduled-task",
+    "coveredBy": null
+  },
+  {
+    "var": "n",
+    "parent": "s",
+    "path": "/",
+    "id": null,
+    "component": "zQt",
+    "fullPath": "/scheduled-task",
+    "coveredBy": null
+  },
+  {
+    "var": "r",
+    "parent": "s",
+    "path": "$id",
+    "id": null,
+    "component": "FQt",
+    "fullPath": "/scheduled-task/:id",
+    "coveredBy": null
+  },
+  {
+    "var": "i",
+    "parent": "gos",
+    "path": "cowork-artifact",
+    "id": null,
+    "component": "qQt",
+    "fullPath": "/cowork-artifact",
+    "coveredBy": null
+  },
+  {
+    "var": "o",
+    "parent": "gos",
+    "path": "cowork-artifact/$id",
+    "id": null,
+    "component": "UQt",
+    "fullPath": "/cowork-artifact/:id",
+    "coveredBy": null
+  }
+]

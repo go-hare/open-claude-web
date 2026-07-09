@@ -1,0 +1,1865 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
+import { Terminal } from "@xterm/xterm";
+import "@xterm/xterm/css/xterm.css";
+import { desktopBridge, type SessionSummary } from "../../adapters/desktopBridge";
+import type { ChatMessage, LocalSessionsBridge } from "../../adapters/desktopBridge/types";
+import { Icon } from "../../shell/icons";
+import type { PaneSlot } from "../../stores/paneStore";
+import { EpitaxyTileLayout } from "./EpitaxyFrameSurface";
+import {
+  OfficialAssistantMessage,
+  OfficialButton,
+  OfficialChatTileShell,
+  OfficialDropdownButton,
+  OfficialComposerDropdown,
+  OfficialSessionHeader,
+  OfficialTranscript,
+  OfficialTranscriptRow,
+  OfficialUserMessage,
+  type OfficialDropdownItem,
+  type OfficialViewPane,
+} from "./OfficialEpitaxyComponents";
+
+type EpitaxySessionType = "local" | "remote" | "bridge";
+type SessionSource = "code" | "epitaxy";
+
+type EpitaxySessionRef = {
+  id: string;
+  type: EpitaxySessionType;
+};
+
+type EpitaxyFramePageProps = {
+  hideComposer?: boolean;
+  landingActions?: ReactNode;
+  landingBody?: ReactNode;
+  onNavigate: (path: string) => void;
+  sessionId: string;
+};
+
+type EpitaxySessionTileProps = {
+  isLonePane?: boolean;
+  onClose?: () => void;
+  onMovePane?: (slot: PaneSlot) => void;
+  onNavigate: (path: string) => void;
+  paneIndex?: number;
+  sessionId: string;
+  slot?: PaneSlot;
+};
+
+const draftPersistKey = "epitaxy-draft";
+
+export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, onNavigate, sessionId }: EpitaxyFramePageProps) {
+  const activeSessionId = sessionId || undefined;
+  const sessionType = useEpitaxySessionType(activeSessionId);
+  const sessionRef = useMemo(() => activeSessionId ? { id: activeSessionId, type: sessionType } : null, [activeSessionId, sessionType]);
+
+  useFocusedSession(activeSessionId);
+
+  const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft?: boolean, dragHandle?: ReactNode) => (
+    <OfficialChatTileShell>
+      <EpitaxyChatPanel
+        draftPersistKey={activeSessionId ? `epitaxy-${activeSessionId}` : draftPersistKey}
+        dragHandle={dragHandle}
+        hideComposer={hideComposer}
+        initialSessionId={activeSessionId}
+        isPanelActive
+        isTopLeft={isTopLeft}
+        landingActions={landingActions}
+        landingBody={landingBody}
+        sessionRef={sessionRef}
+        sessionType={activeSessionId ? sessionType : undefined}
+      />
+    </OfficialChatTileShell>
+  ), [activeSessionId, hideComposer, landingActions, landingBody, onNavigate, sessionRef, sessionType]);
+
+  return (
+    <div className="epitaxy-root select-none h-full w-full flex flex-col">
+      <div className="flex-1 min-h-0">
+        <EpitaxyTileLayout>{renderChatTile()}</EpitaxyTileLayout>
+      </div>
+    </div>
+  );
+}
+
+export function EpitaxySessionTile({ isLonePane = false, onClose, onMovePane, onNavigate, paneIndex = 0, sessionId, slot }: EpitaxySessionTileProps) {
+  return (
+    <EpitaxySecondPane
+      isLonePane={isLonePane}
+      onClose={onClose}
+      onMovePane={onMovePane}
+      onNavigate={onNavigate}
+      paneIndex={paneIndex}
+      sessionId={sessionId}
+      slot={slot}
+    />
+  );
+}
+
+function EpitaxySecondPane({ isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, slot }: EpitaxySessionTileProps) {
+  const sessionType = useEpitaxySessionType(sessionId);
+  const sessionRef = useMemo(() => ({ id: sessionId, type: sessionType }), [sessionId, sessionType]);
+  const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft?: boolean, dragHandle?: ReactNode) => (
+    <OfficialChatTileShell>
+      <EpitaxyChatPanel
+        draftPersistKey={`epitaxy-pane-${sessionId}`}
+        dragHandle={dragHandle}
+        initialSessionId={sessionId}
+        isLonePane={isLonePane}
+        isPanelActive={false}
+        isTopLeft={isTopLeft}
+        onClose={onClose}
+        onMovePane={onMovePane}
+        onSessionRemoved={onClose ?? (() => onNavigate("/epitaxy"))}
+        paneIndex={paneIndex}
+        sessionRef={sessionRef}
+        sessionType={sessionType}
+        slot={slot}
+      />
+    </OfficialChatTileShell>
+  ), [isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, sessionRef, sessionType, slot]);
+
+  return (
+    <div className="epitaxy-root select-none flex-1 min-h-0 flex flex-col overflow-hidden">
+      <EpitaxyTileLayout>{renderChatTile()}</EpitaxyTileLayout>
+    </div>
+  );
+}
+
+type EpitaxyChatPanelProps = {
+  draftPersistKey: string;
+  dragHandle?: ReactNode;
+  hideComposer?: boolean;
+  initialSessionId?: string;
+  isLonePane?: boolean;
+  isPanelActive: boolean;
+  isTopLeft?: boolean;
+  landingActions?: ReactNode;
+  landingBody?: ReactNode;
+  onClose?: () => void;
+  onMovePane?: (slot: PaneSlot) => void;
+  onSessionRemoved?: () => void;
+  paneIndex?: number;
+  sessionRef: EpitaxySessionRef | null;
+  sessionType?: EpitaxySessionType;
+  slot?: PaneSlot;
+};
+
+function EpitaxyChatPanel({
+  dragHandle,
+  hideComposer = false,
+  initialSessionId,
+  isLonePane = false,
+  isPanelActive,
+  isTopLeft,
+  landingActions,
+  landingBody,
+  onClose,
+  onMovePane,
+  onSessionRemoved,
+  paneIndex = 0,
+  sessionRef,
+  sessionType = "local",
+  slot,
+}: EpitaxyChatPanelProps) {
+  const { error, isLoading, isSessionNotFound, messages, reload, session, source } = useEpitaxySessionData(initialSessionId);
+  const [activeView, setActiveView] = useState<OfficialViewPane | undefined>(() => initialSessionId ? "preview" : undefined);
+  const title = session?.title ?? (initialSessionId ? "Untitled" : "Claude Code");
+  const effectiveSessionRef = sessionRef ?? (initialSessionId ? { id: initialSessionId, type: sessionType } : null);
+  const selectView = useCallback((view: OfficialViewPane) => {
+    setActiveView((current) => current === view ? undefined : view);
+  }, []);
+
+  useEpitaxyViewShortcuts(selectView);
+  useEffect(() => {
+    if (!initialSessionId) setActiveView(undefined);
+  }, [initialSessionId]);
+
+  const chatBody = (
+    <>
+      {!initialSessionId && landingActions ? <div className="relative"><div className="epitaxy-chat-column epitaxy-chat-size pointer-events-none absolute inset-x-0 top-[12px] flex justify-end"><div className="pointer-events-auto">{landingActions}</div></div></div> : null}
+      <div className="contents">
+        <div className="flex-1 min-h-0 relative isolate [--epitaxy-scrim-inset-end:16px]">
+          <div aria-hidden="true" className="epitaxy-top-scrim" />
+          <div aria-hidden="true" className="epitaxy-bottom-scrim" style={{ opacity: messages.length > 0 ? 1 : 0 }} />
+          {renderTranscriptBody({ error, initialSessionId, isLoading, isSessionNotFound, landingBody, messages, reload })}
+        </div>
+        {!hideComposer && initialSessionId && !isSessionNotFound ? (
+          <ExistingSessionComposer
+            bridge={bridgeForSource(source, session)}
+            disabled={isLoading || Boolean(error)}
+            onSubmit={async (text) => {
+              await sendMessageToSession(source, initialSessionId, text);
+              await reload();
+            }}
+            reload={reload}
+            session={session}
+            sessionRef={effectiveSessionRef}
+          />
+        ) : null}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="relative h-full min-w-0 flex">
+      <div className="relative h-full min-w-0 flex flex-col flex-1">
+        <EpitaxyChatHeader
+          activeView={activeView}
+          dragHandle={dragHandle}
+          isTitleLoading={isLoading && !session}
+          isTopLeft={isTopLeft}
+          onClose={onClose}
+          onSessionRemoved={onSessionRemoved}
+          onViewSelect={selectView}
+          paneIndex={paneIndex}
+          session={session}
+          sessionRef={effectiveSessionRef}
+          title={title}
+        />
+        {chatBody}
+      </div>
+      {activeView ? (
+        <EpitaxySidePaneTile
+          activeView={activeView}
+          isTopLeft={isTopLeft}
+          onClose={() => setActiveView(undefined)}
+          session={session}
+          sessionRef={effectiveSessionRef}
+          source={source}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function EpitaxyChatHeader({ activeView, dragHandle, isTitleLoading, isTopLeft, onClose, onSessionRemoved, onViewSelect, paneIndex, session, sessionRef, title }: {
+  activeView?: OfficialViewPane;
+  dragHandle?: ReactNode;
+  isTitleLoading: boolean;
+  isTopLeft?: boolean;
+  onClose?: () => void;
+  onSessionRemoved?: () => void;
+  onViewSelect?: (view: OfficialViewPane) => void;
+  paneIndex: number;
+  session: SessionSummary | null;
+  sessionRef: EpitaxySessionRef | null;
+  title: string;
+}) {
+  return (
+    <OfficialSessionHeader
+      activeView={activeView}
+      dragHandle={dragHandle}
+      isTitleLoading={isTitleLoading}
+      isTopLeft={isTopLeft}
+      onSessionRemoved={onSessionRemoved}
+      onViewSelect={onViewSelect}
+      paneIndex={paneIndex}
+      session={session}
+      sessionRef={sessionRef}
+      title={title}
+    />
+  );
+}
+
+function useEpitaxyViewShortcuts(onSelect: (view: OfficialViewPane) => void) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (event.metaKey && event.shiftKey && event.code === "KeyP") {
+        event.preventDefault();
+        onSelect("preview");
+        return;
+      }
+      if (event.metaKey && event.shiftKey && event.code === "KeyD") {
+        event.preventDefault();
+        onSelect("diff");
+        return;
+      }
+      if (event.ctrlKey && event.code === "Backquote") {
+        event.preventDefault();
+        onSelect("terminal");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onSelect]);
+}
+
+function EpitaxySidePaneTile({
+  activeView,
+  isTopLeft,
+  onClose,
+  session,
+  sessionRef,
+  source,
+}: {
+  activeView: OfficialViewPane;
+  isTopLeft?: boolean;
+  onClose: () => void;
+  session: SessionSummary | null;
+  sessionRef: EpitaxySessionRef | null;
+  source: SessionSource | null;
+}) {
+  const codeSurface = activeView === "terminal" || activeView === "diff";
+  const bridge = bridgeForSource(source, session);
+  const [diffShowTree, setDiffShowTree] = useState(true);
+  const [terminalTabs, setTerminalTabs] = useState<TerminalTabsState>(() => createDefaultTerminalTabs());
+  const plan = useMemo(() => activeView === "plan" ? parseOfficialPlan(session?.messages ?? []) : { content: undefined, path: undefined }, [activeView, session?.messages]);
+
+  useEffect(() => {
+    setTerminalTabs(createDefaultTerminalTabs());
+  }, [sessionRef?.id]);
+
+  const addTerminalTab = useCallback(() => {
+    setTerminalTabs((current) => {
+      const id = String(current.nextId);
+      const tab = { id, ordinal: current.nextId + 1 };
+      return {
+        activeId: id,
+        nextId: current.nextId + 1,
+        tabs: [...current.tabs, tab],
+      };
+    });
+  }, []);
+
+  const selectTerminalTab = useCallback((tabId: string) => {
+    setTerminalTabs((current) => current.activeId === tabId ? current : { ...current, activeId: tabId });
+  }, []);
+
+  const closeTerminalTab = useCallback((tabId: string) => {
+    if (sessionRef) void bridge.stopShellPty?.(terminalPtyKey(sessionRef.id, tabId));
+    setTerminalTabs((current) => {
+      const index = current.tabs.findIndex((tab) => tab.id === tabId);
+      if (index < 0) return current;
+      const tabs = current.tabs.filter((tab) => tab.id !== tabId);
+      if (tabs.length === 0) return createDefaultTerminalTabs();
+      const activeId = current.activeId === tabId ? tabs[Math.min(index, tabs.length - 1)]?.id ?? tabs[0].id : current.activeId;
+      return { ...current, activeId, tabs };
+    });
+  }, [bridge, sessionRef]);
+
+  const activeTerminalTab = terminalTabs.tabs.find((tab) => tab.id === terminalTabs.activeId) ?? terminalTabs.tabs[0];
+
+  return (
+    <>
+      <div aria-hidden="true" className="relative w-[8px] shrink-0 cursor-col-resize">
+        <div className="absolute inset-y-[8px] left-1/2 w-px -translate-x-1/2 rounded-full bg-t2" />
+      </div>
+      <aside
+        className={`${codeSurface ? "epitaxy-code-surface " : ""}min-w-0 shrink-0 relative isolate flex flex-col rounded-r6`}
+        style={{ height: "100%", maxWidth: 560, minWidth: 320, width: "42%" }}
+      >
+        <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated" />
+        <div data-top-left={isTopLeft || undefined} className="relative flex items-center justify-between gap-g6 h-[32px] pl-[8px] pr-[4px] shrink-0">
+          <div className="draggable absolute inset-0 -z-[1]" aria-hidden="true" />
+          {renderSidePaneTitle(activeView, session, sessionRef, {
+            activeTab: activeTerminalTab,
+            diffShowTree,
+            onDiffShowTreeChange: setDiffShowTree,
+            onAddTab: addTerminalTab,
+            onCloseTab: closeTerminalTab,
+            onSelectTab: selectTerminalTab,
+            tabs: terminalTabs.tabs,
+          })}
+          <div className="relative z-[1] flex items-center gap-g1 shrink-0 draggable-none">
+            {activeView === "plan" ? <OfficialPlanHeaderActions bridge={bridge} plan={plan} session={session} /> : null}
+            <OfficialButton ariaLabel="Close" icon="XCrossCloseMedium" onClick={onClose} />
+          </div>
+        </div>
+        <div className="flex-1 min-h-0 overflow-hidden rounded-b-r6">
+          <ViewPaneBody activeTerminalTab={activeTerminalTab} activeView={activeView} bridge={bridge} diffShowTree={diffShowTree} session={session} sessionRef={sessionRef} />
+        </div>
+      </aside>
+    </>
+  );
+}
+
+const viewPaneConfig: Record<OfficialViewPane, { icon: string; label: string }> = {
+  preview: { icon: "Play", label: "预览" },
+  diff: { icon: "ChangesDiffPlusMinusBox", label: "Diff" },
+  terminal: { icon: "TerminalOpenCommandLine", label: "Terminal" },
+  tasks: { icon: "Blocks", label: "任务" },
+  plan: { icon: "CheckList", label: "Plan" },
+};
+
+type TerminalTab = {
+  id: string;
+  name?: string;
+  ordinal: number;
+};
+
+type TerminalTabsState = {
+  activeId: string;
+  nextId: number;
+  tabs: TerminalTab[];
+};
+
+type TerminalTitleState = {
+  activeTab?: TerminalTab;
+  diffShowTree?: boolean;
+  onDiffShowTreeChange?: (showTree: boolean) => void;
+  onAddTab: () => void;
+  onCloseTab: (tabId: string) => void;
+  onSelectTab: (tabId: string) => void;
+  tabs: TerminalTab[];
+};
+
+const defaultTerminalTabId = "0";
+
+function createDefaultTerminalTabs(): TerminalTabsState {
+  return { activeId: defaultTerminalTabId, nextId: 1, tabs: [{ id: defaultTerminalTabId, ordinal: 1 }] };
+}
+
+function terminalTabLabel(tab: TerminalTab | undefined) {
+  if (!tab) return "Terminal";
+  return tab.name ?? (tab.ordinal > 1 ? `Terminal ${tab.ordinal}` : "Terminal");
+}
+
+function terminalPtyKey(sessionId: string, tabId: string) {
+  return tabId === defaultTerminalTabId ? sessionId : `${sessionId}::${tabId}`;
+}
+
+function renderSidePaneTitle(activeView: OfficialViewPane, session: SessionSummary | null, sessionRef: EpitaxySessionRef | null, terminalState?: TerminalTitleState) {
+  if (activeView === "preview" && sessionRef?.type === "local") {
+    return (
+      <div className="relative z-[1] flex items-center gap-g3 min-w-0 draggable-none">
+        <OfficialDropdownButton
+          align="start"
+          className="-ml-[5px]"
+          header="Servers"
+          label="预览"
+          mode="text"
+          side="bottom"
+        />
+      </div>
+    );
+  }
+
+  if (activeView === "diff" && sessionRef) {
+    return (
+      <div className="relative z-[1] flex items-center gap-g3 min-w-0 draggable-none">
+        <OfficialButton
+          ariaLabel={terminalState?.diffShowTree ? "Hide files" : "Show files"}
+          className="-ml-[4px]"
+          icon="FolderOpenFront"
+          onClick={() => terminalState?.onDiffShowTreeChange?.(!terminalState.diffShowTree)}
+          pressed={terminalState?.diffShowTree}
+        />
+        <span className="flex items-center gap-g3 text-body text-t6 min-w-0 -ml-[2px]">
+          <span className="text-t7 truncate">{session?.repo?.branch ?? "HEAD"}</span>
+          <span className="text-t4">→</span>
+          <span className="text-t7 truncate">working tree</span>
+        </span>
+      </div>
+    );
+  }
+
+  if (activeView === "terminal") {
+    const activeTab = terminalState?.activeTab;
+    const hasMultipleTabs = Boolean(terminalState && terminalState.tabs.length > 1);
+    const tabItems: OfficialDropdownItem[] = terminalState?.tabs.map((tab) => ({
+      checked: tab.id === activeTab?.id,
+      label: terminalTabLabel(tab),
+      onSelect: () => terminalState.onSelectTab(tab.id),
+      trailing: terminalState.tabs.length > 1 ? (
+        <TerminalTabDeleteButton ariaLabel={`Close ${terminalTabLabel(tab)}`} onDelete={() => terminalState.onCloseTab(tab.id)} />
+      ) : undefined,
+    })) ?? [];
+    const extraSections = terminalState ? [{ items: [{ label: "New terminal", onSelect: terminalState.onAddTab }] }] : undefined;
+
+    return (
+      <div className="relative z-[1] flex items-center gap-g1 min-w-0 draggable-none">
+        {hasMultipleTabs ? (
+          <OfficialDropdownButton
+            align="start"
+            className="-ml-[5px]"
+            extraSections={extraSections}
+            header="Terminals"
+            items={tabItems}
+            label={terminalTabLabel(activeTab)}
+            mode="text"
+            side="bottom"
+          />
+        ) : (
+          <span className="text-body text-uncontained-default select-none truncate max-w-[200px] pl-[1px]">{terminalTabLabel(activeTab)}</span>
+        )}
+        {hasMultipleTabs ? <span aria-hidden className="inline-block w-px h-[10px] rounded-full bg-t3 -ml-[2px] -mr-[2px]" /> : null}
+        <OfficialButton ariaLabel="New terminal" className="w-[20px]" icon="PlusSmall" onClick={terminalState?.onAddTab} />
+      </div>
+    );
+  }
+
+  const label = activeView === "preview" && session?.title ? "预览" : viewPaneConfig[activeView].label;
+  return <span className="text-body text-t7 select-none truncate draggable-none pl-[1px] relative z-[1]">{label}</span>;
+}
+
+function TerminalTabDeleteButton({ ariaLabel, onDelete }: { ariaLabel: string; onDelete: () => void }) {
+  return (
+    <button
+      aria-label={ariaLabel}
+      className="ml-auto flex items-center justify-center size-[20px] shrink-0 rounded-r3 bg-transparent border-0 outline-none ring-focus text-t5 hover:text-[var(--core-red)] hover:bg-t2"
+      onClick={(event) => {
+        event.stopPropagation();
+        onDelete();
+      }}
+      type="button"
+    >
+      <Icon name="TrashCanRound" size="sm" />
+    </button>
+  );
+}
+
+function OfficialPlanHeaderActions({ bridge, plan, session }: { bridge: LocalSessionsBridge; plan: { content?: string; path?: string }; session: SessionSummary | null }) {
+  const [copied, setCopied] = useState(false);
+  const openPath = plan.path ? resolvePlanOpenPath(plan.path, session) : undefined;
+  const canOpen = Boolean(openPath && bridge.openInEditor);
+  const openItems: OfficialDropdownItem[] = canOpen ? [{
+    icon: "Folder1Open",
+    label: "Default editor",
+    onSelect: () => {
+      if (openPath) void bridge.openInEditor?.(openPath);
+    },
+  }] : [];
+
+  if (!plan.content) return null;
+  return (
+    <>
+      {canOpen ? (
+        <OfficialDropdownButton
+          align="end"
+          ariaLabel="Open in…"
+          header="Open in…"
+          icon="Folder1Open"
+          items={openItems}
+          revealChevron="never"
+        />
+      ) : null}
+      <OfficialButton
+        ariaLabel={copied ? "Copied" : "Copy plan"}
+        icon={copied ? "CheckSelection" : "CopySquareBehind"}
+        onClick={() => {
+          void navigator.clipboard.writeText(plan.content ?? "").then(() => {
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1600);
+          }).catch(() => {});
+        }}
+      />
+    </>
+  );
+}
+
+function ViewPaneBody({ activeTerminalTab, activeView, bridge, diffShowTree, session, sessionRef }: { activeTerminalTab?: TerminalTab; activeView: OfficialViewPane; bridge: LocalSessionsBridge; diffShowTree: boolean; session: SessionSummary | null; sessionRef: EpitaxySessionRef | null }) {
+  switch (activeView) {
+    case "preview":
+      return <OfficialPreviewPane session={session} />;
+    case "diff":
+      return sessionRef ? <OfficialDiffPane bridge={bridge} session={session} sessionRef={sessionRef} showTree={diffShowTree} /> : null;
+    case "terminal":
+      return sessionRef ? <OfficialShellPtyPane bridge={bridge} ptyKey={terminalPtyKey(sessionRef.id, activeTerminalTab?.id ?? defaultTerminalTabId)} sessionRef={sessionRef} /> : null;
+    case "tasks":
+      return sessionRef ? <OfficialTasksPane bridge={bridge} session={session} sessionRef={sessionRef} /> : null;
+    case "plan":
+      return sessionRef ? <OfficialPlanPane session={session} /> : null;
+  }
+}
+
+type OfficialTaskStatus = "completed" | "failed" | "running" | "stopped";
+
+type OfficialBackgroundTask = {
+  completedAt?: number;
+  description: string;
+  index: number;
+  lastToolName?: string;
+  prompt?: string;
+  result?: string;
+  startedAt?: number;
+  status: OfficialTaskStatus;
+  summary?: string;
+  taskId: string;
+  taskType?: string;
+  toolUseId?: string;
+  usage?: {
+    durationMs: number;
+    toolUses: number;
+    totalTokens: number;
+  };
+  workflowProgress?: Array<{
+    index: number;
+    label: string;
+    state: "done" | "error" | "pending" | "running" | "start";
+    title?: string;
+    type: "agent" | "workflow_phase";
+  }>;
+};
+
+function OfficialTasksPane({ bridge, session, sessionRef }: { bridge: LocalSessionsBridge; session: SessionSummary | null; sessionRef: EpitaxySessionRef }) {
+  const tasks = useMemo(() => parseOfficialTasks(session?.messages ?? []), [session?.messages]);
+  const running = useMemo(() => tasks.filter((task) => task.status === "running").sort((left, right) => (left.startedAt ?? Infinity) - (right.startedAt ?? Infinity) || left.index - right.index), [tasks]);
+  const finished = useMemo(() => tasks.filter((task) => task.status !== "running").sort((left, right) => (right.completedAt ?? -Infinity) - (left.completedAt ?? -Infinity) || left.index - right.index), [tasks]);
+  const stopTask = useCallback((taskId: string) => {
+    void bridge.stopTask?.(sessionRef.id, taskId);
+  }, [bridge, sessionRef.id]);
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="flex flex-col gap-g6 px-p7 py-p7">
+        {running.length === 0 && finished.length === 0 ? <OfficialTasksEmpty /> : (
+          <>
+            <OfficialTaskSection heading="Running" onStop={bridge.stopTask ? stopTask : undefined} tasks={running} />
+            <OfficialTaskSection heading="Completed" tasks={finished} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OfficialTasksEmpty() {
+  return (
+    <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-g3 text-center text-t6">
+      <Icon name="Blocks" size="lg" />
+      <div className="text-body">No tasks.</div>
+    </div>
+  );
+}
+
+function OfficialTaskSection({ heading, onStop, tasks }: { heading: string; onStop?: (taskId: string) => void; tasks: OfficialBackgroundTask[] }) {
+  if (tasks.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-g3">
+      <h3 className="text-footnote text-t6">{heading}</h3>
+      {tasks.map((task) => <OfficialTaskCard key={task.taskId} onStop={onStop} task={task} />)}
+    </section>
+  );
+}
+
+function OfficialTaskCard({ onStop, task }: { onStop?: (taskId: string) => void; task: OfficialBackgroundTask }) {
+  const [expanded, setExpanded] = useState(false);
+  const kind = officialTaskKind(task.taskType);
+  const usage = task.usage ? [formatDuration(task.usage.durationMs), formatTokens(task.usage.totalTokens), `${task.usage.toolUses} ${task.usage.toolUses === 1 ? "tool use" : "tool uses"}`].join(" · ") : null;
+  const canExpand = Boolean(task.summary || task.workflowProgress?.length);
+  const canStop = task.status === "running" && Boolean(onStop);
+  return (
+    <div className={`group flex flex-col rounded-r6 bg-t1 ${canExpand ? "hover:bg-t2 focus-within:bg-t2" : ""}`}>
+      <div className="flex items-center gap-g6 pl-p6 pr-p8 py-p6">
+        <button
+          type="button"
+          onClick={() => canExpand && setExpanded((value) => !value)}
+          disabled={!canExpand}
+          aria-expanded={canExpand ? expanded : undefined}
+          aria-label={`Background task: ${task.description}`}
+          className="flex-1 min-w-0 flex items-start gap-g6 text-left outline-none hide-focus-ring ring-focus disabled:cursor-default"
+        >
+          <span className="flex h-[var(--leading-body)] w-[20px] shrink-0 items-center justify-center">
+            <OfficialTaskStatusIcon status={task.status} />
+          </span>
+          <span className="flex-1 min-w-0 flex flex-col gap-g4 pb-p2">
+            <span className="min-w-0 flex items-center gap-g2 text-body text-t9">
+              <span className="truncate">{task.description}</span>
+              {canExpand ? <Icon name={expanded ? "ChevronDownMedium" : "ChevronRightMedium"} size="sm" className="shrink-0 text-t6" /> : null}
+            </span>
+            <span className="text-footnote text-t6 truncate">
+              <span className="text-t7">{kind.label}</span>
+              <span> · </span>
+              <OfficialTaskStatusLabel task={task} />
+              {usage ? <><span> · </span>{usage}</> : null}
+            </span>
+          </span>
+        </button>
+        {canStop ? (
+          <OfficialButton ariaLabel="Stop this task" onClick={() => onStop?.(task.taskId)} size="small" variant="contained">Stop</OfficialButton>
+        ) : null}
+      </div>
+      {expanded && canExpand ? (
+        <div className="flex flex-col gap-g4 pl-[calc(var(--p6)+20px+var(--g6))] pr-p8 pb-[16px] select-text">
+          {task.summary ? <div className="text-footnote text-t7 whitespace-pre-wrap break-words">{task.summary}</div> : null}
+          {task.workflowProgress?.length ? <OfficialWorkflowProgress progress={task.workflowProgress} /> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function OfficialTaskStatusIcon({ status }: { status: OfficialTaskStatus }) {
+  if (status === "completed") return <Icon name="CircleCheck" size="sm" />;
+  if (status === "failed") return <Icon name="XCrossCloseMedium" size="sm" className="text-extended-pink" />;
+  if (status === "stopped") return <Icon name="Stop" size="sm" />;
+  return <OfficialSpinner />;
+}
+
+function OfficialTaskStatusLabel({ task }: { task: OfficialBackgroundTask }) {
+  if (task.status === "running") return <>{task.lastToolName ? `Running ${task.lastToolName}` : "Running"}</>;
+  if (task.status === "completed") return <>Completed</>;
+  if (task.status === "failed") return <>Failed</>;
+  return <>Stopped</>;
+}
+
+function OfficialWorkflowProgress({ progress }: { progress: NonNullable<OfficialBackgroundTask["workflowProgress"]> }) {
+  return (
+    <ul className="flex flex-col gap-g2">
+      {progress.map((item) => item.type === "workflow_phase" ? (
+        <li className="text-footnote text-t7 pt-p6 pb-p2 first:pt-0" key={`phase-${item.index}`}>{item.title}</li>
+      ) : (
+        <li className="-ml-[calc(12px+var(--g3))] flex items-center gap-g3 text-footnote text-t6" key={`agent-${item.index}`}>
+          <span className="flex w-[12px] shrink-0 translate-y-px justify-center">
+            {item.state === "done" ? <Icon name="CircleCheck" size="sm" /> : item.state === "error" ? <Icon name="XCrossCloseMedium" size="sm" className="text-extended-pink" /> : <OfficialSpinner />}
+          </span>
+          <span className="truncate">{item.label}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function OfficialPlanPane({ session }: { session: SessionSummary | null }) {
+  const plan = useMemo(() => parseOfficialPlan(session?.messages ?? []), [session?.messages]);
+  if (!plan.content) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-g3 px-[32px] text-center text-t6">
+        <Icon name="CheckList" size="lg" />
+        <div className="text-body">No plan yet.</div>
+        <div className="text-caption">Claude writes the plan here as it explores. Keep chatting.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="h-full select-text overflow-y-auto p-p8" style={{ scrollbarGutter: "stable" }}>
+      <div className="epitaxy-markdown mx-auto max-w-[68ch]">
+        <pre className="m-0 whitespace-pre-wrap break-words text-body text-t8 font-sans">{plan.content}</pre>
+      </div>
+    </div>
+  );
+}
+
+function OfficialPreviewPane({ session }: { session: SessionSummary | null }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-g8 px-p8">
+      <img alt="" className="select-none" draggable={false} height={94} src="/assets/v1/clawd-laptop-official.gif" width={140} />
+      <div role="status" className="flex items-center gap-g3 text-body text-t7">
+        <OfficialSpinner />
+        <span>{session ? "Setting up preview" : "Run your dev server to inspect network requests, debug with logs, and see changes live."}</span>
+      </div>
+    </div>
+  );
+}
+
+type DiffFileEntry = {
+  diff: string;
+  isDeleted: boolean;
+  isNew: boolean;
+  isRenamed: boolean;
+  oldPath?: string;
+  path: string;
+  status: "A" | "D" | "M" | "R";
+};
+
+function OfficialDiffPane({ bridge, session, sessionRef, showTree }: { bridge: LocalSessionsBridge; session: SessionSummary | null; sessionRef: EpitaxySessionRef; showTree: boolean }) {
+  const [state, setState] = useState<{ diff: string; error?: string; isLoading: boolean; stats: string }>({ diff: "", isLoading: true, stats: "" });
+  const [contentState, setContentState] = useState<{ error?: string; isLoading: boolean; modified: string; original: string }>({ isLoading: false, modified: "", original: "" });
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setState({ diff: "", isLoading: true, stats: "" });
+    setSelectedPath(null);
+    void Promise.all([
+      bridge.getGitDiff?.(sessionRef.id, []) ?? Promise.resolve({ ok: false, error: "getGitDiff unavailable", stdout: "", stderr: "" }),
+      bridge.getGitDiffStats?.(sessionRef.id) ?? Promise.resolve({ ok: false, error: "getGitDiffStats unavailable", stdout: "", stderr: "" }),
+    ]).then(([diffResult, statsResult]) => {
+      if (!alive) return;
+      const diffOk = diffResult.ok !== false && !diffResult.error;
+      const statsOk = statsResult.ok !== false && !statsResult.error;
+      setState({
+        diff: diffOk ? diffResult.stdout ?? "" : "",
+        error: diffOk ? undefined : diffResult.error ?? diffResult.stderr ?? "Failed to load diff",
+        isLoading: false,
+        stats: statsOk ? statsResult.stdout ?? "" : "",
+      });
+    }).catch((error) => {
+      if (alive) setState({ diff: "", error: error instanceof Error ? error.message : "Failed to load diff", isLoading: false, stats: "" });
+    });
+    return () => { alive = false; };
+  }, [bridge, sessionRef.id]);
+
+  const files = useMemo(() => parseDiffFiles(state.diff), [state.diff]);
+  const activeFile = useMemo(() => {
+    if (files.length === 0) return null;
+    return files.find((file) => file.path === selectedPath) ?? files[0];
+  }, [files, selectedPath]);
+  const diffTarget = `${sessionRef.id}:${activeFile?.path ?? ""}:${activeFile?.oldPath ?? ""}`;
+
+  useEffect(() => {
+    let alive = true;
+    if (!activeFile) {
+      setContentState({ isLoading: false, modified: "", original: "" });
+      return () => { alive = false; };
+    }
+
+    setContentState({ isLoading: true, modified: "", original: "" });
+    const originalPromise = activeFile.isNew
+      ? Promise.resolve({ ok: true, stdout: "", stderr: "" })
+      : bridge.getDiffFileContent?.(sessionRef.id, "HEAD", activeFile.path, activeFile.oldPath)
+        ?? bridge.getDiffFileContent?.(sessionRef.id, activeFile.oldPath ?? activeFile.path)
+        ?? Promise.resolve({ ok: false, error: "getDiffFileContent unavailable", stdout: "", stderr: "" });
+    const modifiedPromise = activeFile.isDeleted
+      ? Promise.resolve({ ok: true, stdout: "", stderr: "" })
+      : bridge.readFileAtCwd?.(sessionRef.id, activeFile.path)
+        ?? Promise.resolve({ ok: false, error: "readFileAtCwd unavailable", stdout: "", stderr: "" });
+
+    void Promise.all([originalPromise, modifiedPromise]).then(([original, modified]) => {
+      if (!alive) return;
+      const originalError = "error" in original ? original.error : undefined;
+      const modifiedError = "error" in modified ? modified.error : undefined;
+      setContentState({
+        error: originalError || modifiedError,
+        isLoading: false,
+        modified: modified.ok === false ? "" : modified.stdout ?? "",
+        original: original.ok === false ? "" : original.stdout ?? "",
+      });
+    }).catch((error) => {
+      if (alive) {
+        setContentState({
+          error: error instanceof Error ? error.message : "Failed to load file diff",
+          isLoading: false,
+          modified: "",
+          original: "",
+        });
+      }
+    });
+    return () => { alive = false; };
+  }, [activeFile, bridge, diffTarget, sessionRef.id]);
+
+  if (state.isLoading) {
+    return <div role="status" className="h-full flex items-center justify-center text-t5"><OfficialSpinner /><span className="sr-only">Loading diff</span></div>;
+  }
+
+  if (state.error) {
+    return <div className="h-full flex items-center justify-center text-body text-t5 px-p8 text-center">{state.error}</div>;
+  }
+
+  if (!state.diff.trim()) {
+    return <div className="h-full flex items-center justify-center text-body text-t5">No changes to show.</div>;
+  }
+
+  return (
+    <div className="h-full select-text flex min-w-0 text-body text-t8">
+      {showTree && files.length > 0 ? (
+        <aside className="w-[200px] shrink-0 overflow-y-auto border-r border-border-300 py-p4">
+          {files.map((file) => (
+            <button
+              key={file.path}
+              aria-pressed={file.path === activeFile?.path || undefined}
+              className="group/btn relative isolate flex h-small w-full items-center gap-g3 border-0 bg-transparent px-p6 text-left text-footnote text-t7 outline-none hide-focus-ring ring-focus"
+              onClick={() => setSelectedPath(file.path)}
+              type="button"
+            >
+              <span aria-hidden="true" className={`absolute inset-y-0 left-[6px] right-[6px] -z-[1] rounded-r4 ${file.path === activeFile?.path ? "bg-[var(--fill-uncontained-selected)]" : "group-hover/btn:bg-[var(--fill-uncontained-hover)]"}`} />
+              <Icon name="Document" size="xs" />
+              <span className="truncate">{file.path}</span>
+              <span className="ml-auto shrink-0 text-t5">{file.status}</span>
+            </button>
+          ))}
+        </aside>
+      ) : null}
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        {state.stats.trim() ? <pre className="m-0 border-b border-border-300 p-p6 text-code text-t6 whitespace-pre-wrap">{state.stats.trim()}</pre> : null}
+        <div className="flex-1 min-h-0 overflow-auto">
+          {contentState.isLoading ? (
+            <div role="status" className="h-full flex items-center justify-center text-t5"><OfficialSpinner /><span className="sr-only">Loading file diff</span></div>
+          ) : contentState.error ? (
+            <pre className="m-0 min-w-max p-p6 text-code text-t8 leading-[18px] whitespace-pre-wrap">{activeFile?.diff ?? state.diff}</pre>
+          ) : (
+            <OfficialSplitDiffView file={activeFile} modified={contentState.modified} original={contentState.original} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OfficialSplitDiffView({ file, modified, original }: { file: DiffFileEntry | null; modified: string; original: string }) {
+  if (!file) return null;
+  const originalLines = splitDiffText(original);
+  const modifiedLines = splitDiffText(modified);
+  const rows = Math.max(originalLines.length, modifiedLines.length, 1);
+  return (
+    <div className="min-w-[720px]">
+      <div className="sticky top-0 z-[2] grid grid-cols-2 border-b border-border-300 bg-bg-000 text-footnote text-t6">
+        <div className="truncate border-r border-border-300 px-p6 py-p4">{file.oldPath ?? file.path}</div>
+        <div className="truncate px-p6 py-p4">{file.path}</div>
+      </div>
+      <div className="grid grid-cols-2 text-code text-t8 leading-[18px]">
+        <div className="min-w-0 border-r border-border-300">
+          {Array.from({ length: rows }, (_, index) => (
+            <DiffCodeLine key={`old-${index}`} line={originalLines[index] ?? ""} lineNumber={index + 1} muted={file.isNew} variant={file.isDeleted ? "delete" : "plain"} />
+          ))}
+        </div>
+        <div className="min-w-0">
+          {Array.from({ length: rows }, (_, index) => (
+            <DiffCodeLine key={`new-${index}`} line={modifiedLines[index] ?? ""} lineNumber={index + 1} muted={file.isDeleted} variant={file.isNew ? "add" : "plain"} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DiffCodeLine({ line, lineNumber, muted, variant }: { line: string; lineNumber: number; muted?: boolean; variant: "add" | "delete" | "plain" }) {
+  const bg = variant === "add" ? "bg-[rgba(30,158,60,0.08)]" : variant === "delete" ? "bg-[rgba(255,58,48,0.08)]" : "";
+  return (
+    <div className={`grid grid-cols-[48px_minmax(0,1fr)] min-h-[18px] ${bg}`}>
+      <span className="select-none pr-p3 text-right text-t5">{muted ? "" : lineNumber}</span>
+      <span className={`whitespace-pre-wrap break-words pr-p6 ${muted ? "text-t4" : ""}`}>{line}</span>
+    </div>
+  );
+}
+
+function OfficialShellPtyPane({ bridge, ptyKey, sessionRef }: { bridge: LocalSessionsBridge; ptyKey: string; sessionRef: EpitaxySessionRef }) {
+  const [error, setError] = useState<string | null>(null);
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const terminalRef = useRef<{ fitAddon: FitAddon; terminal: Terminal } | null>(null);
+  const bufferRef = useRef("");
+
+  useEffect(() => {
+    let alive = true;
+    let started = false;
+    let resizeFrame = 0;
+    let resizeObserver: ResizeObserver | null = null;
+    let pollTimer = 0;
+    let dataDisposable: { dispose: () => void } | undefined;
+    setError(null);
+
+    bufferRef.current = "";
+    hostRef.current?.replaceChildren();
+
+    const terminal = new Terminal({
+      cursorBlink: true,
+      fontFamily: "\"SF Mono\", Menlo, Monaco, \"Courier New\", monospace",
+      fontSize: 12,
+      scrollback: 1000,
+      theme: officialLightTerminalTheme,
+    });
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type !== "keydown") return true;
+      if (event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.code === "Backquote") return false;
+      if (event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && (event.code === "BracketLeft" || event.code === "BracketRight")) {
+        event.preventDefault();
+        if (!event.repeat) {
+          if (event.code === "BracketLeft") window.history.back();
+          else window.history.forward();
+        }
+        return false;
+      }
+      if ((event.metaKey || (event.ctrlKey && event.shiftKey)) && event.code === "KeyC" && terminal.hasSelection()) {
+        event.preventDefault();
+        void navigator.clipboard.writeText(terminal.getSelection()).catch(() => {});
+        return false;
+      }
+      return true;
+    });
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    try {
+      const webglAddon = new WebglAddon();
+      webglAddon.onContextLoss(() => webglAddon.dispose());
+      terminal.loadAddon(webglAddon);
+    } catch (error) {
+      console.warn("WebGL terminal renderer unavailable, using DOM", error);
+    }
+    terminalRef.current = { fitAddon, terminal };
+
+    if (hostRef.current) terminal.open(hostRef.current);
+    dataDisposable = terminal.onData((data) => {
+      void bridge.writeShellPty?.(ptyKey, data);
+    });
+
+    const unsubscribe = bridge.onShellPtyEvent?.((event) => {
+      if (event.sessionId !== ptyKey) return;
+      if (event.type === "shell_pty_data" && event.data) {
+        bufferRef.current += event.data;
+        terminal.write(event.data);
+      }
+      if (event.type === "shell_pty_close") setError("Shell exited.");
+    });
+
+    const replayBufferedOutput = (nextBuffer?: string) => {
+      if (!nextBuffer || nextBuffer === bufferRef.current) return;
+      if (nextBuffer.startsWith(bufferRef.current)) {
+        terminal.write(nextBuffer.slice(bufferRef.current.length));
+      } else {
+        terminal.write(terminalReconnectReplay + nextBuffer);
+      }
+      bufferRef.current = nextBuffer;
+    };
+
+    const syncBuffer = () => {
+      void bridge.getShellPtyBuffer?.(ptyKey).then((nextBuffer) => {
+        if (alive) replayBufferedOutput(nextBuffer);
+      }).catch(() => {});
+    };
+
+    const startPty = () => {
+      if (started) return;
+      started = true;
+      try {
+        fitAddon.fit();
+      } catch {
+        // xterm cannot fit before layout is available; ResizeObserver will retry.
+      }
+      const { cols, rows } = terminal;
+      void bridge.startShellPty?.(ptyKey, Math.max(cols, 80), Math.max(rows, 24)).then((result) => {
+        if (!alive) return;
+        if (!result?.ok) {
+          setError(result?.error ?? "Failed to start shell");
+          return;
+        }
+        replayBufferedOutput(result.buffered);
+        requestAnimationFrame(() => terminal.focus());
+      }).catch((err) => {
+        if (alive) setError(err instanceof Error ? err.message : "Failed to start shell");
+      });
+    };
+
+    const refit = () => {
+      resizeFrame = 0;
+      if (!alive || !hostRef.current || hostRef.current.offsetHeight === 0) return;
+      try {
+        fitAddon.fit();
+      } catch {
+        return;
+      }
+      const { cols, rows } = terminal;
+      if (cols > 0 && rows > 0) {
+        if (started) void bridge.resizeShellPty?.(ptyKey, cols, rows);
+        else startPty();
+      }
+    };
+
+    if (hostRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        if (!resizeFrame) resizeFrame = requestAnimationFrame(refit);
+      });
+      resizeObserver.observe(hostRef.current);
+    }
+
+    requestAnimationFrame(refit);
+    pollTimer = window.setInterval(syncBuffer, 600);
+
+    return () => {
+      alive = false;
+      if (resizeFrame) cancelAnimationFrame(resizeFrame);
+      if (pollTimer) window.clearInterval(pollTimer);
+      resizeObserver?.disconnect();
+      unsubscribe?.();
+      dataDisposable?.dispose();
+      terminal.dispose();
+      terminalRef.current = null;
+    };
+  }, [bridge, ptyKey, sessionRef.id]);
+
+  return (
+    <div style={{ height: "100%", padding: "var(--p6)", backgroundColor: officialLightTerminalTheme.background }} className="relative w-full">
+      <div
+        ref={hostRef}
+        className="h-full w-full [&_.xterm-viewport]:!bg-transparent [&_textarea]:[caret-color:transparent]"
+        onMouseDown={() => terminalRef.current?.terminal.focus()}
+      />
+      {error ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-g3 bg-bg-100 text-text-400">
+          <p className="text-body text-t6">{error}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const terminalReconnectReplay = "\x1b[3J\x1b[2J\x1b[H\x1b[2m[shell reconnected — replaying buffered output]\x1b[0m\r\n";
+
+const officialLightTerminalTheme = {
+  background: "#ffffff",
+  foreground: "#1a1a1a",
+  cursor: "#0073e6",
+  cursorAccent: "#ffffff",
+  black: "#1a1a1a",
+  red: "#ff3a30",
+  green: "#1e9e3c",
+  yellow: "#98801f",
+  blue: "#0073e6",
+  magenta: "#cd2054",
+  cyan: "#8e6bd9",
+  white: "#999999",
+  brightBlack: "#666666",
+  brightRed: "#ff5047",
+  brightGreen: "#1e9e3c",
+  brightYellow: "#98801f",
+  brightBlue: "#0078f0",
+  brightMagenta: "#cd2054",
+  brightCyan: "#8e6bd9",
+  brightWhite: "#d6d6d6",
+};
+
+function parseDiffFiles(diff: string): DiffFileEntry[] {
+  const files: DiffFileEntry[] = [];
+  const seen = new Set<string>();
+  const matches = Array.from(diff.matchAll(/^diff --git a\/(.*?) b\/(.*?)$/gm));
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index];
+    const start = match.index ?? 0;
+    const end = matches[index + 1]?.index ?? diff.length;
+    const fileDiff = diff.slice(start, end).trimEnd();
+    const renameFrom = fileDiff.match(/^rename from (.+)$/m)?.[1];
+    const renameTo = fileDiff.match(/^rename to (.+)$/m)?.[1];
+    const oldHeader = fileDiff.match(/^--- (.+)$/m)?.[1];
+    const newHeader = fileDiff.match(/^\+\+\+ (.+)$/m)?.[1];
+    const isNew = oldHeader === "/dev/null" || /^new file mode /m.test(fileDiff);
+    const isDeleted = newHeader === "/dev/null" || /^deleted file mode /m.test(fileDiff);
+    const isRenamed = Boolean(renameFrom || renameTo || /^similarity index /m.test(fileDiff));
+    const path = normalizeDiffPath(renameTo ?? newHeader ?? match[2] ?? match[1]);
+    const oldPath = normalizeDiffPath(renameFrom ?? oldHeader ?? match[1]);
+    if (path && !seen.has(path)) {
+      seen.add(path);
+      files.push({
+        diff: fileDiff,
+        isDeleted,
+        isNew,
+        isRenamed,
+        oldPath: oldPath && oldPath !== path ? oldPath : undefined,
+        path,
+        status: isNew ? "A" : isDeleted ? "D" : isRenamed ? "R" : "M",
+      });
+    }
+  }
+  return files;
+}
+
+function normalizeDiffPath(value?: string) {
+  if (!value || value === "/dev/null") return undefined;
+  return value.replace(/^"[ab]\//, "").replace(/"$/, "").replace(/^[ab]\//, "");
+}
+
+function splitDiffText(value: string) {
+  return value.length === 0 ? [] : value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+}
+
+const taskNotificationPattern = /<task-notification>([\s\S]*?)<\/task-notification>/g;
+const taskIdPattern = /<task-id>([^<]+)<\/task-id>/;
+const taskStatusPattern = /<status>([^<]+)<\/status>/;
+const taskSummaryPattern = /<summary>([^<]+)<\/summary>/;
+const taskResultPattern = /<result>([\s\S]*?)<\/result>/;
+const taskToolUseIdPattern = /<tool-use-id>([^<]+)<\/tool-use-id>/;
+const taskTypePattern = /<task-type>([^<]+)<\/task-type>/;
+const taskDescriptionPattern = /^(Agent|Workflow|Background command|Monitor|Remote task) "(.+?)" (?:completed|failed|was|stopped|stream|script|appears)/;
+const taskTypeFromNotification: Record<string, string> = {
+  Agent: "local_agent",
+  Workflow: "local_workflow",
+  "Background command": "local_bash",
+  Monitor: "local_bash",
+  "Remote task": "remote_agent",
+};
+
+function parseOfficialTasks(messages: ChatMessage[]): OfficialBackgroundTask[] {
+  const tasks = new Map<string, OfficialBackgroundTask>();
+  const ensureTask = (taskId: string) => {
+    let task = tasks.get(taskId);
+    if (!task) {
+      task = {
+        description: taskId,
+        index: tasks.size,
+        status: "running",
+        taskId,
+      };
+      tasks.set(taskId, task);
+    }
+    return task;
+  };
+
+  for (const message of messages) {
+    const raw = asRecord(message.raw);
+    if (raw.type === "user") {
+      for (const notification of parseTaskNotifications(raw, message)) {
+        const task = ensureTask(notification.taskId);
+        task.status = notification.status;
+        if (notification.summary) task.summary = notification.summary;
+        if (notification.result) task.result = notification.result;
+        if (notification.toolUseId) task.toolUseId ??= notification.toolUseId;
+        if (notification.taskType) task.taskType ??= notification.taskType;
+        if (notification.description && task.description === task.taskId) task.description = notification.description;
+        if (task.completedAt === undefined && notification.status !== "running") task.completedAt = timestampFromRaw(raw, message);
+      }
+      continue;
+    }
+
+    if (!isOfficialTaskEvent(raw)) continue;
+    const taskId = stringValue(raw.task_id) ?? stringValue(raw.taskId);
+    if (!taskId) continue;
+    const task = ensureTask(taskId);
+    const timestamp = timestampFromRaw(raw, message);
+    const toolUseId = stringValue(raw.tool_use_id) ?? stringValue(raw.toolUseId);
+    if (toolUseId) task.toolUseId = toolUseId;
+
+    switch (raw.subtype) {
+      case "task_started":
+        task.description = stringValue(raw.description) ?? task.description;
+        task.taskType = stringValue(raw.task_type) ?? stringValue(raw.taskType) ?? task.taskType;
+        task.prompt = stringValue(raw.prompt) ?? task.prompt;
+        task.status = "running";
+        if (task.startedAt === undefined) task.startedAt = timestamp;
+        break;
+      case "task_progress":
+        if (task.startedAt === undefined) task.startedAt = timestamp;
+        if (task.description === task.taskId) task.description = stringValue(raw.description) ?? task.description;
+        task.usage = normalizeTaskUsage(raw.usage) ?? task.usage;
+        task.lastToolName = stringValue(raw.last_tool_name) ?? stringValue(raw.lastToolName) ?? task.lastToolName;
+        task.summary = stringValue(raw.summary) ?? task.summary;
+        task.workflowProgress = normalizeWorkflowProgress(raw.workflow_progress) ?? normalizeWorkflowProgress(raw.workflowProgress) ?? task.workflowProgress;
+        break;
+      case "task_notification":
+        task.status = normalizeTaskStatus(raw.status);
+        if (task.completedAt === undefined) task.completedAt = timestamp;
+        task.summary = stringValue(raw.summary) ?? task.summary;
+        task.usage = normalizeTaskUsage(raw.usage) ?? task.usage;
+        break;
+    }
+  }
+
+  return Array.from(tasks.values());
+}
+
+function parseTaskNotifications(raw: Record<string, unknown>, message: ChatMessage) {
+  const text = rawUserText(raw) || message.text;
+  if (!text.includes("<task-notification>")) return [];
+  const notifications: Array<{ description?: string; result?: string; status: OfficialTaskStatus; summary?: string; taskId: string; taskType?: string; toolUseId?: string }> = [];
+  for (const match of text.matchAll(taskNotificationPattern)) {
+    const body = match[1];
+    const taskId = body.match(taskIdPattern)?.[1];
+    const rawStatus = body.match(taskStatusPattern)?.[1];
+    if (!taskId || !rawStatus) continue;
+    const summary = decodeTaskNotificationText(body.match(taskSummaryPattern)?.[1]);
+    const descriptionMatch = summary?.match(taskDescriptionPattern);
+    notifications.push({
+      description: descriptionMatch?.[2],
+      result: decodeTaskNotificationText(body.match(taskResultPattern)?.[1])?.trim(),
+      status: normalizeTaskStatus(rawStatus),
+      summary,
+      taskId,
+      taskType: body.match(taskTypePattern)?.[1] ?? (descriptionMatch ? taskTypeFromNotification[descriptionMatch[1]] : undefined),
+      toolUseId: body.match(taskToolUseIdPattern)?.[1],
+    });
+  }
+  return notifications;
+}
+
+function parseOfficialPlan(messages: ChatMessage[]) {
+  let content: string | undefined;
+  let path: string | undefined;
+  for (const message of messages) {
+    const raw = asRecord(message.raw);
+    if (raw.type !== "assistant" || raw.parent_tool_use_id || raw.parentToolUseId) continue;
+    const items = rawMessageContent(raw);
+    for (const item of items) {
+      const record = asRecord(item);
+      if (record.type !== "tool_use" && record.kind !== "tool_use") continue;
+      const name = stringValue(record.name) ?? stringValue(record.tool_name);
+      const input = asRecord(record.input);
+      if (name === "ExitPlanMode") {
+        content = stringValue(input.plan) ?? content;
+        continue;
+      }
+      const filePath = stringValue(input.file_path) ?? stringValue(input.filePath);
+      if (filePath && filePath.includes("/.claude/plans/") && (path ??= filePath) === filePath) {
+        if (name === "Write") {
+          content = stringValue(input.content) ?? content;
+        } else if (name === "Edit" && content !== undefined) {
+          content = applyPlanEdit(content, input);
+        } else if (name === "MultiEdit" && Array.isArray(input.edits) && content !== undefined) {
+          for (const edit of input.edits) content = applyPlanEdit(content, asRecord(edit));
+        }
+      }
+    }
+  }
+  return { content, path };
+}
+
+function resolvePlanOpenPath(planPath: string, session: SessionSummary | null) {
+  if (/^(\/|~\/|[A-Za-z]:[\\/])/.test(planPath)) return planPath;
+  const cwd = session?.cwd;
+  if (!cwd) return planPath;
+  return `${cwd.replace(/[\\/]$/, "")}/${planPath.replace(/^\.?[\\/]/, "")}`;
+}
+
+function applyPlanEdit(content: string, edit: Record<string, unknown>) {
+  const oldString = stringValue(edit.old_string) ?? stringValue(edit.oldString);
+  const newString = stringValue(edit.new_string) ?? stringValue(edit.newString);
+  if (oldString === undefined || newString === undefined) return content;
+  if (edit.replace_all === true || edit.replaceAll === true) return content.split(oldString).join(newString);
+  const index = content.indexOf(oldString);
+  if (index < 0) return content;
+  return content.slice(0, index) + newString + content.slice(index + oldString.length);
+}
+
+function isOfficialTaskEvent(raw: Record<string, unknown>) {
+  return raw.type === "system" && (raw.subtype === "task_started" || raw.subtype === "task_progress" || raw.subtype === "task_notification");
+}
+
+function officialTaskKind(taskType?: string) {
+  switch (taskType) {
+    case "local_agent":
+    case "remote_agent":
+    case "in_process_teammate":
+      return { kind: "agent", label: "Agent" };
+    case "local_bash":
+      return { kind: "bash", label: "Background command" };
+    case "local_workflow":
+      return { kind: "workflow", label: "Workflow" };
+    case "monitor_mcp":
+      return { kind: "monitor", label: "Monitor" };
+    case "dream":
+      return { kind: "dream", label: "Dream" };
+    default:
+      return { kind: "task", label: taskType ?? "Task" };
+  }
+}
+
+function rawMessageContent(raw: Record<string, unknown>) {
+  const message = asRecord(raw.message);
+  const content = raw.content ?? message.content;
+  return Array.isArray(content) ? content : [];
+}
+
+function rawUserText(raw: Record<string, unknown>) {
+  const message = asRecord(raw.message);
+  const content = raw.content ?? message.content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((item) => stringValue(asRecord(item).text) ?? "").join("\n");
+  }
+  return "";
+}
+
+function normalizeTaskStatus(value: unknown): OfficialTaskStatus {
+  if (value === "running") return "running";
+  if (value === "failed") return "failed";
+  if (value === "stopped" || value === "killed") return "stopped";
+  return "completed";
+}
+
+function normalizeTaskUsage(value: unknown): OfficialBackgroundTask["usage"] | undefined {
+  const raw = asRecord(value);
+  const totalTokens = numberValue(raw.total_tokens ?? raw.totalTokens);
+  const toolUses = numberValue(raw.tool_uses ?? raw.toolUses);
+  const durationMs = numberValue(raw.duration_ms ?? raw.durationMs);
+  if (!totalTokens && !toolUses && !durationMs) return undefined;
+  return { durationMs, toolUses, totalTokens };
+}
+
+function normalizeWorkflowProgress(value: unknown): OfficialBackgroundTask["workflowProgress"] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.map((item, index) => {
+    const raw = asRecord(item);
+    const type = raw.type === "workflow_phase" ? "workflow_phase" : "agent";
+    return {
+      index: numberValue(raw.index) || index,
+      label: stringValue(raw.label) ?? stringValue(raw.title) ?? "",
+      state: raw.state === "done" || raw.state === "error" || raw.state === "pending" || raw.state === "running" || raw.state === "start" ? raw.state : "pending",
+      title: stringValue(raw.title),
+      type,
+    };
+  });
+}
+
+function timestampFromRaw(raw: Record<string, unknown>, fallback?: ChatMessage) {
+  const value = stringValue(raw.timestamp) ?? stringValue(raw.createdAt) ?? fallback?.createdAt;
+  const parsed = value ? Date.parse(value) : NaN;
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function decodeTaskNotificationText(value?: string) {
+  return value?.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
+}
+
+function formatDuration(durationMs: number) {
+  if (!durationMs) return "0s";
+  if (durationMs < 60_000) return `${Math.max(1, Math.round(durationMs / 1000))}s`;
+  const minutes = Math.floor(durationMs / 60_000);
+  const seconds = Math.round((durationMs % 60_000) / 1000);
+  return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
+}
+
+function formatTokens(tokens: number) {
+  return `${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens)} tokens`;
+}
+
+function bridgeForSource(source: SessionSource | null, session: SessionSummary | null): LocalSessionsBridge {
+  if (source === "epitaxy" || session?.kind === "epitaxy") return desktopBridge.LocalSessions;
+  return desktopBridge.LocalAgentModeSessions;
+}
+
+function OfficialSpinner() {
+  return (
+    <span className="relative inline-block shrink-0 align-middle size-[16px]" aria-hidden="true">
+      <span className="absolute inset-0 rounded-full" style={{ border: "2px solid var(--t2)" }} />
+      <span className="absolute inset-0 rounded-full animate-[spin_2s_linear_infinite]" style={{ background: "conic-gradient(transparent 40%, var(--spinner-arc, var(--t6)))", mask: "radial-gradient(farthest-side, transparent calc(100% - 2px), rgb(0, 0, 0) calc(100% - 1.5px))" }} />
+    </span>
+  );
+}
+
+function renderTranscriptBody({ error, initialSessionId, isLoading, isSessionNotFound, landingBody, messages, reload }: {
+  error: Error | null;
+  initialSessionId?: string;
+  isLoading: boolean;
+  isSessionNotFound: boolean;
+  landingBody?: ReactNode;
+  messages: ChatMessage[];
+  reload: () => Promise<void>;
+}) {
+  if (isSessionNotFound) return <SessionNotFound onBack={reload} />;
+  if (isLoading) return <LoadingConversation />;
+  if (error) return <SessionError error={error} onRetry={reload} />;
+  if (!initialSessionId) return <div className="h-full overflow-y-auto overflow-x-hidden">{landingBody ?? null}</div>;
+  if (messages.length === 0) return <div className="h-full flex items-center justify-center text-body text-t5">No messages yet.</div>;
+  return <Transcript messages={messages} />;
+}
+
+function Transcript({ messages }: { messages: ChatMessage[] }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [messages.length]);
+
+  return (
+    <OfficialTranscript scrollRef={(node) => { scrollRef.current = node; }}>
+      <div className="pt-p8 pb-[64px]">
+        {messages.map((message, index) => (
+          <OfficialTranscriptRow key={message.id} last={index === messages.length - 1}>
+            <TranscriptMessage message={message} />
+          </OfficialTranscriptRow>
+        ))}
+      </div>
+    </OfficialTranscript>
+  );
+}
+
+function TranscriptMessage({ message }: { message: ChatMessage }) {
+  if (message.role === "user") {
+    return (
+      <OfficialUserMessage createdAt={message.createdAt}>
+        <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty">{message.text}</p>
+      </OfficialUserMessage>
+    );
+  }
+
+  if (message.role === "system") {
+    return <div className="text-body text-t6 italic whitespace-pre-wrap break-words select-text">{message.text}</div>;
+  }
+
+  return <OfficialAssistantMessage createdAt={message.createdAt}>{message.text}</OfficialAssistantMessage>;
+}
+
+const codeModelOptions = [
+  { label: "Opus 4", value: "opus-4" },
+  { label: "Sonnet 4", value: "sonnet-4" },
+  { label: "Default", value: "default" },
+];
+
+const permissionModeOptions = [
+  { label: "默认", value: "default" },
+  { label: "接受编辑", value: "acceptEdits" },
+  { label: "自动", value: "auto" },
+  { label: "计划", value: "plan" },
+  { label: "绕过权限", value: "bypassPermissions" },
+];
+
+function modelLabel(value: string) {
+  return codeModelOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function permissionModeLabel(value: string) {
+  return permissionModeOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function ExistingSessionComposer({
+  bridge,
+  disabled,
+  onSubmit,
+  reload,
+  session,
+  sessionRef,
+}: {
+  bridge: LocalSessionsBridge;
+  disabled: boolean;
+  onSubmit: (text: string) => Promise<void>;
+  reload: () => Promise<void>;
+  session: SessionSummary | null;
+  sessionRef: EpitaxySessionRef | null;
+}) {
+  const [text, setText] = useState("");
+  const [isSubmitting, setSubmitting] = useState(false);
+  const [model, setModel] = useState(session?.model ?? "opus-4");
+  const [permissionMode, setPermissionMode] = useState(session?.permissionMode ?? "default");
+  const [isConfigBusy, setConfigBusy] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const isBashMode = text.trimStart().startsWith("!");
+  const canSubmit = text.trim().length > 0 && !disabled && !isSubmitting;
+
+  useEffect(() => {
+    setModel(session?.model ?? "opus-4");
+    setPermissionMode(session?.permissionMode ?? "default");
+  }, [session?.model, session?.permissionMode]);
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    const payload = text.trim();
+    setSubmitting(true);
+    try {
+      await onSubmit(payload);
+      setText("");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const applyModel = async (nextModel: string) => {
+    if (!sessionRef || nextModel === model) return;
+    setModel(nextModel);
+    setConfigBusy(true);
+    try {
+      await bridge.setModel?.(sessionRef.id, nextModel);
+      await reload();
+    } finally {
+      setConfigBusy(false);
+    }
+  };
+
+  const applyPermissionMode = async (nextMode: string) => {
+    if (!sessionRef || nextMode === permissionMode) return;
+    setPermissionMode(nextMode);
+    setConfigBusy(true);
+    try {
+      await bridge.setPermissionMode?.(sessionRef.id, nextMode);
+      await reload();
+    } finally {
+      setConfigBusy(false);
+    }
+  };
+
+  const addFolder = async () => {
+    if (!sessionRef) return;
+    const paths = await desktopBridge.Preferences.getDirectoryPath?.(false);
+    const folder = paths?.[0];
+    if (!folder) return;
+    setConfigBusy(true);
+    try {
+      await bridge.addFolderToSession?.(sessionRef.id, folder);
+      await reload();
+    } finally {
+      setConfigBusy(false);
+    }
+  };
+
+  const modelItems = codeModelOptions.map((option) => ({
+    label: option.label,
+    checked: option.value === model,
+    onSelect: () => void applyModel(option.value),
+  }));
+  const permissionItems = permissionModeOptions.map((option) => ({
+    label: option.label,
+    checked: option.value === permissionMode,
+    onSelect: () => void applyPermissionMode(option.value),
+  }));
+  const cwd = session?.cwd;
+  const workspaceLabel = cwd ? basename(cwd) ?? cwd : "本地";
+  const folderItems = [
+    ...(cwd ? [{ icon: "Folder", label: cwd, disabled: true }] : []),
+    ...(cwd ? [{ label: "Copy path", onSelect: () => void navigator.clipboard?.writeText(cwd) }] : []),
+    { icon: "FolderPlus", label: "Add folder", onSelect: () => void addFolder() },
+  ];
+
+  return (
+    <div data-skip-approval-enter={undefined} className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]">
+      <button type="button" aria-label="Scroll to bottom" className="inline-flex items-center h-[24px] px-p3 rounded-r5 bg-fill-contained-default text-contained-default effect-contained-default hover:bg-fill-contained-hover hover:text-contained-hover cursor-default border-0 outline-none hide-focus-ring ring-focus absolute -top-[32px] left-1/2 -translate-x-1/2 z-[1] transition-opacity duration-150 opacity-0 pointer-events-none" />
+      <div
+        className={`epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300 ${isBashMode ? "[&_.tiptap]:font-mono [&_.tiptap]:text-[length:var(--text-code)]" : ""}`}
+        onClick={(event) => {
+          if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+          textareaRef.current?.focus();
+        }}
+      >
+        <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" data-surface="prompt" />
+        {isBashMode ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-r7 shadow-[inset_0_0_0_1px_var(--extended-purple)]" /> : null}
+        <span className="sr-only" role="status">{isBashMode ? "Bash mode. Press Escape to return to chat." : "Chat mode"}</span>
+        <div aria-hidden="true" className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}><div className="min-h-0 overflow-hidden" /></div>
+        <div className="relative flex w-full">
+          {isBashMode ? <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
+          <div className="epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0">
+            <textarea
+              aria-label="Prompt"
+              className="tiptap block w-full resize-none bg-transparent placeholder:text-t5"
+              disabled={disabled || isSubmitting}
+              onChange={(event) => setText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && isBashMode) {
+                  event.preventDefault();
+                  setText("");
+                  return;
+                }
+                if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  void submit();
+                }
+              }}
+              placeholder="Type / for commands"
+              ref={textareaRef}
+              rows={1}
+              value={text}
+            />
+          </div>
+          <div className="flex self-end p-p7 pl-p3">
+            <OfficialButton ariaLabel="Send" disabled={!canSubmit} icon={isSubmitting ? "Stop" : "ArrowReturn"} onClick={() => void submit()} />
+          </div>
+        </div>
+      </div>
+      <div className="w-full flex items-center gap-g5 py-[4px]">
+        <div className="flex items-center gap-g5 min-w-0">
+          <OfficialDropdownButton
+            ariaLabel="Permission mode"
+            disabled={disabled || isConfigBusy}
+            items={permissionItems}
+            label={<span className={permissionMode === "bypassPermissions" ? "text-extended-yellow" : undefined}>{permissionModeLabel(permissionMode)}</span>}
+            mode="text"
+            side="top"
+            variant="uncontained"
+          />
+          <OfficialComposerDropdown icon="Add" onClick={() => setText((current) => (current.startsWith("!") ? current : `! ${current}`))} />
+          <OfficialDropdownButton
+            ariaLabel="Workspace"
+            disabled={disabled || isConfigBusy}
+            icon="Folder"
+            items={folderItems}
+            label={workspaceLabel}
+            mode="text"
+            side="top"
+            variant="uncontained"
+          />
+        </div>
+        <div className="ml-auto flex items-center gap-g4">
+          <OfficialDropdownButton
+            ariaLabel="Model"
+            disabled={disabled || isConfigBusy}
+            items={modelItems}
+            label={modelLabel(model)}
+            mode="text"
+            side="top"
+            variant="uncontained"
+          />
+          <OfficialButton ariaLabel="Usage" className="h-small text-footnote rounded-small shrink-0" customIcon={
+            <span className="size-[12px] rounded-full border-2 border-border-400" aria-hidden="true" />
+          } />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoadingConversation() {
+  return (
+    <div role="status" className="h-full flex items-center justify-center text-t5">
+      <span className="relative inline-block shrink-0 align-middle size-5" aria-hidden="true">
+        <span className="absolute inset-0 rounded-full" style={{ border: "2px solid var(--t2)" }} />
+        <span className="absolute inset-0 rounded-full animate-[spin_2s_linear_infinite]" style={{ background: "conic-gradient(transparent 40%, var(--spinner-arc, var(--t6)))", mask: "radial-gradient(farthest-side, transparent calc(100% - 2px), rgb(0, 0, 0) calc(100% - 1.5px))" }} />
+      </span>
+      <span className="sr-only">Loading conversation</span>
+    </div>
+  );
+}
+
+function SessionNotFound({ onBack }: { onBack: () => Promise<void> }) {
+  return (
+    <div className="h-full flex items-center justify-center text-body text-t5">
+      <div className="flex flex-col items-center gap-g5">
+        <span>找不到这个会话。</span>
+        <button className={composerDropdownButtonClass} onClick={() => void onBack()} type="button">重试</button>
+      </div>
+    </div>
+  );
+}
+
+function SessionError({ error, onRetry }: { error: Error; onRetry: () => Promise<void> }) {
+  return (
+    <div className="h-full flex items-center justify-center text-body text-t5">
+      <div className="flex max-w-[360px] flex-col items-center gap-g5 text-center">
+        <span>Something went wrong loading this session.</span>
+        <code className="text-code text-t6 break-words">{error.message}</code>
+        <button className={composerDropdownButtonClass} onClick={() => void onRetry()} type="button">Retry</button>
+      </div>
+    </div>
+  );
+}
+
+function useEpitaxySessionType(sessionId?: string): EpitaxySessionType {
+  const [sessionType, setSessionType] = useState<EpitaxySessionType>(() => inferSessionType(sessionId));
+
+  useEffect(() => {
+    let alive = true;
+    setSessionType(inferSessionType(sessionId));
+    if (!sessionId) return () => { alive = false; };
+
+    Promise.allSettled([
+      desktopBridge.LocalAgentModeSessions.list(),
+      desktopBridge.LocalSessions.list(),
+    ]).then(([codeSessions, localSessions]) => {
+      if (!alive) return;
+      const codeMatch = codeSessions.status === "fulfilled" ? codeSessions.value.find((session) => session.id === sessionId) : undefined;
+      if (codeMatch) {
+        setSessionType(inferSessionType(sessionId, codeMatch));
+        return;
+      }
+      const localMatch = localSessions.status === "fulfilled" ? localSessions.value.find((session) => session.id === sessionId) : undefined;
+      setSessionType(inferSessionType(sessionId, localMatch));
+    });
+
+    return () => { alive = false; };
+  }, [sessionId]);
+
+  return sessionType;
+}
+
+function useFocusedSession(sessionId?: string) {
+  useEffect(() => {
+    void desktopBridge.LocalAgentModeSessions.setFocusedSession?.(sessionId ?? null);
+    void desktopBridge.LocalSessions.setFocusedSession?.(sessionId ?? null);
+    return () => {
+      void desktopBridge.LocalAgentModeSessions.setFocusedSession?.(null);
+      void desktopBridge.LocalSessions.setFocusedSession?.(null);
+    };
+  }, [sessionId]);
+}
+
+type SessionDataState = {
+  error: Error | null;
+  isLoading: boolean;
+  isSessionNotFound: boolean;
+  messages: ChatMessage[];
+  session: SessionSummary | null;
+  source: SessionSource | null;
+};
+
+function useEpitaxySessionData(sessionId?: string) {
+  const [state, setState] = useState<SessionDataState>({
+    error: null,
+    isLoading: Boolean(sessionId),
+    isSessionNotFound: false,
+    messages: [],
+    session: null,
+    source: null,
+  });
+
+  const reload = useCallback(async () => {
+    if (!sessionId) {
+      setState({ error: null, isLoading: false, isSessionNotFound: false, messages: [], session: null, source: null });
+      return;
+    }
+    setState((current) => ({ ...current, error: null, isLoading: true }));
+    try {
+      const next = await loadEpitaxySession(sessionId);
+      setState({
+        error: null,
+        isLoading: false,
+        isSessionNotFound: !next,
+        messages: next?.messages ?? [],
+        session: next?.session ?? null,
+        source: next?.source ?? null,
+      });
+    } catch (caught) {
+      setState((current) => ({
+        ...current,
+        error: caught instanceof Error ? caught : new Error(String(caught)),
+        isLoading: false,
+      }));
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    let alive = true;
+    void reload().finally(() => {
+      if (!alive) return;
+    });
+    return () => { alive = false; };
+  }, [reload]);
+
+  useEffect(() => {
+    if (!sessionId) return undefined;
+    const handleEvent = (event: unknown) => {
+      if (isSessionEventForId(event, sessionId)) void reload();
+    };
+    const offCode = desktopBridge.LocalAgentModeSessions.onEvent?.(handleEvent);
+    const offLocal = desktopBridge.LocalSessions.onEvent?.(handleEvent);
+    return () => {
+      offCode?.();
+      offLocal?.();
+    };
+  }, [reload, sessionId]);
+
+  return { ...state, reload };
+}
+
+async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMessage[]; session: SessionSummary; source: SessionSource } | null> {
+  const sources: Array<{ bridge: LocalSessionsBridge; source: SessionSource }> = [
+    { bridge: desktopBridge.LocalAgentModeSessions, source: "code" },
+    { bridge: desktopBridge.LocalSessions, source: "epitaxy" },
+  ];
+
+  for (const item of sources) {
+    const session = await item.bridge.getSession(sessionId).catch(() => null);
+    if (!session) continue;
+    const transcript = await item.bridge.getTranscript?.(sessionId).catch(() => undefined);
+    const messages = transcript?.length ? transcript : session.messages ?? [];
+    return { messages, session: { ...session, messages }, source: item.source };
+  }
+
+  return null;
+}
+
+async function sendMessageToSession(source: SessionSource | null, sessionId: string, text: string) {
+  const bridge = source === "epitaxy" ? desktopBridge.LocalSessions : desktopBridge.LocalAgentModeSessions;
+  if (bridge.sendMessage) {
+    await bridge.sendMessage(sessionId, text);
+    return;
+  }
+  await desktopBridge.LocalAgentModeSessions.sendMessage?.(sessionId, text);
+}
+
+function inferSessionType(sessionId?: string, session?: SessionSummary): EpitaxySessionType {
+  if (!sessionId) return "local";
+  if (session?.kind === "code" || session?.kind === "epitaxy") return "local";
+  if (sessionId.startsWith("bridge_")) return "bridge";
+  if (sessionId.startsWith("local_") || sessionId.startsWith("code_") || sessionId.startsWith("epitaxy_")) return "local";
+  return "remote";
+}
+
+function basename(value?: string): string | undefined {
+  return value?.split(/[\\/]/).filter(Boolean).at(-1);
+}
+
+function isSessionEventForId(event: unknown, sessionId: string) {
+  const raw = asRecord(event);
+  if (raw.sessionId === sessionId || raw.id === sessionId) return true;
+  const session = asRecord(raw.session);
+  return session.id === sessionId || session.sessionId === sessionId;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+}
+
+const composerDropdownButtonClass = "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled aria-[expanded=true]:text-[var(--text-uncontained-selected)] aria-[expanded=true]:hover:text-[var(--text-uncontained-selected)] h-small rounded-small text-footnote justify-between pl-p5 pr-p2";
