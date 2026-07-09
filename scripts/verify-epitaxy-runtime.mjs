@@ -14,6 +14,7 @@ const streamText = "Runtime stream smoke phrase";
 const composerText = "runtime composer submit";
 const coworkFollowupText = "Runtime Cowork follow-up reply smoke";
 const coworkAttachmentText = "Runtime Cowork attachment reply smoke";
+const codeHomeText = "Runtime Code home composer smoke";
 
 const checks = [];
 let viteProcess;
@@ -242,6 +243,10 @@ async function run() {
   await cdp.open();
   await cdp.send("Page.enable");
   await cdp.send("Runtime.enable");
+  const runtimeExceptions = [];
+  cdp.on("Runtime.exceptionThrown", ({ exceptionDetails }) => {
+    runtimeExceptions.push(exceptionDetails?.exception?.description ?? exceptionDetails?.text ?? JSON.stringify(exceptionDetails));
+  });
   await cdp.send("Input.setIgnoreInputEvents", { ignore: false });
   await cdp.evaluate(() => {
     window.__epitaxyRuntime = {
@@ -267,6 +272,28 @@ async function run() {
   assertCheck("小细节按钮", "copy/rewind/fork/thumb buttons exist in real DOM", initial.actionButtons, JSON.stringify(initial));
   assertCheck("底部输入框", "official TipTap composer and control buttons exist in real DOM", initial.composerControls, JSON.stringify(initial));
   assertCheck("工具块", "collapsed tool rows render from transcript", initial.toolRows, JSON.stringify(initial));
+
+  runtimeExceptions.length = 0;
+  await navigateInApp(cdp, "/epitaxy");
+  await waitFor(cdp, "Code新任务", "Code home composer renders before typing", () => document.readyState === "complete"
+    && Boolean(document.querySelector('[contenteditable="true"][aria-label="描述一个任务，或提一个问题"].tiptap'))
+    && document.body.innerText.includes("描述一个任务，或提一个问题"));
+  const codeHomeFocused = await cdp.evaluate(() => {
+    const editor = document.querySelector('[contenteditable="true"][aria-label="描述一个任务，或提一个问题"].tiptap');
+    editor?.focus();
+    return document.activeElement === editor;
+  });
+  assertCheck("Code新任务", "Code home composer can receive focus", codeHomeFocused);
+  await insertText(cdp, codeHomeText);
+  await waitFor(cdp, "Code新任务", "Code home composer accepts text without white screen", (expectedText) => {
+    const editor = document.querySelector('[contenteditable="true"][aria-label="描述一个任务，或提一个问题"].tiptap');
+    return Boolean(editor) && (editor?.innerText ?? "").includes(expectedText);
+  }, 8_000, codeHomeText);
+  assertCheck("Code新任务", "Code home composer has no runtime exception", runtimeExceptions.length === 0, runtimeExceptions.join("\n"));
+
+  await navigateInApp(cdp, `/epitaxy/${sessionId}`);
+  await waitFor(cdp, "Code新任务", "Code session returns after Code home composer smoke", (id) => location.pathname === `/epitaxy/${id}`
+    && Boolean(document.querySelector('[contenteditable="true"][aria-label="Prompt"].tiptap')), 8_000, sessionId);
 
   const legacyCoworkRedirects = [
     ["/new", "Legacy /new redirects to /task/new instead of Code"],

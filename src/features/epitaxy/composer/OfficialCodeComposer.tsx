@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { EffortLevel, PermissionMode, WorkspaceContext } from "../../../adapters/desktopBridge";
@@ -59,10 +59,15 @@ export function OfficialCodeComposer({
   workspace,
 }: OfficialCodeComposerProps) {
   const { ensureTrusted, modal } = useWorkspaceTrustGate(workspace.cwd);
+  const submitStateRef = useRef({ busy, ensureTrusted, hasPrompt: false, onSubmit, workspaceCwd: workspace.cwd });
+  const promptSetterRef = useRef(setPrompt);
   const [replayKey, setReplayKey] = useState(0);
   const [openFooterMenu, setOpenFooterMenu] = useState<"effort" | "mode" | "model" | null>(null);
   const hasPrompt = prompt.trim().length > 0;
   const isModelMenuOpen = openFooterMenu === "model" || openFooterMenu === "effort";
+
+  submitStateRef.current = { busy, ensureTrusted, hasPrompt, onSubmit, workspaceCwd: workspace.cwd };
+  promptSetterRef.current = setPrompt;
 
   const permissionItems: OfficialDropdownItem[] = permissionModeOptions.map((option) => ({
     checked: option.value === permissionMode,
@@ -133,9 +138,10 @@ export function OfficialCodeComposer({
   }, [effortItems, modelItems, numberedEffortItems, numberedModelItems, numberedPermissionItems, openFooterMenu, permissionItems.length]);
 
   const submitWithTrust = useCallback(() => {
-    if (!hasPrompt || busy) return;
-    void ensureTrusted(workspace.cwd, onSubmit);
-  }, [busy, ensureTrusted, hasPrompt, onSubmit, workspace.cwd]);
+    const state = submitStateRef.current;
+    if (!state.hasPrompt || state.busy) return;
+    void state.ensureTrusted(state.workspaceCwd, state.onSubmit);
+  }, []);
 
   const editor = useEditor({
     content: "",
@@ -166,18 +172,20 @@ export function OfficialCodeComposer({
       }),
     ],
     onUpdate: ({ editor: nextEditor }) => {
-      setPrompt(nextEditor.getText({ blockSeparator: "\n" }));
+      const current = getOfficialEditorText(nextEditor);
+      if (current !== null) promptSetterRef.current(current);
     },
   }, [submitWithTrust]);
 
   useEffect(() => {
-    editor?.setEditable(!busy);
+    if (!editor || editor.isDestroyed) return;
+    editor.setEditable(!busy);
   }, [busy, editor]);
 
   useEffect(() => {
-    if (!editor) return;
-    const current = editor.getText({ blockSeparator: "\n" });
-    if (current !== prompt) editor.commands.setContent(prompt);
+    const current = getOfficialEditorText(editor);
+    if (current === null) return;
+    if (current !== prompt) editor?.commands.setContent(tiptapDocFromPlainText(prompt), { emitUpdate: false });
   }, [editor, prompt]);
 
   return (
@@ -208,7 +216,7 @@ export function OfficialCodeComposer({
         className="epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300"
         onClick={(event) => {
           if (event.target instanceof HTMLElement && event.target.closest("button")) return;
-          editor?.commands.focus("end");
+          if (editor && !editor.isDestroyed) editor.commands.focus("end");
         }}
         style={{ boxShadow: "var(--df-shadow-card)" }}
       >
@@ -282,6 +290,24 @@ export function OfficialCodeComposer({
       {modal}
     </div>
   );
+}
+
+
+function getOfficialEditorText(editor: ReturnType<typeof useEditor>) {
+  if (!editor || editor.isDestroyed) return null;
+  const doc = editor.state.doc;
+  return doc.textBetween(0, doc.content.size, "\n");
+}
+
+function tiptapDocFromPlainText(value: string) {
+  if (!value) return { type: "doc", content: [] };
+  return {
+    type: "doc",
+    content: value.split("\n").map((line) => ({
+      type: "paragraph",
+      content: line ? [{ type: "text", text: line }] : [],
+    })),
+  };
 }
 
 function OfficialModelFooterLabel({ effortLabel, modelLabel }: { effortLabel?: ReactNode; modelLabel: ReactNode }) {
