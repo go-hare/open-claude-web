@@ -39,15 +39,17 @@ export function SessionRowActions({ frame, onAction, onCreateGroup, onOpenSplit,
   session: SessionSummary;
 }) {
   return (
-    <span className="ml-auto flex shrink-0 items-center pl-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+    <span className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
       <Menu.Root>
         <Menu.Trigger
           aria-label={`More options for ${session.title}`}
-          className="draggable-none size-6 flex items-center justify-center rounded-md text-text-300 hover:text-text-100 hover:bg-bg-300 aria-expanded:bg-bg-300 aria-expanded:text-text-100 transition-colors shrink-0"
+          className="draggable-none size-[calc(var(--df-row-h)-8px)] flex items-center justify-center rounded-md text-text-300 hover:text-text-100 hover:bg-[var(--df-hover)] aria-expanded:bg-bg-400 aria-expanded:text-text-100 transition-colors hide-focus-ring focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--accent-100)),0_0_6px_0_hsl(var(--accent-100)/0.2)]"
+          data-row-action=""
           onClick={(event) => event.stopPropagation()}
+          tabIndex={-1}
           type="button"
         >
-          <Icon name="DotsHorizontal" customSize={14} />
+          <Icon name="DotsHorizontal" customSize={16} />
         </Menu.Trigger>
         <BaseMenuPopup align="end" className="min-w-[180px]" side="right" sideOffset={4}>
           <SessionRowMenuContent frame={frame} onAction={onAction} onCreateGroup={onCreateGroup} onOpenSplit={onOpenSplit} session={session} />

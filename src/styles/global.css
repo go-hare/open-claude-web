@@ -29,14 +29,6 @@ textarea {
   object-fit: contain;
 }
 
-.claude-rebuild-session-dot {
-  width: 6px;
-  height: 6px;
-  border: 1.5px solid currentColor;
-  border-radius: 9999px;
-  color: hsl(var(--text-500));
-}
-
 .claude-rebuild-composer textarea {
   min-height: var(--h8, 72px);
 }
