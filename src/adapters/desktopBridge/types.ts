@@ -110,8 +110,10 @@ export type ScheduledTaskSummary = {
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "auto";
   model?: string;
   approvedPermissions?: Array<{ toolName: string }>;
+  chromeAllowedDomains?: string[];
+  chromePermissionMode?: string;
   userSelectedFolders?: string[];
-  missedRuns?: Array<{ time: string; reason?: string }>;
+  missedRuns?: Array<string | { time: string; reason?: string }>;
 };
 
 export type CreateScheduledTaskInput = {

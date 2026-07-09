@@ -11,6 +11,7 @@ const official = {
   sidebarIndex: read(path.join(officialRoot, "index-BELzQL5P.js")),
   scheduledList: read(path.join(officialRoot, "c705e2e19-CdkFb_TH.js")),
   localRoutine: read(path.join(officialRoot, "c0243d234-BHUzHV1X.js")),
+  localRoutineDetail: read(path.join(officialRoot, "cfc18e0f4-BP16E1oT.js")),
   chatCss: readFirstExisting(["cca089f68-B_9i4gW6.js", "cca089f68-CTV9c1Kv.css", "c0d9175fe-CH-3lZ2a.css"].map((file) => path.join(officialRoot, file))),
 };
 const local = {
@@ -24,6 +25,8 @@ const local = {
   search: read(path.join(root, "src/shell/SearchCommandPalette.tsx")),
   statusGlyph: read(path.join(root, "src/shell/OfficialSidebarStatusGlyph.tsx")),
   scheduledTasks: read(path.join(root, "src/features/scheduled/ScheduledTasks.tsx")),
+  scheduledDetail: read(path.join(root, "src/features/scheduled/ScheduledTaskDetail.tsx")),
+  scheduledDetailBlocks: read(path.join(root, "src/features/scheduled/ScheduledTaskDetailBlocks.tsx")),
   scheduledForm: read(path.join(root, "src/features/scheduled/ScheduledTaskForm.tsx")),
   scheduledPrimitives: read(path.join(root, "src/features/scheduled/ScheduledPrimitives.tsx")),
 };
@@ -46,6 +49,8 @@ const checks = [
   ["本地 scheduled list/card 对齐官方 class 和 badges", local.scheduledTasks, ["Scheduled tasks", "No scheduled tasks yet.", "flex items-center gap-g6 px-p7 py-p6 rounded-r6 bg-t1 hover:bg-t2 text-left outline-none hide-focus-ring ring-focus", "Next run", "Run once", "Paused", "ClockTimeslot", "ShieldCheck"]],
   ["官方 local routine form 依据存在", official.localRoutine, ["New local routine", "Local routines only run while your computer is awake.", "daily-code-review", "Scheduled tasks use a randomized delay of several minutes for server performance.", "epitaxy-textarea w-full min-h-[120px] !bg-transparent !shadow-none"]],
   ["本地 local routine form 对齐官方核心 class/文案", local.scheduledForm + local.scheduledPrimitives, ["New local routine", "Local routines only run while your computer is awake.", "daily-code-review", "Scheduled tasks use a randomized delay of several minutes for server performance.", "epitaxy-textarea w-full min-h-[120px] !bg-transparent !shadow-none"]],
+  ["官方 local routine detail 依据存在", official.localRoutineDetail, ["EpitaxyLocalRoutineDetail", "h-full min-w-0 flex flex-col pt-[8px] pl-[8px]", "epitaxy-chat-column epitaxy-chat-size flex flex-col gap-g8 pt-[48px] pb-[32px]", "grid grid-cols-1 md:grid-cols-[1fr_1.4fr] gap-g8", "Run now", "In progress", "Always allowed", "Approvals you grant during a run appear here.", "Task file not found or has unexpected format.", "Scheduled tasks only run while your computer is awake.", "The previous run was still in progress.", "Other scheduled tasks were already running.", "Delete routine", "Any sessions from this task will be archived."]],
+  ["本地 local routine detail 对齐官方核心 DOM/class/文案", local.scheduledDetail + local.scheduledDetailBlocks + local.scheduledPrimitives, ["h-full min-w-0 flex flex-col pt-[8px] pl-[8px]", "epitaxy-chat-column epitaxy-chat-size flex flex-col gap-g8 pt-[48px] pb-[32px]", "grid grid-cols-1 md:grid-cols-[1fr_1.4fr] gap-g8", "inline-flex items-center gap-g2 px-p4 py-p1 rounded-r4 bg-t2 text-footnote text-t7", "flex flex-col gap-g3", "px-p6 py-p5 rounded-r6 bg-t1 text-body text-t8 whitespace-pre-wrap break-words max-h-[480px] overflow-y-auto", "group flex items-center gap-g4 px-p6 py-p4 rounded-r6 bg-t1 hover:bg-t2 text-left outline-none hide-focus-ring ring-focus", "flex items-center gap-g4 px-p6 py-p4 rounded-r6 bg-t1", "cds-reset relative inline-flex shrink-0 rounded-full border-0 outline-none bg-switch-track", "Run now", "In progress", "Manual only", "Active", "Paused", "Ran", "Always allowed", "Approvals you grant during a run appear here.", "Task file not found or has unexpected format.", "Scheduled tasks only run while your computer is awake.", "The previous run was still in progress.", "Other scheduled tasks were already running.", "Delete routine", "Any sessions from this task will be archived.", "TrashCanRound", "Play"]],
 ];
 
 let failed = 0;

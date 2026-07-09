@@ -623,6 +623,7 @@ export const fakeDesktopBridge: DesktopBridge = {
         model: input.model,
         useWorktree: input.useWorktree,
         sourceBranch: input.sourceBranch,
+        userSelectedFolders: input.userSelectedFolders,
       };
       scheduledTasks.unshift(task);
       return task;

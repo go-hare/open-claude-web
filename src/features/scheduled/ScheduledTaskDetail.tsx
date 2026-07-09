@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RouteViewProps } from "../../app/routes";
 import { desktopBridge, type ScheduledTaskSummary, type SessionSummary } from "../../adapters/desktopBridge";
-import { Icon } from "../../shell/icons";
+import { ConfirmDialog } from "../../shell/ConfirmDialog";
 import { sessionPath } from "../../shell/sessionPaths";
-import { DetailSection, RoutineHeader, ScheduledRouteShell, chipClass } from "./ScheduledPrimitives";
-import { scheduleLabel, taskDisplayName } from "./scheduleUtils";
+import { DetailActions, DetailLeftColumn, DetailRightColumn, basename } from "./ScheduledTaskDetailBlocks";
+import { RoutineHeader, ScheduledRouteShell } from "./ScheduledPrimitives";
+import { taskDisplayName } from "./scheduleUtils";
 import { scheduledTaskIndexPath } from "./scheduledPaths";
 import { useScheduledTasks } from "./useScheduledTasks";
 
@@ -16,7 +17,7 @@ const compareSessionRuns = (left: SessionSummary, right: SessionSummary) => {
 };
 
 export function ScheduledTaskDetail({ onNavigate }: RouteViewProps) {
-  const { tasks, existingNames, isLoading } = useScheduledTasks();
+  const { tasks, isLoading } = useScheduledTasks();
   const taskId = taskIdFromPath();
   const [directLookup, setDirectLookup] = useState<{ id: string; task: ScheduledTaskSummary | null; loading: boolean }>({
     id: "",
@@ -69,6 +70,8 @@ function DetailLoading() {
 function ScheduledTaskDetailView({ task, onBack, onNavigate }: { task: ScheduledTaskSummary; onBack: () => void; onNavigate: (path: string) => void }) {
   const [enabled, setEnabled] = useState(task.enabled);
   const [isRunning, setIsRunning] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { loadRuns, runs, runsLoading } = useScheduledRuns(task.id);
   const title = taskDisplayName(task);
   const toggle = async () => {
@@ -88,14 +91,24 @@ function ScheduledTaskDetailView({ task, onBack, onNavigate }: { task: Scheduled
     }
   };
   const remove = async () => {
-    await desktopBridge.CCDScheduledTasks.updateStatus?.(task.id, "deleted");
-    onBack();
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await desktopBridge.CCDScheduledTasks.updateStatus?.(task.id, "deleted");
+      onBack();
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
     <ScheduledRouteShell>
       <div className="h-full min-w-0 flex flex-col pt-[8px] pl-[8px]">
-        <RoutineHeader title={title} onBack={onBack} actions={<DetailActions isRunDisabled={!task.cwd} isRunning={isRunning} onDelete={remove} onRunNow={runNow} />} />
+        <RoutineHeader
+          title={title}
+          onBack={onBack}
+          actions={<DetailActions isDeleting={isDeleting} isRunDisabled={!task.cwd || !task.prompt} isRunning={isRunning} onDelete={() => setDeleteOpen(true)} onRunNow={runNow} />}
+        />
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="epitaxy-chat-column epitaxy-chat-size flex flex-col gap-g8 pt-[48px] pb-[32px]">
             <div className="grid grid-cols-1 md:grid-cols-[1fr_1.4fr] gap-g8">
@@ -109,6 +122,15 @@ function ScheduledTaskDetailView({ task, onBack, onNavigate }: { task: Scheduled
             </div>
           </div>
         </div>
+        <ConfirmDialog
+          confirmText="Delete"
+          isOpen={deleteOpen}
+          message={`Delete "${title}"? Any sessions from this task will be archived.`}
+          onClose={() => setDeleteOpen(false)}
+          onConfirm={() => { void remove(); }}
+          title="Delete routine"
+          variant="danger"
+        />
       </div>
     </ScheduledRouteShell>
   );
@@ -166,70 +188,4 @@ async function startScheduledRun(task: ScheduledTaskSummary, title: string) {
     useWorktree: task.useWorktree,
     permissionMode: task.permissionMode,
   });
-}
-
-function DetailActions({ isRunDisabled, isRunning, onDelete, onRunNow }: { isRunDisabled: boolean; isRunning: boolean; onDelete: () => void; onRunNow: () => void }) {
-  return (
-    <>
-      <button type="button" onClick={onRunNow} disabled={isRunning || isRunDisabled} className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-primary-default hover:text-primary-hover disabled:text-primary-disabled disabled:hover:text-primary-disabled busy:text-primary-busy ring-focus-primary h-base text-body rounded-base gap-g3 px-p6">
-        <Icon name="spark" />
-        <span>{isRunning ? "Running" : "Run now"}</span>
-      </button>
-      <button type="button" onClick={onDelete} aria-label="Delete" className="inline-flex items-center gap-g2 px-p4 py-p2 rounded-r4 text-footnote text-t6 hover:text-t8 hover:bg-t2 hide-focus-ring ring-focus">
-        Delete
-      </button>
-    </>
-  );
-}
-
-function DetailLeftColumn({ task, enabled, onToggle }: { task: ScheduledTaskSummary; enabled: boolean; onToggle: () => void }) {
-  return (
-    <div className="flex flex-col gap-g8">
-      {task.description ? <DetailSection heading="Description"><p className="text-body text-t9">{task.description}</p></DetailSection> : null}
-      <DetailSection heading="Status">
-        <div className="flex items-center gap-g4 flex-wrap">
-          <button type="button" onClick={onToggle} role="switch" aria-checked={enabled} className={chipClass}>{enabled ? "Active" : "Paused"}</button>
-        </div>
-      </DetailSection>
-      {task.cwd ? <DetailSection heading="Folder"><span className={chipClass}><Icon name="project" />{task.cwd}</span></DetailSection> : null}
-      <DetailSection heading="Repeats"><p className="text-body text-t9">{scheduleLabel(task)}</p></DetailSection>
-      <DetailSection heading="Always allowed"><p className="text-footnote text-t5">Approvals you grant during a run appear here.</p></DetailSection>
-    </div>
-  );
-}
-
-function DetailRightColumn({ runs, runsLoading, task, onOpenRun }: { runs: SessionSummary[]; runsLoading: boolean; task: ScheduledTaskSummary; onOpenRun: (session: SessionSummary) => void }) {
-  return (
-    <div className="flex flex-col gap-g8">
-      <DetailSection heading="Instructions">
-        <div className="px-p6 py-p5 rounded-r6 bg-t1 text-body text-t8 whitespace-pre-wrap break-words max-h-[480px] overflow-y-auto">
-          {task.prompt ? task.prompt : <span className="text-t5">Task file not found or has unexpected format.</span>}
-        </div>
-      </DetailSection>
-      <DetailSection heading="History">
-        <ScheduledRunHistory runs={runs} runsLoading={runsLoading} task={task} onOpenRun={onOpenRun} />
-      </DetailSection>
-    </div>
-  );
-}
-
-function ScheduledRunHistory({ runs, runsLoading, task, onOpenRun }: { runs: SessionSummary[]; runsLoading: boolean; task: ScheduledTaskSummary; onOpenRun: (session: SessionSummary) => void }) {
-  if (runsLoading) return <p className="text-footnote text-t5">Loading runs…</p>;
-  if (runs.length === 0) return <p className="text-footnote text-t5">{task.lastRunAt ? `Last run ${new Date(task.lastRunAt).toLocaleString()}` : "No runs yet."}</p>;
-  return (
-    <ul className="m-0 flex list-none flex-col gap-g2 p-0">
-      {runs.map((run) => (
-        <li key={run.id}>
-          <button type="button" className="flex w-full items-center justify-between rounded-r6 px-p4 py-p3 text-left text-body text-t8 hover:bg-t2" onClick={() => onOpenRun(run)}>
-            <span className="min-w-0 truncate">{run.title || taskDisplayName(task)}</span>
-            <span className="ml-g4 shrink-0 text-footnote text-t5">{run.updatedAt}</span>
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function basename(value?: string): string | undefined {
-  return value?.split(/[\\/]/).filter(Boolean).at(-1);
 }

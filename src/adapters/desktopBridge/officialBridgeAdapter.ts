@@ -1136,7 +1136,12 @@ function normalizeScheduledTask(item: unknown): ScheduledTaskSummary {
     permissionMode: raw.permissionMode as ScheduledTaskSummary["permissionMode"],
     model: stringValue(raw.model),
     approvedPermissions: Array.isArray(raw.approvedPermissions) ? raw.approvedPermissions as Array<{ toolName: string }> : undefined,
+    chromeAllowedDomains: Array.isArray(raw.chromeAllowedDomains) ? raw.chromeAllowedDomains.filter((domain): domain is string => typeof domain === "string") : undefined,
+    chromePermissionMode: stringValue(raw.chromePermissionMode),
     userSelectedFolders: Array.isArray(raw.userSelectedFolders) ? raw.userSelectedFolders.filter((path): path is string => typeof path === "string") : undefined,
+    missedRuns: Array.isArray(raw.missedRuns)
+      ? raw.missedRuns.filter((run): run is string | { time: string; reason?: string } => typeof run === "string" || Boolean(asRecord(run).time))
+      : undefined,
   };
 }
 
