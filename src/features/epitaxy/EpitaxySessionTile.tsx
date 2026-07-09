@@ -1,4 +1,4 @@
-import { createContext, createElement, forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type Ref } from "react";
+import { Fragment, createContext, createElement, forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type Ref } from "react";
 import { Popover } from "@base-ui-components/react/popover";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -2314,14 +2314,12 @@ function OfficialWorkingStatus({ isWorking, sessionId: _sessionId, startedAt, to
     return () => window.clearInterval(timer);
   }, [isWorking, startedAt]);
 
-  if (!isWorking) return null;
-
   const showMeta = isWorking && elapsedSeconds >= 2;
   const showTokens = showMeta && tokenEstimate > 0;
   return (
     <div className="flex items-center gap-[16px] h-h3">
       <OfficialSparkSpinner isWorking={isWorking} size="m" />
-      <div className={`flex items-center text-footnote text-assistant-secondary tabular-nums shrink-0 transition-opacity ${showMeta ? "opacity-100" : "opacity-0"}`}>
+      <div className={`flex items-center text-footnote text-assistant-secondary tabular-nums shrink-0 transition-opacity ${showMeta && isWorking ? "opacity-100" : "opacity-0"}`}>
         {formatElapsedSeconds(elapsedSeconds)}
         {showTokens ? (
           <>
@@ -2390,7 +2388,17 @@ function renderTranscriptBody({ coworkStatus, entries, error, initialSessionId, 
       />
     );
   }
-  return <Transcript key={transcriptKey} entries={entries} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} />;
+  return <Transcript key={transcriptKey} entries={entries} isAwaitingReply={officialIsAwaitingReply(session, isResponding)} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} />;
+}
+
+function officialIsAwaitingReply(session: SessionSummary | null, isResponding: boolean) {
+  if (isResponding) return false;
+  if ((session?.pendingToolPermissions?.length ?? 0) > 0) return false;
+  return officialIsBlockedPostTurnCategory(session?.postTurnSummary?.statusCategory);
+}
+
+function officialIsBlockedPostTurnCategory(category?: string) {
+  return category === "blocked" || category === "need_input" || category === "failed";
 }
 
 function CoworkConversationBody({ coworkStatus, entries, isResponding, onScrollState, pendingTurnStartedAt, scrollRef }: {
@@ -2459,6 +2467,7 @@ const officialTranscriptScrollRestores = new Map<string, OfficialTranscriptResto
 
 type TranscriptProps = {
   entries: TranscriptEntry[];
+  isAwaitingReply: boolean;
   isResponding: boolean;
   onScrollState: (state: OfficialTranscriptScrollState) => void;
   pendingTurnStartedAt?: number | null;
@@ -2469,10 +2478,20 @@ type TranscriptProps = {
   tasks: OfficialBackgroundTask[];
 };
 
-const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isResponding, onScrollState, pendingTurnStartedAt, restoreKey, scrollRef, sessionId, streamTokenEstimate, tasks }, ref) {
+type CodeUserChapter = {
+  afterId: string;
+  id: string;
+  title: string;
+};
+
+const emptyCodeUserChaptersByAfterId = new Map<string, CodeUserChapter[]>();
+
+const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isAwaitingReply, isResponding, onScrollState, pendingTurnStartedAt, restoreKey, scrollRef, sessionId, streamTokenEstimate, tasks }, ref) {
   const rowsRef = useRef<TranscriptRow[]>([]);
   const initialCount = useRef(entries.length);
+  const [userChapters, setUserChapters] = useState<CodeUserChapter[]>([]);
   const rows = useMemo(() => buildTranscriptRows(entries), [entries]);
+  const userChaptersByAfterId = useMemo(() => groupCodeUserChaptersByAfterId(userChapters), [userChapters]);
   const lastEntryIdx = entries.length - 1;
   const lastTextLength = entries.at(-1)?.items.flatMap((item) => item.kind === "text" ? [item.text] : []).join("\n").length ?? 0;
   const officialVirtualizer = useOfficialTranscriptVirtualizer({
@@ -2542,6 +2561,19 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
       officialVirtualizer.setPinned(false);
     }
   }, [officialVirtualizer]);
+  const pinUserChapter = useCallback((afterId: string, text: string) => {
+    setUserChapters((current) => {
+      if (current.some((chapter) => chapter.afterId === afterId)) return current;
+      return [...current, {
+        afterId,
+        id: `chapter-${afterId}`,
+        title: officialChapterTitleFromText(text),
+      }];
+    });
+  }, []);
+  const unpinUserChapters = useCallback((afterId: string) => {
+    setUserChapters((current) => current.filter((chapter) => chapter.afterId !== afterId));
+  }, []);
 
   return (
     <div ref={officialVirtualizer.scrollRef} data-testid="epitaxy-virtual-transcript" className="h-full overflow-y-auto overflow-x-hidden [contain:strict]">
@@ -2552,7 +2584,7 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
             return (
               <div data-index={virtualRow.index} key={virtualRow.key} ref={officialVirtualizer.measureElement}>
                 <div className={virtualRow.index < rows.length - 1 ? "epitaxy-chat-size pb-[var(--chat-turn-gap)] empty:pb-0" : "epitaxy-chat-size"}>
-                  <TranscriptRowContent initialCount={initialCount.current} isResponding={isResponding} lastEntryIdx={lastEntryIdx} pendingTurnStartedAt={pendingTurnStartedAt} row={row} sessionId={sessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} />
+                  <TranscriptRowContent initialCount={initialCount.current} isAwaitingReply={isAwaitingReply} isResponding={isResponding} lastEntryIdx={lastEntryIdx} onPinUserChapter={pinUserChapter} onUnpinUserChapters={unpinUserChapters} pendingTurnStartedAt={pendingTurnStartedAt} row={row} sessionId={sessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} userChaptersByAfterId={userChaptersByAfterId} />
                 </div>
               </div>
             );
@@ -2562,6 +2594,22 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
     </div>
   );
 });
+
+function groupCodeUserChaptersByAfterId(chapters: CodeUserChapter[]) {
+  const grouped = new Map<string, CodeUserChapter[]>();
+  for (const chapter of chapters) {
+    const existing = grouped.get(chapter.afterId);
+    if (existing) existing.push(chapter);
+    else grouped.set(chapter.afterId, [chapter]);
+  }
+  return grouped;
+}
+
+function officialChapterTitleFromText(text: string) {
+  const firstLine = text.split("\n").find((line) => line.trim().length > 0)?.trim() ?? text.trim();
+  const title = firstLine.slice(0, 40);
+  return firstLine.length > 40 ? `${title}…` : title || "Chapter";
+}
 
 function useOfficialTranscriptVirtualizer<TItem>({
   estimateSize,
@@ -2928,16 +2976,51 @@ function buildTranscriptRows(entries: TranscriptEntry[]): TranscriptRow[] {
   return rows;
 }
 
-function TranscriptRowContent({ initialCount, isResponding, lastEntryIdx, pendingTurnStartedAt, row, sessionId, streamTokenEstimate, tasks }: { initialCount: number; isResponding: boolean; lastEntryIdx: number; pendingTurnStartedAt?: number | null; row: TranscriptRow; sessionId?: string; streamTokenEstimate: number; tasks: OfficialBackgroundTask[] }) {
+function TranscriptRowContent({
+  initialCount,
+  isAwaitingReply,
+  isResponding,
+  lastEntryIdx,
+  onPinUserChapter,
+  onUnpinUserChapters,
+  pendingTurnStartedAt,
+  row,
+  sessionId,
+  streamTokenEstimate,
+  tasks,
+  userChaptersByAfterId,
+}: {
+  initialCount: number;
+  isAwaitingReply: boolean;
+  isResponding: boolean;
+  lastEntryIdx: number;
+  onPinUserChapter: (afterId: string, text: string) => void;
+  onUnpinUserChapters: (afterId: string) => void;
+  pendingTurnStartedAt?: number | null;
+  row: TranscriptRow;
+  sessionId?: string;
+  streamTokenEstimate: number;
+  tasks: OfficialBackgroundTask[];
+  userChaptersByAfterId: Map<string, CodeUserChapter[]>;
+}) {
   if (row.kind === "running-tasks") return <OfficialRunningTasks isResponding={isResponding} tasks={tasks} />;
   if (row.kind === "loader") return <OfficialWorkingStatus isWorking={isResponding} sessionId={sessionId} startedAt={pendingTurnStartedAt} tokenEstimate={streamTokenEstimate} />;
 
   const isNewUserEntry = row.kind === "user" && row.entryIdx >= initialCount;
   const isStreaming = row.kind === "assistant" && isResponding && row.entryIdx === lastEntryIdx;
-  const showCodeAwaitingDot = isStreaming;
+  const showCodeAwaitingDot = row.kind === "assistant" && isAwaitingReply && row.entryIdx === lastEntryIdx;
   const content = row.kind === "user"
     ? <CodeUserEntryMessage entry={row.entry} />
-    : <CodeAssistantEntryMessage entry={row.entry} isStreaming={isStreaming} showAwaitingDot={showCodeAwaitingDot} />;
+    : (
+      <CodeAssistantEntryMessage
+        entry={row.entry}
+        isStreaming={isStreaming}
+        onPinUserChapter={onPinUserChapter}
+        onUnpinUserChapters={onUnpinUserChapters}
+        showAwaitingDot={showCodeAwaitingDot}
+        userChaptersByAfterId={userChaptersByAfterId}
+      />
+    );
   if (row.kind === "user") {
     return <div data-epitaxy-entry={row.entry.id} className={`origin-left ${isNewUserEntry ? "epitaxy-user-enter" : ""}`}>{content}</div>;
   }
@@ -3372,10 +3455,33 @@ function UserUploadedFiles({ files }: { files: CoworkUploadedFile[] }) {
   );
 }
 
-function CodeAssistantEntryMessage({ entry, isStreaming = false, showAwaitingDot = false }: { entry: TranscriptEntry; isStreaming?: boolean; showAwaitingDot?: boolean }) {
+function CodeAssistantEntryMessage({
+  entry,
+  isStreaming = false,
+  onPinUserChapter,
+  onUnpinUserChapters,
+  showAwaitingDot = false,
+  userChaptersByAfterId,
+}: {
+  entry: TranscriptEntry;
+  isStreaming?: boolean;
+  onPinUserChapter?: (afterId: string, text: string) => void;
+  onUnpinUserChapters?: (afterId: string) => void;
+  showAwaitingDot?: boolean;
+  userChaptersByAfterId?: Map<string, CodeUserChapter[]>;
+}) {
   const actions = useContext(EpitaxyTranscriptActionContext);
+  const chaptersByAfterId = userChaptersByAfterId ?? emptyCodeUserChaptersByAfterId;
   const visibleItems = entry.items.filter(isVisibleAssistantEntryItem);
   const copyText = visibleItems.flatMap((item) => item.kind === "text" ? [item.text] : []).join("\n\n") || undefined;
+  const firstVisibleItem = visibleItems[0];
+  const pinnedChapters = firstVisibleItem ? chaptersByAfterId.get(firstVisibleItem.id) : undefined;
+  const onPinChapter = firstVisibleItem && onPinUserChapter && onUnpinUserChapters
+    ? () => {
+      if (pinnedChapters?.length) onUnpinUserChapters(firstVisibleItem.id);
+      else onPinUserChapter(firstVisibleItem.id, copyText ?? "");
+    }
+    : undefined;
   const forkFromHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.forkSession) return;
     const forked = await actions.bridge.forkSession(actions.sessionId, entry.id);
@@ -3401,22 +3507,31 @@ function CodeAssistantEntryMessage({ entry, isStreaming = false, showAwaitingDot
   if (visibleItems.length === 0) return null;
 
   return (
-    <OfficialAssistantMessage copyText={copyText} createdAt={isStreaming ? undefined : entry.timestamp} onFork={onFork} onRateMessage={onRateMessage} onRewind={onRewind} rateMessageUuid={entry.id} showAwaitingDot={showAwaitingDot}>
-      {visibleItems.map((item) => {
-        if (item.kind === "thinking") return <CodeThinkingBlock text={item.text} key={item.id} />;
-        if (item.kind === "text") {
-          return (
-            <div className="epitaxy-markdown" key={item.id}>
-              <MarkdownContent isStreaming={isStreaming} text={item.text} />
-            </div>
-          );
-        }
-        if (item.kind === "tools") return <AssistantToolsBlock item={item} key={item.id} />;
-        if (item.kind === "error") return <div className="rounded-r3 border border-[var(--fill-destructive-default)] px-p3 py-p2 text-code text-destructive-default whitespace-pre-wrap break-words" key={item.id}>{item.text}</div>;
-        if (item.kind === "bash") return <UserBashBlock item={item} key={item.id} />;
-        return <div className="text-body text-t6 whitespace-pre-wrap break-words" key={item.id}>{item.content}</div>;
-      })}
+    <OfficialAssistantMessage copyText={copyText} createdAt={isStreaming ? undefined : entry.timestamp} isPinned={Boolean(pinnedChapters?.length)} onFork={onFork} onPinChapter={onPinChapter} onRateMessage={onRateMessage} onRewind={onRewind} rateMessageUuid={entry.id} showAwaitingDot={showAwaitingDot}>
+      {visibleItems.map((item) => (
+        <Fragment key={item.id}>
+          {chaptersByAfterId.get(item.id)?.map((chapter) => <CodeChapterTitle chapter={chapter} key={chapter.id} />)}
+          {renderCodeAssistantEntryItem(item, isStreaming)}
+        </Fragment>
+      ))}
     </OfficialAssistantMessage>
+  );
+}
+
+function renderCodeAssistantEntryItem(item: Exclude<TranscriptEntryItem, { kind: "uploaded-file" }>, isStreaming: boolean) {
+  if (item.kind === "thinking") return <CodeThinkingBlock text={item.text} />;
+  if (item.kind === "text") return <div><OfficialCodeMarkdown isStreaming={isStreaming} text={item.text} /></div>;
+  if (item.kind === "tools") return <AssistantToolsBlock item={item} />;
+  if (item.kind === "error") return <div className="rounded-r3 border border-[var(--fill-destructive-default)] px-p3 py-p2 text-code text-destructive-default whitespace-pre-wrap break-words">{item.text}</div>;
+  if (item.kind === "bash") return <UserBashBlock item={item} />;
+  return <div className="text-body text-t6 whitespace-pre-wrap break-words">{item.content}</div>;
+}
+
+function CodeChapterTitle({ chapter }: { chapter: CodeUserChapter }) {
+  return (
+    <div id={chapter.id} className="text-body-semibold text-assistant-primary select-text scroll-mt-[56px]">
+      {chapter.title}
+    </div>
   );
 }
 
@@ -3444,7 +3559,8 @@ function CoworkAssistantEntryMessage({ entry, isStreaming = false }: { entry: Tr
 }
 
 function CodeThinkingBlock({ text }: { text: string }) {
-  return <div className="text-body text-t6 italic whitespace-pre-wrap break-words">{text}</div>;
+  void text;
+  return null;
 }
 
 function AssistantToolsBlock({ item }: { item: Extract<TranscriptEntryItem, { kind: "tools" }> }) {
@@ -4174,6 +4290,132 @@ type MarkdownBlock =
   | { kind: "list"; items: string[]; key: string; ordered: boolean }
   | { kind: "paragraph"; key: string; lines: string[] }
   | { headers: string[]; kind: "table"; key: string; rows: string[][] };
+
+function OfficialCodeMarkdown({ isStreaming = false, text }: { isStreaming?: boolean; text: string }) {
+  const normalized = useMemo(() => preprocessOfficialCodeMarkdown(text), [text]);
+  const chunks = useOfficialCodeMarkdownChunks(normalized, isStreaming);
+  const renderedChunks = useMemo(() => {
+    const completed = chunks.completedChunks.map((chunk, index) => index > 0 ? `\n\n${chunk}` : chunk);
+    const streaming = chunks.streamingChunk || (chunks.completedChunks.length === 0 ? normalized : "");
+    if (streaming) completed.push(chunks.completedChunks.length > 0 ? `\n\n${streaming}` : streaming);
+    return completed;
+  }, [chunks.completedChunks, chunks.streamingChunk, normalized]);
+  return (
+    <div className="epitaxy-markdown" data-official-source="c11959232-h_zsw3wI.js:kb + c93fb40ec-C-L_NkHO.js:Oe">
+      {renderedChunks.map((chunk, index) => (
+        <OfficialCodeMarkdownChunk chunk={chunk} key={index} scope={`code-${index}`} />
+      ))}
+    </div>
+  );
+}
+
+const OfficialCodeMarkdownChunk = memo(function OfficialCodeMarkdownChunk({ chunk, scope }: { chunk: string; scope: string }) {
+  return <>{parseMarkdownBlocks(chunk).map((block) => renderMarkdownBlock(block, scope))}</>;
+}, (previous, next) => previous.chunk === next.chunk && previous.scope === next.scope);
+
+function useOfficialCodeMarkdownChunks(text: string, isStreaming: boolean) {
+  const stableChunks = useMemo(() => ({ completedChunks: text ? [text] : [], streamingChunk: "" }), [text]);
+  const [chunks, setChunks] = useState<{ completedChunks: string[]; streamingChunk: string }>({ completedChunks: [], streamingChunk: "" });
+  const trackerRef = useRef<OfficialMarkdownStructureTracker | null>(null);
+
+  useEffect(() => {
+    if (!isStreaming) return undefined;
+    if (!text) {
+      setChunks({ completedChunks: [], streamingChunk: "" });
+      return undefined;
+    }
+    trackerRef.current ??= new OfficialMarkdownStructureTracker();
+    const lines = text.split("\n");
+    const completedChunks: string[] = [];
+    let pendingLines: string[] = [];
+    let completedThrough = -1;
+    trackerRef.current.reset();
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const { insideStructure, previousLineWasEmpty, structureJustClosed } = trackerRef.current.processLine(line);
+      pendingLines.push(line);
+      if (structureJustClosed || (!insideStructure && line.trim() === "" && pendingLines.length > 1 && !previousLineWasEmpty)) {
+        while (pendingLines.length > 0 && pendingLines[pendingLines.length - 1].trim() === "") pendingLines.pop();
+        if (pendingLines.length > 0) {
+          completedChunks.push(pendingLines.join("\n"));
+          completedThrough = index;
+          pendingLines = [];
+        }
+      }
+    }
+    setChunks({
+      completedChunks,
+      streamingChunk: lines.slice(completedThrough + 1).join("\n"),
+    });
+    return undefined;
+  }, [isStreaming, text]);
+
+  return isStreaming ? chunks : stableChunks;
+}
+
+class OfficialMarkdownStructureTracker {
+  private codeBlockDelimiter = "";
+  private inBlockquote = false;
+  private inCodeBlock = false;
+  private inList = false;
+  private inMathBlock = false;
+  private inTable = false;
+  private lastLineWasEmpty = true;
+
+  reset() {
+    this.inBlockquote = false;
+    this.inCodeBlock = false;
+    this.codeBlockDelimiter = "";
+    this.inList = false;
+    this.inMathBlock = false;
+    this.inTable = false;
+    this.lastLineWasEmpty = true;
+  }
+
+  processLine(line: string) {
+    const trimmed = line.trim();
+    const wasInsideStructure = this.isInsideStructure();
+    if ((trimmed.startsWith("```") || trimmed.startsWith("~~~")) && !this.inMathBlock) {
+      if (this.inCodeBlock) {
+        if (trimmed.startsWith(this.codeBlockDelimiter)) {
+          this.inCodeBlock = false;
+          this.codeBlockDelimiter = "";
+        }
+      } else {
+        this.inCodeBlock = true;
+        this.codeBlockDelimiter = trimmed.substring(0, 3);
+      }
+    }
+    if (trimmed === "$$" && !this.inCodeBlock) this.inMathBlock = !this.inMathBlock;
+    const inCodeOrMath = this.inCodeBlock || this.inMathBlock;
+    if (/^[-*+]|\d+\./.test(trimmed) && !inCodeOrMath) this.inList = true;
+    else if (this.inList && trimmed === "") this.inList = false;
+    if (line.includes("|") && !inCodeOrMath) this.inTable = true;
+    else if (this.inTable && trimmed === "") this.inTable = false;
+    const isBlockquoteLine = trimmed.startsWith(">");
+    if (isBlockquoteLine && !inCodeOrMath) this.inBlockquote = true;
+    else if (this.inBlockquote && trimmed === "" && !isBlockquoteLine) this.inBlockquote = false;
+    const previousLineWasEmpty = this.lastLineWasEmpty;
+    this.lastLineWasEmpty = trimmed === "";
+    return {
+      insideStructure: this.isInsideStructure(),
+      previousLineWasEmpty,
+      structureJustClosed: wasInsideStructure && !this.isInsideStructure(),
+    };
+  }
+
+  private isInsideStructure() {
+    return this.inBlockquote || this.inCodeBlock || this.inList || this.inMathBlock || this.inTable;
+  }
+}
+
+const officialSearchTreeBlockPattern = /<search_tree>([\s\S]*?)<\/search_tree>/g;
+
+function preprocessOfficialCodeMarkdown(text: string) {
+  return text.includes("<search_tree>")
+    ? text.replace(officialSearchTreeBlockPattern, (_match, body: string) => `\n\n\`\`\`search_tree\n${body.trim()}\n\`\`\`\n\n`)
+    : text;
+}
 
 function MarkdownContent({ isStreaming = false, text }: { isStreaming?: boolean; text: string }) {
   const chunks = useMemo(() => splitStreamingMarkdown(text, isStreaming), [isStreaming, text]);

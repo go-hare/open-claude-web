@@ -716,6 +716,7 @@ function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): Se
     origin: stringValue(raw.origin) ?? stringValue(original.origin),
     showRetryButton: booleanValue(raw.showRetryButton) ?? booleanValue(original.showRetryButton),
     statusMessage: stringValue(raw.statusMessage) ?? stringValue(raw.sessionStatusMessage) ?? stringValue(original.statusMessage) ?? stringValue(original.sessionStatusMessage),
+    postTurnSummary: normalizePostTurnSummary(raw.postTurnSummary ?? raw.post_turn_summary ?? original.postTurnSummary ?? original.post_turn_summary),
     isPinned: Boolean(raw.isStarred),
     isArchived: Boolean(raw.archived ?? raw.isArchived),
     isRunning: isRunning(raw),
@@ -723,6 +724,20 @@ function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): Se
     hasWorktree: hasWorktree(raw, original),
     messages: normalizeMessages(raw.messages),
     pendingToolPermissions: normalizePendingToolPermissions(raw.pendingToolPermissions, id),
+  };
+}
+
+function normalizePostTurnSummary(value: unknown): SessionSummary["postTurnSummary"] {
+  const raw = asRecord(value);
+  if (Object.keys(raw).length === 0) return undefined;
+  return {
+    title: stringValue(raw.title),
+    description: stringValue(raw.description),
+    statusCategory: stringValue(raw.statusCategory) ?? stringValue(raw.status_category),
+    statusDetail: stringValue(raw.statusDetail) ?? stringValue(raw.status_detail),
+    recentAction: stringValue(raw.recentAction) ?? stringValue(raw.recent_action),
+    needsAction: stringValue(raw.needsAction) ?? stringValue(raw.needs_action),
+    isNoteworthy: booleanValue(raw.isNoteworthy) ?? booleanValue(raw.is_noteworthy),
   };
 }
 

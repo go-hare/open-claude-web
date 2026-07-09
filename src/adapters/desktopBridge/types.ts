@@ -64,6 +64,15 @@ export type SessionSummary = {
   origin?: string;
   showRetryButton?: boolean;
   statusMessage?: string;
+  postTurnSummary?: {
+    description?: string;
+    isNoteworthy?: boolean;
+    needsAction?: string;
+    recentAction?: string;
+    statusCategory?: string;
+    statusDetail?: string;
+    title?: string;
+  };
   isPinned?: boolean;
   isArchived?: boolean;
   isRunning?: boolean;

@@ -598,8 +598,6 @@ function OfficialMessageActions({
   rating,
   rewindAriaLabel = "Rewind to here",
   rewindIcon = "ArrowUndoUp",
-  showBranchActions = false,
-  showPinAction = false,
   timestamp,
 }: {
   buttonVariant?: "link" | "muted";
@@ -614,14 +612,10 @@ function OfficialMessageActions({
   rating?: OfficialMessageRating;
   rewindAriaLabel?: string;
   rewindIcon?: string;
-  showBranchActions?: boolean;
-  showPinAction?: boolean;
   timestamp?: string;
 }) {
   const [copied, setCopied] = useState(false);
-  const [localPinned, setLocalPinned] = useState(isPinned);
   const [localRating, setLocalRating] = useState<OfficialMessageRating | undefined>(rating);
-  const pinned = onPinChapter ? isPinned : localPinned;
   const currentRating = rating ?? localRating;
   const copyMessage = () => {
     if (copyText === undefined) return;
@@ -629,13 +623,6 @@ function OfficialMessageActions({
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1200);
     });
-  };
-  const pinMessage = () => {
-    if (onPinChapter) {
-      onPinChapter();
-      return;
-    }
-    setLocalPinned((value) => !value);
   };
   const rateMessage = (nextRating: OfficialMessageRating) => {
     if (rateMessageUuid && onRateMessage) {
@@ -645,15 +632,13 @@ function OfficialMessageActions({
     }
     setLocalRating((value) => value === nextRating ? undefined : nextRating);
   };
-  const shouldShowRewind = Boolean(onRewind) || showBranchActions;
-  const shouldShowFork = Boolean(onFork) || showBranchActions;
   const shouldShowRating = Boolean(rateMessageUuid && onRateMessage);
   return (
     <div className={`flex gap-g2 pt-[4px] opacity-0 pointer-events-none group-hover/msg:opacity-100 group-hover/msg:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto ${className}`}>
       {copyText !== undefined ? <OfficialButton ariaLabel={copied ? "Copied" : "Copy message"} icon={copied ? "CheckSelection" : "CopySquareBehind"} onClick={copyMessage} size="small" variant={buttonVariant} /> : null}
-      {showPinAction ? <OfficialButton ariaLabel={pinned ? "Unpin chapter" : "Pin as chapter"} icon={pinned ? "Unpin" : "Pin"} onClick={pinMessage} pressed={pinned} size="small" variant={buttonVariant} /> : null}
-      {shouldShowRewind ? <OfficialButton ariaLabel={rewindAriaLabel} icon={rewindIcon} onClick={onRewind} size="small" variant={buttonVariant} /> : null}
-      {shouldShowFork ? <OfficialButton ariaLabel="Fork from here" icon="GitBranch" onClick={onFork} size="small" variant={buttonVariant} /> : null}
+      {onPinChapter ? <OfficialButton ariaLabel={isPinned ? "Unpin chapter" : "Pin as chapter"} icon={isPinned ? "Unpin" : "Pin"} onClick={onPinChapter} pressed={isPinned} size="small" variant={buttonVariant} /> : null}
+      {onRewind ? <OfficialButton ariaLabel={rewindAriaLabel} icon={rewindIcon} onClick={onRewind} size="small" variant={buttonVariant} /> : null}
+      {onFork ? <OfficialButton ariaLabel="Fork from here" icon="GitBranch" onClick={onFork} size="small" variant={buttonVariant} /> : null}
       {shouldShowRating ? (
         <>
           <OfficialButton ariaLabel="Good response" customIcon={<ThumbFeedbackIcon direction="up" />} onClick={() => rateMessage("positive")} pressed={currentRating === "positive"} size="small" variant={buttonVariant} />
@@ -695,35 +680,37 @@ export function OfficialAssistantMessage({
   children,
   copyText,
   createdAt,
+  isPinned = false,
   showAwaitingDot = false,
   onFork,
+  onPinChapter,
   onRateMessage,
   onRewind,
   rateMessageUuid,
   rating,
-  showPinAction = true,
 }: {
   children: ReactNode;
   copyText?: string;
   createdAt?: string;
+  isPinned?: boolean;
   onFork?: () => void;
+  onPinChapter?: () => void;
   onRateMessage?: (messageUuid: string, rating: OfficialMessageRating) => void;
   onRewind?: () => void;
   rateMessageUuid?: string;
   rating?: OfficialMessageRating;
   showAwaitingDot?: boolean;
-  showPinAction?: boolean;
 }) {
   return (
-    <article className="group/msg relative flex flex-col w-full">
+    <div className="group/msg relative flex flex-col w-full">
       {showAwaitingDot ? <span className="absolute left-[-28px] top-0" data-official-source="c11959232-h_zsw3wI.js:Kb showAwaitingDot _h"><OfficialAwaitingDot /></span> : null}
       <div className="flex flex-col gap-[var(--chat-item-gap)] select-text">
         {children}
       </div>
-      {(copyText !== undefined || createdAt || showPinAction || onFork || onRewind || (rateMessageUuid && onRateMessage)) ? (
-        <OfficialMessageActions copyText={copyText} onFork={onFork} onRateMessage={onRateMessage} onRewind={onRewind} rateMessageUuid={rateMessageUuid} rating={rating} showPinAction={showPinAction} timestamp={createdAt} />
+      {(copyText !== undefined || createdAt || onPinChapter || onFork || onRewind || (rateMessageUuid && onRateMessage)) ? (
+        <OfficialMessageActions copyText={copyText} isPinned={isPinned} onFork={onFork} onPinChapter={onPinChapter} onRateMessage={onRateMessage} onRewind={onRewind} rateMessageUuid={rateMessageUuid} rating={rating} timestamp={createdAt} />
       ) : null}
-    </article>
+    </div>
   );
 }
 
