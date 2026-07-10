@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import { desktopBridge } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
 import { Icon } from "../../shell/icons";
 import { CustomizeSideNav } from "./CustomizeSideNav";
@@ -13,6 +14,7 @@ const SKILLS_ENABLED = false;
 
 export function CustomizePage({ onNavigate }: RouteViewProps) {
   const pathname = window.location.pathname;
+  const needsTrafficLightPadding = useCustomizeTrafficLightPadding();
   const [pluginBrowserOpen, setPluginBrowserOpen] = useState(false);
   const [pluginWarningDismissed, setPluginWarningDismissed] = useState(false);
 
@@ -72,6 +74,7 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
   // route 内容容器为 flex-1 overflow-y-auto bg-bg-100；_Component22 为 standalone 左侧 nav。
   return (
     <div className="flex h-full w-full flex-col">
+      {needsTrafficLightPadding ? <div aria-hidden="true" className="h-10 shrink-0" data-testid="customize-traffic-light-spacer" /> : null}
       <div className="flex flex-1 min-h-0">
         <CustomizeSideNav activePath={pathname} onNavigate={onNavigate} onBrowsePlugins={() => setPluginBrowserOpen(true)} />
         <div className="flex-1 overflow-y-auto bg-bg-100">
@@ -82,6 +85,25 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
       {pluginBrowserOpen ? <PluginBrowserPanel onClose={() => setPluginBrowserOpen(false)} /> : null}
     </div>
   );
+}
+
+function useCustomizeTrafficLightPadding() {
+  const isMacDesktop = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    const isMac = /\bMacintosh\b|\bMac OS\b/.test(navigator.userAgent);
+    const isDesktop = Boolean(window["claude.web"]) || /\bElectron\//.test(navigator.userAgent);
+    return isMac && isDesktop && !/\bWindows\b/.test(navigator.userAgent);
+  }, []);
+  const [isFullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    if (!isMacDesktop) return;
+    let disposed = false;
+    void desktopBridge.Window.getFullscreen()
+      .then((value) => { if (!disposed) setFullscreen(value); })
+      .catch(() => undefined);
+    return () => { disposed = true; };
+  }, [isMacDesktop]);
+  return isMacDesktop && !isFullscreen;
 }
 
 function CustomizeIndex({ onNavigate, onBrowsePlugins }: { onNavigate: (path: string) => void; onBrowsePlugins: () => void }) {
