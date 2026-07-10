@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { desktopBridge, type SessionSummary } from "../../../adapters/desktopBridge";
 import { useShellText } from "../../../i18n/shellMessages";
 import type { FrameStore } from "../../../stores/frameStore";
@@ -8,9 +8,11 @@ import { SidebarSectionHeader } from "../../../shell/SidebarSectionHeader";
 import { coworkSelectedSessionId } from "../sessionPaths";
 import { CoworkPinnedSection } from "./CoworkPinnedSection";
 import { CoworkRecentList } from "./CoworkRecentList";
-import { buildCoworkRecentGroups } from "./coworkRecentGroups";
 import { type CoworkRowAction, useCoworkSessionRowActions } from "./CoworkSessionMenus";
-import { coworkSessionPinKey, isCoworkSessionPinned } from "./coworkSessionPinning";
+import { CoworkScheduledSection } from "./CoworkScheduledSection";
+import { CoworkSpacesSection } from "./CoworkSpacesSection";
+import { buildCoworkSidebarModel } from "./coworkSidebarModel";
+import { useCoworkSidebarData } from "./useCoworkSidebarData";
 
 type CoworkRecentsSectionProps = {
   frame: FrameStore;
@@ -18,35 +20,22 @@ type CoworkRecentsSectionProps = {
 };
 
 export function CoworkRecentsSection({ frame, onNavigate }: CoworkRecentsSectionProps) {
-  const text = useShellText();
-  const [sessions, setSessions] = useCoworkSessions();
+  const data = useCoworkSidebarData();
   const [renameTarget, setRenameTarget] = useState<SessionSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary | null>(null);
   const selectedSessionId = coworkSelectedSessionId(window.location.pathname);
-  const pinnedKeys = useMemo(() => new Set(sessions.filter((session) => isCoworkSessionPinned(session, frame.pinnedOrder)).map(coworkSessionPinKey)), [frame.pinnedOrder, sessions]);
-  const recentSessions = useMemo(() => sessions.filter((session) => !pinnedKeys.has(coworkSessionPinKey(session))), [pinnedKeys, sessions]);
-  const groups = useMemo(() => buildCoworkRecentGroups(recentSessions, frame, text), [frame, recentSessions, text]);
-  const rawActions = useCoworkSessionRowActions(frame, setSessions);
+  const model = useMemo(() => buildCoworkSidebarModel(data.sessions, data.scheduledTasks, data.spaces, frame.pinnedOrder), [data.scheduledTasks, data.sessions, data.spaces, frame.pinnedOrder]);
+  const rawActions = useCoworkSessionRowActions(frame, data.setSessions);
   const actions = useCoworkActions(rawActions, setRenameTarget, setDeleteTarget);
   return (
     <div className="dframe-recents-by-mode contents" data-mode="cowork">
-      <CoworkPinnedSection frame={frame} onAction={actions} onNavigate={onNavigate} selectedSessionId={selectedSessionId} sessions={sessions} />
-      <CoworkRecentSection frame={frame} groups={groups} onAction={actions} onNavigate={onNavigate} selectedSessionId={selectedSessionId} sessionCount={sessions.length} />
-      <CoworkSessionDialogs deleteTarget={deleteTarget} onDelete={rawActions} onDeleteClose={() => setDeleteTarget(null)} onRenameClose={() => setRenameTarget(null)} renameTarget={renameTarget} setSessions={setSessions} />
+      <CoworkScheduledSection frame={frame} items={model.scheduled} onNavigate={onNavigate} selectedSessionId={selectedSessionId} />
+      <CoworkSpacesSection frame={frame} onNavigate={onNavigate} spaces={model.spaces} />
+      <CoworkPinnedSection frame={frame} onAction={actions} onNavigate={onNavigate} selectedSessionId={selectedSessionId} sessions={model.pinned} />
+      <CoworkRecentSection frame={frame} onAction={actions} onNavigate={onNavigate} selectedSessionId={selectedSessionId} sessions={model.recents} />
+      <CoworkSessionDialogs deleteTarget={deleteTarget} onDelete={rawActions} onDeleteClose={() => setDeleteTarget(null)} onRenameClose={() => setRenameTarget(null)} renameTarget={renameTarget} setSessions={data.setSessions} />
     </div>
   );
-}
-
-function useCoworkSessions() {
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  useEffect(() => {
-    let mounted = true;
-    const load = () => desktopBridge.LocalAgentModeSessions.list().then((items) => { if (mounted) setSessions([...items].sort((left, right) => right.updatedAtMs - left.updatedAtMs)); });
-    void load();
-    const unsubscribe = desktopBridge.LocalAgentModeSessions.onEvent?.(() => { void load(); });
-    return () => { mounted = false; unsubscribe?.(); };
-  }, []);
-  return [sessions, setSessions] as const;
 }
 
 function useCoworkActions(rawActions: (session: SessionSummary, action: CoworkRowAction) => void, setRenameTarget: (session: SessionSummary) => void, setDeleteTarget: (session: SessionSummary) => void) {
@@ -57,15 +46,15 @@ function useCoworkActions(rawActions: (session: SessionSummary, action: CoworkRo
   }, [rawActions, setDeleteTarget, setRenameTarget]);
 }
 
-function CoworkRecentSection({ frame, groups, onAction, onNavigate, selectedSessionId, sessionCount }: Omit<Parameters<typeof CoworkRecentList>[0], "groups"> & { groups: ReturnType<typeof buildCoworkRecentGroups>; sessionCount: number }) {
+function CoworkRecentSection({ frame, onAction, onNavigate, selectedSessionId, sessions }: Parameters<typeof CoworkRecentList>[0]) {
   const text = useShellText();
   const collapsed = frame.collapsedGroups.includes("recents");
-  const visibleCount = groups.reduce((count, group) => count + group.sessions.length, 0);
+  if (sessions.length === 0) return null;
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-px" data-kind="cowork">
+    <section className="flex min-h-0 flex-1 flex-col gap-px" data-cowork-sidebar-section="recents" data-kind="cowork">
       <div className="flex-1 min-h-[120px] overflow-hidden">
         <SidebarSectionHeader collapsed={collapsed} onToggle={() => frame.toggleGroupCollapsed("recents")}>{text.recent}</SidebarSectionHeader>
-        {!collapsed && visibleCount > 0 ? <CoworkRecentList frame={frame} groups={groups} onAction={onAction} onNavigate={onNavigate} selectedSessionId={selectedSessionId} /> : !collapsed && sessionCount > 0 ? <div className="px-[var(--df-row-px)] py-1 text-xs text-text-500">{text.noFilteredSessions}</div> : null}
+        {!collapsed ? <CoworkRecentList frame={frame} onAction={onAction} onNavigate={onNavigate} selectedSessionId={selectedSessionId} sessions={sessions} /> : null}
       </div>
     </section>
   );
@@ -73,10 +62,16 @@ function CoworkRecentSection({ frame, groups, onAction, onNavigate, selectedSess
 
 function CoworkSessionDialogs({ deleteTarget, onDelete, onDeleteClose, onRenameClose, renameTarget, setSessions }: { deleteTarget: SessionSummary | null; onDelete: (session: SessionSummary, action: CoworkRowAction) => void; onDeleteClose: () => void; onRenameClose: () => void; renameTarget: SessionSummary | null; setSessions: React.Dispatch<React.SetStateAction<SessionSummary[]>> }) {
   const text = useShellText();
+  const rename = (name: string) => {
+    if (!renameTarget) return;
+    setSessions((current) => current.map((item) => item.id === renameTarget.id ? { ...item, title: name } : item));
+    void desktopBridge.LocalAgentModeSessions.updateSession?.(renameTarget.id, { title: name });
+    onRenameClose();
+  };
   return (
     <>
       <ConfirmDialog confirmText={text.delete} isOpen={deleteTarget !== null} message={<>{text.deleteSessionPrefix} “{deleteTarget?.title}”? {text.deleteSessionSuffix}</>} onClose={onDeleteClose} onConfirm={() => { if (deleteTarget) onDelete(deleteTarget, "delete"); }} title={text.deleteSession} variant="danger" />
-      <GroupNameDialog initialName={renameTarget?.title ?? ""} isOpen={renameTarget !== null} onClose={onRenameClose} onSubmit={(name) => setSessions((current) => current.map((item) => item.id === renameTarget?.id ? { ...item, title: name } : item))} placeholder={text.sessionName} title={text.renameSession} />
+      <GroupNameDialog initialName={renameTarget?.title ?? ""} isOpen={renameTarget !== null} onClose={onRenameClose} onSubmit={rename} placeholder={text.sessionName} title={text.renameSession} />
     </>
   );
 }

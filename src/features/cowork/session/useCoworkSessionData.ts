@@ -13,8 +13,8 @@ import {
   shouldSettleCoworkStream,
 } from "./coworkSessionEvents";
 import { createCoworkSessionStreamSmoother } from "./stream/coworkStreamSmoother";
-import { mergeCoworkStream, estimateCoworkStreamTokens } from "./transcript/coworkStreamTranscript";
-import { parseCoworkTranscript } from "./transcript/coworkTranscriptParser";
+import { estimateCoworkStreamTokens } from "./transcript/coworkStreamTranscript";
+import { buildCoworkMessageChains } from "./transcript/coworkMessageModel";
 import type { CoworkSessionDataState } from "./types";
 
 const sessionDataCache = new Map<string, CoworkSessionDataState>();
@@ -40,13 +40,14 @@ export function useCoworkSessionData(sessionId: string) {
   useCoworkSmoother(sessionId, setState, smootherRef);
   useCoworkSessionSubscription(subscription);
 
-  const activeMessageId = state.streamingMessageId ?? state.streamSnapshot?.messageId ?? null;
-  const parsedEntries = useMemo(() => parseCoworkTranscript(state.messages, activeMessageId), [activeMessageId, state.messages]);
-  const entries = useMemo(() => mergeCoworkStream(parsedEntries, state.streamSnapshot), [parsedEntries, state.streamSnapshot]);
+  const chains = useMemo(
+    () => buildCoworkMessageChains(state.messages, state.streamSnapshot),
+    [state.messages, state.streamSnapshot],
+  );
   const streamTokenEstimate = useMemo(() => estimateCoworkStreamTokens(state.streamSnapshot), [state.streamSnapshot]);
   const isResponding = state.streamActivity !== idleActivity || state.streamSnapshot !== null
     || state.streamingMessageId !== null || state.session?.isRunning === true;
-  return { ...state, entries, isResponding, reload, streamTokenEstimate };
+  return { ...state, chains, isResponding, reload, streamTokenEstimate };
 }
 
 function useCachedSessionState(sessionId: string) {

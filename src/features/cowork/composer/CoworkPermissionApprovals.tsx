@@ -1,54 +1,59 @@
+import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { LocalSessionsBridge } from "../../../adapters/desktopBridge/types";
+import { Icon } from "../../../shell/icons";
 import { CoworkButton } from "../ui/CoworkButton";
+import { labelFromCron } from "../scheduled/scheduleUtils";
+import type { CoworkPermissionDecision, CoworkPermissionRequest } from "../session/coworkPermissionTypes";
 import { asRecord, booleanValue, stringValue } from "../session/recordUtils";
+import { CoworkMarkdown } from "../session/transcript/CoworkMarkdown";
 import { isCoworkDirectoryPermissionRequest } from "../session/transcript/coworkDirectoryTools";
 
-type CoworkPermissionRequest = {
-  alwaysAllowScope?: string;
-  description?: string;
-  hasAlwaysAllow?: boolean;
-  input: Record<string, unknown>;
-  requestId: string;
-  sessionId: string;
-  toolName: string;
-};
+export type CoworkPermissionController = ReturnType<typeof useCoworkPermissionRequests>;
 
-type Decision = "always" | "deny" | "once";
-
-export function CoworkPermissionApprovals({ bridge, sessionId }: { bridge: LocalSessionsBridge; sessionId: string }) {
-  const { requests, setRequests } = usePermissionRequests(bridge, sessionId);
-  const [error, setError] = useState<string | null>(null);
+export function CoworkPermissionApprovals({ controller }: { controller: CoworkPermissionController }) {
+  const { requests, setRequests } = controller;
+  const visibleRequests = useMemo(() => requests.filter(isVisiblePermissionRequest), [requests]);
+  const [error, setError] = useState<{ id: string; message: string } | null>(null);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
-  const request = requests[0];
-  const decide = useCallback(async (decision: Decision) => {
-    if (!request || !bridge.respondToToolPermission) return;
+  const decide = useCallback(async (request: CoworkPermissionRequest, decision: CoworkPermissionDecision) => {
+    if (!controller.bridge.respondToToolPermission) return;
     setResolvingId(request.requestId);
     setError(null);
     try {
-      const result = await bridge.respondToToolPermission(request.requestId, decision, request.input);
-      if (permissionFailed(result)) setError(stringValue(asRecord(result).error) ?? "Permission response failed.");
+      const result = await controller.bridge.respondToToolPermission(request.requestId, decision, request.input);
+      if (permissionFailed(result)) setError({ id: request.requestId, message: stringValue(asRecord(result).error) ?? "Permission response failed." });
       else setRequests((current) => current.filter((item) => item.requestId !== request.requestId));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      setError({ id: request.requestId, message: caught instanceof Error ? caught.message : String(caught) });
     } finally {
       setResolvingId(null);
     }
-  }, [bridge, request, setRequests]);
-  usePermissionShortcuts(request, resolvingId, decide);
-  if (!request) return null;
-  const errorNode = error ? <div className="text-footnote text-extended-pink">{error}</div> : null;
-  return isCoworkDirectoryPermissionRequest(request)
-    ? <CoworkDirectoryApproval busy={resolvingId === request.requestId} error={errorNode} onDecide={decide} request={request} />
-    : <CoworkToolApproval busy={resolvingId === request.requestId} error={errorNode} onDecide={decide} queueDepth={requests.length - 1} request={request} />;
+  }, [controller.bridge, setRequests]);
+  usePermissionShortcuts(visibleRequests[0], resolvingId, decide);
+  return (
+    <div className={visibleRequests.length > 0 ? "mb-6" : undefined}>
+      <AnimatePresence initial={false} mode="popLayout">
+        {visibleRequests.map((request) => (
+          <motion.div className="-mx-1 overflow-hidden px-1" exit={{ height: 0, opacity: 0 }} key={request.requestId} layout="position" transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}>
+            <CoworkPermissionCard busy={resolvingId === request.requestId} error={error?.id === request.requestId ? <div className="text-footnote text-extended-pink">{error.message}</div> : null} onDecide={(decision) => void decide(request, decision)} request={request} />
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
 }
 
-function usePermissionRequests(bridge: LocalSessionsBridge, sessionId: string) {
+export function useCoworkPermissionRequests(bridge: LocalSessionsBridge, sessionId: string) {
   const [requests, setRequests] = useState<CoworkPermissionRequest[]>([]);
   useEffect(() => {
     let alive = true;
     void bridge.getSession(sessionId).then((session) => {
-      if (alive) setRequests((session?.pendingToolPermissions ?? []).map((item) => ({ ...item, input: asRecord(item.input) })));
+      if (alive) setRequests((session?.pendingToolPermissions ?? []).map((item) => ({
+        ...item,
+        input: asRecord(item.input),
+        sessionId: item.sessionId || sessionId,
+      })));
     }).catch(() => undefined);
     const onEvent = (event: unknown) => {
       const resolvedId = permissionResolvedId(event, sessionId);
@@ -60,43 +65,78 @@ function usePermissionRequests(bridge: LocalSessionsBridge, sessionId: string) {
     const offEvent = bridge.onEvent?.(onEvent);
     return () => { alive = false; offPermission?.(); offEvent?.(); };
   }, [bridge, sessionId]);
-  return { requests, setRequests };
+  return { bridge, requests, setRequests };
 }
 
-function usePermissionShortcuts(request: CoworkPermissionRequest | undefined, resolvingId: string | null, decide: (decision: Decision) => Promise<void>) {
+function usePermissionShortcuts(request: CoworkPermissionRequest | undefined, resolvingId: string | null, decide: (request: CoworkPermissionRequest, decision: CoworkPermissionDecision) => Promise<void>) {
   useEffect(() => {
     if (!request) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || resolvingId === request.requestId) return;
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); void decide("deny"); }
-      else if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        const decision = event.shiftKey ? "always" : "once";
-        if (decision === "always" && request.hasAlwaysAllow === false) return;
-        event.preventDefault(); event.stopPropagation(); void decide(decision);
-      }
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); void decide(request, "deny"); }
+      else if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); void decide(request, "once"); }
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [decide, request, resolvingId]);
 }
 
-function CoworkDirectoryApproval({ busy, error, onDecide, request }: { busy: boolean; error: ReactNode; onDecide: (decision: Decision) => void; request: CoworkPermissionRequest }) {
+function CoworkPermissionCard({ busy, error, onDecide, request }: { busy: boolean; error: ReactNode; onDecide: (decision: CoworkPermissionDecision) => void; request: CoworkPermissionRequest }) {
+  if (isCoworkDirectoryPermissionRequest(request)) return <CoworkDirectoryApproval busy={busy} error={error} onDecide={onDecide} request={request} />;
+  if (isScheduledTaskRequest(request)) return <CoworkScheduledTaskApproval busy={busy} error={error} onDecide={onDecide} request={request} />;
+  if (request.toolName.toLowerCase().includes("save_skill")) return <CoworkSaveSkillApproval busy={busy} error={error} onDecide={onDecide} request={request} />;
+  return <CoworkToolApproval busy={busy} error={error} onDecide={onDecide} request={request} />;
+}
+
+function CoworkDirectoryApproval({ busy, error, onDecide, request }: { busy: boolean; error: ReactNode; onDecide: (decision: CoworkPermissionDecision) => void; request: CoworkPermissionRequest }) {
   const path = stringValue(request.input.path);
   return (
-    <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden p-3"><div className="flex flex-col gap-2"><div className="text-sm text-text-200">Claude would like to <strong>Cowork</strong> in:</div>{path ? <span className="font-mono text-sm text-text-100 break-all">{path}</span> : null}{error}<div className="flex justify-end gap-2"><CoworkButton disabled={busy} onClick={() => onDecide("deny")} variant="contained">Deny</CoworkButton><CoworkButton disabled={busy} onClick={() => onDecide("once")} variant="primary">{path ? "Allow" : "Choose folder"}</CoworkButton></div></div></div>
+    <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden p-3"><div className="flex flex-col gap-2"><div className="flex items-start gap-2"><Icon className="text-text-300 flex-shrink-0 mt-0.5" customSize={20} name="Folder1" /><div className="flex min-w-0 flex-col gap-1"><span className="text-sm text-text-200">Claude would like to <strong>Cowork</strong> in{path ? ":" : " a folder"}</span>{path ? <span className="font-mono text-sm text-text-100 break-all">{path}</span> : null}</div></div>{error}<div className="flex justify-end gap-2"><CoworkButton disabled={busy} onClick={() => onDecide("deny")} variant="contained">Deny</CoworkButton><CoworkButton disabled={busy} onClick={() => onDecide("once")} variant="primary">{path ? "Allow" : "Choose folder"}</CoworkButton></div></div></div>
   );
 }
 
-function CoworkToolApproval({ busy, error, onDecide, queueDepth, request }: { busy: boolean; error: ReactNode; onDecide: (decision: Decision) => void; queueDepth: number; request: CoworkPermissionRequest }) {
+function CoworkToolApproval({ busy, error, onDecide, request }: { busy: boolean; error: ReactNode; onDecide: (decision: CoworkPermissionDecision) => void; request: CoworkPermissionRequest }) {
   const copy = useMemo(() => approvalCopy(request), [request]);
   return (
     <div className="epitaxy-approval-card">
-      {Array.from({ length: Math.min(queueDepth, 2) }, (_, index) => <div aria-hidden="true" className="absolute inset-0 rounded-r7 bg-surface-primary-elevated epitaxy-approval-ghost" key={index} style={{ opacity: 0.75 - 0.25 * index, transform: `translateY(-${6 * (index + 1)}px) scale(${0.97 - 0.03 * index})`, zIndex: -index - 1 }} />)}
       <div aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] bg-surface-primary-elevated effect-primary-elevated" />
       <div className="flex flex-col gap-2"><div className="text-footnote text-t6">Claude wants to use {request.toolName}</div><div className="text-body-semibold text-t9">Allow Claude to {copy.action}{copy.meta ? ` ${copy.meta}` : ""}?</div>{copy.detail ? <div className="bg-t1 rounded-r4 py-p6 px-p8 text-code text-t7 whitespace-pre-wrap break-words max-h-[240px] overflow-y-auto">{copy.detail}</div> : null}{request.description ? <div className="text-footnote text-t6">{request.description}</div> : null}{error}</div>
       <div className="epitaxy-approval-actions flex flex-wrap justify-between gap-2"><CoworkButton disabled={busy} onClick={() => onDecide("deny")} variant="contained">Deny</CoworkButton><div className="flex gap-2">{request.hasAlwaysAllow === false ? null : <CoworkButton disabled={busy} onClick={() => onDecide("always")} variant="contained">{alwaysAllowLabel(request.alwaysAllowScope)}</CoworkButton>}<CoworkButton disabled={busy} onClick={() => onDecide("once")} variant="primary">Allow once</CoworkButton></div></div>
     </div>
   );
+}
+
+function CoworkScheduledTaskApproval({ busy, error, onDecide, request }: { busy: boolean; error: ReactNode; onDecide: (decision: CoworkPermissionDecision) => void; request: CoworkPermissionRequest }) {
+  const [expanded, setExpanded] = useState(false);
+  const update = request.toolName.toLowerCase().includes("update_scheduled_task");
+  const name = stringValue(request.input.name) ?? stringValue(request.input.title) ?? stringValue(request.input.taskId) ?? "Untitled";
+  const description = stringValue(request.input.description);
+  const prompt = stringValue(request.input.prompt);
+  const schedule = permissionSchedule(request.input);
+  return (
+    <div className="bg-bg-000 rounded-xl border-0.5 border-border-300 shadow-sm overflow-hidden p-3">
+      <div className="flex flex-col gap-2"><div className="flex items-center gap-2"><div className="flex items-center justify-center rounded-md border border-border-300 p-1"><Icon className="text-text-300" customSize={16} name="Calendar" /></div><span className="font-base-bold text-text-100">{update ? "Update task" : "Schedule task"}</span><span className="text-text-500/50">·</span><span className="font-base truncate">{name}</span></div>{description ? <div className="font-base text-text-300 pl-[34px]">{description}</div> : null}<div className="font-small text-text-500 pl-[34px]">{schedule}</div>{prompt ? <PermissionDetails expanded={expanded} label="Details" onToggle={() => setExpanded((value) => !value)}><CoworkMarkdown text={prompt} /></PermissionDetails> : null}{error}</div>
+      <div className="mt-2 flex ml-8 gap-2"><CoworkButton disabled={busy} onClick={() => onDecide("once")} variant="primary">{update ? "Update" : "Schedule"}</CoworkButton><CoworkButton disabled={busy} onClick={() => onDecide("deny")} variant="contained">Cancel</CoworkButton></div>
+    </div>
+  );
+}
+
+function CoworkSaveSkillApproval({ busy, error, onDecide, request }: { busy: boolean; error: ReactNode; onDecide: (decision: CoworkPermissionDecision) => void; request: CoworkPermissionRequest }) {
+  const [expanded, setExpanded] = useState(false);
+  const update = request.input.overwrite === true;
+  const name = stringValue(request.input.name) ?? "untitled";
+  const description = stringValue(request.input.description);
+  const content = stringValue(request.input.content);
+  return (
+    <div className="bg-bg-000 rounded-xl border-0.5 border-border-300 shadow-sm overflow-hidden p-3">
+      <div className="flex flex-col gap-2"><div className="flex items-center gap-2"><div className="flex items-center justify-center rounded-md border border-border-300 p-1"><Icon className="text-text-300" customSize={16} name="Book" /></div><span className="font-base-bold text-text-100">{update ? "Update skill" : "Save skill"}</span><span className="text-text-500/50">·</span><span className="font-base truncate">{name}</span></div>{description ? <div className="font-base text-text-300 pl-[34px]">{description}</div> : null}{content ? <PermissionDetails expanded={expanded} label="Content" onToggle={() => setExpanded((value) => !value)}><CoworkMarkdown text={content} /></PermissionDetails> : null}{error}</div>
+      <div className="mt-2 flex ml-8 gap-2"><CoworkButton disabled={busy} onClick={() => onDecide("once")} variant="primary">{update ? "Update" : "Save"}</CoworkButton><CoworkButton disabled={busy} onClick={() => onDecide("deny")} variant="contained">Cancel</CoworkButton></div>
+    </div>
+  );
+}
+
+function PermissionDetails({ children, expanded, label, onToggle }: { children: ReactNode; expanded: boolean; label: string; onToggle: () => void }) {
+  return <div className="mt-2 pl-[34px]"><button aria-expanded={expanded} className="flex items-center gap-1 font-small text-text-500 cursor-pointer bg-transparent border-none p-0 py-1" onClick={onToggle} type="button"><Icon customSize={14} name={expanded ? "ChevronDownSmall" : "ChevronRightMedium"} />{label}</button>{expanded ? <div className="mt-1 max-h-[300px] overflow-y-auto rounded-lg border-0.5 border-border-300 bg-bg-100 p-4 font-base text-text-500 break-words">{children}</div> : null}</div>;
 }
 
 function approvalCopy(request: CoworkPermissionRequest) {
@@ -118,7 +158,26 @@ function normalizePermissionRequest(event: unknown, activeSessionId: string): Co
   const sessionId = stringValue(raw.sessionId) ?? stringValue(message.sessionId) ?? stringValue(request.sessionId) ?? activeSessionId;
   const requestId = stringValue(request.requestId) ?? stringValue(request.request_id) ?? stringValue(raw.requestId);
   if (sessionId !== activeSessionId || !requestId) return null;
-  return { alwaysAllowScope: stringValue(request.alwaysAllowScope) ?? stringValue(request.always_allow_scope), description: stringValue(request.description), hasAlwaysAllow: booleanValue(request.hasAlwaysAllow) ?? booleanValue(request.has_always_allow), input: asRecord(request.input ?? raw.input), requestId, sessionId, toolName: stringValue(request.toolName) ?? stringValue(request.tool_name) ?? stringValue(raw.toolName) ?? "Tool" };
+  return { alwaysAllowScope: stringValue(request.alwaysAllowScope) ?? stringValue(request.always_allow_scope), description: stringValue(request.description), hasAlwaysAllow: booleanValue(request.hasAlwaysAllow) ?? booleanValue(request.has_always_allow), input: asRecord(request.input ?? raw.input), requestId, sessionId, toolName: stringValue(request.toolName) ?? stringValue(request.tool_name) ?? stringValue(raw.toolName) ?? "Tool", toolUseId: stringValue(request.toolUseId) ?? stringValue(request.tool_use_id) ?? stringValue(raw.toolUseId) };
+}
+
+function isVisiblePermissionRequest(request: CoworkPermissionRequest) {
+  return !request.toolName.includes("AskUserQuestion") && !request.toolName.includes("show_onboarding_role_picker");
+}
+
+function isScheduledTaskRequest(request: CoworkPermissionRequest) {
+  const name = request.toolName.toLowerCase();
+  return name.includes("create_scheduled_task") || name.includes("update_scheduled_task");
+}
+
+function permissionSchedule(input: Record<string, unknown>) {
+  const fireAt = stringValue(input.fireAt);
+  if (fireAt) {
+    const date = new Date(fireAt);
+    if (!Number.isNaN(date.getTime())) return `Once — ${date.toLocaleString()}`;
+  }
+  const cron = stringValue(input.cronExpression);
+  return cron ? labelFromCron(cron) : "Manual only";
 }
 
 function permissionResolvedId(event: unknown, sessionId: string) {

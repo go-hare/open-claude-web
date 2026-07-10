@@ -7,7 +7,7 @@ export function useScheduledTasks() {
 
   useEffect(() => {
     let alive = true;
-    void desktopBridge.CCDScheduledTasks.list()
+    void desktopBridge.CoworkScheduledTasks.list()
       .then((items) => {
         if (alive) setTasks(items);
       })

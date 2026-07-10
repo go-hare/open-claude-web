@@ -46,7 +46,7 @@ function CoworkToolRow({ inGroup = false, tool }: { inGroup?: boolean; tool: Cow
   const isError = tool.status === "error" || Boolean(tool.isError);
   const toggle = () => { if (hasDetails && summary.kind !== "question") setExpanded((value) => !value); };
   return (
-    <div className="flex flex-col w-full" data-cowork-tool-grouped={inGroup || undefined}>
+    <div className="flex flex-col w-full">
       <div aria-expanded={hasDetails ? expanded : undefined} className="relative group/tool flex self-start max-w-full items-center py-0 gap-g2 text-left cursor-pointer outline-none hide-focus-ring focus:ring-focus rounded-r3" onClick={toggle} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } }} role="button" tabIndex={0}>
         <CoworkAnimatedToolLabel className={`shrink-0 ${isRunning ? "text-body epitaxy-text-shine" : isError ? "text-body text-extended-pink" : "text-body text-assistant-secondary"}`} morphKey={isRunning ? "running" : "settled"}>{isRunning ? summary.runningVerb : summary.verb}</CoworkAnimatedToolLabel>
         {tool.subagentActivity?.model ? <span className="text-body text-assistant-secondary shrink-0">{tool.subagentActivity.model}</span> : null}

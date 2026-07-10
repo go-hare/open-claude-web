@@ -59,6 +59,8 @@ export type SessionSummary = {
     branch?: string;
   };
   scheduledTaskId?: string;
+  sessionType?: string;
+  spaceId?: string;
   connectionState?: string;
   nextReconnectTime?: number;
   origin?: string;
@@ -75,6 +77,9 @@ export type SessionSummary = {
   };
   isPinned?: boolean;
   isArchived?: boolean;
+  isAgentCompleted?: boolean;
+  hasCompleted?: boolean;
+  error?: string;
   isRunning?: boolean;
   isUnread?: boolean;
   hasWorktree?: boolean;
@@ -91,6 +96,14 @@ export type SessionSummary = {
     toolName: string;
     toolUseId?: string;
   }>;
+};
+
+export type CoworkSpaceSummary = {
+  id: string;
+  name: string;
+  updatedAtMs: number;
+  isStarred?: boolean;
+  sessionIds?: string[];
 };
 
 export type ScheduledTaskSummary = {
@@ -299,6 +312,7 @@ export type LocalSessionsBridge = {
   setMcpServers?: (id: string, mcpServers: unknown) => Promise<SessionSummary | null>;
   setModel?: (id: string, model: string) => Promise<SessionSummary | null>;
   setPermissionMode?: (id: string, mode: string) => Promise<SessionSummary | null>;
+  updateSession?: (id: string, patch: Partial<Pick<SessionSummary, "title" | "isAgentCompleted" | "isPinned" | "spaceId">>) => Promise<SessionSummary | null>;
   submitFeedback?: (input?: unknown) => Promise<unknown>;
   checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<WorkspaceTrustResult>;
   checkTrust?: (folder: string) => Promise<WorkspaceTrustResult>;
@@ -333,6 +347,11 @@ export type ScheduledTasksBridge = {
   get: (id: string) => Promise<ScheduledTaskSummary | null>;
   create?: (input: CreateScheduledTaskInput) => Promise<ScheduledTaskSummary | null>;
   updateStatus?: (id: string, status: "enabled" | "disabled" | "deleted") => Promise<void>;
+  onEvent?: (listener: (event: unknown) => void) => () => void;
+};
+
+export type CoworkSpacesBridge = {
+  list: () => Promise<CoworkSpaceSummary[]>;
   onEvent?: (listener: (event: unknown) => void) => () => void;
 };
 
@@ -403,6 +422,8 @@ export type DesktopBridge = {
   LocalSessionEnvironment: LocalSessionEnvironmentBridge;
   BrowserUse: BrowserUseBridge;
   CCDScheduledTasks: ScheduledTasksBridge;
+  CoworkScheduledTasks: ScheduledTasksBridge;
+  CoworkSpaces: CoworkSpacesBridge;
   FileSystem: FileSystemBridge;
   OfficeAddinFiles: ConnectedOfficeFilesBridge;
   Preferences: PreferencesBridge;

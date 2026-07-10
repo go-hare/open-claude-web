@@ -23,7 +23,7 @@ export function CoworkPinnedSection({ frame, onAction, onNavigate, selectedSessi
   const pinned = orderCoworkPinnedSessions(sessions, frame.pinnedOrder);
   const drop = useCoworkPinnedDrop(frame);
   return (
-    <section className="group/section flex flex-col gap-px" data-over={drop.dragOver || undefined} {...drop.sectionProps}>
+    <section className="group/section flex flex-col gap-px" data-cowork-sidebar-section="pinned" data-over={drop.dragOver || undefined} {...drop.sectionProps}>
       <SidebarSectionHeader collapsed={collapsed} onToggle={() => frame.toggleGroupCollapsed("pinned")}>{text.pinned}</SidebarSectionHeader>
       {frame.showDragPinHint ? <CoworkDragPinHint onClose={frame.markDragPinHintSeen} text={text} /> : null}
       {!collapsed && pinned.length > 0 ? pinned.map((session) => (

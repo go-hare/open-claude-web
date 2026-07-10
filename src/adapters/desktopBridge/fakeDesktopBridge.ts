@@ -1,17 +1,28 @@
 import type {
+  ChatMessage,
   ConnectedBrowser,
   ConnectedOfficeFile,
+  CoworkSpaceSummary,
   DesktopBridge,
   DesktopPreferences,
   LocalFileEntry,
   ScheduledTaskSummary,
+  ScheduledTasksBridge,
   SessionSummary,
   StartSessionInput,
   WorkspaceContext,
 } from "./types";
 import { createMessageUuid } from "./messageUuid";
+import coworkOfficialFixtures from "../../fixtures/coworkOfficialFixtures.json";
 
 const now = Date.now();
+
+const coworkFixture = coworkOfficialFixtures as {
+  messages: ChatMessage[];
+  scheduledTasks: ScheduledTaskSummary[];
+  sessions: Array<Pick<SessionSummary, "id" | "title" | "updatedAtMs"> & Partial<SessionSummary>>;
+  spaces: CoworkSpaceSummary[];
+};
 
 type FakeSessionKind = "code" | "epitaxy";
 type FakeEventListener = (event: unknown) => void;
@@ -98,14 +109,21 @@ const sessions: SessionSummary[] = [
     isPinned: false,
     isRunning: false,
     isUnread: false,
-    messages: [
+    pendingToolPermissions: [
       {
-        id: "m1",
-        role: "user",
-        text: "Organize Downloads folder",
-        createdAt: "刚刚",
+        input: {
+          taskId: "review-launch-risks",
+          description: "Review launch risks and owners",
+          prompt: "Review the launch brief, update the risk register, and notify each owner about unresolved blockers.",
+          cronExpression: "0 9 * * 1",
+        },
+        requestId: "permission-schedule",
+        sessionId: "cowork_downloads",
+        toolName: "create_scheduled_task",
+        toolUseId: "tool-schedule"
       },
     ],
+    messages: coworkFixture.messages,
   },
   {
     id: "cowork_untitled",
@@ -124,6 +142,26 @@ const sessions: SessionSummary[] = [
     isUnread: false,
     messages: [],
   },
+  ...coworkFixture.sessions.slice(1).map((session): SessionSummary => ({
+    ...session,
+    updatedAt: "刚刚",
+    kind: "epitaxy",
+    sessionKind: "cowork",
+    messages: session.id === "cowork_official_error" ? [fakeCoworkStatusUserMessage(session.id, "Review the failure and reconnect.")] : [],
+  })),
+  fakeCoworkStatusSession("cowork_official_compacting", "Compact project research", {
+    type: "system",
+    subtype: "status",
+    status: "compacting",
+    statusMessage: "Compacting our conversation so we can keep chatting...",
+  }),
+  fakeCoworkStatusSession("cowork_official_retry", "Retry customer data source", {
+    type: "system",
+    subtype: "api_retry",
+    attempt: 2,
+    max_retries: 5,
+    retry_delay_ms: 15000,
+  }),
   ...Array.from({ length: 14 }, (_, index): SessionSummary => ({
     id: `code_demo_${index}`,
     title: index === 1 ? "Coding Session 2" : index === 7 ? "2" : "General coding session",
@@ -150,6 +188,35 @@ const sessions: SessionSummary[] = [
     ],
   })),
 ];
+
+function fakeCoworkStatusSession(id: string, title: string, status: Record<string, unknown>): SessionSummary {
+  return {
+    id,
+    title,
+    updatedAt: "刚刚",
+    updatedAtMs: now - 1000 * 60 * 4,
+    kind: "epitaxy",
+    sessionKind: "cowork",
+    isRunning: true,
+    messages: [fakeCoworkStatusUserMessage(id, title), {
+      id: `${id}-status`,
+      role: "system",
+      text: "",
+      createdAt: new Date().toISOString(),
+      raw: status,
+    }],
+  };
+}
+
+function fakeCoworkStatusUserMessage(id: string, text: string): ChatMessage {
+  return {
+    id: `${id}-user`,
+    role: "user",
+    text,
+    createdAt: new Date().toISOString(),
+    raw: { type: "user", uuid: `${id}-user`, message: { role: "user", content: [{ type: "text", text }] } },
+  };
+}
 
 
 function buildFakeTranscript(index: number) {
@@ -211,6 +278,43 @@ function buildFakeTranscript(index: number) {
 }
 
 const scheduledTasks: ScheduledTaskSummary[] = [];
+const coworkScheduledTasks: ScheduledTaskSummary[] = coworkFixture.scheduledTasks.map((task) => ({ ...task }));
+const coworkSpaces: CoworkSpaceSummary[] = coworkFixture.spaces.map((space) => ({ ...space }));
+
+function createFakeScheduledTasksBridge(items: ScheduledTaskSummary[]): ScheduledTasksBridge {
+  return {
+    list: async () => items.slice(),
+    get: async (id) => items.find((task) => task.id === id) ?? null,
+    create: async (input) => {
+      const task: ScheduledTaskSummary = {
+        id: input.name,
+        title: input.name,
+        schedule: input.cronExpression ?? "Manual",
+        enabled: true,
+        description: input.description,
+        prompt: input.prompt,
+        cronExpression: input.cronExpression,
+        cwd: input.cwd,
+        permissionMode: input.permissionMode,
+        model: input.model,
+        useWorktree: input.useWorktree,
+        sourceBranch: input.sourceBranch,
+        userSelectedFolders: input.userSelectedFolders,
+      };
+      items.unshift(task);
+      return task;
+    },
+    updateStatus: async (id, status) => {
+      const index = items.findIndex((task) => task.id === id);
+      if (index < 0) return;
+      if (status === "deleted") {
+        items.splice(index, 1);
+        return;
+      }
+      items[index] = { ...items[index], enabled: status === "enabled" };
+    },
+  };
+}
 
 const preferencesListeners = new Set<(preferences: DesktopPreferences) => void>();
 const fakeConnectedOfficeFileListeners = new Set<(files: ConnectedOfficeFile[]) => void>();
@@ -368,7 +472,18 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   pickSessionFile: async () => "/tmp/preview.txt",
   pickFileAtCwd: async () => "/tmp/preview.txt",
   respondToToolPermission: async (requestId, decision, updatedInput) => {
-    const sessionId = fakePermissionSessionByRequestId.get(requestId);
+    const sessionIndex = sessions.findIndex((session) =>
+      session.kind === targetKind
+      && session.pendingToolPermissions?.some((request) => request.requestId === requestId),
+    );
+    const sessionId = fakePermissionSessionByRequestId.get(requestId)
+      ?? (sessionIndex >= 0 ? sessions[sessionIndex].id : undefined);
+    if (sessionIndex >= 0) {
+      sessions[sessionIndex] = {
+        ...sessions[sessionIndex],
+        pendingToolPermissions: sessions[sessionIndex].pendingToolPermissions?.filter((request) => request.requestId !== requestId),
+      };
+    }
     fakePermissionSessionByRequestId.delete(requestId);
     emitFakeLocalSessionEvent({
       type: "tool_permission_resolved",
@@ -393,6 +508,12 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
     if (index < 0) return null;
     sessions[index] = { ...sessions[index], permissionMode };
+    return sessions[index];
+  },
+  updateSession: async (id, patch) => {
+    const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
+    if (index < 0) return null;
+    sessions[index] = { ...sessions[index], ...patch, updatedAt: "刚刚", updatedAtMs: Date.now() };
     return sessions[index];
   },
   startShellPty: async () => ({ ok: true, buffered: "" }),
@@ -606,40 +727,11 @@ export const fakeDesktopBridge: DesktopBridge = {
     },
     getSelectedBrowserId: async () => fakeSelectedBrowserId,
   },
-  CCDScheduledTasks: {
-    list: async () => scheduledTasks.slice(),
-    get: async (id) => scheduledTasks.find((task) => task.id === id) ?? null,
-    create: async (input) => {
-      const task: ScheduledTaskSummary = {
-        id: input.name,
-        title: input.name,
-        schedule: input.cronExpression ?? "Manual",
-        enabled: true,
-        description: input.description,
-        prompt: input.prompt,
-        cronExpression: input.cronExpression,
-        cwd: input.cwd,
-        permissionMode: input.permissionMode,
-        model: input.model,
-        useWorktree: input.useWorktree,
-        sourceBranch: input.sourceBranch,
-        userSelectedFolders: input.userSelectedFolders,
-      };
-      scheduledTasks.unshift(task);
-      return task;
-    },
-    updateStatus: async (id, status) => {
-      const index = scheduledTasks.findIndex((task) => task.id === id);
-      if (index < 0) return;
-      if (status === "deleted") {
-        scheduledTasks.splice(index, 1);
-        return;
-      }
-      scheduledTasks[index] = {
-        ...scheduledTasks[index],
-        enabled: status === "enabled",
-      };
-    },
+  CCDScheduledTasks: createFakeScheduledTasksBridge(scheduledTasks),
+  CoworkScheduledTasks: createFakeScheduledTasksBridge(coworkScheduledTasks),
+  CoworkSpaces: {
+    list: async () => coworkSpaces.map((space) => ({ ...space })),
+    onEvent: () => () => {},
   },
   FileSystem: {
     browseFiles: async () => [`${workspace.cwd ?? "/tmp"}/sample.txt`],

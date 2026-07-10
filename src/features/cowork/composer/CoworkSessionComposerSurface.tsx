@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { EditorContent } from "@tiptap/react";
-import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode, RefObject } from "react";
 import { Icon } from "../../../shell/icons";
 import { CoworkSelectedFiles } from "../newTask/CoworkSelectedFiles";
 import type { CoworkUploadedFile } from "../newTask/coworkUploadedFiles";
@@ -11,6 +11,7 @@ type CoworkSessionComposerSurfaceProps = {
   canStop: boolean;
   canSubmit: boolean;
   childrenAbove?: ReactNode;
+  containerRef?: RefObject<HTMLDivElement | null>;
   disabled: boolean;
   editor: Editor | null;
   isSubmitting: boolean;
@@ -32,7 +33,7 @@ export function CoworkSessionComposerSurface(props: CoworkSessionComposerSurface
   const showPlaceholder = !props.text.trim();
   const queueDisabled = !props.canSubmit || props.disabled || props.isSubmitting;
   return (
-    <div className="epitaxy-chat-column relative shrink-0 flex flex-col gap-g5 [contain:layout] sticky bottom-0 mx-auto w-full pt-6 z-[5]" data-chat-input-container style={{ maxWidth: "58rem", paddingInline: "clamp(24px, 4%, 48px)" }}>
+    <div className="relative shrink-0 flex flex-col gap-1.5 [contain:layout] sticky bottom-0 mx-auto w-full pt-6 z-[5]" data-chat-input-container ref={props.containerRef}>
       <ScrollToBottomButton onScroll={props.onScrollToBottom} visible={props.showScrollButton} />
       {props.childrenAbove}
       <div className="epitaxy-prompt !box-content flex flex-col bg-bg-000 mx-2 md:mx-0 items-stretch transition-all duration-200 relative z-10 rounded-[20px] border border-transparent shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-300)/0.15)]" onClick={props.onContainerClick}>

@@ -86,7 +86,7 @@ async function createTask(input: CreateTaskInput) {
   input.setIsSaving(true);
   input.setError("");
   const [hour, minute] = input.time.split(":").map(Number);
-  const created = await desktopBridge.CCDScheduledTasks.create?.({
+  const created = await desktopBridge.CoworkScheduledTasks.create?.({
     name: normalizeTaskId(input.name),
     description: input.description.trim(),
     prompt: input.prompt.trim(),

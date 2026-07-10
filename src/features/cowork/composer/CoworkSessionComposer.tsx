@@ -1,14 +1,13 @@
 import type { Editor } from "@tiptap/core";
 import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
 import type { SendMessageInput, SessionSummary } from "../../../adapters/desktopBridge/types";
 import { createCoworkAddMenuItems } from "../newTask/CoworkAddMenuItems";
 import { coworkUploadedFilePaths, formatCoworkPromptWithUploadedFiles, mergeCoworkUploadedFiles, type CoworkUploadedFile } from "../newTask/coworkUploadedFiles";
 import { coworkSessionsBridge } from "../session/coworkSessionBridge";
 import type { CoworkDropdownItem } from "../ui/CoworkMenuTypes";
-import { CoworkPermissionApprovals } from "./CoworkPermissionApprovals";
 import { CoworkSessionComposerSurface } from "./CoworkSessionComposerSurface";
 import { CoworkSessionSlashMenu } from "./slash/CoworkSessionSlashMenu";
 import { CoworkSkillChip } from "./slash/CoworkSkillChip";
@@ -27,11 +26,12 @@ type CoworkSessionComposerProps = {
   session: SessionSummary | null;
   sessionId: string;
   showScrollButton: boolean;
+  containerRef?: RefObject<HTMLDivElement | null>;
 };
 
 export function CoworkSessionComposer(props: CoworkSessionComposerProps) {
   const controller = useCoworkComposerController(props);
-  return <CoworkSessionComposerSurface canStop={controller.canStop} canSubmit={controller.canSubmit} childrenAbove={<CoworkPermissionApprovals bridge={coworkSessionsBridge} sessionId={props.sessionId} />} disabled={props.disabled} editor={controller.editor} isSubmitting={controller.isSubmitting} modelItems={controller.modelItems} modelLabel={controller.modelLabel} onContainerClick={(event) => { if (!(event.target instanceof HTMLElement && event.target.closest("button"))) controller.editor?.commands.focus("end"); }} onKeyDownCapture={controller.onKeyDownCapture} onRemoveFile={controller.removeFile} onScrollToBottom={props.onScrollToBottom} onStop={() => void controller.stop()} onSubmit={() => void controller.submit()} plusMenuItems={controller.plusMenuItems} selectedFiles={controller.selectedFiles} showScrollButton={props.showScrollButton} text={controller.text} />;
+  return <CoworkSessionComposerSurface canStop={controller.canStop} canSubmit={controller.canSubmit} containerRef={props.containerRef} disabled={props.disabled} editor={controller.editor} isSubmitting={controller.isSubmitting} modelItems={controller.modelItems} modelLabel={controller.modelLabel} onContainerClick={(event) => { if (!(event.target instanceof HTMLElement && event.target.closest("button"))) controller.editor?.commands.focus("end"); }} onKeyDownCapture={controller.onKeyDownCapture} onRemoveFile={controller.removeFile} onScrollToBottom={props.onScrollToBottom} onStop={() => void controller.stop()} onSubmit={() => void controller.submit()} plusMenuItems={controller.plusMenuItems} selectedFiles={controller.selectedFiles} showScrollButton={props.showScrollButton} text={controller.text} />;
 }
 
 function useCoworkComposerController(props: CoworkSessionComposerProps) {

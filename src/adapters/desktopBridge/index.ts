@@ -38,6 +38,7 @@ export type {
   ConnectedBrowser,
   ConnectedOfficeFile,
   ContextUsage,
+  CoworkSpaceSummary,
   CoworkMountedProject,
   DesktopBridge,
   DesktopPreferences,

@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
+import { forwardRef, useEffect, useRef, useState, type MutableRefObject } from "react";
 import type { ChatMessage, SessionSummary } from "../../../../adapters/desktopBridge/types";
+import { CoworkClaudeAvatar } from "../transcript/CoworkClaudeAvatar";
+import { useCoworkTimelineStatusVisibility } from "../transcript/CoworkTimelineStatusVisibility";
 
 export type CoworkApiRetryStatus = {
   attempt: number;
@@ -24,35 +26,35 @@ export function parseCoworkConversationStatus(messages: ChatMessage[], session: 
   };
 }
 
-export function CoworkConversationStatus({
-  isWorking,
-  startedAt,
-  status,
-}: {
+export const CoworkConversationStatus = forwardRef<HTMLDivElement, {
   isWorking: boolean;
   startedAt?: number | null;
   status: CoworkConversationStatusState | null;
-}) {
+}>(function CoworkConversationStatus({
+  isWorking,
+  startedAt,
+  status,
+}, ref) {
+  const { isVisible: timelineStatusVisible } = useCoworkTimelineStatusVisibility();
   const compacting = status?.compactionStatus === "compacting" || status?.compactionStatus === "complete";
-  const showWaiting = isWorking || compacting || Boolean(status?.apiRetryStatus) || status?.connectionState === "disconnected";
-  if (!showWaiting) return null;
-
   return (
-    <div className={`ml-1 flex items-center transition-transform duration-300 ease-out ${isWorking ? "mt-2 -translate-y-2.5" : "mt-6"}`} data-cowork-conversation-status>
-      <div className="p-1 -translate-x-px">
+    <div ref={ref}>
+      <div className={`ml-1 flex items-center transition-transform duration-300 ease-out ${isWorking ? "mt-2 -translate-y-2.5" : "mt-6"}`}>
+      <div className={`p-1 -translate-x-px ${timelineStatusVisible ? "invisible" : ""}`}>
         <CoworkSparkSpinner isWorking={isWorking || compacting} />
       </div>
-      <CoworkWaitingText isWorking={isWorking} startedAt={startedAt} status={status} />
+      <CoworkWaitingText isWorking={isWorking} startedAt={startedAt} status={status} timelineStatusVisible={timelineStatusVisible} />
+      </div>
     </div>
   );
-}
+});
 
-function CoworkWaitingText({ isWorking, startedAt, status }: { isWorking: boolean; startedAt?: number | null; status: CoworkConversationStatusState | null }) {
+function CoworkWaitingText({ isWorking, startedAt, status, timelineStatusVisible }: { isWorking: boolean; startedAt?: number | null; status: CoworkConversationStatusState | null; timelineStatusVisible: boolean }) {
   const retryText = useCoworkRetryText(status?.apiRetryStatus);
   const waitingText = useCoworkWaitingText(Boolean(isWorking || status?.apiRetryStatus), startedAt, status?.statusMessage);
   if (status?.connectionState === "disconnected") return <div className="text-text-400 ml-2 pb-1.5 text-xs">Reconnecting...</div>;
-  if (status?.compactionStatus === "compacting" || status?.compactionStatus === "complete") return <CoworkCompactionProgress status={status.compactionStatus} />;
-  const text = retryText ?? waitingText;
+  if (!timelineStatusVisible && (status?.compactionStatus === "compacting" || status?.compactionStatus === "complete")) return <CoworkCompactionProgress status={status.compactionStatus} />;
+  const text = retryText ?? (timelineStatusVisible ? null : waitingText);
   return text ? <div className="font-claude-response text-text-300 ml-2 pb-1.5 text-sm italic tabular-nums">{text}</div> : null;
 }
 
@@ -72,25 +74,7 @@ function CoworkCompactionProgress({ status }: { status: string }) {
 }
 
 function CoworkSparkSpinner({ isWorking }: { isWorking: boolean }) {
-  return (
-    <span className="inline-block overflow-hidden shrink-0 text-accent-main-100" style={{ width: 16, height: 16 }} aria-hidden="true">
-      <span
-        className={`block ${isWorking ? "epitaxy-spark-working" : ""}`}
-        style={{
-          width: 16,
-          height: 1344,
-          background: "currentColor",
-          WebkitMaskImage: 'url("/assets/v1/epitaxy-spark-mask.webp")',
-          maskImage: 'url("/assets/v1/epitaxy-spark-mask.webp")',
-          WebkitMaskSize: "100% 100%",
-          maskSize: "100% 100%",
-          "--spark-frames": 84,
-          "--spark-duration": "5040ms",
-          transform: "translateY(-4.7619047619%)",
-        } as CSSProperties}
-      />
-    </span>
-  );
+  return <CoworkClaudeAvatar state={isWorking ? "writing" : "static"} />;
 }
 
 function useCoworkCompactionProgress(status: string) {

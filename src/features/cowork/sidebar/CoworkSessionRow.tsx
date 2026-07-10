@@ -1,8 +1,6 @@
-import { useState } from "react";
 import type { SessionSummary } from "../../../adapters/desktopBridge";
 import type { FrameStore } from "../../../stores/frameStore";
 import { BaseContextMenuPopup, ContextMenu } from "../../../shell/BaseMenu";
-import { GroupNameDialog } from "../../../shell/GroupNameDialog";
 import { coworkSessionPath } from "../sessionPaths";
 import { CoworkSessionRowActions, CoworkSessionRowMenu, type CoworkRowAction } from "./CoworkSessionMenus";
 import { CoworkSidebarStatusGlyph } from "./CoworkSidebarStatusGlyph";
@@ -19,30 +17,19 @@ type CoworkSessionRowProps = {
 };
 
 export function CoworkSessionRow(props: CoworkSessionRowProps) {
-  const [createGroupOpen, setCreateGroupOpen] = useState(false);
-  const createGroup = (name: string) => {
-    const group = props.frame.addCustomGroup(name);
-    props.frame.assignToCustomGroup(coworkSessionPinKey(props.session), group.id);
-    props.frame.setGroupBy("cowork", "custom");
-  };
-  return (
-    <>
-      <CoworkSessionRowContext {...props} onCreateGroup={() => setCreateGroupOpen(true)} />
-      <GroupNameDialog isOpen={createGroupOpen} onClose={() => setCreateGroupOpen(false)} onSubmit={createGroup} />
-    </>
-  );
+  return <CoworkSessionRowContext {...props} />;
 }
 
-function CoworkSessionRowContext({ frame, onAction, onCreateGroup, onDropBefore, onNavigate, selected, session }: CoworkSessionRowProps & { onCreateGroup: () => void }) {
+function CoworkSessionRowContext({ frame, onAction, onDropBefore, onNavigate, selected, session }: CoworkSessionRowProps) {
   const key = coworkSessionPinKey(session);
   return (
     <ContextMenu.Root>
       <ContextMenu.Trigger className={rowWrapperClass} data-jump-hint-row="" data-row="" data-row-key={key} data-selected={selected ? "open" : undefined} onDragOver={(event) => allowDropBefore(event, Boolean(onDropBefore))} onDrop={(event) => handleDropBefore(event, key, onDropBefore)}>
         <CoworkSessionRowButton keyValue={key} onNavigate={onNavigate} selected={selected} session={session} />
-        <CoworkSessionRowActions frame={frame} onAction={onAction} onCreateGroup={onCreateGroup} session={session} />
+        <CoworkSessionRowActions frame={frame} onAction={onAction} session={session} />
       </ContextMenu.Trigger>
       <BaseContextMenuPopup className="min-w-[180px]">
-        <CoworkSessionRowMenu frame={frame} onAction={onAction} onCreateGroup={onCreateGroup} session={session} />
+        <CoworkSessionRowMenu frame={frame} onAction={onAction} session={session} />
       </BaseContextMenuPopup>
     </ContextMenu.Root>
   );

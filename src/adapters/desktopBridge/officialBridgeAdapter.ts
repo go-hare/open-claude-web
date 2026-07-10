@@ -1,6 +1,7 @@
 import type {
   ChatMessage,
   CodeStats,
+  CoworkSpaceSummary,
   ConnectedBrowser,
   ConnectedOfficeFile,
   ContextUsage,
@@ -64,6 +65,7 @@ type RawLocalSessionsBridge = {
   setMcpServers?: (id: string, mcpServers: unknown) => Promise<unknown>;
   setModel?: (id: string, model: string) => Promise<unknown>;
   setPermissionMode?: (id: string, mode: string) => Promise<unknown>;
+  updateSession?: (id: string, patch: Record<string, unknown>) => Promise<unknown>;
   startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<unknown>;
   stop?: (id: string) => Promise<unknown>;
   stopShellPty?: (sessionId: string) => Promise<unknown>;
@@ -95,6 +97,12 @@ type RawScheduledTasksBridge = {
   createScheduledTask?: (input: CreateScheduledTaskInput) => Promise<unknown>;
   onScheduledTaskEvent?: RawEventSubscription;
   onOnScheduledTaskEvent?: RawEventSubscription;
+};
+
+type RawCoworkSpacesBridge = {
+  getAllSpaces?: () => Promise<unknown[]>;
+  onOnSpaceEvent?: RawEventSubscription;
+  onSpaceEvent?: RawEventSubscription;
 };
 
 type RawLocalSessionEnvironmentBridge = {
@@ -153,6 +161,8 @@ export type RawClaudeWebBridge = {
   LocalAgentModeSessions?: RawLocalSessionsBridge;
   LocalSessionEnvironment?: RawLocalSessionEnvironmentBridge;
   CCDScheduledTasks?: RawScheduledTasksBridge;
+  CoworkScheduledTasks?: RawScheduledTasksBridge;
+  CoworkSpaces?: RawCoworkSpacesBridge;
   FileSystem?: RawFileSystemBridge;
   OpenDocuments?: RawOpenDocumentsBridge;
   WindowControl?: {
@@ -213,6 +223,8 @@ export function createDesktopBridgeFromOfficialNamespaces(
     LocalSessionEnvironment: createLocalSessionEnvironmentBridge(web.LocalSessionEnvironment),
     BrowserUse: createBrowserUseBridge(web.LocalAgentModeSessions, settings?.AppPreferences),
     CCDScheduledTasks: createScheduledTasksBridge(web.CCDScheduledTasks),
+    CoworkScheduledTasks: createScheduledTasksBridge(web.CoworkScheduledTasks),
+    CoworkSpaces: createCoworkSpacesBridge(web.CoworkSpaces),
     FileSystem: {
       browseFiles: async (options) => normalizeStringArray(await web.FileSystem?.browseFiles?.(options).catch(() => [])),
       listFilesInFolder: async (sessionId, folderPath) => listFilesInFolder(web.FileSystem, sessionId, folderPath),
@@ -538,6 +550,12 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       const item = await raw?.setPermissionMode?.(id, mode);
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
     },
+    updateSession: async (id, patch) => {
+      const { isPinned, ...rest } = patch;
+      const officialPatch = isPinned === undefined ? rest : { ...rest, isStarred: isPinned };
+      const item = await raw?.updateSession?.(id, officialPatch);
+      return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
+    },
     startShellPty: async (sessionId, cols, rows) => normalizeShellPtyStartResult(await raw?.startShellPty?.(sessionId, cols, rows), await raw?.getShellPtyBuffer?.(sessionId).catch(() => "")),
     stop: async (id) => raw?.stop?.(id),
     stopShellPty: async (sessionId) => {
@@ -628,6 +646,16 @@ function createScheduledTasksBridge(raw: RawScheduledTasksBridge | undefined): D
   };
 }
 
+function createCoworkSpacesBridge(raw: RawCoworkSpacesBridge | undefined): DesktopBridge["CoworkSpaces"] {
+  return {
+    list: async () => normalizeCoworkSpaces(await raw?.getAllSpaces?.()),
+    onEvent: (listener) => {
+      const subscribe = raw?.onSpaceEvent ?? raw?.onOnSpaceEvent;
+      return subscribe?.(listener) ?? (() => {});
+    },
+  };
+}
+
 function normalizeSessionList(items: unknown, targetKind: SessionSummary["kind"]): SessionSummary[] {
   return (Array.isArray(items) ? items : [])
     .map((item) => normalizeSession(item, targetKind))
@@ -711,6 +739,8 @@ function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): Se
     permissionMode: stringValue(raw.permissionMode) ?? stringValue(original.permissionMode),
     repo: repoInfo(raw, cwd),
     scheduledTaskId: stringValue(raw.scheduledTaskId) ?? stringValue(original.scheduledTaskId),
+    sessionType: stringValue(raw.sessionType) ?? stringValue(original.sessionType),
+    spaceId: stringValue(raw.spaceId) ?? stringValue(original.spaceId),
     connectionState: stringValue(raw.connectionState) ?? stringValue(original.connectionState),
     nextReconnectTime: timestampValue(raw.nextReconnectTime) ?? timestampValue(original.nextReconnectTime),
     origin: stringValue(raw.origin) ?? stringValue(original.origin),
@@ -719,12 +749,32 @@ function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): Se
     postTurnSummary: normalizePostTurnSummary(raw.postTurnSummary ?? raw.post_turn_summary ?? original.postTurnSummary ?? original.post_turn_summary),
     isPinned: Boolean(raw.isStarred),
     isArchived: Boolean(raw.archived ?? raw.isArchived),
+    isAgentCompleted: booleanValue(raw.isAgentCompleted) ?? booleanValue(original.isAgentCompleted),
+    hasCompleted: booleanValue(raw.hasCompleted) ?? booleanValue(original.hasCompleted),
+    error: stringValue(raw.error) ?? stringValue(original.error),
     isRunning: isRunning(raw),
     isUnread: Boolean(raw.isUnread),
     hasWorktree: hasWorktree(raw, original),
     messages: normalizeMessages(raw.messages),
     pendingToolPermissions: normalizePendingToolPermissions(raw.pendingToolPermissions, id),
   };
+}
+
+function normalizeCoworkSpaces(items: unknown): CoworkSpaceSummary[] {
+  const spaces: CoworkSpaceSummary[] = [];
+  for (const item of Array.isArray(items) ? items : []) {
+    const raw = asRecord(item);
+    const id = stringValue(raw.id) ?? stringValue(raw.uuid);
+    if (!id) continue;
+    spaces.push({
+      id,
+      name: stringValue(raw.name) ?? stringValue(raw.title) ?? "Untitled project",
+      updatedAtMs: timestampValue(raw.updatedAt) ?? timestampValue(raw.updated_at) ?? Date.now(),
+      isStarred: booleanValue(raw.isStarred) ?? booleanValue(raw.starred),
+      sessionIds: normalizeStringArray(raw.sessionIds ?? raw.session_ids),
+    });
+  }
+  return spaces.sort((left, right) => right.updatedAtMs - left.updatedAtMs);
 }
 
 function normalizePostTurnSummary(value: unknown): SessionSummary["postTurnSummary"] {

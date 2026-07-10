@@ -1,0 +1,312 @@
+{
+  "sessions": [
+    {
+      "id": "cowork_official_active",
+      "title": "Prepare launch brief",
+      "updatedAtMs": 1783692000000,
+      "isRunning": true,
+      "isUnread": false,
+      "hasCompleted": false,
+      "isAgentCompleted": false,
+      "sessionType": "interactive",
+      "spaceId": "space_launch"
+    },
+    {
+      "id": "cowork_official_scheduled",
+      "title": "Weekly customer summary",
+      "updatedAtMs": 1783691900000,
+      "isRunning": false,
+      "isUnread": true,
+      "hasCompleted": true,
+      "isAgentCompleted": true,
+      "sessionType": "scheduled",
+      "scheduledTaskId": "weekly-customer-summary"
+    },
+    {
+      "id": "cowork_official_dispatch_child",
+      "title": "Background research child",
+      "updatedAtMs": 1783691800000,
+      "isRunning": true,
+      "sessionType": "dispatch_child"
+    },
+    {
+      "id": "cowork_official_error",
+      "title": "Review vendor contracts",
+      "updatedAtMs": 1783691700000,
+      "isRunning": false,
+      "isUnread": true,
+      "hasCompleted": false,
+      "isAgentCompleted": false,
+      "connectionState": "disconnected",
+      "error": "Worker disconnected"
+    }
+  ],
+  "spaces": [
+    {
+      "id": "space_launch",
+      "name": "Launch planning",
+      "updatedAtMs": 1783692000000,
+      "isStarred": true,
+      "sessionIds": ["cowork_official_active"]
+    }
+  ],
+  "scheduledTasks": [
+    {
+      "id": "weekly-customer-summary",
+      "title": "Weekly customer summary",
+      "schedule": "0 9 * * 1",
+      "enabled": true,
+      "cronExpression": "0 9 * * 1",
+      "prompt": "Summarize customer feedback from the last week."
+    }
+  ],
+  "messages": [
+    {
+      "id": "cowork-user-1",
+      "role": "user",
+      "text": "Prepare a launch brief with evidence, owners, risks, and next steps. Include the source documents and keep every claim traceable. This deliberately long request exercises the official long-message collapse behavior and attachment row without using the Code transcript bubble.",
+      "createdAt": "2026-07-10T12:00:00.000Z",
+      "raw": {
+        "type": "user",
+        "uuid": "cowork-user-1",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Prepare a launch brief with evidence, owners, risks, and next steps. Include the source documents and keep every claim traceable.\n\nExecutive summary: state the recommendation and measurable outcome.\nDecision log: record each decision, owner, evidence, and date.\nLaunch checklist: list dependencies, readiness gates, and rollback steps.\nStakeholder map: identify approvers, contributors, and informed teams.\nCustomer evidence: connect every claim to a source document.\nRisk register: score likelihood, impact, mitigation, and owner.\nTimeline: show milestones, dependencies, and decision deadlines.\nSuccess metrics: define baselines, targets, and measurement windows.\nOperating plan: explain handoffs, escalation paths, and support coverage.\nOpen questions: separate blockers from follow-up research.\nAppendix: preserve links to the original source material.\nQuality check: flag unsupported claims and conflicting evidence.\nReview packet: make the result easy to scan before opening files.\nNext steps: assign an owner and due date to every action.\n\nThis deliberately long request exercises the official long-message collapse behavior and attachment row without using the Code transcript bubble."
+            }
+          ],
+          "files": [
+            {
+              "name": "launch-notes.pdf",
+              "path": "/Users/apple/Documents/launch-notes.pdf",
+              "mimeType": "application/pdf"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cowork-assistant-1",
+      "role": "assistant",
+      "text": "I will inspect the inputs first.",
+      "createdAt": "2026-07-10T12:00:01.000Z",
+      "raw": {
+        "type": "assistant",
+        "uuid": "cowork-assistant-1",
+        "message": {
+          "id": "cowork-assistant-message-1",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "I should inspect the source material before drafting."
+            },
+            {
+              "type": "text",
+              "text": "I’ll inspect the inputs first, then assemble the brief."
+            },
+            {
+              "type": "tool_use",
+              "id": "tool-bash",
+              "name": "bash_tool",
+              "input": {
+                "command": "ls -la /Users/apple/Documents"
+              }
+            },
+            {
+              "type": "tool_use",
+              "id": "tool-create",
+              "name": "create_file",
+              "input": {
+                "path": "/Users/apple/Documents/launch-brief.md",
+                "content": "# Launch brief"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cowork-tools-result-1",
+      "role": "user",
+      "text": "",
+      "createdAt": "2026-07-10T12:00:02.000Z",
+      "raw": {
+        "type": "user",
+        "uuid": "cowork-tools-result-1",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "tool-bash",
+              "content": "launch-notes.pdf\nroadmap.xlsx"
+            },
+            {
+              "type": "tool_result",
+              "tool_use_id": "tool-create",
+              "content": "Created launch-brief.md"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cowork-assistant-2",
+      "role": "assistant",
+      "text": "Searching supporting evidence.",
+      "createdAt": "2026-07-10T12:00:03.000Z",
+      "raw": {
+        "type": "assistant",
+        "uuid": "cowork-assistant-2",
+        "message": {
+          "id": "cowork-assistant-message-2",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "tool-search",
+              "name": "web_search",
+              "input": {
+                "query": "launch readiness risk checklist"
+              }
+            },
+            {
+              "type": "tool_use",
+              "id": "tool-fetch",
+              "name": "web_fetch",
+              "input": {
+                "url": "https://example.com/launch-readiness"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cowork-tools-result-2",
+      "role": "user",
+      "text": "",
+      "createdAt": "2026-07-10T12:00:04.000Z",
+      "raw": {
+        "type": "user",
+        "uuid": "cowork-tools-result-2",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "tool-search",
+              "content": "Three relevant sources found"
+            },
+            {
+              "type": "tool_result",
+              "tool_use_id": "tool-fetch",
+              "content": "Read launch readiness guidance"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cowork-assistant-child",
+      "role": "assistant",
+      "text": "Nested worker detail",
+      "createdAt": "2026-07-10T12:00:05.000Z",
+      "raw": {
+        "type": "assistant",
+        "uuid": "cowork-assistant-child",
+        "parent_tool_use_id": "tool-search",
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Nested worker detail"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cowork-assistant-3",
+      "role": "assistant",
+      "text": "Creating the deliverables.",
+      "createdAt": "2026-07-10T12:00:06.000Z",
+      "raw": {
+        "type": "assistant",
+        "uuid": "cowork-assistant-3",
+        "message": {
+          "id": "cowork-assistant-message-3",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "tool-present",
+              "name": "present_files",
+              "input": {
+                "paths": ["/Users/apple/Documents/launch-brief.md"]
+              }
+            },
+            {
+              "type": "tool_use",
+              "id": "tool-schedule",
+              "name": "create_scheduled_task",
+              "input": {
+                "name": "Review launch risks"
+              }
+            },
+            {
+              "type": "tool_use",
+              "id": "tool-skill",
+              "name": "save_skill",
+              "input": {
+                "name": "launch-brief"
+              }
+            },
+            {
+              "type": "tool_use",
+              "id": "tool-connectors",
+              "name": "list_connectors",
+              "input": {}
+            },
+            {
+              "type": "tool_use",
+              "id": "tool-plugins",
+              "name": "list_plugins",
+              "input": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cowork-assistant-4",
+      "role": "assistant",
+      "text": "The launch brief is ready.",
+      "createdAt": "2026-07-10T12:00:07.000Z",
+      "raw": {
+        "type": "assistant",
+        "uuid": "cowork-assistant-4",
+        "message": {
+          "id": "cowork-assistant-message-4",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "## Launch brief ready\n\nThe brief includes owners, risks, evidence, and next steps.",
+              "citations": [
+                {
+                  "url": "https://example.com/launch-readiness",
+                  "title": "Launch readiness guidance"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

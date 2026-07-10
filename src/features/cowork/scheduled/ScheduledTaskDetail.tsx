@@ -29,7 +29,7 @@ export function ScheduledTaskDetail({ onNavigate }: RouteViewProps) {
     if (!taskId) return;
     let alive = true;
     setDirectLookup({ id: taskId, task: null, loading: true });
-    void desktopBridge.CCDScheduledTasks.get(taskId)
+    void desktopBridge.CoworkScheduledTasks.get(taskId)
       .then((task) => {
         if (alive) setDirectLookup({ id: taskId, task, loading: false });
       })
@@ -77,7 +77,7 @@ function ScheduledTaskDetailView({ task, onBack, onNavigate }: { task: Scheduled
   const toggle = async () => {
     const next = !enabled;
     setEnabled(next);
-    await desktopBridge.CCDScheduledTasks.updateStatus?.(task.id, next ? "enabled" : "disabled");
+    await desktopBridge.CoworkScheduledTasks.updateStatus?.(task.id, next ? "enabled" : "disabled");
   };
   const runNow = async () => {
     if (isRunning || !task.cwd) return;
@@ -94,7 +94,7 @@ function ScheduledTaskDetailView({ task, onBack, onNavigate }: { task: Scheduled
     if (isDeleting) return;
     setIsDeleting(true);
     try {
-      await desktopBridge.CCDScheduledTasks.updateStatus?.(task.id, "deleted");
+      await desktopBridge.CoworkScheduledTasks.updateStatus?.(task.id, "deleted");
       onBack();
     } finally {
       setIsDeleting(false);
