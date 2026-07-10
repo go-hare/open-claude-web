@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { AppRoute } from "../app/routes";
 import { desktopBridge } from "../adapters/desktopBridge";
+import { CoworkRecentsSection } from "../features/cowork/sidebar/CoworkRecentsSection";
 import { useShellText } from "../i18n/shellMessages";
 import { SIDEBAR_WIDTH_BOUNDS, type FrameStore } from "../stores/frameStore";
 import { ModePill } from "./ModePill";
@@ -9,7 +10,7 @@ import { SidebarNav } from "./SidebarNav";
 import { SidebarFooter } from "./SidebarFooter";
 import { CustomizeSidebarDialog } from "./CustomizeSidebarDialog";
 import { Icon } from "./icons";
-import { primaryNavItems } from "./sidebarData";
+import { primaryNavItemsForMode } from "./sidebarData";
 import { sessionHomePath } from "./sessionPaths";
 
 type FrameSidebarProps = {
@@ -324,7 +325,7 @@ function SidebarResizeHandle({ frame }: { frame: FrameStore }) {
 
 function useSidebarCustomization(mode: FrameStore["mode"], frame: FrameStore) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const configurableItems = useMemo(() => primaryNavItems.filter((item) => item.visibleIn.includes(mode)), [mode]);
+  const configurableItems = useMemo(() => primaryNavItemsForMode(mode), [mode]);
   const isPinned = useCallback((key: string) => frame.navPinnedIds === null || frame.navPinnedIds.includes(key), [frame.navPinnedIds]);
   const hiddenKeys = useMemo(() => new Set(configurableItems.filter((item) => !isPinned(item.key)).map((item) => item.key)), [configurableItems, isPinned]);
   const togglePinned = (key: string) => {
@@ -488,7 +489,7 @@ function SidebarContent({ currentRoute, customization, frame, onNavigate }: Omit
           />
         </div>
         <div className="dframe-nav-scroll relative flex flex-col flex-1 min-h-0 overflow-y-auto px-1 pt-1 pb-3 -mx-1 -mt-1">
-          <RecentsSection frame={frame} mode={frame.mode} onNavigate={onNavigate} />
+          {frame.mode === "cowork" ? <CoworkRecentsSection frame={frame} onNavigate={onNavigate} /> : <RecentsSection frame={frame} onNavigate={onNavigate} />}
         </div>
       </div>
       <SidebarFooter frame={frame} mode={frame.mode} onNavigate={onNavigate} />

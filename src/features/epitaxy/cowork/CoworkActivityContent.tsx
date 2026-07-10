@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
-import { scheduledTaskDetailPath } from "../../scheduled/scheduledPaths";
+import { scheduledTaskDetailPath } from "../../cowork/scheduled/scheduledPaths";
 import { Icon } from "../../../shell/icons";
 import { CoworkInstructionEditorModal } from "./CoworkInstructionEditorModal";
 import { CoworkBrowserPickerButton, useCoworkBrowserSwitching } from "./CoworkBrowserPickerButton";

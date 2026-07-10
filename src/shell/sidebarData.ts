@@ -1,5 +1,6 @@
 import type { FrameMode } from "../stores/frameStore";
-import { scheduledTaskIndexPath } from "../features/scheduled/scheduledPaths";
+import { scheduledTaskIndexPath as coworkScheduledTaskIndexPath } from "../features/cowork/scheduled/scheduledPaths";
+import { scheduledTaskIndexPath as codeScheduledTaskIndexPath } from "../features/scheduled/scheduledPaths";
 
 export type SidebarNavItem = {
   key: string;
@@ -40,7 +41,7 @@ export const primaryNavItems: SidebarNavItem[] = [
     key: "scheduled",
     label: "定时任务",
     icon: "Clock",
-    href: scheduledTaskIndexPath,
+    href: codeScheduledTaskIndexPath,
     visibleIn: ["cowork", "code"],
   },
   {
@@ -55,3 +56,12 @@ export const primaryNavItems: SidebarNavItem[] = [
 // 原版 code 模式始终显示 More，但在当前可见配置里 overflow 为空，
 // flyout 只保留「自定义侧边栏」入口。不要在这里塞猜测出来的假导航。
 export const moreNavItems: SidebarNavItem[] = [];
+
+export function primaryNavItemsForMode(mode: FrameMode) {
+  return primaryNavItems
+    .filter((item) => item.visibleIn.includes(mode))
+    .map((item) => item.key === "scheduled" ? {
+      ...item,
+      href: mode === "cowork" ? coworkScheduledTaskIndexPath : codeScheduledTaskIndexPath,
+    } : item);
+}

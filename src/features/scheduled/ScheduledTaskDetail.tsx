@@ -138,7 +138,7 @@ function ScheduledTaskDetailView({ task, onBack, onNavigate }: { task: Scheduled
 
 async function canStartScheduledRun(task: ScheduledTaskSummary) {
   if (!task.cwd || !task.prompt) return false;
-  const trust = await desktopBridge.LocalAgentModeSessions.checkTrust?.(task.cwd).catch(() => ({ trusted: true }));
+  const trust = await desktopBridge.LocalSessions.checkTrust?.(task.cwd).catch(() => ({ trusted: true }));
   return trust?.trusted !== false;
 }
 
@@ -146,14 +146,14 @@ function useScheduledRuns(taskId: string) {
   const [runs, setRuns] = useState<SessionSummary[]>([]);
   const [runsLoading, setRunsLoading] = useState(true);
   const loadRuns = useCallback(async () => {
-    if (!desktopBridge.LocalAgentModeSessions.getSessionsForScheduledTask) {
+    if (!desktopBridge.LocalSessions.getSessionsForScheduledTask) {
       setRuns([]);
       setRunsLoading(false);
       return;
     }
     setRunsLoading(true);
     try {
-      const items = await desktopBridge.LocalAgentModeSessions.getSessionsForScheduledTask(taskId);
+      const items = await desktopBridge.LocalSessions.getSessionsForScheduledTask(taskId);
       setRuns([...items].sort(compareSessionRuns));
     } finally {
       setRunsLoading(false);
@@ -170,8 +170,8 @@ function useScheduledRuns(taskId: string) {
 }
 
 async function startScheduledRun(task: ScheduledTaskSummary, title: string) {
-  await desktopBridge.LocalAgentModeSessions.start({
-    kind: "epitaxy",
+  await desktopBridge.LocalSessions.start({
+    kind: "code",
     title,
     prompt: task.prompt ?? title,
     scheduledTaskId: task.id,

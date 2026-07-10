@@ -3,7 +3,7 @@ import { useShellText } from "../i18n/shellMessages";
 import type { FrameMode } from "../stores/frameStore";
 import { NavItem } from "./NavItem";
 import { SidebarMoreFlyout, localizeNavItem } from "./SidebarMoreFlyout";
-import { moreNavItems, newSessionItemByMode, primaryNavItems } from "./sidebarData";
+import { moreNavItems, newSessionItemByMode, primaryNavItemsForMode } from "./sidebarData";
 
 type SidebarNavProps = {
   currentRoute: AppRoute;
@@ -19,7 +19,7 @@ const isVisible = (mode: FrameMode) => (item: { visibleIn: FrameMode[] }) => ite
 
 export function SidebarNav({ currentRoute, hiddenKeys, mode, moreOpen, onCustomizeSidebar, onMoreOpenChange, onNavigate }: SidebarNavProps) {
   const text = useShellText();
-  const visiblePrimary = primaryNavItems.filter(isVisible(mode));
+  const visiblePrimary = primaryNavItemsForMode(mode);
   const primary = visiblePrimary.filter((item) => !hiddenKeys.has(item.key));
   const more = [...moreNavItems.filter(isVisible(mode)), ...visiblePrimary.filter((item) => hiddenKeys.has(item.key))];
   const activeInMore = more.find((item) => item.key === currentRoute.navKey);

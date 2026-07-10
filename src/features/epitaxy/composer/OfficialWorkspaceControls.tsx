@@ -51,12 +51,10 @@ export function OfficialWorkspaceControls({
     let alive = true;
     void Promise.all([
       desktopBridge.LocalSessions.list().catch(() => []),
-      desktopBridge.LocalAgentModeSessions.list().catch(() => []),
       (desktopBridge.LocalSessions.getDetectedProjects?.() ?? Promise.resolve([])).catch(() => []),
-      (desktopBridge.LocalAgentModeSessions.getDetectedProjects?.() ?? Promise.resolve([])).catch(() => []),
-    ]).then(([codeSessions, agentSessions, codeProjects, agentProjects]) => {
+    ]).then(([codeSessions, codeProjects]) => {
       if (!alive) return;
-      setRecentFolders(buildRecentFolders([...codeSessions, ...agentSessions, ...codeProjects, ...agentProjects], workspace.cwd));
+      setRecentFolders(buildRecentFolders([...codeSessions, ...codeProjects], workspace.cwd));
     });
     return () => {
       alive = false;

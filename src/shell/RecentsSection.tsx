@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { desktopBridge, type SessionSummary } from "../adapters/desktopBridge";
 import { useShellText } from "../i18n/shellMessages";
-import type { FrameMode, FrameStore } from "../stores/frameStore";
+import type { FrameStore } from "../stores/frameStore";
 import { BaseContextMenuPopup, ContextMenu } from "./BaseMenu";
 import { buildCustomGroups, CustomGroupHeader, type RecentDisplayGroup } from "./CustomGroups";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -17,13 +17,12 @@ import { canOpenSessionInSplit, selectedSessionIdFromPath, sessionPath } from ".
 
 type RecentsSectionProps = {
   frame: FrameStore;
-  mode: FrameMode;
   onNavigate: (path: string) => void;
 };
 
 const byNewest = (left: SessionSummary, right: SessionSummary) => right.updatedAtMs - left.updatedAtMs;
 
-export function RecentsSection({ frame, mode, onNavigate }: RecentsSectionProps) {
+export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
   const text = useShellText();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [filterDraft, setFilterDraft] = useState<RecentsFilterState>(defaultRecentsFilter);
@@ -33,7 +32,7 @@ export function RecentsSection({ frame, mode, onNavigate }: RecentsSectionProps)
 
   useEffect(() => {
     let mounted = true;
-    const source = mode === "code" ? desktopBridge.LocalSessions : desktopBridge.LocalAgentModeSessions;
+    const source = desktopBridge.LocalSessions;
     const loadSessions = () => source.list().then((items) => {
       if (mounted) setSessions([...items].sort(byNewest));
     });
@@ -45,18 +44,18 @@ export function RecentsSection({ frame, mode, onNavigate }: RecentsSectionProps)
       mounted = false;
       unsubscribe?.();
     };
-  }, [mode]);
+  }, []);
 
   const filter = useMemo(() => ({
     ...filterDraft,
-    groupBy: frame.groupByByMode[mode] ?? defaultRecentsFilter.groupBy,
-    sortBy: frame.sortByByMode[mode] ?? defaultRecentsFilter.sortBy,
-  }), [filterDraft, frame.groupByByMode, frame.sortByByMode, mode]);
+    groupBy: frame.groupByByMode.code ?? defaultRecentsFilter.groupBy,
+    sortBy: frame.sortByByMode.code ?? defaultRecentsFilter.sortBy,
+  }), [filterDraft, frame.groupByByMode.code, frame.sortByByMode.code]);
   const updateFilter = useCallback((next: RecentsFilterState) => {
-    if (next.groupBy !== filter.groupBy) frame.setGroupBy(mode, next.groupBy);
-    if (next.sortBy !== filter.sortBy) frame.setSortBy(mode, next.sortBy);
+    if (next.groupBy !== filter.groupBy) frame.setGroupBy("code", next.groupBy);
+    if (next.sortBy !== filter.sortBy) frame.setSortBy("code", next.sortBy);
     setFilterDraft({ ...next, groupBy: defaultRecentsFilter.groupBy, sortBy: defaultRecentsFilter.sortBy });
-  }, [filter.groupBy, filter.sortBy, frame, mode]);
+  }, [filter.groupBy, filter.sortBy, frame]);
 
   const pinnedKeys = useMemo(() => new Set(sessions.filter((session) => isPinnedSession(session, frame.pinnedOrder)).map(sessionPinKey)), [frame.pinnedOrder, sessions]);
   const recentsSessions = useMemo(() => sessions.filter((session) => !pinnedKeys.has(sessionPinKey(session))), [pinnedKeys, sessions]);
@@ -79,12 +78,12 @@ export function RecentsSection({ frame, mode, onNavigate }: RecentsSectionProps)
   const createGroupForSession = useCallback((session: SessionSummary, name: string) => {
     const group = frame.addCustomGroup(name);
     frame.assignToCustomGroup(sessionPinKey(session), group.id);
-    frame.setGroupBy(mode, "custom");
-  }, [frame, mode]);
+    frame.setGroupBy("code", "custom");
+  }, [frame]);
   const openSplit = useCallback((session: SessionSummary) => {
     window.dispatchEvent(new CustomEvent("dframe:open-pane", { detail: { path: sessionPath(session), title: session.title } }));
   }, []);
-  const canOpenSplit = useCallback((session: SessionSummary) => canOpenSessionInSplit(mode, session), [mode]);
+  const canOpenSplit = useCallback((session: SessionSummary) => canOpenSessionInSplit("code", session), []);
   const renderActions = useCallback((session: SessionSummary, onCreateGroup: () => void) => (
     <SessionRowActions frame={frame} onAction={actions} onCreateGroup={onCreateGroup} onOpenSplit={() => openSplit(session)} session={session} />
   ), [actions, frame, openSplit]);
@@ -94,7 +93,7 @@ export function RecentsSection({ frame, mode, onNavigate }: RecentsSectionProps)
   const recentsCollapsed = frame.collapsedGroups.includes("recents");
 
   return (
-    <div className="dframe-recents-by-mode contents" data-mode={mode}>
+    <div className="dframe-recents-by-mode contents" data-mode="code">
       <PinnedSection
         canOpenSplit={canOpenSplit}
         collapsed={frame.collapsedGroups.includes("pinned")}
@@ -113,9 +112,9 @@ export function RecentsSection({ frame, mode, onNavigate }: RecentsSectionProps)
         showDragPinHint={frame.showDragPinHint}
         onNavigate={onNavigate}
       />
-      <section data-kind={mode} className="flex min-h-0 flex-1 flex-col gap-px">
+      <section data-kind="code" className="flex min-h-0 flex-1 flex-col gap-px">
         <div className="flex-1 min-h-[120px] overflow-hidden">
-          <SidebarSectionHeader collapsed={recentsCollapsed} onToggle={() => frame.toggleGroupCollapsed("recents")} trailing={mode === "code" ? <RecentsControls mode={mode} sessions={sessions} value={filter} onChange={updateFilter} /> : undefined}>{text.recent}</SidebarSectionHeader>
+          <SidebarSectionHeader collapsed={recentsCollapsed} onToggle={() => frame.toggleGroupCollapsed("recents")} trailing={<RecentsControls mode="code" sessions={sessions} value={filter} onChange={updateFilter} />}>{text.recent}</SidebarSectionHeader>
           {!recentsCollapsed && (rows.length > 0 ? <RecentRows filter={filter} frame={frame} groups={groups} onAction={actions} renderActions={renderActions} selectedSessionId={openSessionId} onNavigate={onNavigate} rows={rows} /> : sessions.length > 0 ? <div className="px-[var(--df-row-px)] py-1 text-xs text-text-500">{text.noFilteredSessions}</div> : null)}
         </div>
       </section>

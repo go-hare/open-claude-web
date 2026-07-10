@@ -23,8 +23,8 @@ export function EpitaxyComposer({ onNavigate, placeholder, workspace }: EpitaxyC
 
     setIsSubmitting(true);
     try {
-      const session = await desktopBridge.LocalAgentModeSessions.start({
-        kind: "epitaxy",
+      const session = await desktopBridge.LocalSessions.start({
+        kind: "code",
         permissionMode,
         prompt: trimmedPrompt,
         workspace,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import type { AppRoute } from "../app/routes";
 import { EpitaxySessionTile } from "../features/epitaxy/EpitaxySessionTile";
+import { CoworkSessionTile } from "../features/cowork/session/CoworkSessionTile";
 import type { FrameMode } from "../stores/frameStore";
 import { paneRefFromPath, paneRefKey, paneStore, usePaneStoreSnapshot, type PaneSlot } from "../stores/paneStore";
 import { PaneResizeHandles, useCommandHeldAttribute, usePaneDrag, usePaneKeyboard, usePaneSplitBounds } from "./PaneControls";
@@ -154,6 +155,7 @@ function ExtraPane({ focused, isLonePane, mode, onClose, onFocus, onNavigate, pa
   slot: PaneSlot;
 }) {
   const drag = usePaneDrag(paneIndex, mode, onNavigate);
+  const SessionTile = refKind === "cowork" ? CoworkSessionTile : EpitaxySessionTile;
   return (
     <div
       aria-current={focused ? "true" : undefined}
@@ -166,14 +168,13 @@ function ExtraPane({ focused, isLonePane, mode, onClose, onFocus, onNavigate, pa
       onPointerDownCapture={onFocus}
       role="region"
     >
-      <EpitaxySessionTile
+      <SessionTile
         isLonePane={isLonePane}
         onClose={onClose}
         onMovePane={(nextSlot: PaneSlot) => paneStore.movePane(mode, paneIndex, nextSlot)}
         onNavigate={onNavigate}
         paneIndex={paneIndex}
         sessionId={refId}
-        sessionSourceHint={refKind === "cowork" ? "epitaxy" : "code"}
         slot={slot}
       />
     </div>

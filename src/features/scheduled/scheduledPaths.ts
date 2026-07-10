@@ -1,4 +1,4 @@
-export const scheduledTaskIndexPath = "/scheduled-task";
+export const scheduledTaskIndexPath = "/code/scheduled";
 
 export function scheduledTaskDetailPath(taskId: string) {
   return `${scheduledTaskIndexPath}/${encodeURIComponent(taskId)}`;

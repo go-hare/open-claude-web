@@ -2,18 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { desktopBridge, type EffortLevel, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
 import { sessionPath } from "../../shell/sessionPaths";
-import { useFrameContext } from "../../stores/frameContext";
 import { EpitaxyRouteFrame, EpitaxySessionLoading } from "./EpitaxyFrameSurface";
 import { CodeStatsCard } from "./CodeStatsCard";
 import { OfficialCodeComposer } from "./composer/OfficialCodeComposer";
 import { normalizePermissionMode } from "./composer/options";
-import { CoworkNewTaskPage } from "./CoworkNewTaskPage";
 
 export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
-  const frame = useFrameContext();
-  const routeMode = route.id === "cowork-home" ? "cowork" : route.id === "code-home" ? "code" : undefined;
-  const mode = routeMode ?? frame?.mode ?? "code";
+  void route;
 
   useEffect(() => {
     let alive = true;
@@ -27,11 +23,7 @@ export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
 
   if (!workspace) return <EpitaxySessionLoading />;
 
-  return mode === "cowork" ? (
-    <CoworkNewTaskPage onNavigate={onNavigate} workspace={workspace} />
-  ) : (
-    <CodeNewSessionPage onNavigate={onNavigate} workspace={workspace} />
-  );
+  return <CodeNewSessionPage onNavigate={onNavigate} workspace={workspace} />;
 }
 
 function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: string) => void; workspace: WorkspaceContext }) {

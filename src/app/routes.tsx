@@ -1,5 +1,10 @@
 import { useEffect, type ComponentType } from "react";
 import { AnalyticsPage } from "../features/analytics/AnalyticsPage";
+import { ScheduledTaskDetail as CoworkScheduledTaskDetail } from "../features/cowork/scheduled/ScheduledTaskDetail";
+import { ScheduledTaskEditor as CoworkScheduledTaskEditor } from "../features/cowork/scheduled/ScheduledTaskEditor";
+import { ScheduledTasks as CoworkScheduledTasks } from "../features/cowork/scheduled/ScheduledTasks";
+import { CoworkHome } from "../features/cowork/CoworkHome";
+import { CoworkSessionPage } from "../features/cowork/session/CoworkSessionPage";
 import { WebCodePage } from "../features/webcode/WebCodePage";
 import { CustomizePage } from "../features/customize/CustomizePage";
 import { DispatchPage } from "../features/dispatch/DispatchPage";
@@ -83,7 +88,7 @@ export const routes: AppRoute[] = [
     navKey: "new-session",
     kind: "epitaxy",
     sourceChunk: "index-BELzQL5P.js",
-    Component: EpitaxyHome,
+    Component: CoworkHome,
     match: (pathname) => pathname === "/task/new",
   },
   {
@@ -143,7 +148,7 @@ export const routes: AppRoute[] = [
     navKey: "new-session",
     kind: "epitaxy",
     sourceChunk: "index-BELzQL5P.js xos/bos local_sessions/$sessionId",
-    Component: EpitaxySessionPage,
+    Component: CoworkSessionPage,
     match: (pathname) => pathname.startsWith("/local_sessions/"),
   },
   {
@@ -153,7 +158,7 @@ export const routes: AppRoute[] = [
     navKey: "scheduled",
     kind: "epitaxy",
     sourceChunk: "index-BELzQL5P.js Nds scheduled-task canonical + local editor",
-    Component: ScheduledTaskEditor,
+    Component: CoworkScheduledTaskEditor,
   },
   {
     id: "scheduled-task-detail",
@@ -162,7 +167,7 @@ export const routes: AppRoute[] = [
     navKey: "scheduled",
     kind: "epitaxy",
     sourceChunk: "index-BELzQL5P.js Nds scheduled-task/$id canonical",
-    Component: ScheduledTaskDetail,
+    Component: CoworkScheduledTaskDetail,
     match: (pathname) => startsWithPath(pathname, "/scheduled-task") && pathname !== "/scheduled-task" && pathname !== "/scheduled-task/new",
   },
   {
@@ -172,7 +177,7 @@ export const routes: AppRoute[] = [
     navKey: "scheduled",
     kind: "epitaxy",
     sourceChunk: "index-BELzQL5P.js Nds scheduled-task canonical",
-    Component: ScheduledTasks,
+    Component: CoworkScheduledTasks,
   },
   {
     id: "code-apps",

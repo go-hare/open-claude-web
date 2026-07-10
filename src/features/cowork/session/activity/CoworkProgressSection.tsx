@@ -1,0 +1,86 @@
+import { Icon } from "../../../../shell/icons";
+import { CoworkActivitySection } from "./CoworkActivitySection";
+import { OfficialSpinner } from "./CoworkActivitySpinner";
+import type { CoworkBackgroundTask, CoworkTaskStatus, CoworkTodoItem } from "./coworkActivityTypes";
+
+export function CoworkProgressSection({ allTodosCompleted, isExpanded, onToggle, tasks, todos }: { allTodosCompleted: boolean; isExpanded: boolean; onToggle: () => void; tasks: CoworkBackgroundTask[]; todos: CoworkTodoItem[] }) {
+  const maxContentHeight = todos.length > 0 || tasks.length > 0 ? "24rem" : "12rem";
+  const headerLeftAction = !isExpanded && allTodosCompleted ? <span className="text-text-500 font-small">{todos.length} of {todos.length}</span> : undefined;
+  return (
+    <CoworkActivitySection contentClassName="!pb-2" headerLeftAction={headerLeftAction} isExpanded={isExpanded} maxContentHeight={maxContentHeight} title="进度" onToggle={onToggle}>
+      {todos.length > 0 ? <CoworkTodoList todos={todos} /> : tasks.length > 0 ? <CoworkTaskList tasks={tasks} /> : <CoworkEmptyProgressState />}
+    </CoworkActivitySection>
+  );
+}
+
+function CoworkTodoList({ todos }: { todos: CoworkTodoItem[] }) {
+  return (
+    <ul className="flex flex-col gap-1">
+      {todos.map((todo) => (
+        <li className="flex items-start gap-2 rounded px-1 py-1.5 text-sm text-text-200" key={todo.id}>
+          <span className="mt-[2px] flex h-4 w-4 shrink-0 items-center justify-center text-text-500">
+            {todo.status === "completed" ? <Icon name="CircleCheck" size="xs" /> : todo.status === "in_progress" ? <OfficialSpinner size="m" /> : <span className="h-2 w-2 rounded-full border border-border-300" />}
+          </span>
+          <span className={todo.status === "completed" ? "text-text-500 line-through decoration-text-500/60" : ""}>{todo.content}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CoworkTaskList({ tasks }: { tasks: CoworkBackgroundTask[] }) {
+  return (
+    <ul className="flex flex-col gap-2">
+      {tasks.map((task) => (
+        <li className="flex items-start gap-2 rounded px-1 py-1.5 text-sm text-text-200" key={task.taskId}>
+          <span className="mt-[1px] flex h-5 w-5 shrink-0 items-center justify-center"><OfficialTaskStatusIcon status={task.status} /></span>
+          <span className="min-w-0 flex flex-col">
+            <span className="truncate">{task.description}</span>
+            <span className="text-xs text-text-500">{task.status === "running" ? "Running" : capitalize(task.status)}</span>
+            {task.workflowProgress?.length ? <OfficialWorkflowProgress progress={task.workflowProgress} /> : null}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function OfficialTaskStatusIcon({ status }: { status: CoworkTaskStatus }) {
+  if (status === "completed") return <Icon name="CircleCheck" size="md" className="text-t6" />;
+  if (status === "failed") return <Icon name="XCrossCloseMedium" size="md" className="text-extended-pink" />;
+  if (status === "stopped") return <Icon name="Hand4FingerStop" size="md" className="text-t6" />;
+  return <OfficialSpinner />;
+}
+
+function OfficialWorkflowProgress({ progress }: { progress: NonNullable<CoworkBackgroundTask["workflowProgress"]> }) {
+  return (
+    <ul className="flex flex-col gap-g2">
+      {progress.map((item) => item.type === "workflow_phase" ? (
+        <li className="text-footnote text-t7 pt-p6 pb-p2 first:pt-0" key={`phase-${item.index}`}>{item.title}</li>
+      ) : (
+        <li className="-ml-[calc(12px+var(--g3))] flex items-center gap-g3 text-footnote text-t6" key={`agent-${item.index}`}>
+          <span className="flex w-[12px] shrink-0 translate-y-px justify-center">
+            {item.state === "done" ? <Icon name="CircleCheck" size="xs" /> : item.state === "error" ? <Icon name="XCrossCloseMedium" size="xs" className="text-extended-pink" /> : <OfficialSpinner animate={item.state !== "start"} size="m" />}
+          </span>
+          <span className="truncate">{item.label}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CoworkEmptyProgressState() {
+  return (
+    <div className="flex flex-col items-start gap-3">
+      <div className="-ml-3">
+        <img alt="" className="dark:hidden" draggable={false} height={66} src="/images/illustrations/session-progress.svg" width={117} />
+        <img alt="" className="hidden dark:block" draggable={false} height={66} src="/images/illustrations/session-progress-dark.svg" width={117} />
+      </div>
+      <p className="text-text-500 font-small">See task progress for longer tasks.</p>
+    </div>
+  );
+}
+
+function capitalize(value: string) {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}

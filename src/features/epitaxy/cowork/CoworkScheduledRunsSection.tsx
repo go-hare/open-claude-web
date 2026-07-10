@@ -1,7 +1,7 @@
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { LocalSessionsBridge, SessionSummary } from "../../../adapters/desktopBridge/types";
 import { Icon } from "../../../shell/icons";
-import { sessionPath } from "../../../shell/sessionPaths";
+import { coworkSessionPath } from "../../cowork/sessionPaths";
 
 export function useCoworkScheduledRuns(bridge: LocalSessionsBridge, scheduledTaskId?: string) {
   const [runs, setRuns] = useState<SessionSummary[]>([]);
@@ -89,7 +89,7 @@ function CoworkScheduledRunRow({
   const className = isCurrent ? "bg-bg-200 text-text-100" : "text-text-300 hover:bg-bg-200";
   return (
     <li>
-      <button className={`flex items-center justify-between py-2 px-2 -mx-2 rounded-lg transition-colors text-sm w-full text-left ${className}`} onClick={() => onNavigate(sessionPath(run))} type="button">
+      <button className={`flex items-center justify-between py-2 px-2 -mx-2 rounded-lg transition-colors text-sm w-full text-left ${className}`} onClick={() => onNavigate(coworkSessionPath(run))} type="button">
         <span className="min-w-0 truncate">{formatCoworkRunTime(coworkRunTimestamp(run))}</span>
         {unread ? <span aria-label="Unread completed run" className="size-2 rounded-full bg-accent-100 flex-shrink-0" /> : null}
       </button>

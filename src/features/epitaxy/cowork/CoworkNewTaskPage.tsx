@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { desktopBridge, type CoworkMountedProject, type PermissionMode, type SessionSummary, type WorkspaceContext } from "../../../adapters/desktopBridge";
 import { createMessageUuid } from "../../../adapters/desktopBridge/messageUuid";
-import { coworkSessionsBasePath } from "../../../shell/sessionPaths";
-import { normalizeCoworkPermissionMode } from "../composer/options";
+import { coworkSessionsBasePath } from "../../cowork/sessionPaths";
+import { normalizeCoworkPermissionMode } from "./coworkOptions";
 import { CoworkGridBackground } from "./CoworkGridBackground";
 import { CoworkHeader } from "./CoworkHeader";
 import { OfficialCoworkPromptBox } from "../OfficialCoworkComposer";

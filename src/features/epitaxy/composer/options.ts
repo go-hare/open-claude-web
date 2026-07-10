@@ -13,10 +13,6 @@ export const permissionModeOptions: Array<{ label: string; value: PermissionMode
   { label: "绕过权限", value: "bypassPermissions" },
 ];
 
-export const coworkPermissionModeOptions: Array<{ label: string; value: PermissionMode }> = [
-  { label: "Ask", value: "default" },
-];
-
 export const effortOptions: Array<{ label: string; value: EffortLevel }> = [
   { label: "Low", value: "low" },
   { label: "Medium", value: "medium" },
@@ -34,20 +30,12 @@ export function permissionModeLabel(value: PermissionMode) {
   return permissionModeOptions.find((option) => option.value === value)?.label ?? value;
 }
 
-export function coworkPermissionModeLabel(value: PermissionMode) {
-  return coworkPermissionModeOptions.find((option) => option.value === value)?.label ?? "Ask";
-}
-
 export function effortLabel(value: EffortLevel) {
   return effortOptions.find((option) => option.value === value)?.label ?? value;
 }
 
 export function normalizePermissionMode(value: unknown): PermissionMode {
   return permissionModeOptions.find((option) => option.value === value)?.value ?? "default";
-}
-
-export function normalizeCoworkPermissionMode(value: unknown): PermissionMode {
-  return coworkPermissionModeOptions.find((option) => option.value === value)?.value ?? "default";
 }
 
 function normalizeCodeModelValue(value?: string) {

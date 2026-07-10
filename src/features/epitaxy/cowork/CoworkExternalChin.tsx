@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { PermissionMode, WorkspaceContext } from "../../../adapters/desktopBridge";
 import { Icon } from "../../../shell/icons";
 import { OfficialDropdownButton, type OfficialDropdownItem } from "../OfficialEpitaxyComponents";
-import { codeModelOptions, coworkPermissionModeLabel, coworkPermissionModeOptions, modelLabel, normalizeCoworkPermissionMode } from "../composer/options";
+import { coworkModelLabel, coworkModelOptions, coworkPermissionModeLabel, coworkPermissionModeOptions, normalizeCoworkPermissionMode } from "./coworkOptions";
 import { pickCoworkWorkspace } from "./coworkWorkspaceSelection";
 
 type OpenCoworkChinMenu = "folder" | "mode" | "model" | null;
@@ -131,7 +131,7 @@ function CoworkModelButton({
       disabled={busy}
       header="Models"
       items={modelItems}
-      label={modelLabel(model)}
+      label={coworkModelLabel(model)}
       mode="text"
       onOpenChange={(nextOpen) => onMenuOpen(nextOpen ? "model" : null)}
       open={open}
@@ -187,7 +187,7 @@ function usePermissionItems(permissionMode: PermissionMode, onChange: (value: Pe
 
 function useModelItems(model: string, onChange: (value: string) => void, openMenu: OpenCoworkChinMenu) {
   return useMemo(() => {
-    const items = codeModelOptions.map((option) => ({ checked: option.value === model, label: option.label, onSelect: () => onChange(option.value) }));
+    const items = coworkModelOptions.map((option) => ({ checked: option.value === model, label: option.label, onSelect: () => onChange(option.value) }));
     return openMenu === "model" ? numberMenuItems(items) : items;
   }, [model, onChange, openMenu]);
 }
