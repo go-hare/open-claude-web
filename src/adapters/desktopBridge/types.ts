@@ -17,6 +17,14 @@ export type ChatMessage = {
   raw?: unknown;
 };
 
+export type CoworkMessageEnvelope = {
+  createdAt: string;
+  id: string;
+  raw?: unknown;
+  role: "assistant" | "system" | "user";
+  text: string;
+};
+
 export type CoworkMountedProject = {
   uuid: string;
   name: string;
@@ -39,6 +47,9 @@ export type ConnectedBrowser = {
 };
 
 export type SessionSummary = {
+  bufferedMessages?: ChatMessage[];
+  chromePermissionMode?: string;
+  cuSelectedDisplayId?: number;
   id: string;
   title: string;
   createdAtMs?: number;
@@ -51,6 +62,12 @@ export type SessionSummary = {
   folders?: string[];
   userSelectedFiles?: string[];
   userSelectedFolders?: string[];
+  folderExists?: boolean;
+  homePath?: string;
+  hostLoopMode?: boolean;
+  initialMessage?: string;
+  initializationStatus?: unknown;
+  mcqAnswers?: unknown;
   mountedProjects?: CoworkMountedProject[];
   model?: string;
   permissionMode?: string;
@@ -75,6 +92,7 @@ export type SessionSummary = {
     statusDetail?: string;
     title?: string;
   };
+  promptSuggestion?: string;
   isPinned?: boolean;
   isArchived?: boolean;
   isAgentCompleted?: boolean;
@@ -210,9 +228,29 @@ export type StartSessionInput = {
   workspace: WorkspaceContext;
 };
 
+export type CoworkImagePayload = {
+  base64: string;
+  filename?: string;
+  mimeType: string;
+};
+
+export type CoworkToolStateContent = {
+  data?: string;
+  media_type?: string;
+  text?: string;
+  type: string;
+};
+
+export type CoworkToolState = {
+  content: CoworkToolStateContent[];
+  tool_name: string;
+};
+
 export type SendMessageInput = {
+  images?: CoworkImagePayload[];
   messageUuid?: string;
   permissionMode?: string;
+  toolStates?: CoworkToolState[];
   userSelectedFiles?: string[];
 };
 
@@ -342,6 +380,83 @@ export type LocalSessionsBridge = {
   onToolPermissionRequest?: (listener: (event: unknown) => void) => () => void;
 };
 
+export type CoworkSessionSnapshot = Omit<SessionSummary, "bufferedMessages" | "messages"> & {
+  bufferedMessages?: CoworkMessageEnvelope[];
+  messages?: CoworkMessageEnvelope[];
+  /** Unmodified LocalAgentModeSessions.getSession payload. */
+  rawSession?: unknown;
+  /** Unmodified message arrays carried on the raw session payload. */
+  rawBufferedMessages?: unknown[];
+  rawMessages?: unknown[];
+};
+
+export type CoworkAddFolderResult =
+  | { folderPath: string; ok: true }
+  | { error: string; ok: false };
+
+export type CoworkSessionsBridge = {
+  list: () => Promise<SessionSummary[]>;
+  getSession: (id: string) => Promise<CoworkSessionSnapshot | null>;
+  getTranscript?: (id: string) => Promise<CoworkMessageEnvelope[]>;
+  getSessionsForScheduledTask?: (taskId: string) => Promise<SessionSummary[]>;
+  addFolderToSession?: (id: string, folder: string) => Promise<CoworkAddFolderResult>;
+  getCodeStats?: () => Promise<CodeStats | null>;
+  getContextUsage?: (id: string) => Promise<ContextUsage | null>;
+  getDefaultEffort?: () => Promise<EffortLevel | null>;
+  getDefaultPermissionMode?: (cwd?: string) => Promise<string | null>;
+  getDetectedProjects?: () => Promise<SessionSummary[]>;
+  getDiffFileContent?: (idOrCwd: string, refOrFilePath: string, filePath?: string, previousFilePath?: string) => Promise<GitCommandResult>;
+  getEffort?: (id: string) => Promise<EffortLevel | string>;
+  getGitInfo?: (idOrCwd: string) => Promise<unknown>;
+  getGitDiff?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
+  getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
+  getLocalBranches?: (idOrCwd: string) => Promise<GitCommandResult | string[]>;
+  openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
+  getPermissionMode?: (id: string) => Promise<string>;
+  getSupportedCommands?: (request?: GetSupportedCommandsRequest) => Promise<SlashCommand[]>;
+  getWorkingTreeStatus?: (idOrCwd: string) => Promise<GitCommandResult>;
+  clearSession?: (id: string) => Promise<unknown>;
+  launchUltrareview?: (idOrCwd: string, options?: unknown) => Promise<unknown>;
+  readFileAtCwd?: (idOrCwd: string, filePath: string) => Promise<GitCommandResult>;
+  readSessionFile?: (id: string, filePath: string) => Promise<string | null | Record<string, unknown>>;
+  readSessionImageAsDataUrl?: (id: string, filePath: string) => Promise<string | null>;
+  pickSessionFile?: (id: string) => Promise<string | null>;
+  pickFileAtCwd?: (idOrCwd: string) => Promise<string | null>;
+  setEffort?: (id: string, effort: EffortLevel | string) => Promise<SessionSummary | null>;
+  setMcpServers?: (id: string, mcpServers: unknown) => Promise<SessionSummary | null>;
+  setModel?: (id: string, model: string) => Promise<SessionSummary | null>;
+  setPermissionMode?: (id: string, mode: string) => Promise<SessionSummary | null>;
+  updateSession?: (id: string, patch: Partial<Pick<SessionSummary, "title" | "isAgentCompleted" | "isPinned" | "spaceId">>) => Promise<SessionSummary | null>;
+  submitFeedback?: (input?: unknown) => Promise<unknown>;
+  checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<WorkspaceTrustResult>;
+  checkTrust?: (folder: string) => Promise<WorkspaceTrustResult>;
+  isFolderTrusted?: (folder: string) => Promise<boolean>;
+  respondToToolPermission?: (requestId: string, decision: "always" | "deny" | "once", updatedInput?: unknown) => Promise<unknown>;
+  saveTrust?: (folder: string) => Promise<unknown>;
+  addTrustedFolder?: (folder: string) => Promise<unknown>;
+  startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<ShellPtyStartResult>;
+  stop?: (id: string) => Promise<unknown>;
+  stopShellPty?: (sessionId: string) => Promise<unknown>;
+  stopTask?: (sessionId: string, taskId: string) => Promise<unknown>;
+  writeShellPty?: (sessionId: string, data: string) => Promise<unknown>;
+  resizeShellPty?: (sessionId: string, cols: number, rows: number) => Promise<unknown>;
+  getShellPtyBuffer?: (sessionId: string) => Promise<string>;
+  getTranscriptFeedback?: (id: string) => Promise<unknown[]>;
+  onShellPtyEvent?: (listener: (event: ShellPtyEvent) => void) => () => void;
+  start: (input: StartSessionInput) => Promise<SessionSummary>;
+  sendMessage?: (id: string, text: string, input?: SendMessageInput) => Promise<SessionSummary | null>;
+  forkSession?: (id: string, messageId?: string) => Promise<SessionSummary | null>;
+  rewind?: (id: string, messageId?: string) => Promise<string | null>;
+  create: (kind: SessionSummary["kind"]) => Promise<SessionSummary>;
+  archive: (id: string) => Promise<void>;
+  delete: (id: string) => Promise<void>;
+  setFocusedSession?: (id: string | null) => Promise<void>;
+  submitTranscriptFeedback?: (sessionIdOrInput: unknown, input?: unknown) => Promise<unknown>;
+  onEvent?: (listener: (event: unknown) => void) => () => void;
+  getRawSession: (id: string) => Promise<CoworkSessionSnapshot | null>;
+  getRawTranscript: (id: string) => Promise<unknown[]>;
+};
+
 export type ScheduledTasksBridge = {
   list: () => Promise<ScheduledTaskSummary[]>;
   get: (id: string) => Promise<ScheduledTaskSummary | null>;
@@ -380,11 +495,26 @@ export type LocalFileEntry = {
 
 export type LocalFileReadResult = {
   content?: string;
+  /** Official Gzt base64 branch: encoding === "base64". */
+  encoding?: "base64" | "utf8";
+  mimeType?: string;
   name?: string;
   path?: string;
   size?: number;
   tooLarge?: boolean;
 } | string | null;
+
+export type CoworkFilePreviewBounds = { x: number; y: number; width: number; height: number };
+
+export type CoworkFilePreviewShowResult = boolean | { ok: boolean; painted?: boolean; declineReason?: unknown };
+
+export type CoworkFilePreviewBridge = {
+  isEnabled: () => Promise<boolean>;
+  isVmReady: () => Promise<boolean>;
+  show: (sessionId: string, encodedPath: string, bounds: CoworkFilePreviewBounds) => Promise<CoworkFilePreviewShowResult>;
+  hide: () => Promise<void | boolean>;
+  parkAndCapture: (bounds: CoworkFilePreviewBounds) => Promise<string | null>;
+};
 
 export type FileSystemBridge = {
   browseFiles?: (options?: { defaultPath?: string; multiSelections?: boolean; title?: string }) => Promise<string[]>;
@@ -414,16 +544,21 @@ export type WindowBridge = {
   close: () => Promise<void>;
   getFullscreen: () => Promise<boolean>;
   getZoomFactor: () => Promise<number>;
+  /** Official qWt / WindowState.fullscreenChanged subscription. */
+  onFullscreenChanged?: (listener: (isFullscreen: boolean) => void) => () => void;
+  /** Official qWt / WindowState.zoomFactorChanged subscription. */
+  onZoomFactorChanged?: (listener: (zoomFactor: number) => void) => () => void;
 };
 
 export type DesktopBridge = {
   LocalSessions: LocalSessionsBridge;
-  LocalAgentModeSessions: LocalSessionsBridge;
+  LocalAgentModeSessions: CoworkSessionsBridge;
   LocalSessionEnvironment: LocalSessionEnvironmentBridge;
   BrowserUse: BrowserUseBridge;
   CCDScheduledTasks: ScheduledTasksBridge;
   CoworkScheduledTasks: ScheduledTasksBridge;
   CoworkSpaces: CoworkSpacesBridge;
+  CoworkFilePreview: CoworkFilePreviewBridge;
   FileSystem: FileSystemBridge;
   OfficeAddinFiles: ConnectedOfficeFilesBridge;
   Preferences: PreferencesBridge;

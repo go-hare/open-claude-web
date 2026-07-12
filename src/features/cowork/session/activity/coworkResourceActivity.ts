@@ -1,6 +1,12 @@
-import type { ChatMessage, SessionSummary } from "../../../../adapters/desktopBridge/types";
+import type { CoworkSessionSnapshot } from "../../../../adapters/desktopBridge/types";
+import type { CoworkRawMessage } from "../types";
 import { coworkContextResourceOperations, isCoworkUserFolderResource } from "./coworkResourcePaths";
-import { coworkResourceActivityFromTool, rawCoworkToolUses } from "./coworkResourceFromTool";
+import {
+  collectCoworkToolResults,
+  coworkResourceActivitiesFromTool,
+  rawCoworkToolUses,
+  type CoworkResourceActivityOptions,
+} from "./coworkResourceFromTool";
 import type { CoworkResourceActivity, CoworkResourceOperation, CoworkResourceSections } from "./coworkResourceTypes";
 
 export type {
@@ -11,17 +17,24 @@ export type {
 } from "./coworkResourceTypes";
 export { coworkChromeMcpServerUuid, isCoworkChromeMcpServer } from "./coworkResourceFromTool";
 
-export function parseCoworkResourceActivity(messages: ChatMessage[]): CoworkResourceActivity[] {
-  const resources = new Map<string, CoworkResourceActivity>();
+export function parseCoworkResourceActivity(
+  messages: CoworkRawMessage[],
+  options: CoworkResourceActivityOptions = {},
+): CoworkResourceActivity[] {
+  const toolResults = collectCoworkToolResults(messages);
+  const resources: CoworkResourceActivity[] = [];
   messages.forEach((message, messageIndex) => {
     for (const tool of rawCoworkToolUses(message)) {
-      const activity = coworkResourceActivityFromTool(message, messageIndex, tool);
-      if (!activity) continue;
-      const existing = resources.get(activity.filePath);
-      if (!existing || existing.timestamp <= activity.timestamp) resources.set(activity.filePath, activity);
+      resources.push(...coworkResourceActivitiesFromTool(
+        message,
+        messageIndex,
+        tool,
+        toolResults.get(tool.id),
+        options,
+      ));
     }
   });
-  return [...resources.values()].sort((left, right) => right.timestamp - left.timestamp);
+  return resources.sort((left, right) => left.timestamp - right.timestamp);
 }
 
 export function splitCoworkResourceSections(resources: CoworkResourceActivity[], folders: string[]): CoworkResourceSections {
@@ -54,7 +67,7 @@ export function coworkResourceOperationLabel(operation: CoworkResourceOperation)
   return labels[operation];
 }
 
-export function coworkSessionFolders(session: SessionSummary | null) {
+export function coworkSessionFolders(session: CoworkSessionSnapshot | null) {
   const folders = session?.folders?.filter(Boolean) ?? [];
   return folders.length > 0 ? folders : session?.cwd ? [session.cwd] : [];
 }

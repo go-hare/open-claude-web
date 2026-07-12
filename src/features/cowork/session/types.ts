@@ -1,8 +1,26 @@
-import type { ChatMessage, SessionSummary } from "../../../adapters/desktopBridge/types";
+import type { CoworkMessageEnvelope, CoworkSessionSnapshot } from "../../../adapters/desktopBridge/types";
 import type { CoworkUploadedFile } from "../newTask/coworkUploadedFiles";
+import type { CoworkPermissionRequest } from "./coworkPermissionTypes";
 import type { CoworkStreamSnapshot } from "./stream/coworkStreamTypes";
 
 export type CoworkStreamActivity = "idle" | "requesting" | "thinking" | "responding" | "tool-use";
+export type CoworkConnectionState = "connected" | "connecting" | "disconnected";
+export type CoworkAgentActivity = {
+  activity: "thinking" | "tool_use" | "writing";
+  contentLength?: number;
+  filePath?: string;
+  lastActivityTime?: number;
+  toolName?: string;
+};
+export type CoworkPendingTurn = { endTurnSeen: boolean; startTime: number };
+export type CoworkInitializationStatus = {
+  isComplete?: boolean;
+  message?: string;
+  startTime?: number;
+  step?: string;
+};
+
+export type CoworkRawMessage = CoworkMessageEnvelope;
 
 export type CoworkTranscriptEntry = {
   author: "assistant" | "user";
@@ -35,13 +53,21 @@ export type CoworkToolUse = {
 };
 
 export type CoworkSessionDataState = {
+  agentActivity: CoworkAgentActivity | null;
+  connectionState: CoworkConnectionState;
   error: Error | null;
+  errorCategory: string | null;
+  initializationStatus: CoworkInitializationStatus | null;
   isLoading: boolean;
   isSessionNotFound: boolean;
-  messages: ChatMessage[];
-  pendingTurnStartedAt: number | null;
-  session: SessionSummary | null;
+  messages: CoworkRawMessage[];
+  pendingMessages: CoworkRawMessage[];
+  pendingTurn: CoworkPendingTurn | null;
+  promptSuggestion: string | null;
+  session: CoworkSessionSnapshot | null;
+  sessionId: string;
   streamActivity: CoworkStreamActivity;
   streamingMessageId: string | null;
   streamSnapshot: CoworkStreamSnapshot;
+  toolPermissionRequests: CoworkPermissionRequest[];
 };

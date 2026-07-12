@@ -1,3 +1,7 @@
+/**
+ * @deprecated Dead parallel renderer — live path is CoworkOfficialToolRenderer only.
+ * Do not wire this into transcript/timeline. Kept only if residual imports exist.
+ */
 import { useState, type ReactNode } from "react";
 import { Icon } from "../../../../shell/icons";
 import { asRecord, stringValue, toolResultText } from "../recordUtils";
@@ -6,6 +10,7 @@ import { CoworkOfficialToolBody, CoworkOfficialToolCell, CoworkToolFallbackIcon 
 import { CoworkConnectorSuggestion, CoworkPluginSuggestion, CoworkSkillSuggestion } from "./CoworkOfficialSuggestions";
 import { hasPendingCoworkToolPermission, useCoworkMessageContext } from "./CoworkMessageContext";
 import { CoworkToolRow } from "./CoworkToolRow";
+import { coworkToolActivityLabel } from "./coworkToolActivityLabel";
 import { useCoworkTranscriptActions } from "./CoworkTranscriptActions";
 
 type ToolProps = {
@@ -23,10 +28,10 @@ type ToolProps = {
 export function CoworkToolRenderer(props: ToolProps) {
   const { toolPermissionRequests } = useCoworkMessageContext();
   const name = normalizeToolName(props.block.name ?? "");
-  if (props.standalone && hasPendingCoworkToolPermission(toolPermissionRequests, props.block.id)) return null;
+  if (hasPendingCoworkToolPermission(toolPermissionRequests, props.block.id)) return null;
   if (props.standalone) return <CoworkStandaloneTool {...props} normalizedName={name} />;
   if (name === "bash" || name === "bash_tool") return <CoworkBashTool {...props} />;
-  if (["read", "open_file", "view", "write", "create_file", "edit", "str_replace", "str_replace_editor", "grep", "glob", "present_files"].includes(name)) return <CoworkFileTool {...props} normalizedName={name} />;
+  if (["read", "open_file", "view", "write", "create_file", "edit", "str_replace", "str_replace_editor", "present_files"].includes(name)) return <CoworkFileTool {...props} normalizedName={name} />;
   if (name === "web_search" || name === "web_fetch") return <CoworkWebTool {...props} normalizedName={name} />;
   if (name === "task" || name === "agent") return <CoworkTaskTool {...props} />;
   return <CoworkGenericTool {...props} normalizedName={name} />;
@@ -68,11 +73,11 @@ function CoworkFileTool(props: ToolProps & { normalizedName: string }) {
   const label = stringValue(input.description) ?? fileActionText(action, fileName, !completed, props.toolResult?.is_error === true);
   const content = stringValue(input.file_text) ?? stringValue(input.content) ?? stringValue(input.new_str);
   const actions = useCoworkTranscriptActions();
-  const icon = action === "edit" ? "Edit" : action === "read" ? "BookText" : "NoteSquareLines";
+  const icon = action === "edit" ? "Edit" : "File";
   const showPreview = Boolean(content) && (action === "create" || action === "edit");
   return (
     <CoworkToolRow
-      handleClick={path ? () => actions?.openFile({ path }) : undefined}
+      handleClick={path ? () => actions?.openFile({ content: content || undefined, path, toolType: props.normalizedName }) : undefined}
       hideCaret
       icon={<Icon className="text-text-500" customSize={16} name={icon} />}
       isFirstBlockOfMessage={props.isFirstBlockOfMessage}
@@ -105,27 +110,34 @@ function CoworkTaskTool(props: ToolProps) {
 }
 
 function CoworkGenericTool(props: ToolProps & { normalizedName: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const displayName = toolDisplayName(props.block.name ?? props.normalizedName);
+  const [requestExpanded, setRequestExpanded] = useState(false);
+  const [resultExpanded, setResultExpanded] = useState(false);
+  const inputRecord = asRecord(props.block.input);
+  const displayName = coworkToolActivityLabel(props.block.name ?? props.normalizedName, inputRecord)
+    ?? toolDisplayName(props.block.name ?? props.normalizedName);
   const result = resultText(props.toolResult);
   const input = safeJson(props.block.input);
-  const expandable = Boolean(input || result) && !props.isStreaming;
+  const complete = Boolean(props.toolResult) || !props.isStreaming;
+  const hasResult = Boolean(result) && complete;
   return (
     <CoworkToolRow
-      handleClick={expandable ? () => setExpanded((value) => !value) : undefined}
-      hideCaret={!expandable}
+      handleClick={hasResult ? () => setResultExpanded((value) => !value) : undefined}
+      hideCaret
       icon={<Icon className="text-text-500" customSize={16} name={toolIcon(props.normalizedName)} />}
-      isExpanded={expanded}
+      isExpanded={resultExpanded}
       isFirstBlockOfMessage={props.isFirstBlockOfMessage}
       isFirstItemInGroup={props.isFirstItem}
       isLastBlockOfMessage={props.isLastBlockOfMessage}
       isLastItemInGroup={props.isLastItem}
-      isStreaming={props.isStreaming}
+      isStreaming={!complete}
       renderMode={props.standalone ? "standard" : "timeline"}
       secondaryIcon={props.toolResult?.is_error ? <Icon className="text-danger-000" customSize={16} name="Warning" /> : undefined}
-      text={stringValue(props.block.message) ?? displayName}
+      text={stringValue(props.block.message) && stringValue(props.block.message) !== props.block.name
+        ? stringValue(props.block.message)
+        : displayName}
     >
-      {expanded ? <div className="mx-2.5 mt-1 mb-2"><div className="rounded-lg border-[0.5px] border-border-300 bg-bg-000"><div className="p-2 flex flex-col gap-2 max-h-[200px] overflow-y-auto [&_pre]:!text-xs [&_code]:!text-xs">{input ? <ToolCode code={input} title="Request" /> : null}{result ? <ToolCode code={result} error={props.toolResult?.is_error === true} title={props.toolResult?.is_error ? "Error" : "Response"} /> : null}</div></div></div> : null}
+      {input && !complete ? <ToolDetailSection expanded={requestExpanded} label="Request" onExpand={() => setRequestExpanded(true)}><ToolCode code={input} /></ToolDetailSection> : null}
+      {hasResult ? <ToolDetailSection error={props.toolResult?.is_error === true} expanded={resultExpanded} label="Result" onExpand={() => setResultExpanded(true)}><ToolCode code={result} error={props.toolResult?.is_error === true} /></ToolDetailSection> : null}
     </CoworkToolRow>
   );
 }
@@ -191,10 +203,23 @@ function ToolCode({ code, error, title }: { code: string; error?: boolean; title
 
 function normalizeToolName(name: string) { const index = name.lastIndexOf("__"); return (index >= 0 ? name.slice(index + 2) : name).replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase(); }
 function toolDisplayName(name: string) { const raw = name.split("__").at(-1) ?? name.split(":").at(-1) ?? name; return raw.split("_").map((part, index) => index ? part.toLowerCase() : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()).join(" "); }
-function toolIcon(name: string) { if (name.includes("search")) return "Search"; if (name.includes("task")) return "Agent"; if (name.includes("edit")) return "Edit"; if (name.includes("read")) return "BookText"; return "Toolbox"; }
+function toolIcon(name: string) {
+  if (["glob", "grep", "tool_search"].includes(name) || name.includes("search")) return "Search";
+  if (["task", "agent"].includes(name)) return "Agent";
+  if (["edit", "str_replace", "str_replace_editor"].includes(name)) return "Edit";
+  if (name === "read") return "BookText";
+  if (["write", "create_file", "open_file", "update_file"].includes(name)) return "File";
+  if (name === "repl") return "CodeBlock";
+  if (["web_search", "web_fetch"].includes(name)) return "Globe";
+  if (name === "todo_write") return "Tasks";
+  if (name === "ask_user_question") return "Lightbulb";
+  if (["recent_chats", "conversation_search"].includes(name)) return "Memory";
+  if (name === "project_knowledge_search") return "Projects";
+  return "Toolbox";
+}
 function resultText(result?: CoworkContentBlock) { return result ? toolResultText(result.content) : ""; }
 function basename(path: string) { return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path; }
-function fileAction(name: string) { if (["read", "open_file", "view", "grep", "glob"].includes(name)) return "read"; if (["write", "create_file"].includes(name)) return "create"; if (name === "present_files") return "present"; return "edit"; }
+function fileAction(name: string) { if (["read", "open_file", "view"].includes(name)) return "read"; if (["write", "create_file"].includes(name)) return "create"; if (name === "present_files") return "present"; return "edit"; }
 function fileActionText(action: string, file: string, streaming: boolean, error: boolean) { const verb = action === "read" ? streaming ? "Reading" : "Read" : action === "create" ? streaming ? "Creating" : "Created" : action === "present" ? streaming ? "Presenting file(s)..." : "Presented file(s)" : streaming ? "Editing" : error ? "Failed to edit" : "Edited"; return file ? `${verb} ${file}` : verb; }
 function webResultCount(result?: CoworkContentBlock) { if (!result) return undefined; try { const parsed = JSON.parse(resultText(result)); return Array.isArray(parsed) ? parsed.length : undefined; } catch { return undefined; } }
 function safeJson(value: unknown) { try { const text = JSON.stringify(value, null, 2); return text === "{}" ? "" : text; } catch { return String(value ?? ""); } }

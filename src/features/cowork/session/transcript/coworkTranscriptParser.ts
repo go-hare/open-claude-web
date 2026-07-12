@@ -1,4 +1,3 @@
-import type { ChatMessage } from "../../../../adapters/desktopBridge/types";
 import { parseCoworkUploadedFilesText } from "../../newTask/coworkUploadedFiles";
 import {
   asRecord,
@@ -8,9 +7,9 @@ import {
   stringValue,
   toolResultText,
 } from "../recordUtils";
-import type { CoworkToolUse, CoworkTranscriptEntry, CoworkTranscriptItem } from "../types";
+import type { CoworkRawMessage, CoworkToolUse, CoworkTranscriptEntry, CoworkTranscriptItem } from "../types";
 
-export function parseCoworkTranscript(messages: ChatMessage[], streamingMessageId?: string | null) {
+export function parseCoworkTranscript(messages: CoworkRawMessage[], streamingMessageId?: string | null) {
   const entries: CoworkTranscriptEntry[] = [];
   const pendingTools = new Map<string, CoworkToolUse>();
   messages.forEach((message, index) => {
@@ -38,7 +37,7 @@ export function parseCoworkTranscript(messages: ChatMessage[], streamingMessageI
   return entries;
 }
 
-function transcriptRole(rawType: string | undefined, role: ChatMessage["role"], nested: Record<string, unknown>) {
+function transcriptRole(rawType: string | undefined, role: CoworkRawMessage["role"], nested: Record<string, unknown>) {
   const candidate = rawType === "assistant" || rawType === "user" ? rawType : role === "assistant" || role === "user" ? role : stringValue(nested.role);
   return candidate === "assistant" || candidate === "user" ? candidate : null;
 }

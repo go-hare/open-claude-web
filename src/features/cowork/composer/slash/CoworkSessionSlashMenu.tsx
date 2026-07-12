@@ -1,15 +1,17 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { SessionSummary } from "../../../../adapters/desktopBridge";
-import type { LocalSessionsBridge, SlashCommand } from "../../../../adapters/desktopBridge/types";
+import type { CoworkSessionsBridge, SlashCommand } from "../../../../adapters/desktopBridge/types";
 import { CoworkSlashMenuSurface } from "./CoworkSlashMenuSurface";
 import type { CoworkSlashCommandItem, CoworkSlashCommandMenuProps } from "./CoworkSlashTypes";
 import { coworkSlashSkillChipContent } from "./CoworkSlashTypes";
 
 type CoworkSessionSlashMenuProps = CoworkSlashCommandMenuProps & {
-  bridge: LocalSessionsBridge;
+  bridge: CoworkSlashBridge;
   session: SessionSummary | null;
   sessionId?: string;
 };
+
+type CoworkSlashBridge = Pick<CoworkSessionsBridge, "clearSession" | "forkSession" | "getSupportedCommands" | "setMcpServers">;
 
 export const CoworkSessionSlashMenu = memo(function CoworkSessionSlashMenu({ bridge, clientRect, editor, onClose, query = "", range, session, sessionId }: CoworkSessionSlashMenuProps) {
   const [commands, setCommands] = useState<SlashCommand[]>([]);
@@ -22,7 +24,7 @@ export const CoworkSessionSlashMenu = memo(function CoworkSessionSlashMenu({ bri
   return <CoworkSlashMenuSurface clientRect={clientRect} editor={editor} items={items} onClose={onClose} query={query} />;
 });
 
-function useCoworkSupportedCommands(bridge: LocalSessionsBridge, session: SessionSummary | null, sessionId: string | undefined, setCommands: (items: SlashCommand[]) => void, setLoading: (value: boolean) => void) {
+function useCoworkSupportedCommands(bridge: CoworkSlashBridge, session: SessionSummary | null, sessionId: string | undefined, setCommands: (items: SlashCommand[]) => void, setLoading: (value: boolean) => void) {
   useEffect(() => {
     let alive = true;
     if (!bridge.getSupportedCommands) {
@@ -43,7 +45,7 @@ function useCoworkSupportedCommands(bridge: LocalSessionsBridge, session: Sessio
 }
 
 type SlashItemsInput = {
-  bridge: LocalSessionsBridge;
+  bridge: CoworkSlashBridge;
   commands: SlashCommand[];
   editor: CoworkSlashCommandMenuProps["editor"];
   isLoading: boolean;
@@ -72,7 +74,7 @@ function useCoworkSlashItems(input: SlashItemsInput) {
   }, [input]);
 }
 
-function withCoworkCommands(commands: SlashCommand[], bridge: LocalSessionsBridge) {
+function withCoworkCommands(commands: SlashCommand[], bridge: CoworkSlashBridge) {
   const base = commands.filter((command) => command.name !== "clear" && command.name !== "schedule");
   const names = new Set(base.map((command) => command.name));
   const extra: SlashCommand[] = [];

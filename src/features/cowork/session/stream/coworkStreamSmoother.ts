@@ -13,6 +13,8 @@ const blockOperations: CoworkSmootherBlockOps<CoworkStreamBlock> = {
     return block;
   },
   blockSize(block) {
+    // Official smoother sizes text/tool for reveal pacing; thinking is non-smoothed payload (size 0)
+    // so full thinking text is delivered with the block rather than character-sliced.
     if (block.kind === "text") return block.text.length;
     if (block.kind === "tool") return 1 + block.partialJson.length;
     return 0;

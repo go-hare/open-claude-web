@@ -6,6 +6,7 @@ import type {
   CoworkMessageSegment,
   CoworkTimelineSegment,
 } from "./coworkMessageTypes";
+import { coworkToolActivityLabel } from "./coworkToolActivityLabel";
 
 const organizationTools = new Set([
   "get_organization_settings", "update_organization_settings", "list_organization_members",
@@ -244,7 +245,9 @@ function timelineStatus(blocks: CoworkContentBlock[], allowToolStatus: boolean) 
     if (block.type !== "tool_use" || !allowToolStatus) return;
     const message = stringValue(block.message);
     const description = stringValue(asRecord(block.input).description);
-    const candidate = description ?? (message && message !== block.name ? message : undefined) ?? block.name;
+    const candidate = description
+      ?? (message && message !== block.name ? message : undefined)
+      ?? coworkToolActivityLabel(block.name ?? "", block.input);
     if (candidate) text = candidate.charAt(0).toUpperCase() + candidate.slice(1);
   });
   return text ? { text } : {};

@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { CoworkChevronDownGlyph, CoworkCollapseGlyph, CoworkExpandGlyph } from "../../ui/CoworkOfficialGlyphs";
 import { CoworkClaudeAvatar } from "./CoworkClaudeAvatar";
+import { CoworkShimmerText } from "./CoworkShimmerText";
 
 type CaretPosition = "leading" | "leading-chip" | "trailing";
 
@@ -21,7 +22,7 @@ type CoworkStatusPillProps = {
   textClassName?: string;
 };
 
-export function CoworkStatusPill({
+export const CoworkStatusPill = memo(function CoworkStatusPill({
   animateTextChange = true,
   caretPosition = "trailing",
   children,
@@ -59,7 +60,6 @@ export function CoworkStatusPill({
           aria-expanded={expanded}
           className={classes(statusButtonClass(workingWithSpark), "flex-1 min-w-0")}
           onClick={toggle}
-          type="button"
         >
           {workingWithSpark ? <CoworkWritingSpark expanded={expanded} /> : null}
           {statusPrefix}
@@ -75,7 +75,7 @@ export function CoworkStatusPill({
       ) : null}
     </div>
   );
-}
+});
 
 function buildStatusContent({ animateTextChange, caretPosition, expanded, isWorking, prefix, statusText, textClassName, workingWithSpark }: {
   animateTextChange: boolean;
@@ -92,7 +92,7 @@ function buildStatusContent({ animateTextChange, caretPosition, expanded, isWork
       {!workingWithSpark && caretPosition === "leading" ? <StatusCaret expanded={expanded} size={14} /> : null}
       {!workingWithSpark && caretPosition === "leading-chip" ? <StatusChipCaret expanded={expanded} /> : null}
       {prefix}
-      {isWorking ? <span className={classes("text-left truncate epitaxy-text-shine", textClassName)}>{statusText}</span> : <span className={classes("truncate", textClassName)}>{statusText}</span>}
+      {isWorking ? <CoworkShimmerText className={classes("text-left truncate", textClassName)}>{statusText}</CoworkShimmerText> : <span className={classes("truncate", textClassName)}>{statusText}</span>}
       {!workingWithSpark && caretPosition === "trailing" ? <StatusCaret expanded={expanded} size={12} /> : null}
     </>
   );

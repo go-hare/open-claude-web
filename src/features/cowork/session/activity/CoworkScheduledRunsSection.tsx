@@ -1,9 +1,9 @@
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { LocalSessionsBridge, SessionSummary } from "../../../../adapters/desktopBridge/types";
+import type { CoworkSessionsBridge, SessionSummary } from "../../../../adapters/desktopBridge/types";
 import { Icon } from "../../../../shell/icons";
 import { coworkSessionPath } from "../../sessionPaths";
 
-export function useCoworkScheduledRuns(bridge: LocalSessionsBridge, scheduledTaskId?: string) {
+export function useCoworkScheduledRuns(bridge: CoworkSessionsBridge, scheduledTaskId?: string) {
   const [runs, setRuns] = useState<SessionSummary[]>([]);
 
   useEffect(() => {

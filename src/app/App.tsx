@@ -2,6 +2,7 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { matchRoute } from "./routes";
 import { isDesktopBridgeMissingInElectron } from "../adapters/desktopBridge";
 import { DesktopFrame } from "../shell/DesktopFrame";
+import { useDesktopCoworkAccountSync } from "./useDesktopCoworkAccountSync";
 
 const getLocation = () => window.location.pathname + window.location.search;
 
@@ -16,6 +17,7 @@ const subscribeLocation = (onChange: () => void) => {
 };
 
 export function App() {
+  useDesktopCoworkAccountSync();
   const locationKey = useSyncExternalStore(subscribeLocation, getLocation);
   const route = useMemo(() => matchRoute(window.location.pathname), [locationKey]);
 

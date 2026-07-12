@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Tooltip } from "@base-ui-components/react/tooltip";
 import type { AppRoute } from "../app/routes";
 import { desktopBridge } from "../adapters/desktopBridge";
 import { CoworkRecentsSection } from "../features/cowork/sidebar/CoworkRecentsSection";
@@ -12,6 +13,7 @@ import { CustomizeSidebarDialog } from "./CustomizeSidebarDialog";
 import { Icon } from "./icons";
 import { primaryNavItemsForMode } from "./sidebarData";
 import { sessionHomePath } from "./sessionPaths";
+import { resolveTrafficLightPadding } from "./trafficLightPadding";
 
 type FrameSidebarProps = {
   currentRoute: AppRoute;
@@ -106,21 +108,40 @@ function CollapsedPeekIcon() {
 function SidebarMacChrome({ frame, onSearch }: { frame: FrameStore; onSearch: () => void }) {
   const text = useShellText();
   const trafficLightPadding = useTrafficLightPadding();
+  // Official FrameSidebar zt tooltips (cbc59a8af ~2233–2251):
+  // collapse tooltipKeyboardShortcut: "cmd+b"; search: Fe("command_palette") → cmd+k.
+  const isMac = isMacDesktopFrame();
+  const collapseShortcut = isMac ? "⌘B" : "Ctrl+B";
+  const searchShortcut = isMac ? "⌘K" : "Ctrl+K";
 
-  if (!isMacDesktopFrame() || frame.sidebarCollapsed) return null;
+  // Official FrameSidebar (cbc59a8af ~2197–2258): Mac expanded only; Windows uses top bar.
+  if (!isMac || frame.sidebarCollapsed) return null;
 
-  const spacerStyle = trafficLightPadding.needsPadding
-    ? ({ width: `${trafficLightPadding.spacerWidth}px` } as CSSProperties)
-    : undefined;
+  // Official desktop button wrappers: draggable-none -mt-[10px] (+ ml-0.5 on collapse).
+  const buttonLiftClass = "draggable-none -mt-[10px]";
 
   return (
     <div className="draggable h-11 shrink-0 flex items-center px-2">
-      {spacerStyle ? <div className="shrink-0" style={spacerStyle} /> : null}
-      <div className="draggable-none -mt-[10px] ml-0.5 flex items-center gap-1">
-        <SidebarChromeButton ariaLabel={text.collapseSidebar} onClick={frame.toggleSidebar}>
+      {trafficLightPadding.needsPadding ? (
+        <div className="shrink-0" style={{ width: trafficLightPadding.spacerWidth }} />
+      ) : null}
+      <div className={`${buttonLiftClass} ml-0.5`}>
+        <SidebarChromeButton
+          ariaLabel={text.collapseSidebar}
+          keyboardShortcut={collapseShortcut}
+          onClick={frame.toggleSidebar}
+          tooltip={text.collapseSidebar}
+        >
           <Icon name="Sidebar" customSize={16} />
         </SidebarChromeButton>
-        <SidebarChromeButton ariaLabel={text.search} onClick={onSearch}>
+      </div>
+      <div className={buttonLiftClass}>
+        <SidebarChromeButton
+          ariaLabel={text.search}
+          keyboardShortcut={searchShortcut}
+          onClick={onSearch}
+          tooltip={text.search}
+        >
           <Icon name="Search" customSize={16} />
         </SidebarChromeButton>
       </div>
@@ -128,19 +149,56 @@ function SidebarMacChrome({ frame, onSearch }: { frame: FrameStore; onSearch: ()
   );
 }
 
-function SidebarChromeButton({ ariaLabel, children, onClick }: { ariaLabel: string; children: ReactNode; onClick: () => void }) {
+/**
+ * Official FrameSidebar chrome control (zt): df-chrome-btn + bottom tooltip + keyboardShortcut.
+ * Icons use pointer-events-none so Electron drag hit-tests land on the no-drag button.
+ */
+function SidebarChromeButton({
+  ariaLabel,
+  children,
+  keyboardShortcut,
+  onClick,
+  tooltip,
+}: {
+  ariaLabel: string;
+  children: ReactNode;
+  keyboardShortcut?: string;
+  onClick: () => void;
+  tooltip: string;
+}) {
   return (
-    <button
-      aria-label={ariaLabel}
-      className="df-chrome-btn opacity-80 draggable-none flex items-center justify-center size-7 rounded-[9px] border-0 bg-transparent transition-colors"
-      onClick={onClick}
-      type="button"
-    >
-      {children}
-    </button>
+    <Tooltip.Root disableHoverablePopup>
+      <Tooltip.Trigger
+        delay={400}
+        render={
+          <button
+            aria-label={ariaLabel}
+            className="df-chrome-btn opacity-80 draggable-none flex items-center justify-center size-7 rounded-[9px] border-0 bg-transparent transition-colors"
+            onClick={onClick}
+            type="button"
+          >
+            <span className="pointer-events-none inline-flex items-center justify-center">{children}</span>
+          </button>
+        }
+      />
+      <Tooltip.Portal>
+        <Tooltip.Positioner className="z-[100]" side="bottom" sideOffset={6}>
+          <Tooltip.Popup className="px-2 py-1 text-xs font-ui leading-tight rounded-md shadow-md text-always-white bg-always-black/80 backdrop-blur pointer-events-none whitespace-nowrap">
+            {tooltip}
+            {keyboardShortcut ? <span className="ml-1.5 opacity-70">{keyboardShortcut}</span> : null}
+          </Tooltip.Popup>
+        </Tooltip.Positioner>
+      </Tooltip.Portal>
+    </Tooltip.Root>
   );
 }
 
+/**
+ * Official qWt + dframe FrameSidebar Le():
+ * needsTrafficLightPadding = isMac && !isFullscreen
+ * trafficLightSpacerWidth = round(74 / min(zoom, 1))
+ * Subscribes to WindowState fullscreen/zoom changes (not a one-shot read).
+ */
 function useTrafficLightPadding() {
   const [state, setState] = useState({ isFullscreen: false, zoomFactor: 1 });
 
@@ -148,25 +206,34 @@ function useTrafficLightPadding() {
     if (!isMacDesktopFrame()) return;
 
     let disposed = false;
-    void Promise.all([
-      desktopBridge.Window.getFullscreen().catch(() => false),
-      desktopBridge.Window.getZoomFactor().catch(() => 1),
-    ]).then(([isFullscreen, zoomFactor]) => {
+    const applyFullscreen = (isFullscreen: boolean) => {
       if (disposed) return;
-      setState({
-        isFullscreen,
-        zoomFactor: Number.isFinite(zoomFactor) && zoomFactor > 0 ? zoomFactor : 1,
-      });
-    });
+      setState((prev) => (prev.isFullscreen === isFullscreen ? prev : { ...prev, isFullscreen }));
+    };
+    const applyZoom = (zoomFactor: number) => {
+      if (disposed) return;
+      const next = Number.isFinite(zoomFactor) && zoomFactor > 0 ? zoomFactor : 1;
+      setState((prev) => (prev.zoomFactor === next ? prev : { ...prev, zoomFactor: next }));
+    };
+
+    void desktopBridge.Window.getFullscreen()
+      .then((value) => applyFullscreen(value === true))
+      .catch(() => applyFullscreen(false));
+    void desktopBridge.Window.getZoomFactor()
+      .then(applyZoom)
+      .catch(() => applyZoom(1));
+
+    const unsubscribeFullscreen = desktopBridge.Window.onFullscreenChanged?.(applyFullscreen);
+    const unsubscribeZoom = desktopBridge.Window.onZoomFactorChanged?.(applyZoom);
 
     return () => {
       disposed = true;
+      unsubscribeFullscreen?.();
+      unsubscribeZoom?.();
     };
   }, []);
 
-  const needsPadding = !state.isFullscreen;
-  const spacerWidth = needsPadding ? Math.round(74 / Math.min(state.zoomFactor, 1)) : 0;
-  return { needsPadding, spacerWidth };
+  return resolveTrafficLightPadding(state.isFullscreen, state.zoomFactor);
 }
 
 function isMacDesktopFrame() {

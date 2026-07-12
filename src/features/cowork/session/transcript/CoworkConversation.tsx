@@ -5,62 +5,123 @@ import type { CoworkPermissionRequest } from "../coworkPermissionTypes";
 import { CoworkMessageCell } from "./CoworkMessageCell";
 import { CoworkMessageContextProvider } from "./CoworkMessageContext";
 import { CoworkConversationBottomSpacer } from "./CoworkConversationBottomSpacer";
+import { CoworkAskUserQuestionProvider } from "../../composer/CoworkAskUserQuestionContext";
 import { CoworkTimelineStatusVisibilityProvider } from "./CoworkTimelineStatusVisibility";
-import type { CoworkMessageChain } from "./coworkMessageModel";
+import type { CoworkAutoscrollHandle, CoworkPinToBottomConfig } from "./coworkAutoscroll";
+import { isCoworkNearBottom } from "./coworkAutoscroll";
+import { buildOfficialCoworkMessageChains, type CoworkChatMessage, type CoworkMessageChain } from "./coworkMessageModel";
+import { coworkMessagePathStore } from "./coworkMessagePathStore";
+import { useCoworkAutoscroll } from "./useCoworkAutoscroll";
 
 export type CoworkScrollState = { showBottomFade: boolean; showScrollButton: boolean };
 
-export function CoworkConversation({ chains, composer, composerRef, isResponding, onScrollState, pendingTurnStartedAt, permissionApprovals, permissionRequests, scrollRef, status }: { chains: CoworkMessageChain[]; composer: ReactNode; composerRef: RefObject<HTMLDivElement | null>; isResponding: boolean; onScrollState: (state: CoworkScrollState) => void; pendingTurnStartedAt?: number | null; permissionApprovals?: ReactNode; permissionRequests: CoworkPermissionRequest[]; scrollRef: MutableRefObject<HTMLDivElement | null>; status: CoworkConversationStatusState | null }) {
+export function CoworkConversation({
+  activityStartedAt,
+  autoscrollRef,
+  composer,
+  composerRef,
+  error,
+  errorCategory,
+  isResponding,
+  messageUuids,
+  onScrollState,
+  onToolDecision,
+  onTryAgain,
+  permissionApprovals,
+  permissionRequests,
+  pinToBottomConfig,
+  scrollRef,
+  status,
+  streamingMessageId,
+}: {
+  activityStartedAt?: number | null;
+  /** Official IYe imperative handle surface (getScrollContainer / scrollToBottom / setPinToBottom). */
+  autoscrollRef?: MutableRefObject<CoworkAutoscrollHandle | null>;
+  composer: ReactNode;
+  composerRef: RefObject<HTMLDivElement | null>;
+  error?: Error | null;
+  errorCategory?: string | null;
+  isResponding: boolean;
+  messageUuids: string[];
+  onScrollState: (state: CoworkScrollState) => void;
+  onToolDecision?: (requestId: string, toolUseId: string, input: Record<string, unknown>, decision: "always" | "deny" | "once") => void;
+  onTryAgain?: () => Promise<void> | void;
+  permissionApprovals?: ReactNode;
+  permissionRequests: CoworkPermissionRequest[];
+  /** Official IYe pinToBottomConfig; default { disabled:false, initialValue:false }. */
+  pinToBottomConfig?: CoworkPinToBottomConfig;
+  scrollRef: MutableRefObject<HTMLDivElement | null>;
+  status: CoworkConversationStatusState | null;
+  streamingMessageId: string | null;
+}) {
   const localScrollRef = useRef<HTMLDivElement | null>(null);
   const innerRef = useRef<HTMLDivElement | null>(null);
+  const spacerAutoscrollRef = useRef<CoworkAutoscrollHandle | null>(null);
   const lastAssistantMessageRef = useRef<HTMLDivElement | null>(null);
   const lastHumanMessageRef = useRef<HTMLDivElement | null>(null);
   const extrasRef = useRef<HTMLDivElement | null>(null);
+  const lastMessageSentinelRef = useRef<HTMLDivElement | null>(null);
+  const chains = useMemo(() => buildOfficialCoworkMessageChains(
+    messageUuids
+      .map((messageUuid) => coworkMessagePathStore.getState().messageByUuid[messageUuid])
+      .filter((message): message is CoworkChatMessage => message !== undefined),
+    streamingMessageId,
+  ), [messageUuids, streamingMessageId]);
   const messagePositions = useMemo(() => buildMessagePositions(chains), [chains]);
-  const messageContext = useMemo(() => ({ toolPermissionRequests: permissionRequests }), [permissionRequests]);
+  const messageContext = useMemo(() => ({ onRetry: onTryAgain, onToolDecision, toolPermissionRequests: permissionRequests }), [onToolDecision, onTryAgain, permissionRequests]);
+  // Official IYe pin controller. Conversation shell omits pinToBottomConfig (initial false);
+  // session path re-pins via t$t scroll-to-bottom / streaming session effects.
+  const autoscroll = useCoworkAutoscroll(localScrollRef, innerRef, pinToBottomConfig);
   useLayoutEffect(() => {
     scrollRef.current = localScrollRef.current;
     return () => { scrollRef.current = null; };
   }, [scrollRef]);
-  usePinnedConversationScroll(localScrollRef, innerRef);
-  useConversationScrollState(localScrollRef, innerRef, onScrollState);
+  useLayoutEffect(() => {
+    spacerAutoscrollRef.current = autoscroll;
+    if (autoscrollRef) autoscrollRef.current = autoscroll;
+    return () => {
+      spacerAutoscrollRef.current = null;
+      if (autoscrollRef) autoscrollRef.current = null;
+    };
+  }, [autoscroll, autoscrollRef]);
+  useConversationScrollState(localScrollRef, innerRef, lastMessageSentinelRef, onScrollState);
   return (
-    <div className="flex flex-1 h-full w-full overflow-hidden max-md:relative md:-mt-[var(--df-header-h,0px)] md:h-[calc(100%+var(--df-header-h,0px))]">
+    <CoworkAskUserQuestionProvider>
+      <div className="flex flex-1 h-full w-full overflow-hidden max-md:relative md:-mt-[var(--df-header-h,0px)] md:h-[calc(100%+var(--df-header-h,0px))]">
       <div className="h-full flex flex-col overflow-hidden md:pt-[var(--df-header-h,0px)] relative" style={{ flex: "100 0" }}>
         <div className="overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable] pt-14 flex-1" data-autoscroll-container ref={localScrollRef}>
           <div className="relative w-full min-h-full flex flex-col" ref={innerRef}>
             <div className="mx-auto flex w-full flex-1 flex-col max-w-3xl md:px-2">
               <CoworkResponseStatusAnnouncer isStreaming={isResponding} />
               <div className="flex-1 flex flex-col px-4 max-w-3xl mx-auto w-full pt-1">
-                {chains.length > 0 ? (
-                  <CoworkTimelineStatusVisibilityProvider>
-                    <CoworkMessageContextProvider value={messageContext}>
-                      {chains.map((chain, index) => (
-                        <CoworkMessageCell
-                          chain={chain}
-                          conversationIsStreaming={isResponding}
-                          isLastHumanMessage={messagePositions[index]?.isLastHumanMessage ?? false}
-                          isLastMessage={messagePositions[index]?.isLastMessage ?? false}
-                          key={chain.firstMessageUuid}
-                          lastAssistantMessageRef={lastAssistantMessageRef}
-                          lastHumanMessageRef={lastHumanMessageRef}
-                        />
-                      ))}
-                    </CoworkMessageContextProvider>
-                    {permissionApprovals}
-                    <div aria-hidden="true" className="h-px w-full pointer-events-none" />
-                    <CoworkConversationStatus isWorking={isResponding} ref={extrasRef} startedAt={pendingTurnStartedAt} status={status} />
-                    <div className="h-12" />
-                    <CoworkConversationBottomSpacer composerRef={composerRef} extrasRef={extrasRef} lastAssistantMessageRef={lastAssistantMessageRef} lastHumanMessageRef={lastHumanMessageRef} messageCount={chains.length} scrollRef={localScrollRef} />
-                  </CoworkTimelineStatusVisibilityProvider>
-                ) : null}
+                <CoworkTimelineStatusVisibilityProvider>
+                  <CoworkMessageContextProvider value={messageContext}>
+                    {chains.map((chain, index) => (
+                      <CoworkMessageCell
+                        chain={chain}
+                        conversationIsStreaming={isResponding}
+                        isLastHumanMessage={messagePositions[index]?.isLastHumanMessage ?? false}
+                        isLastMessage={messagePositions[index]?.isLastMessage ?? false}
+                        key={chain.firstMessageUuid}
+                        lastAssistantMessageRef={lastAssistantMessageRef}
+                        lastHumanMessageRef={lastHumanMessageRef}
+                      />
+                    ))}
+                  </CoworkMessageContextProvider>
+                  {permissionApprovals}
+                  <div aria-hidden="true" className="h-px w-full pointer-events-none" ref={lastMessageSentinelRef} />
+                  <CoworkConversationStatus error={error} errorCategory={errorCategory} isWorking={isResponding} onTryAgain={onTryAgain} ref={extrasRef} startedAt={activityStartedAt} status={status} />
+                  <div className="h-12" />
+                  <CoworkConversationBottomSpacer autoScrollRef={spacerAutoscrollRef} composerRef={composerRef} extrasRef={extrasRef} lastAssistantMessageRef={lastAssistantMessageRef} lastHumanMessageRef={lastHumanMessageRef} messageCount={messageUuids.length} scrollRef={localScrollRef} />
+                </CoworkTimelineStatusVisibilityProvider>
               </div>
               {composer}
             </div>
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </CoworkAskUserQuestionProvider>
   );
 }
 
@@ -91,55 +152,31 @@ function buildMessagePositions(chains: CoworkMessageChain[]) {
   });
 }
 
-function useConversationScrollState(scrollRef: React.RefObject<HTMLDivElement | null>, innerRef: React.RefObject<HTMLDivElement | null>, onScrollState: (state: CoworkScrollState) => void) {
+function useConversationScrollState(scrollRef: React.RefObject<HTMLDivElement | null>, innerRef: React.RefObject<HTMLDivElement | null>, sentinelRef: React.RefObject<HTMLDivElement | null>, onScrollState: (state: CoworkScrollState) => void) {
   useLayoutEffect(() => {
     const node = scrollRef.current;
-    if (!node) return;
-    const update = () => {
+    const sentinel = sentinelRef.current;
+    if (!node || !sentinel) return;
+    let showScrollButton = false;
+    const updateFade = () => {
       if (node.offsetParent === null) return;
-      const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
-      onScrollState({ showScrollButton: distance > 200, showBottomFade: distance > 8 });
+      onScrollState({ showScrollButton, showBottomFade: !isCoworkNearBottom(node) });
     };
-    node.addEventListener("scroll", update, { passive: true });
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    if (innerRef.current) observer.observe(innerRef.current);
-    update();
-    return () => { node.removeEventListener("scroll", update); observer.disconnect(); onScrollState({ showScrollButton: false, showBottomFade: false }); };
-  }, [innerRef, onScrollState, scrollRef]);
-}
-
-function usePinnedConversationScroll(scrollRef: React.RefObject<HTMLDivElement | null>, innerRef: React.RefObject<HTMLDivElement | null>) {
-  const pinnedRef = useRef(true);
-  const programmaticRef = useRef(false);
-  const previousTopRef = useRef(0);
-  const previousHeightRef = useRef(0);
-  useLayoutEffect(() => {
-    const node = scrollRef.current;
-    const inner = innerRef.current;
-    if (!node || !inner) return;
-    const scrollToBottom = () => {
-      if (!pinnedRef.current || node.scrollTop > node.scrollHeight - node.clientHeight) return;
-      programmaticRef.current = true;
-      node.scrollTo({ behavior: "auto", top: node.scrollHeight });
-      window.setTimeout(() => { programmaticRef.current = false; }, 0);
+    node.addEventListener("scroll", updateFade, { passive: true });
+    const resizeObserver = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(updateFade);
+    resizeObserver?.observe(node);
+    if (innerRef.current) resizeObserver?.observe(innerRef.current);
+    const intersectionObserver = typeof IntersectionObserver === "undefined" ? undefined : new IntersectionObserver(([entry]) => {
+      showScrollButton = !entry.isIntersecting;
+      updateFade();
+    }, { root: node, threshold: 0.01, rootMargin: "0px 0px 150px 0px" });
+    intersectionObserver?.observe(sentinel);
+    updateFade();
+    return () => {
+      node.removeEventListener("scroll", updateFade);
+      resizeObserver?.disconnect();
+      intersectionObserver?.disconnect();
+      onScrollState({ showScrollButton: false, showBottomFade: false });
     };
-    const onScroll = () => updatePinnedState(node, pinnedRef, programmaticRef, previousTopRef, previousHeightRef);
-    const observer = new ResizeObserver(scrollToBottom);
-    node.addEventListener("scroll", onScroll, { passive: true });
-    observer.observe(inner);
-    observer.observe(node);
-    scrollToBottom();
-    return () => { node.removeEventListener("scroll", onScroll); observer.disconnect(); };
-  }, [innerRef, scrollRef]);
-}
-
-function updatePinnedState(node: HTMLDivElement, pinnedRef: React.MutableRefObject<boolean>, programmaticRef: React.MutableRefObject<boolean>, previousTopRef: React.MutableRefObject<number>, previousHeightRef: React.MutableRefObject<number>) {
-  const scrolledUp = node.scrollTop < previousTopRef.current;
-  const heightShrank = node.scrollHeight < previousHeightRef.current;
-  previousTopRef.current = node.scrollTop;
-  previousHeightRef.current = node.scrollHeight;
-  if (programmaticRef.current) return;
-  const nearBottom = Math.floor(node.scrollHeight - node.scrollTop - node.clientHeight) < 8;
-  if (!nearBottom && scrolledUp && !heightShrank) pinnedRef.current = false;
+  }, [innerRef, onScrollState, scrollRef, sentinelRef]);
 }

@@ -73,3 +73,23 @@ textarea {
 .dframe-content-inner:has(.epitaxy-root) {
   --df-content-gutter: 0px;
 }
+
+/*
+ * Official ion-dist (c6a992d55-CgNGFRYw.css):
+ *   .draggable { app-region: drag }
+ *   .draggable a,button,input,label,select,textarea,.draggable-none { app-region: no-drag }
+ *
+ * Electron drag hit-tests the topmost painted node. Official rules do not set
+ * no-drag on SVG/path descendants, so under a .draggable chrome row those nodes
+ * keep the initial app-region and the parent drag region steals the top of icon
+ * hits (only the lower part of the 28px control feels clickable).
+ *
+ * Extend the official control list to their descendants only — do NOT cascade
+ * `.draggable-none *` (that would no-drag every .draggable region under
+ * `.dframe-root.draggable-none` and break intended window-drag strips).
+ */
+.draggable :is(a, button, input, label, select, textarea),
+.draggable :is(a, button, input, label, select, textarea) * {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}

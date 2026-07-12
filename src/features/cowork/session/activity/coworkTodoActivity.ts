@@ -1,7 +1,7 @@
-import type { ChatMessage } from "../../../../adapters/desktopBridge/types";
 import type { CoworkTodoItem } from "./coworkActivityTypes";
+import type { CoworkRawMessage } from "../types";
 
-export function parseCoworkTodos(messages: ChatMessage[]): CoworkTodoItem[] {
+export function parseCoworkTodos(messages: CoworkRawMessage[]): CoworkTodoItem[] {
   let latestTodos: CoworkTodoItem[] = [];
   for (const message of messages) {
     for (const tool of rawToolUsesFromMessage(message)) {
@@ -12,7 +12,7 @@ export function parseCoworkTodos(messages: ChatMessage[]): CoworkTodoItem[] {
   return latestTodos;
 }
 
-function rawToolUsesFromMessage(message: ChatMessage): Array<{ input: Record<string, unknown>; name: string }> {
+function rawToolUsesFromMessage(message: CoworkRawMessage): Array<{ input: Record<string, unknown>; name: string }> {
   const raw = asRecord(message.raw);
   const content = rawMessageContent(raw);
   return content.flatMap((item) => {

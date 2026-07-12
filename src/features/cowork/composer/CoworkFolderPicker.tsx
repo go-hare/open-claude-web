@@ -1,7 +1,7 @@
 import { Menu } from "@base-ui-components/react/menu";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
-import type { LocalSessionsBridge } from "../../../adapters/desktopBridge/types";
+import type { CoworkSessionsBridge } from "../../../adapters/desktopBridge/types";
 import { Icon } from "../../../shell/icons";
 import { CoworkFolderTrustDialog, type CoworkFolderConfirmation } from "./CoworkFolderTrustDialog";
 
@@ -16,7 +16,9 @@ const popupClass = "epitaxy-popup relative isolate min-w-[130px] max-w-[320px] m
 const itemClass = "relative isolate flex items-center min-h-[var(--h4)] shrink-0 px-p8 text-body select-none cursor-default outline-none hide-focus-ring before:content-[''] before:absolute before:-z-[1] before:inset-y-0 before:left-[6px] before:right-[6px] before:rounded-r5 text-[var(--menu-item-color,var(--t8))] data-[highlighted]:before:bg-fill-uncontained-hover hover:before:bg-fill-uncontained-hover";
 const iconStyle = { "--class-base-icon": "14px" } as CSSProperties;
 
-export function CoworkFolderPicker({ bridge, defaultTarget, disabled, onSelectedFoldersChange, placeholder = "在项目中工作", recentTargets, selectedFolders }: { bridge: LocalSessionsBridge; defaultTarget: CoworkFolderTarget | null; disabled?: boolean; onSelectedFoldersChange: (folders: string[]) => void; placeholder?: string; recentTargets: CoworkFolderTarget[]; selectedFolders: string[] }) {
+type CoworkFolderBridge = Pick<CoworkSessionsBridge, "addTrustedFolder" | "isFolderTrusted">;
+
+export function CoworkFolderPicker({ bridge, defaultTarget, disabled, onSelectedFoldersChange, placeholder = "在项目中工作", recentTargets, selectedFolders }: { bridge: CoworkFolderBridge; defaultTarget: CoworkFolderTarget | null; disabled?: boolean; onSelectedFoldersChange: (folders: string[]) => void; placeholder?: string; recentTargets: CoworkFolderTarget[]; selectedFolders: string[] }) {
   const [open, setOpen] = useState(false);
   const [confirmations, setConfirmations] = useState<CoworkFolderConfirmation[]>([]);
   const [defaultFolderPath, setDefaultFolderPath] = useState<string | null>(defaultTarget?.path ?? null);
@@ -44,7 +46,7 @@ export function CoworkFolderPicker({ bridge, defaultTarget, disabled, onSelected
   );
 }
 
-function useFolderActions(input: { bridge: LocalSessionsBridge; confirmations: CoworkFolderConfirmation[]; onSelectedFoldersChange: (folders: string[]) => void; selectedFolders: string[]; setConfirmations: React.Dispatch<React.SetStateAction<CoworkFolderConfirmation[]>>; setOpen: (open: boolean) => void }) {
+function useFolderActions(input: { bridge: CoworkFolderBridge; confirmations: CoworkFolderConfirmation[]; onSelectedFoldersChange: (folders: string[]) => void; selectedFolders: string[]; setConfirmations: React.Dispatch<React.SetStateAction<CoworkFolderConfirmation[]>>; setOpen: (open: boolean) => void }) {
   const addFolder = useCallback((path: string) => input.onSelectedFoldersChange(uniqueStrings([...input.selectedFolders, path])), [input]);
   const clearPending = () => input.setConfirmations((current) => current.slice(1));
   const selectWithTrustCheck = async (path: string) => {

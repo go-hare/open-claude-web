@@ -144,7 +144,11 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
 
   useFocusedSession(activeSessionId);
 
-  const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft?: boolean, dragHandle?: ReactNode) => (
+  // Official tile layout (c11959232 KI/YI): topLeftId marks the primary pane tile isTopLeft.
+  // EpitaxyFramePage is always the dframe-pane-primary chat tile, so isTopLeft must be true.
+  // Official CSS then applies:
+  //   .dframe-root[data-collapsed] .dframe-pane-primary .epitaxy-root [data-top-left]{margin-left:112px}
+  const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft = true, dragHandle?: ReactNode) => (
     <OfficialChatTileShell>
       <EpitaxyChatPanel
         draftPersistKey={activeSessionId ? `epitaxy-${activeSessionId}` : draftPersistKey}
@@ -165,7 +169,7 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
   return (
     <div className="epitaxy-root select-none h-full w-full flex flex-col">
       <div className="flex-1 min-h-0">
-        <EpitaxyTileLayout>{renderChatTile()}</EpitaxyTileLayout>
+        <EpitaxyTileLayout>{renderChatTile(undefined, true)}</EpitaxyTileLayout>
       </div>
     </div>
   );

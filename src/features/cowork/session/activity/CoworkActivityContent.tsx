@@ -30,7 +30,37 @@ export function CoworkWorkingFolderContent({ folders, hasConnectedOfficeFiles = 
   );
 }
 
-export function CoworkContextContent({ mountedProjects, onNavigate, onOpenBrowserExtension, onOpenFile, resources, scheduledTaskId, selectedPath, userSelectedFolders }: { mountedProjects: CoworkMountedProject[]; onNavigate: (path: string) => void; onOpenBrowserExtension?: (target: { highlightId?: string }) => void; onOpenFile: (target: CoworkOpenFileTarget) => void; resources: CoworkResourceActivity[]; scheduledTaskId?: string; selectedPath?: string; userSelectedFolders: string[] }) {
+export type CoworkContextResourceOpenTarget = {
+  filePath: string;
+  fileName: string;
+  isBrowserExtension?: boolean;
+  isMcpServer?: boolean;
+  isSkillInvocation?: boolean;
+  isWebSearch?: boolean;
+  latestId: string;
+  pluginName?: string;
+  mcpServer?: { iconSrc?: string; iconType?: string; name?: string; uuid?: string };
+  mcpServerUuid?: string;
+};
+
+export function CoworkContextContent({
+  mountedProjects,
+  onNavigate,
+  onOpenContextResource,
+  resources,
+  scheduledTaskId,
+  selectedPath,
+  userSelectedFolders,
+}: {
+  mountedProjects: CoworkMountedProject[];
+  onNavigate: (path: string) => void;
+  /** Official activity Re (~249116): SELECT_* / SELECT_FILE into cFt drawer. */
+  onOpenContextResource: (group: CoworkContextResourceOpenTarget) => void;
+  resources: CoworkResourceActivity[];
+  scheduledTaskId?: string;
+  selectedPath?: string;
+  userSelectedFolders: string[];
+}) {
   const groups = useMemo(() => buildCoworkContextGroups(resources, userSelectedFolders), [resources, userSelectedFolders]);
   if (groups.length === 0 && mountedProjects.length === 0 && !scheduledTaskId) return <CoworkContextEmptyStateWithConnectors onNavigate={onNavigate} />;
   return (
@@ -39,7 +69,15 @@ export function CoworkContextContent({ mountedProjects, onNavigate, onOpenBrowse
       {scheduledTaskId ? <CoworkScheduledTaskContextRow onNavigate={onNavigate} scheduledTaskId={scheduledTaskId} /> : null}
       {contextCategoryOrder.map((category) => {
         const categoryGroups = groups.filter((group) => group.categoryKey === category);
-        return categoryGroups.length > 0 ? <CoworkContextCategorySection categoryKey={category} groups={categoryGroups} key={category} onOpenBrowserExtension={onOpenBrowserExtension} onOpenFile={onOpenFile} selectedPath={selectedPath} /> : null;
+        return categoryGroups.length > 0 ? (
+          <CoworkContextCategorySection
+            categoryKey={category}
+            groups={categoryGroups}
+            key={category}
+            onOpenContextResource={onOpenContextResource}
+            selectedPath={selectedPath}
+          />
+        ) : null;
       })}
     </div>
   );
@@ -72,34 +110,77 @@ function CoworkFolderInstructionsRow({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-function CoworkContextCategorySection({ categoryKey, groups, onOpenBrowserExtension, onOpenFile, selectedPath }: { categoryKey: CoworkResourceCategory; groups: CoworkContextGroup[]; onOpenBrowserExtension?: (target: { highlightId?: string }) => void; onOpenFile: (target: CoworkOpenFileTarget) => void; selectedPath?: string }) {
+function CoworkContextCategorySection({
+  categoryKey,
+  groups,
+  onOpenContextResource,
+  selectedPath,
+}: {
+  categoryKey: CoworkResourceCategory;
+  groups: CoworkContextGroup[];
+  onOpenContextResource: (group: CoworkContextResourceOpenTarget) => void;
+  selectedPath?: string;
+}) {
   return (
     <div className="mb-2 last:mb-0">
       <div className="flex items-center gap-1.5 w-full py-2 font-small text-text-500"><span>{contextCategoryLabels[categoryKey]}</span></div>
       <div className="relative">
-        {groups.map((group) => <CoworkContextResourceRow group={group} isSelected={group.filePath === selectedPath} key={group.groupKey} onOpenBrowserExtension={onOpenBrowserExtension} onOpenFile={onOpenFile} />)}
+        {groups.map((group) => (
+          <CoworkContextResourceRow
+            group={group}
+            isSelected={group.filePath === selectedPath}
+            key={group.groupKey}
+            onOpenContextResource={onOpenContextResource}
+          />
+        ))}
       </div>
     </div>
   );
 }
 
-function CoworkContextResourceRow({ group, isSelected, onOpenBrowserExtension, onOpenFile }: { group: CoworkContextGroup; isSelected: boolean; onOpenBrowserExtension?: (target: { highlightId?: string }) => void; onOpenFile: (target: CoworkOpenFileTarget) => void }) {
+function CoworkContextResourceRow({
+  group,
+  isSelected,
+  onOpenContextResource,
+}: {
+  group: CoworkContextGroup;
+  isSelected: boolean;
+  onOpenContextResource: (group: CoworkContextResourceOpenTarget) => void;
+}) {
   const operation = group.operationHistory[0]?.operation;
   const isBrowserSwitching = useCoworkBrowserSwitching();
+  // Official HZt: commands are not clickable; files open via SELECT_FILE; mcp/web/browser/skill via Re.
+  const isCommand = Boolean(group.isCommandInvocation);
+  const canOpenNonFile =
+    Boolean(group.isWebSearch) ||
+    Boolean(group.isBrowserExtension) ||
+    Boolean(group.isMcpServer) ||
+    Boolean(group.isSkillInvocation);
   const canOpenFile = canOpenCoworkContextFile(group);
-  const canOpenBrowserExtension = group.isBrowserExtension && Boolean(onOpenBrowserExtension);
-  const canOpen = canOpenFile || canOpenBrowserExtension;
+  const canOpen = !isCommand && (canOpenFile || canOpenNonFile);
   const canShowInFolder = canOpenFile && Boolean(desktopBridge.FileSystem.showInFolder);
-  const openFile = () => {
-    if (canOpenFile) onOpenFile({ path: group.filePath });
-    else if (canOpenBrowserExtension) onOpenBrowserExtension?.({ highlightId: group.latestId });
+  const openResource = () => {
+    if (isCommand || !canOpen) return;
+    // Official Re (~249116): all openable context groups share one handler (SELECT_* or SELECT_FILE).
+    onOpenContextResource({
+      filePath: group.filePath,
+      fileName: group.fileName,
+      isBrowserExtension: group.isBrowserExtension,
+      isMcpServer: group.isMcpServer,
+      isSkillInvocation: group.isSkillInvocation,
+      isWebSearch: group.isWebSearch,
+      latestId: group.latestId,
+      pluginName: group.pluginName,
+      mcpServer: group.mcpServer,
+      mcpServerUuid: group.mcpServerUuid,
+    });
   };
   const showInFolder = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     void desktopBridge.FileSystem.showInFolder?.(group.filePath);
   };
   return (
-    <div className="relative" data-cowork-context-resource={group.filePath} onClick={openFile}>
+    <div className="relative" data-cowork-context-resource={group.filePath} onClick={openResource}>
       <div className={`flex items-center gap-2.5 py-1.5 px-1 rounded -mx-1 ${canOpen ? "group cursor-pointer hover:bg-bg-200" : ""} ${isSelected ? "bg-bg-300 rounded-md" : ""}`}>
         {group.isBrowserExtension && group.latestScreenshotSrc ? (
           <div className="flex-shrink-0 w-9 h-7 overflow-hidden rounded border border-border-300">
@@ -150,7 +231,15 @@ type CoworkContextGroup = {
   isWebSearch?: boolean;
   latestScreenshotSrc?: string;
   latestId: string;
+  mcpServer?: {
+    iconSrc?: string;
+    iconType?: string;
+    name?: string;
+    uuid?: string;
+  };
+  mcpServerUuid?: string;
   operationHistory: CoworkContextOperation[];
+  pluginName?: string;
 };
 
 const contextCategoryOrder: CoworkResourceCategory[] = ["outputs", "uploads", "connectors", "working", "memory", "skills", "commands"];
@@ -182,20 +271,40 @@ function buildCoworkContextGroups(resources: CoworkResourceActivity[], userSelec
       if (resource.timestamp > (current.operationHistory[0]?.timestamp ?? 0)) current.latestId = resource.latestId;
       continue;
     }
+    // Official grouping (~247579–247688): mcp keeps mcpServer; skill keeps pluginName.
+    const isMcpServer = resource.operation === "mcp_tool" && key !== "browser_extension://all";
+    const mcpServerUuid = isMcpServer
+      ? resource.mcpServerUuid ?? resource.mcpServer?.uuid ?? parseMcpServerFromPath(key)
+      : undefined;
+    const mcpServer = isMcpServer
+      ? {
+          ...resource.mcpServer,
+          uuid: mcpServerUuid,
+          name: resource.mcpServer?.name ?? resource.displayName,
+          iconSrc: resource.mcpServer?.iconSrc,
+          iconType: resource.mcpServer?.iconType,
+        }
+      : undefined;
     groupsByKey.set(key, {
       categoryKey: coworkContextGroupCategory(resource),
       displayName: coworkContextGroupDisplayName(resource, userSelectedFolders),
       fileName: resource.fileName,
-      filePath: key === "browser_extension://all" ? key : resource.filePath,
+      filePath:
+        key === "browser_extension://all" || key === "web_search://all" || key.startsWith("mcp://")
+          ? key
+          : resource.filePath,
       groupKey: key,
       isCommandInvocation: resource.operation === "command_invoked",
       isConnectorInvocation: resource.operation === "cli_tool",
       isBrowserExtension: key === "browser_extension://all",
-      isMcpServer: resource.operation === "mcp_tool" && key !== "browser_extension://all",
+      isMcpServer,
       isSkillInvocation: resource.operation === "skill_invoked",
       isWebSearch: resource.operation === "web_search",
       latestId: resource.latestId,
+      mcpServer,
+      mcpServerUuid,
       operationHistory: [operation],
+      pluginName: resource.pluginName,
     });
   }
 

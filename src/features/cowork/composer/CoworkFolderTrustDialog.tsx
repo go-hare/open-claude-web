@@ -1,10 +1,10 @@
 import { Dialog } from "@base-ui-components/react/dialog";
-import type { LocalSessionsBridge } from "../../../adapters/desktopBridge/types";
+import type { CoworkSessionsBridge } from "../../../adapters/desktopBridge/types";
 import { CoworkButton } from "../ui/CoworkButton";
 
 export type CoworkFolderConfirmation = { path: string; wasTrusted: boolean };
 
-export function CoworkFolderTrustDialog({ bridge, onAlwaysAllow, onCancel, onConfirm, pending }: { bridge: LocalSessionsBridge; onAlwaysAllow: (path: string) => void | Promise<void>; onCancel: () => void; onConfirm: (path: string) => void; pending: CoworkFolderConfirmation | null }) {
+export function CoworkFolderTrustDialog({ bridge, onAlwaysAllow, onCancel, onConfirm, pending }: { bridge: Pick<CoworkSessionsBridge, "addTrustedFolder">; onAlwaysAllow: (path: string) => void | Promise<void>; onCancel: () => void; onConfirm: (path: string) => void; pending: CoworkFolderConfirmation | null }) {
   const directory = basename(pending?.path) ?? pending?.path ?? "";
   const title = pending?.wasTrusted
     ? `You've allowed this folder before. Continue to add "${directory}"?`

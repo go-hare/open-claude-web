@@ -5,6 +5,7 @@ export type CoworkPermissionRequest = {
   input: Record<string, unknown>;
   requestId: string;
   sessionId: string;
+  suggestions?: unknown;
   toolName: string;
   toolUseId?: string;
 };

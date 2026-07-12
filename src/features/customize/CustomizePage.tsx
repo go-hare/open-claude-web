@@ -98,10 +98,17 @@ function useCustomizeTrafficLightPadding() {
   useEffect(() => {
     if (!isMacDesktop) return;
     let disposed = false;
+    const apply = (value: boolean) => {
+      if (!disposed) setFullscreen(value === true);
+    };
     void desktopBridge.Window.getFullscreen()
-      .then((value) => { if (!disposed) setFullscreen(value); })
-      .catch(() => undefined);
-    return () => { disposed = true; };
+      .then(apply)
+      .catch(() => apply(false));
+    const unsubscribe = desktopBridge.Window.onFullscreenChanged?.(apply);
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
   }, [isMacDesktop]);
   return isMacDesktop && !isFullscreen;
 }

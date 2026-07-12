@@ -6,6 +6,9 @@ import type {
   ConnectedOfficeFile,
   ContextUsage,
   CoworkMountedProject,
+  CoworkMessageEnvelope,
+  CoworkSessionSnapshot,
+  CoworkSessionsBridge,
   CreateScheduledTaskInput,
   DesktopBridge,
   DesktopPreferences,
@@ -23,6 +26,7 @@ import type {
   WorkspaceTrustResult,
   WorkspaceContext,
 } from "./types";
+import { buildOfficialCoworkSendMessageArgs } from "./coworkSendMessageContract";
 import { createMessageUuid } from "./messageUuid";
 
 type RemoveListener = () => void;
@@ -31,6 +35,7 @@ type RawEventSubscription = (listener: (event: unknown) => void) => RemoveListen
 type RawLocalSessionsBridge = {
   getAll?: (...args: unknown[]) => Promise<unknown[]>;
   addFolderToSession?: (id: string, folder: string) => Promise<unknown>;
+  addTrustedFolder?: (folder: string) => Promise<unknown>;
   clearSession?: (id: string) => Promise<unknown>;
   getCodeStats?: () => Promise<unknown>;
   getContextUsage?: (id: string) => Promise<unknown>;
@@ -46,6 +51,7 @@ type RawLocalSessionsBridge = {
   getGitDiff?: (idOrCwd: string, base?: string) => Promise<unknown>;
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<unknown>;
   getLocalBranches?: (idOrCwd: string) => Promise<unknown>;
+  isFolderTrusted?: (folder: string) => Promise<unknown>;
   mcpCallTool?: (serverName: string, toolName: string, input?: Record<string, unknown>) => Promise<unknown>;
   checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<unknown>;
   checkTrust?: (folder: string) => Promise<unknown>;
@@ -75,7 +81,7 @@ type RawLocalSessionsBridge = {
   getShellPtyBuffer?: (sessionId: string) => Promise<unknown>;
   getTranscriptFeedback?: (id: string) => Promise<unknown>;
   start?: (input?: Record<string, unknown>) => Promise<unknown>;
-  sendMessage?: (id: string, text: string, images?: unknown, permissionMode?: unknown, messageUuid?: unknown, options?: unknown) => Promise<unknown>;
+  sendMessage?: (...args: unknown[]) => Promise<unknown>;
   forkSession?: (id: string, messageId?: string) => Promise<unknown>;
   rewind?: (id: string, messageId?: string) => Promise<unknown>;
   setFocusedSession?: (id: string | null) => Promise<unknown>;
@@ -89,6 +95,29 @@ type RawLocalSessionsBridge = {
   onToolPermissionRequest?: RawEventSubscription;
   onOnToolPermissionRequest?: RawEventSubscription;
 };
+
+type CoworkQueryBridge = Pick<CoworkSessionsBridge,
+  | "list" | "getSessionsForScheduledTask" | "getCodeStats" | "getContextUsage"
+  | "getDefaultEffort" | "getDefaultPermissionMode" | "getDetectedProjects"
+  | "getDiffFileContent" | "getEffort" | "getGitInfo" | "getGitDiff"
+  | "getGitDiffStats" | "getLocalBranches" | "checkRemoteTrust" | "checkTrust"
+  | "isFolderTrusted" | "saveTrust" | "addTrustedFolder" | "openInEditor" | "getPermissionMode" | "getSupportedCommands"
+  | "getWorkingTreeStatus"
+>;
+type CoworkFileBridge = Pick<CoworkSessionsBridge,
+  | "clearSession" | "launchUltrareview" | "readFileAtCwd" | "readSessionFile"
+  | "readSessionImageAsDataUrl" | "pickSessionFile" | "pickFileAtCwd"
+>;
+type CoworkMutationBridge = Pick<CoworkSessionsBridge,
+  | "addFolderToSession" | "respondToToolPermission" | "setEffort" | "setMcpServers"
+  | "setModel" | "setPermissionMode" | "updateSession" | "startShellPty" | "stop"
+  | "stopShellPty" | "stopTask" | "writeShellPty" | "resizeShellPty" | "getShellPtyBuffer"
+>;
+type CoworkLifecycleBridge = Pick<CoworkSessionsBridge,
+  | "getTranscriptFeedback" | "onShellPtyEvent" | "start" | "sendMessage" | "forkSession"
+  | "rewind" | "create" | "archive" | "delete" | "setFocusedSession" | "submitFeedback"
+  | "submitTranscriptFeedback" | "onEvent"
+>;
 
 type RawScheduledTasksBridge = {
   getAllScheduledTasks?: () => Promise<unknown[]>;
@@ -108,6 +137,14 @@ type RawCoworkSpacesBridge = {
 type RawLocalSessionEnvironmentBridge = {
   get?: () => Promise<unknown>;
   save?: (env: Record<string, string>) => Promise<unknown>;
+};
+
+type RawCoworkFilePreviewBridge = {
+  hide?: () => Promise<unknown>;
+  isEnabled?: () => Promise<unknown>;
+  isVmReady?: () => Promise<unknown>;
+  parkAndCapture?: (bounds: { x: number; y: number; width: number; height: number }) => Promise<unknown>;
+  show?: (sessionId: string, encodedPath: string, bounds: { x: number; y: number; width: number; height: number }) => Promise<unknown>;
 };
 
 type RawFileSystemBridge = {
@@ -157,12 +194,16 @@ export type RawBrowserNavigationState = {
 };
 
 export type RawClaudeWebBridge = {
+  Account?: {
+    setAccountDetails?: (details: RawAccountDetails) => Promise<unknown>;
+  };
   LocalSessions?: RawLocalSessionsBridge;
   LocalAgentModeSessions?: RawLocalSessionsBridge;
   LocalSessionEnvironment?: RawLocalSessionEnvironmentBridge;
   CCDScheduledTasks?: RawScheduledTasksBridge;
   CoworkScheduledTasks?: RawScheduledTasksBridge;
   CoworkSpaces?: RawCoworkSpacesBridge;
+  CoworkFilePreview?: RawCoworkFilePreviewBridge;
   FileSystem?: RawFileSystemBridge;
   OpenDocuments?: RawOpenDocumentsBridge;
   WindowControl?: {
@@ -178,7 +219,23 @@ export type RawClaudeWebBridge = {
   WindowState?: {
     getFullscreen?: () => Promise<unknown>;
     getZoomFactor?: () => Promise<unknown>;
+    /** Preload may expose either raw event name or on* alias (expose.ts officialEventAlias). */
+    fullscreenChanged?: (listener: (...args: unknown[]) => void) => () => void;
+    onFullscreenChanged?: (listener: (...args: unknown[]) => void) => () => void;
+    zoomFactorChanged?: (listener: (...args: unknown[]) => void) => () => void;
+    onZoomFactorChanged?: (listener: (...args: unknown[]) => void) => () => void;
   };
+};
+
+export type RawAccountDetails = {
+  accountTaggedId?: string;
+  accountUuid?: string;
+  displayName?: string;
+  emailAddress?: string;
+  fullName?: string;
+  hasWiggle: boolean;
+  isLoggedOut: boolean;
+  isRaven: boolean;
 };
 
 export type RawClaudeSettingsBridge = {
@@ -219,20 +276,50 @@ export function createDesktopBridgeFromOfficialNamespaces(
 ): DesktopBridge {
   return {
     LocalSessions: createLocalSessionsBridge(web.LocalSessions, "code"),
-    LocalAgentModeSessions: createLocalSessionsBridge(web.LocalAgentModeSessions, "epitaxy"),
+    LocalAgentModeSessions: createCoworkSessionsBridge(web.LocalAgentModeSessions),
     LocalSessionEnvironment: createLocalSessionEnvironmentBridge(web.LocalSessionEnvironment),
     BrowserUse: createBrowserUseBridge(web.LocalAgentModeSessions, settings?.AppPreferences),
     CCDScheduledTasks: createScheduledTasksBridge(web.CCDScheduledTasks),
     CoworkScheduledTasks: createScheduledTasksBridge(web.CoworkScheduledTasks),
     CoworkSpaces: createCoworkSpacesBridge(web.CoworkSpaces),
+    CoworkFilePreview: createCoworkFilePreviewBridge(web.CoworkFilePreview),
     FileSystem: {
       browseFiles: async (options) => normalizeStringArray(await web.FileSystem?.browseFiles?.(options).catch(() => [])),
       listFilesInFolder: async (sessionId, folderPath) => listFilesInFolder(web.FileSystem, sessionId, folderPath),
-      openLocalFile: async (filePathOrSessionId, encodedFilePath) => web.FileSystem?.openLocalFile?.(decodeOfficialPathArg(filePathOrSessionId, encodedFilePath)),
-      readLocalFile: async (filePathOrSessionId, encodedFilePath, options) => normalizeLocalFileReadResult(await web.FileSystem?.readLocalFile?.(decodeOfficialPathArg(filePathOrSessionId, encodedFilePath), options).catch(() => null)),
-      showInFolder: async (filePathOrSessionId, encodedFilePath) => Boolean(await web.FileSystem?.showInFolder?.(decodeOfficialPathArg(filePathOrSessionId, encodedFilePath)).catch(() => false)),
+      // Official Gzt/a2e: openLocalFile(sessionId, encodeURIComponent(path), reveal?)
+      openLocalFile: async (filePathOrSessionId, encodedFilePath, reveal) => {
+        if (typeof encodedFilePath === "string" && encodedFilePath.length > 0) {
+          return web.FileSystem?.openLocalFile?.(filePathOrSessionId, encodedFilePath, reveal);
+        }
+        return web.FileSystem?.openLocalFile?.(filePathOrSessionId);
+      },
+      // Official Gzt local_session: readLocalFile(sessionId, encodeURIComponent(path)) → {content, encoding?}
+      readLocalFile: async (filePathOrSessionId, encodedFilePath, options) => {
+        if (typeof encodedFilePath === "string" && encodedFilePath.length > 0) {
+          return normalizeLocalFileReadResult(
+            await web.FileSystem?.readLocalFile?.(filePathOrSessionId, encodedFilePath, options).catch(() => null),
+          );
+        }
+        return normalizeLocalFileReadResult(
+          await web.FileSystem?.readLocalFile?.(filePathOrSessionId, options).catch(() => null),
+        );
+      },
+      showInFolder: async (filePathOrSessionId, encodedFilePath) => {
+        if (typeof encodedFilePath === "string" && encodedFilePath.length > 0) {
+          return Boolean(await web.FileSystem?.showInFolder?.(filePathOrSessionId, encodedFilePath).catch(() => false));
+        }
+        return Boolean(await web.FileSystem?.showInFolder?.(filePathOrSessionId).catch(() => false));
+      },
       writeLocalFile: async (filePathOrSessionId, encodedFilePathOrData, dataOrOptions, options) => {
         const writeArgs = normalizeWriteLocalFileArgs(filePathOrSessionId, encodedFilePathOrData, dataOrOptions, options);
+        if (writeArgs.officialSignature) {
+          return web.FileSystem?.writeLocalFile?.(
+            writeArgs.sessionId,
+            writeArgs.encodedFilePath,
+            writeArgs.data,
+            writeArgs.options,
+          );
+        }
         return web.FileSystem?.writeLocalFile?.(writeArgs.filePath, writeArgs.data, writeArgs.options);
       },
     },
@@ -268,10 +355,33 @@ export function createDesktopBridgeFromOfficialNamespaces(
       close: async () => {
         await web.WindowControl?.close?.();
       },
-      getFullscreen: async () => Boolean(await web.WindowState?.getFullscreen?.()),
-      getZoomFactor: async () => Number(await web.WindowState?.getZoomFactor?.()) || 1,
+      // Strict true-check: Boolean(object) would wrongly kill traffic-light spacer (qWt).
+      getFullscreen: async () => asStrictBoolean(await web.WindowState?.getFullscreen?.()),
+      getZoomFactor: async () => {
+        const zoom = Number(await web.WindowState?.getZoomFactor?.());
+        return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+      },
+      onFullscreenChanged: (listener) => {
+        const subscribe = web.WindowState?.onFullscreenChanged ?? web.WindowState?.fullscreenChanged;
+        if (!subscribe) return () => undefined;
+        return subscribe((value) => {
+          listener(asStrictBoolean(value));
+        });
+      },
+      onZoomFactorChanged: (listener) => {
+        const subscribe = web.WindowState?.onZoomFactorChanged ?? web.WindowState?.zoomFactorChanged;
+        if (!subscribe) return () => undefined;
+        return subscribe((value) => {
+          const zoom = Number(value);
+          listener(Number.isFinite(zoom) && zoom > 0 ? zoom : 1);
+        });
+      },
     },
   };
+}
+
+function asStrictBoolean(value: unknown): boolean {
+  return value === true;
 }
 
 function createLocalSessionEnvironmentBridge(raw: RawLocalSessionEnvironmentBridge | undefined): DesktopBridge["LocalSessionEnvironment"] {
@@ -380,6 +490,8 @@ function normalizeLocalFileReadResult(value: unknown): LocalFileReadResult {
   const raw = asRecord(value);
   return {
     content: stringValue(raw.content),
+    encoding: stringValue(raw.encoding) as "base64" | "utf8" | undefined,
+    mimeType: stringValue(raw.mimeType),
     name: stringValue(raw.name),
     path: stringValue(raw.path),
     size: numberValue(raw.size),
@@ -387,17 +499,26 @@ function normalizeLocalFileReadResult(value: unknown): LocalFileReadResult {
   };
 }
 
-function normalizeWriteLocalFileArgs(filePathOrSessionId: string, encodedFilePathOrData: string, dataOrOptions?: string | Uint8Array | { encoding?: string }, options?: { encoding?: string }) {
+function normalizeWriteLocalFileArgs(
+  filePathOrSessionId: string,
+  encodedFilePathOrData: string,
+  dataOrOptions?: string | Uint8Array | { encoding?: string },
+  options?: { encoding?: string },
+) {
   if (typeof dataOrOptions === "string" || dataOrOptions instanceof Uint8Array) {
     return {
       data: dataOrOptions,
+      encodedFilePath: encodedFilePathOrData,
       filePath: decodeOfficialPathArg(filePathOrSessionId, encodedFilePathOrData),
+      officialSignature: true as const,
       options,
+      sessionId: filePathOrSessionId,
     };
   }
   return {
     data: encodedFilePathOrData,
     filePath: filePathOrSessionId,
+    officialSignature: false as const,
     options: dataOrOptions,
   };
 }
@@ -625,6 +746,181 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
   };
 }
 
+function createCoworkSessionsBridge(raw: RawLocalSessionsBridge | undefined): CoworkSessionsBridge {
+  const rawAccess = createCoworkRawAccess(raw);
+  return {
+    ...createCoworkQueryBridge(raw),
+    ...createCoworkFileBridge(raw),
+    ...createCoworkMutationBridge(raw),
+    ...createCoworkLifecycleBridge(raw),
+    getSession: rawAccess.getRawSession,
+    ...rawAccess,
+  };
+}
+
+function createCoworkRawAccess(raw: RawLocalSessionsBridge | undefined) {
+  return {
+    getRawSession: async (id: string) => {
+      const item = await raw?.getSession?.(id, { skipReplay: true });
+      return item ? normalizeCoworkSessionSnapshot(item) : null;
+    },
+    getTranscript: async (id: string) => normalizeCoworkMessageEnvelopes(
+      await raw?.getTranscript?.(id).catch(() => []),
+    ),
+    getRawTranscript: async (id: string) => rawArray(await raw?.getTranscript?.(id).catch(() => [])),
+  };
+}
+
+function createCoworkQueryBridge(raw: RawLocalSessionsBridge | undefined): CoworkQueryBridge {
+  return {
+    list: async () => normalizeSessionList(await raw?.getAll?.(), "epitaxy"),
+    getSessionsForScheduledTask: async (taskId) => normalizeSessionList(await raw?.getSessionsForScheduledTask?.(taskId), "epitaxy"),
+    getCodeStats: async () => normalizeCodeStats(await raw?.getCodeStats?.().catch(() => null)),
+    getContextUsage: async (id) => normalizeOfficialContextUsageResult(await raw?.getContextUsage?.(id).catch(() => null)),
+    getDefaultEffort: async () => normalizeEffort(await raw?.getDefaultEffort?.().catch(() => null)),
+    getDefaultPermissionMode: async (cwd) => stringValue(await raw?.getDefaultPermissionMode?.(cwd).catch(() => null)) ?? null,
+    getDetectedProjects: async () => normalizeDetectedProjectList(await raw?.getDetectedProjects?.().catch(() => []), "epitaxy"),
+    getDiffFileContent: async (idOrCwd, refOrFilePath, filePath, previousFilePath) => normalizeGitCommandResult(await raw?.getDiffFileContent?.(idOrCwd, refOrFilePath, filePath, previousFilePath)),
+    getEffort: async (id) => String(await raw?.getEffort?.(id).catch(() => "medium") ?? "medium"),
+    getGitInfo: async (idOrCwd) => raw?.getGitInfo?.(idOrCwd),
+    getGitDiff: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiff?.(idOrCwd, base)),
+    getGitDiffStats: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiffStats?.(idOrCwd, base)),
+    getLocalBranches: async (idOrCwd) => normalizeLocalBranches(await raw?.getLocalBranches?.(idOrCwd)),
+    checkRemoteTrust: async (sshConfig, folder) => normalizeTrustResult(await raw?.checkRemoteTrust?.(sshConfig, folder)),
+    checkTrust: async (folder) => normalizeTrustResult(await raw?.checkTrust?.(folder)),
+    isFolderTrusted: async (folder) => (await raw?.isFolderTrusted?.(folder)) === true,
+    saveTrust: async (folder) => raw?.saveTrust?.(folder),
+    addTrustedFolder: async (folder) => raw?.addTrustedFolder?.(folder),
+    openInEditor: async (target, editor, line, column) => raw?.openInEditor?.(target, editor, line, column),
+    getPermissionMode: async (id) => String(await raw?.getPermissionMode?.(id).catch(() => "default") ?? "default"),
+    getSupportedCommands: async (request) => normalizeSupportedCommands(await raw?.getSupportedCommands?.(request).catch(() => [])),
+    getWorkingTreeStatus: async (idOrCwd) => normalizeGitCommandResult(await raw?.getWorkingTreeStatus?.(idOrCwd)),
+  };
+}
+
+function createCoworkFileBridge(raw: RawLocalSessionsBridge | undefined): CoworkFileBridge {
+  return {
+    clearSession: async (id) => raw?.clearSession?.(id),
+    launchUltrareview: async (idOrCwd, options) => raw?.launchUltrareview?.(idOrCwd, options),
+    // LocalAgentModeSessions does not expose readFileAtCwd; return null so callers
+    // can fall through instead of treating a missing method as {ok:false}.
+    readFileAtCwd: async (idOrCwd, filePath) => {
+      if (!raw?.readFileAtCwd) return null as unknown as GitCommandResult;
+      return normalizeGitCommandResult(await raw.readFileAtCwd(idOrCwd, filePath));
+    },
+    readSessionFile: async (id, filePath) => {
+      if (!raw?.readSessionFile) return null;
+      return (await raw.readSessionFile(id, filePath) ?? null) as string | null | Record<string, unknown>;
+    },
+    readSessionImageAsDataUrl: async (id, filePath) => {
+      if (!raw?.readSessionImageAsDataUrl) return null;
+      const result = await raw.readSessionImageAsDataUrl(id, filePath);
+      return typeof result === "string" ? result : null;
+    },
+    pickSessionFile: async (id) => {
+      const result = await raw?.pickSessionFile?.(id);
+      return typeof result === "string" ? result : null;
+    },
+    pickFileAtCwd: async (idOrCwd) => {
+      const result = await raw?.pickFileAtCwd?.(idOrCwd);
+      return typeof result === "string" ? result : null;
+    },
+  };
+}
+
+function createCoworkMutationBridge(raw: RawLocalSessionsBridge | undefined): CoworkMutationBridge {
+  return {
+    addFolderToSession: async (id, folder) => normalizeCoworkAddFolderResult(await raw?.addFolderToSession?.(id, folder)),
+    respondToToolPermission: async (requestId, decision, updatedInput) => raw?.respondToToolPermission?.(requestId, decision, updatedInput),
+    setEffort: async (id, effort) => normalizeCoworkResult(await raw?.setEffort?.(id, effort)),
+    setMcpServers: async (id, mcpServers) => normalizeCoworkResult(await raw?.setMcpServers?.(id, mcpServers)),
+    setModel: async (id, model) => normalizeCoworkResult(await raw?.setModel?.(id, model)),
+    setPermissionMode: async (id, mode) => normalizeCoworkResult(await raw?.setPermissionMode?.(id, mode)),
+    updateSession: async (id, patch) => {
+      const { isPinned, ...rest } = patch;
+      const officialPatch = isPinned === undefined ? rest : { ...rest, isStarred: isPinned };
+      return normalizeCoworkResult(await raw?.updateSession?.(id, officialPatch));
+    },
+    startShellPty: async (sessionId, cols, rows) => normalizeShellPtyStartResult(await raw?.startShellPty?.(sessionId, cols, rows), await raw?.getShellPtyBuffer?.(sessionId).catch(() => "")),
+    stop: async (id) => raw?.stop?.(id),
+    stopShellPty: async (sessionId) => { await raw?.stopShellPty?.(sessionId); },
+    stopTask: async (sessionId, taskId) => { await raw?.stopTask?.(sessionId, taskId); },
+    writeShellPty: async (sessionId, data) => { await raw?.writeShellPty?.(sessionId, data); },
+    resizeShellPty: async (sessionId, cols, rows) => { await raw?.resizeShellPty?.(sessionId, cols, rows); },
+    getShellPtyBuffer: async (sessionId) => String(await raw?.getShellPtyBuffer?.(sessionId).catch(() => "") ?? ""),
+  };
+}
+
+function createCoworkLifecycleBridge(raw: RawLocalSessionsBridge | undefined): CoworkLifecycleBridge {
+  return {
+    getTranscriptFeedback: async (id) => rawArray(await raw?.getTranscriptFeedback?.(id).catch(() => [])),
+    onShellPtyEvent: (listener) => {
+      const subscribe = raw?.onEvent ?? raw?.onOnEvent;
+      return subscribe?.((event) => {
+        const normalized = normalizeShellPtyEvent(event);
+        if (normalized) listener(normalized);
+      }) ?? (() => {});
+    },
+    start: async (input) => normalizeSession(await raw?.start?.(toStartPayload(input, "epitaxy")), "epitaxy", false),
+    sendMessage: async (id, text, input) => {
+      const messageUuid = input?.messageUuid ?? createMessageUuid();
+      await raw?.sendMessage?.(...buildOfficialCoworkSendMessageArgs(id, text, input, messageUuid));
+      return null;
+    },
+    forkSession: async (id, messageId) => normalizeCoworkResult(await raw?.forkSession?.(id, messageId)),
+    rewind: async (id, messageId) => {
+      const prompt = await raw?.rewind?.(id, messageId);
+      return typeof prompt === "string" ? prompt : null;
+    },
+    create: async (kind) => normalizeSession(await raw?.start?.({ kind, title: "New session" }), "epitaxy", false),
+    archive: async (id) => { await raw?.archive?.(id); },
+    delete: async (id) => { await raw?.delete?.(id); },
+    setFocusedSession: async (id) => { await raw?.setFocusedSession?.(id); },
+    submitFeedback: async (input) => raw?.submitFeedback?.(input),
+    submitTranscriptFeedback: async (sessionIdOrInput, input) => raw?.submitTranscriptFeedback?.(sessionIdOrInput, input),
+    onEvent: (listener) => {
+      const subscribe = raw?.onEvent ?? raw?.onOnEvent;
+      return subscribe?.(listener) ?? (() => {});
+    },
+  };
+}
+
+function normalizeCoworkResult(item: unknown) {
+  return item ? normalizeSession(item, "epitaxy", false) : null;
+}
+
+function normalizeCoworkAddFolderResult(value: unknown) {
+  const result = asRecord(value);
+  if (result.ok === true && typeof result.folderPath === "string") {
+    return { folderPath: result.folderPath, ok: true } as const;
+  }
+  return {
+    error: typeof result.error === "string" ? result.error : "Failed to add folder",
+    ok: false,
+  } as const;
+}
+
+function createCoworkFilePreviewBridge(raw: RawCoworkFilePreviewBridge | undefined): DesktopBridge["CoworkFilePreview"] {
+  return {
+    isEnabled: async () => (await raw?.isEnabled?.().catch(() => false)) === true,
+    isVmReady: async () => (await raw?.isVmReady?.().catch(() => false)) === true,
+    show: async (sessionId, encodedPath, bounds) => {
+      const result = await raw?.show?.(sessionId, encodedPath, bounds);
+      if (typeof result === "boolean") return result;
+      const record = asRecord(result);
+      return { ok: record.ok === true, painted: record.painted === true, declineReason: record.declineReason };
+    },
+    hide: async () => {
+      const result = await raw?.hide?.();
+      return typeof result === "boolean" ? result : undefined;
+    },
+    parkAndCapture: async (bounds) => {
+      const result = await raw?.parkAndCapture?.(bounds).catch(() => null);
+      return typeof result === "string" ? result : null;
+    },
+  };
+}
+
 function createScheduledTasksBridge(raw: RawScheduledTasksBridge | undefined): DesktopBridge["CCDScheduledTasks"] {
   return {
     list: async () => normalizeScheduledTasks(await raw?.getAllScheduledTasks?.()),
@@ -699,7 +995,11 @@ function normalizeDetectedProject(item: unknown, targetKind: SessionSummary["kin
   };
 }
 
-function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): SessionSummary {
+function normalizeSession(
+  item: unknown,
+  targetKind: SessionSummary["kind"],
+  includeMessages = true,
+): SessionSummary {
   const raw = asRecord(item);
   const original = asRecord(raw._originalSession);
   const id = stringValue(raw.id) ?? stringValue(raw.sessionId) ?? stringValue(original.sessionId) ?? `session_${Date.now()}`;
@@ -724,6 +1024,9 @@ function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): Se
     ?? (kind === "code" ? "General coding session" : "New session");
 
   return {
+    bufferedMessages: includeMessages ? normalizeMessages(raw.bufferedMessages ?? original.bufferedMessages) : undefined,
+    chromePermissionMode: stringValue(raw.chromePermissionMode) ?? stringValue(original.chromePermissionMode),
+    cuSelectedDisplayId: numberOrUndefined(raw.cuSelectedDisplayId ?? original.cuSelectedDisplayId),
     id,
     title,
     createdAtMs,
@@ -734,6 +1037,13 @@ function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): Se
     cwd,
     effort: stringValue(raw.effort) ?? stringValue(original.effort),
     folders: Array.isArray(raw.folders) ? raw.folders.filter((folder): folder is string => typeof folder === "string") : undefined,
+    folderExists: booleanValue(raw.folderExists) ?? booleanValue(original.folderExists),
+    homePath: stringValue(raw.homePath) ?? stringValue(original.homePath),
+    hostLoopMode: booleanValue(raw.hostLoopMode) ?? booleanValue(original.hostLoopMode),
+    initialMessage: stringValue(raw.initialMessage) ?? stringValue(original.initialMessage),
+    initializationStatus: raw.initializationStatus ?? original.initializationStatus,
+    mcqAnswers: raw.mcqAnswers ?? original.mcqAnswers,
+    userSelectedFolders: normalizeStringArray(raw.userSelectedFolders ?? original.userSelectedFolders),
     mountedProjects: normalizeCoworkMountedProjects(raw.mountedProjects ?? original.mountedProjects),
     model: stringValue(raw.model) ?? stringValue(original.model),
     permissionMode: stringValue(raw.permissionMode) ?? stringValue(original.permissionMode),
@@ -747,6 +1057,7 @@ function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): Se
     showRetryButton: booleanValue(raw.showRetryButton) ?? booleanValue(original.showRetryButton),
     statusMessage: stringValue(raw.statusMessage) ?? stringValue(raw.sessionStatusMessage) ?? stringValue(original.statusMessage) ?? stringValue(original.sessionStatusMessage),
     postTurnSummary: normalizePostTurnSummary(raw.postTurnSummary ?? raw.post_turn_summary ?? original.postTurnSummary ?? original.post_turn_summary),
+    promptSuggestion: stringValue(raw.promptSuggestion) ?? stringValue(original.promptSuggestion),
     isPinned: Boolean(raw.isStarred),
     isArchived: Boolean(raw.archived ?? raw.isArchived),
     isAgentCompleted: booleanValue(raw.isAgentCompleted) ?? booleanValue(original.isAgentCompleted),
@@ -755,9 +1066,49 @@ function normalizeSession(item: unknown, targetKind: SessionSummary["kind"]): Se
     isRunning: isRunning(raw),
     isUnread: Boolean(raw.isUnread),
     hasWorktree: hasWorktree(raw, original),
-    messages: normalizeMessages(raw.messages),
+    messages: includeMessages ? normalizeMessages(raw.messages) : undefined,
     pendingToolPermissions: normalizePendingToolPermissions(raw.pendingToolPermissions, id),
   };
+}
+
+function normalizeCoworkSessionSnapshot(item: unknown): CoworkSessionSnapshot {
+  const raw = asRecord(item);
+  const original = asRecord(raw._originalSession);
+  const normalized = normalizeSession(item, "epitaxy", false);
+  const { bufferedMessages: _bufferedMessages, messages: _messages, ...metadata } = normalized;
+  return {
+    ...metadata,
+    bufferedMessages: normalizeCoworkMessageEnvelopes(raw.bufferedMessages ?? original.bufferedMessages),
+    messages: normalizeCoworkMessageEnvelopes(raw.messages ?? original.messages),
+    rawBufferedMessages: rawArray(raw.bufferedMessages ?? original.bufferedMessages),
+    rawMessages: rawArray(raw.messages ?? original.messages),
+    rawSession: item,
+  };
+}
+
+function normalizeCoworkMessageEnvelopes(value: unknown): CoworkMessageEnvelope[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((message, index) => {
+    const raw = asRecord(message);
+    const nestedMessage = asRecord(raw.message);
+    const author = stringValue(raw.author);
+    const rawRole = stringValue(raw.role) ?? stringValue(nestedMessage.role);
+    const rawType = stringValue(raw.type);
+    const role = rawRole === "assistant" || rawRole === "system"
+      ? rawRole
+      : author === "assistant" || rawType === "assistant" || rawType === "result"
+        ? "assistant"
+        : author === "system" || rawType === "system" || rawType === "error"
+          ? "system"
+          : "user";
+    return {
+      createdAt: stringValue(raw.createdAt) ?? stringValue(raw.timestamp) ?? new Date().toISOString(),
+      id: stringValue(raw.id) ?? stringValue(raw.uuid) ?? stringValue(raw.message_id) ?? `cowork_msg_${index}`,
+      raw: message,
+      role,
+      text: messageText(raw),
+    };
+  });
 }
 
 function normalizeCoworkSpaces(items: unknown): CoworkSpaceSummary[] {
@@ -940,7 +1291,7 @@ function normalizePendingToolPermissions(value: unknown, fallbackSessionId: stri
         sessionId: stringValue(raw.sessionId) ?? stringValue(raw.session_id) ?? fallbackSessionId,
         suggestions: raw.suggestions,
         toolName: stringValue(raw.toolName) ?? stringValue(raw.tool_name) ?? "Tool",
-        toolUseId: stringValue(raw.toolUseId) ?? stringValue(raw.tool_use_id),
+        toolUseId: stringValue(raw.toolUseId) ?? stringValue(raw.tool_use_id) ?? requestId,
       };
     })
     .filter((request): request is PendingToolPermission => Boolean(request));
@@ -1291,6 +1642,10 @@ function normalizeStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
 }
 
+function rawArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function normalizeLocalFileEntries(value: unknown, parentPath: string): LocalFileEntry[] {
   const entries: LocalFileEntry[] = [];
   for (const item of Array.isArray(value) ? value : []) {
@@ -1328,6 +1683,10 @@ function booleanValue(value: unknown): boolean | undefined {
 
 function numberValue(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function numberOrUndefined(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function numberRecord(value: unknown): Record<string, number> {

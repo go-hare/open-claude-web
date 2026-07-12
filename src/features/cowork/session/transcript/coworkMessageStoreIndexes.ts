@@ -17,7 +17,7 @@ export function collectToolResults(messages: Record<string, unknown>[]) {
 export function collectAnswers(messages: Record<string, unknown>[]) {
   const output = new Map<string, unknown>();
   messages.filter((message) => message.type === "user").forEach((message) => {
-    const answers = asRecord(message.tool_use_result).answers;
+    const answers = asRecord(message.toolUseResult ?? message.tool_use_result).answers;
     const result = messageContent(message).find((block) => block.type === "tool_result" && block.tool_use_id);
     if (answers && result?.tool_use_id) output.set(result.tool_use_id, answers);
   });

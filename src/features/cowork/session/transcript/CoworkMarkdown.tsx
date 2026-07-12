@@ -1,157 +1,300 @@
-import { createElement, useMemo, type ReactNode } from "react";
+import { Fragment, createElement, useMemo, type MouseEvent, type ReactNode } from "react";
+import type { Link, Parent, PhrasingContent, Root, RootContent } from "mdast";
+import { remark } from "remark";
 
-type MarkdownBlock =
-  | { kind: "blockquote"; key: string; lines: string[] }
-  | { kind: "code"; key: string; language?: string; text: string }
-  | { kind: "heading"; key: string; level: 1 | 2 | 3 | 4 | 5 | 6; text: string }
-  | { kind: "hr"; key: string }
-  | { kind: "list"; items: string[]; key: string; ordered: boolean }
-  | { kind: "paragraph"; key: string; lines: string[] }
-  | { headers: string[]; kind: "table"; key: string; rows: string[][] };
+export type CoworkMarkdownCallbacks = {
+  blockCitations?: readonly unknown[];
+  messageUuid?: string;
+  onLinkClick?: (event: MouseEvent<HTMLAnchorElement>, url: string) => void;
+  onOpenArtifact?: (artifact: unknown) => void;
+};
+
+export type CoworkMarkdownProfile = "assistant" | "human";
+
+type CoworkMarkdownTreeProps = CoworkMarkdownCallbacks & {
+  headingLevelOffset?: number;
+  profile: CoworkMarkdownProfile;
+  root: Root;
+  source: string;
+};
+
+type RenderContext = CoworkMarkdownCallbacks & {
+  definitions: Map<string, string>;
+  headingLevelOffset: number;
+  profile: CoworkMarkdownProfile;
+  source: string;
+};
+
+const assistantHeadingClasses = {
+  1: "text-text-100 mt-3 -mb-1 text-[1.375rem] font-bold",
+  2: "text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold",
+  3: "text-text-100 mt-2 -mb-1 text-base font-bold",
+  4: "text-text-100 mt-2 -mb-1 text-base font-bold",
+  5: "text-text-100 mt-2 -mb-1 text-sm font-bold",
+  6: "text-text-100 mt-2 -mb-1 text-sm font-semibold",
+} as const;
+
+export function parseCoworkMarkdown(source: string): Root {
+  return remark().parse(source);
+}
 
 export function CoworkMarkdown({ isStreaming = false, text }: { isStreaming?: boolean; text: string }) {
-  const chunks = useMemo(() => splitStreamingMarkdown(text, isStreaming), [isStreaming, text]);
-  const committed = useMemo(() => parseMarkdownBlocks(chunks.committed), [chunks.committed]);
-  const frontier = useMemo(() => parseMarkdownBlocks(chunks.frontier), [chunks.frontier]);
-  return <>{committed.map((block) => renderMarkdownBlock(block, "committed"))}{frontier.map((block) => renderMarkdownBlock(block, "frontier"))}</>;
+  const root = useMemo(() => parseCoworkMarkdown(text), [text]);
+  const parts = isStreaming ? partitionCoworkMarkdown(root, text) : { committed: [root], frontier: null };
+  return <>{parts.committed.map((chunk, index) => <CoworkMarkdownTree key={index} profile="assistant" root={chunk} source={text} />)}{parts.frontier ? <CoworkMarkdownTree profile="assistant" root={parts.frontier} source={text} /> : null}</>;
 }
 
 export function renderCoworkInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  const pattern = /(`[^`]+`|\*\*[^*]+?\*\*|__[^_]+?__|\*[^*\s][^*]*?\*|_[^_\s][^_]*?_|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g;
-  let lastIndex = 0;
-  for (const match of text.matchAll(pattern)) {
-    if (match.index === undefined) continue;
-    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
-    nodes.push(renderInlineToken(match[0], `${keyPrefix}-${nodes.length}`));
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
-  return nodes;
+  return [<CoworkMarkdown key={keyPrefix} text={text} />];
 }
-
-function splitStreamingMarkdown(text: string, streaming: boolean) {
-  if (!streaming) return { committed: text, frontier: "" };
-  const normalized = text.replace(/\r\n?/g, "\n");
-  const boundary = lastStableBoundary(normalized);
-  if (boundary <= 0) return { committed: "", frontier: normalized };
-  return { committed: normalized.slice(0, boundary).trimEnd(), frontier: normalized.slice(boundary).replace(/^\n+/, "") };
-}
-
-function lastStableBoundary(text: string) {
-  let inFence = false;
-  let lastBoundary = -1;
-  let offset = 0;
-  for (const line of text.split("\n")) {
-    if (/^```/.test(line)) inFence = !inFence;
-    offset += line.length + 1;
-    if (!inFence && line.trim() === "") lastBoundary = offset;
-  }
-  return lastBoundary;
-}
-
-function parseMarkdownBlocks(source: string): MarkdownBlock[] {
-  const lines = source.replace(/\r\n?/g, "\n").split("\n");
-  const blocks: MarkdownBlock[] = [];
-  let paragraph: string[] = [];
-  const flush = () => {
-    if (paragraph.length) blocks.push({ kind: "paragraph", key: `p-${blocks.length}`, lines: paragraph });
-    paragraph = [];
+export function CoworkMarkdownTree({ headingLevelOffset = 0, profile, root, source, ...callbacks }: CoworkMarkdownTreeProps) {
+  const context: RenderContext = {
+    ...callbacks,
+    definitions: collectDefinitions(root),
+    headingLevelOffset,
+    profile,
+    source,
   };
-  for (let index = 0; index < lines.length;) {
-    const line = lines[index];
-    if (!line.trim()) { flush(); index += 1; continue; }
-    const fenced = line.match(/^```(.*)$/);
-    if (fenced) { flush(); index = pushCodeBlock(lines, index, fenced[1], blocks); continue; }
-    const heading = line.match(/^(#{1,6})\s+(.+)$/);
-    if (heading) { flush(); blocks.push({ kind: "heading", key: `h-${blocks.length}`, level: heading[1].length as 1 | 2 | 3 | 4 | 5 | 6, text: heading[2].trim() }); index += 1; continue; }
-    if (/^ {0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line)) { flush(); blocks.push({ kind: "hr", key: `hr-${blocks.length}` }); index += 1; continue; }
-    if (isTableStart(lines, index)) { flush(); index = pushTableBlock(lines, index, blocks); continue; }
-    const list = parseListItem(line);
-    if (list) { flush(); index = pushListBlock(lines, index, list.ordered, blocks); continue; }
-    if (/^>\s?/.test(line)) { flush(); index = pushQuoteBlock(lines, index, blocks); continue; }
-    paragraph.push(line);
-    index += 1;
+  return <>{root.children.map((node, index) => renderBlock(node, `${node.type}-${index}`, context))}</>;
+}
+
+export function partitionCoworkMarkdown(root: Root, source: string) {
+  if (root.children.length === 0) return { committed: [] as Root[], frontier: null as Root | null };
+  const last = root.children[root.children.length - 1];
+  const endOffset = last.position?.end.offset ?? source.length;
+  const trailing = source.slice(endOffset);
+  const lastIsCommitted = hasBlankTerminator(trailing);
+  const committedNodes = lastIsCommitted ? root.children : root.children.slice(0, -1);
+  return {
+    committed: committedNodes.map((node) => rootFromChildren([node])),
+    frontier: lastIsCommitted ? null : rootFromChildren([last]),
+  };
+}
+
+export function hasCoworkMarkdownNode(root: Root, types: ReadonlySet<string>) {
+  const pending: RootContent[] = [...root.children];
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (!node) continue;
+    if (types.has(node.type)) return true;
+    if ("children" in node && Array.isArray(node.children)) pending.push(...node.children as RootContent[]);
   }
-  flush();
-  return blocks;
+  return false;
 }
 
-function pushCodeBlock(lines: string[], start: number, language: string, blocks: MarkdownBlock[]) {
-  const code: string[] = [];
-  let index = start + 1;
-  while (index < lines.length && !lines[index].startsWith("```")) code.push(lines[index++]);
-  blocks.push({ kind: "code", key: `code-${blocks.length}`, language: language.trim() || undefined, text: code.join("\n") });
-  return index < lines.length ? index + 1 : index;
-}
-
-function pushListBlock(lines: string[], start: number, ordered: boolean, blocks: MarkdownBlock[]) {
-  const items: string[] = [];
-  let index = start;
-  while (index < lines.length) {
-    if (!lines[index].trim() && parseListItem(lines[index + 1] ?? "")?.ordered === ordered) { index += 1; continue; }
-    const item = parseListItem(lines[index]);
-    if (!item || item.ordered !== ordered) break;
-    items.push(item.text);
-    index += 1;
+function renderBlock(node: RootContent, key: string, context: RenderContext): ReactNode {
+  if (context.profile === "human" && !humanBlockAllowed(node.type)) {
+    return <p key={key}>{nodeSource(node, context.source)}</p>;
   }
-  blocks.push({ kind: "list", items, key: `list-${blocks.length}`, ordered });
-  return index;
-}
-
-function pushTableBlock(lines: string[], start: number, blocks: MarkdownBlock[]) {
-  const headers = splitTableRow(lines[start]);
-  const rows: string[][] = [];
-  let index = start + 2;
-  while (index < lines.length && lines[index].includes("|") && lines[index].trim()) rows.push(splitTableRow(lines[index++]));
-  blocks.push({ headers, kind: "table", key: `table-${blocks.length}`, rows });
-  return index;
-}
-
-function pushQuoteBlock(lines: string[], start: number, blocks: MarkdownBlock[]) {
-  const quoteLines: string[] = [];
-  let index = start;
-  while (index < lines.length) {
-    const quote = lines[index].match(/^>\s?(.*)$/);
-    if (!quote) break;
-    quoteLines.push(quote[1]);
-    index += 1;
+  if (node.type === "paragraph") {
+    const special = context.profile === "assistant" ? renderSpecialParagraph(node, key, context) : null;
+    return special ?? <p className={context.profile === "assistant" ? "font-claude-response-body break-words whitespace-normal leading-[1.7]" : undefined} key={key}>{renderInlineChildren(node, key, context)}</p>;
   }
-  blocks.push({ kind: "blockquote", key: `quote-${blocks.length}`, lines: quoteLines });
-  return index;
+  if (node.type === "heading") {
+    const level = Math.min(node.depth, 6) as keyof typeof assistantHeadingClasses;
+    const tag = `h${Math.min(level + context.headingLevelOffset, 6)}`;
+    return createElement(tag, { className: assistantHeadingClasses[level], key }, renderInlineChildren(node, key, context));
+  }
+  if (node.type === "blockquote") {
+    return <blockquote className={context.profile === "assistant" ? "ml-2 border-l-4 border-border-300/10 pl-4 text-text-300" : undefined} key={key}>{node.children.map((child, index) => renderBlock(child, `${key}-${index}`, context))}</blockquote>;
+  }
+  if (node.type === "list") {
+    const tag = node.ordered ? "ol" : "ul";
+    const className = context.profile === "assistant" ? classes("[li_&]:mb-0 [li_&]:mt-1 [li_&]:gap-1 [&:not(:last-child)_ul]:pb-1 [&:not(:last-child)_ol]:pb-1 flex flex-col gap-1 pl-8 mb-3", node.ordered ? "list-decimal" : "list-disc") : undefined;
+    return createElement(tag, { className, key, start: node.ordered ? node.start ?? undefined : undefined }, node.children.map((item, index) => <li className={context.profile === "assistant" ? "whitespace-normal break-words pl-2" : undefined} key={index}>{item.children.map((child, childIndex) => renderListChild(child, `${key}-${index}-${childIndex}`, context))}</li>));
+  }
+  if (node.type === "code") {
+    return <pre className={node.lang ? `language-${node.lang}` : undefined} key={key}><code>{node.value}</code></pre>;
+  }
+  if (node.type === "thematicBreak") return <hr className="border-border-200 border-t-0.5 my-3 mx-1.5" key={key} />;
+  if (node.type === "html") return renderHtml(node.value, key, context);
+  return null;
 }
 
-function renderMarkdownBlock(block: MarkdownBlock, scope: string) {
-  const key = `${scope}-${block.key}`;
-  if (block.kind === "heading") return createElement(`h${block.level}`, { key }, renderCoworkInlineMarkdown(block.text, key));
-  if (block.kind === "code") return <pre key={key}><code className={block.language ? `language-${block.language}` : undefined}>{block.text}</code></pre>;
-  if (block.kind === "list") return createElement(block.ordered ? "ol" : "ul", { key }, block.items.map((item, index) => <li key={index}>{renderCoworkInlineMarkdown(item, `${key}-${index}`)}</li>));
-  if (block.kind === "blockquote") return <blockquote key={key}>{block.lines.map((line, index) => <p key={index}>{renderCoworkInlineMarkdown(line, `${key}-${index}`)}</p>)}</blockquote>;
-  if (block.kind === "table") return <MarkdownTable block={block} key={key} keyPrefix={key} />;
-  if (block.kind === "hr") return <hr key={key} />;
-  return <p key={key}>{renderCoworkInlineMarkdown(block.lines.join("\n"), key)}</p>;
+function renderListChild(node: RootContent, key: string, context: RenderContext) {
+  if (node.type === "paragraph") return <Fragment key={key}>{renderInlineChildren(node, key, context)}</Fragment>;
+  return renderBlock(node, key, context);
 }
 
-function MarkdownTable({ block, keyPrefix }: { block: Extract<MarkdownBlock, { kind: "table" }>; keyPrefix: string }) {
-  return <table><thead><tr>{block.headers.map((cell, index) => <th key={index}>{renderCoworkInlineMarkdown(cell, `${keyPrefix}-h${index}`)}</th>)}</tr></thead><tbody>{block.rows.map((row, rowIndex) => <tr key={rowIndex}>{block.headers.map((_header, cellIndex) => <td key={cellIndex}>{renderCoworkInlineMarkdown(row[cellIndex] ?? "", `${keyPrefix}-${rowIndex}-${cellIndex}`)}</td>)}</tr>)}</tbody></table>;
+function renderInlineChildren(node: Parent, key: string, context: RenderContext) {
+  return node.children.map((child, index) => renderInline(child as PhrasingContent, `${key}-${index}`, context));
 }
 
-function renderInlineToken(token: string, key: string) {
-  if (token.startsWith("`")) return <code key={key}>{token.slice(1, -1)}</code>;
-  if (token.startsWith("**") || token.startsWith("__")) return <strong key={key}>{renderCoworkInlineMarkdown(token.slice(2, -2), key)}</strong>;
-  if (token.startsWith("*") || token.startsWith("_")) return <em key={key}>{renderCoworkInlineMarkdown(token.slice(1, -1), key)}</em>;
-  const link = token.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/);
-  return link ? <a href={link[2]} key={key} rel="noreferrer" target="_blank">{link[1]}</a> : token;
+function renderInline(node: PhrasingContent, key: string, context: RenderContext): ReactNode {
+  if (node.type === "text") return renderExtendedText(node.value, key, context.profile === "assistant");
+  if (node.type === "inlineCode") return <code key={key}>{renderHumanColorSwatch(node.value, context.profile)}{node.value}</code>;
+  if (node.type === "strong") return context.profile === "assistant" ? <strong key={key}>{renderInlineChildren(node, key, context)}</strong> : nodeSource(node, context.source);
+  if (node.type === "emphasis") return context.profile === "assistant" ? <em key={key}>{renderInlineChildren(node, key, context)}</em> : nodeSource(node, context.source);
+  if (node.type === "delete") return <del key={key}>{renderInlineChildren(node, key, context)}</del>;
+  if (node.type === "break") return <br key={key} />;
+  if (node.type === "link") return renderLink(node, key, context);
+  if (node.type === "linkReference") return renderLinkReference(node, key, context);
+  if (node.type === "image") return context.profile === "assistant" ? `![${node.alt ?? ""}](${node.url})` : nodeSource(node, context.source);
+  return nodeSource(node, context.source);
 }
 
-function isTableStart(lines: string[], index: number) {
-  return lines[index]?.includes("|") && /^(\s*\|)?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[index + 1] ?? "");
+function renderLink(node: Link, key: string, context: RenderContext) {
+  const raw = nodeSource(node, context.source);
+  if (context.profile === "human" && !(raw.startsWith("<") && raw.endsWith(">"))) return raw;
+  return linkElement(node.url, renderInlineChildren(node, key, context), key, context);
 }
 
-function splitTableRow(line: string) { return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim()); }
-function parseListItem(line: string) {
-  const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
-  if (bullet) return { ordered: false, text: bullet[1] };
-  const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
-  return ordered ? { ordered: true, text: ordered[1] } : null;
+function renderLinkReference(node: Extract<PhrasingContent, { type: "linkReference" }>, key: string, context: RenderContext) {
+  if (context.profile === "human") return nodeSource(node, context.source);
+  const target = context.definitions.get(node.identifier.toLowerCase());
+  return target ? linkElement(target, renderInlineChildren(node, key, context), key, context) : nodeSource(node, context.source);
+}
+
+function linkElement(url: string, children: ReactNode, key: string, context: RenderContext) {
+  const safe = safeCoworkMarkdownUrl(url);
+  return <a className="underline underline-offset-2 decoration-1 decoration-current/40 hover:decoration-current focus:decoration-current" href={safe} key={key} onClick={safe && context.onLinkClick ? (event) => context.onLinkClick?.(event, safe) : undefined} rel="noopener noreferrer" target="_blank">{children}</a>;
+}
+
+function renderSpecialParagraph(node: Extract<RootContent, { type: "paragraph" }>, key: string, context: RenderContext) {
+  const value = singleTextValue(node);
+  if (value === undefined) return null;
+  const table = parseTable(value);
+  if (table) return <table key={key}><thead><tr>{table[0].map((cell, index) => <th key={index}>{renderCell(cell, `${key}-h-${index}`, context)}</th>)}</tr></thead><tbody>{table.slice(2).map((row, rowIndex) => <tr key={rowIndex}>{table[0].map((_cell, cellIndex) => <td key={cellIndex}>{renderCell(row[cellIndex] ?? "", `${key}-${rowIndex}-${cellIndex}`, context)}</td>)}</tr>)}</tbody></table>;
+  if (value.startsWith("$$\n") && value.endsWith("\n$$")) return <div className="math math-display" data-math-display key={key}>{value.slice(3, -3)}</div>;
+  return null;
+}
+
+function renderCell(value: string, key: string, context: RenderContext) {
+  const root = parseCoworkMarkdown(value);
+  const paragraph = root.children[0];
+  return paragraph?.type === "paragraph" ? <Fragment key={key}>{renderInlineChildren(paragraph, key, { ...context, source: value })}</Fragment> : value;
+}
+
+function renderExtendedText(value: string, key: string, extensions: boolean) {
+  const output: ReactNode[] = [];
+  let cursor = 0;
+  while (cursor < value.length) {
+    const token = extensions ? nextExtension(value, cursor) : nextNewline(value, cursor);
+    if (!token) { output.push(value.slice(cursor)); break; }
+    if (token.index > cursor) output.push(value.slice(cursor, token.index));
+    if (token.kind === "newline") output.push(<br key={`${key}-${output.length}`} />);
+    else if (token.kind === "text") output.push(token.value);
+    else if (token.kind === "delete") output.push(<del key={`${key}-${output.length}`}>{token.value}</del>);
+    else output.push(<span className="math math-inline" data-math-inline key={`${key}-${output.length}`}>{token.value}</span>);
+    cursor = token.end;
+  }
+  return output;
+}
+
+function nextExtension(value: string, start: number) {
+  const newline = value.indexOf("\n", start);
+  const strike = value.indexOf("~~", start);
+  const math = value.indexOf("$", start);
+  const index = smallestIndex(newline, strike, math);
+  if (index < 0) return null;
+  if (index === newline) return { end: index + 1, index, kind: "newline" as const, value: "" };
+  const marker = index === strike ? "~~" : "$";
+  const closing = value.indexOf(marker, index + marker.length);
+  if (closing < 0) return { end: index + marker.length, index, kind: "text" as const, value: marker };
+  return { end: closing + marker.length, index, kind: marker === "~~" ? "delete" as const : "math" as const, value: value.slice(index + marker.length, closing) };
+}
+
+function nextNewline(value: string, start: number) {
+  const index = value.indexOf("\n", start);
+  return index < 0 ? null : { end: index + 1, index, kind: "newline" as const, value: "" };
+}
+
+function parseTable(value: string) {
+  const rows = value.split("\n").map(splitTableRow);
+  if (rows.length < 2 || rows[0].length < 2 || rows[1].length !== rows[0].length) return null;
+  return rows[1].every(isTableDelimiter) ? rows : null;
+}
+
+function splitTableRow(value: string) {
+  const trimmed = value.trim();
+  const inner = trimmed.startsWith("|") ? trimmed.slice(1) : trimmed;
+  const withoutEnd = inner.endsWith("|") ? inner.slice(0, -1) : inner;
+  return withoutEnd.split("|").map((cell) => cell.trim());
+}
+
+function isTableDelimiter(value: string) {
+  const compact = value.split(" ").join("");
+  const body = compact.startsWith(":") ? compact.slice(1) : compact;
+  const core = body.endsWith(":") ? body.slice(0, -1) : body;
+  return core.length >= 3 && [...core].every((character) => character === "-");
+}
+
+function renderHtml(value: string, key: string, context: RenderContext) {
+  const artifact = artifactFromHtml(value);
+  if (!artifact || !context.onOpenArtifact) return <Fragment key={key}>{value}</Fragment>;
+  return <button className="underline" key={key} onClick={() => context.onOpenArtifact?.({ ...artifact, messageUuid: context.messageUuid })} type="button">{artifact.title ?? "Open artifact"}</button>;
+}
+
+function artifactFromHtml(value: string) {
+  if (!value.startsWith("<antArtifact")) return null;
+  const identifier = htmlAttribute(value, "identifier") ?? htmlAttribute(value, "id");
+  return identifier ? { identifier, title: htmlAttribute(value, "title") } : null;
+}
+
+function htmlAttribute(value: string, name: string) {
+  const marker = `${name}=`;
+  const start = value.indexOf(marker);
+  if (start < 0) return undefined;
+  const quote = value[start + marker.length];
+  if (quote !== '"' && quote !== "'") return undefined;
+  const end = value.indexOf(quote, start + marker.length + 1);
+  return end < 0 ? undefined : value.slice(start + marker.length + 1, end);
+}
+
+function collectDefinitions(root: Root) {
+  const definitions = new Map<string, string>();
+  for (const node of root.children) if (node.type === "definition") definitions.set(node.identifier.toLowerCase(), node.url);
+  return definitions;
+}
+
+function rootFromChildren(children: RootContent[]): Root {
+  return { children, type: "root" };
+}
+
+function singleTextValue(node: Extract<RootContent, { type: "paragraph" }>) {
+  return node.children.length === 1 && node.children[0].type === "text" ? node.children[0].value : undefined;
+}
+
+function nodeSource(node: { position?: RootContent["position"] }, source: string) {
+  const start = node.position?.start.offset;
+  const end = node.position?.end.offset;
+  return start === undefined || end === undefined ? "" : source.slice(start, end);
+}
+
+function humanBlockAllowed(type: string) {
+  return type === "paragraph" || type === "blockquote" || type === "list" || type === "code";
+}
+
+function safeCoworkMarkdownUrl(value: string) {
+  if (value.startsWith("computer://") || value.startsWith("tel:")) return value;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function renderHumanColorSwatch(value: string, profile: CoworkMarkdownProfile) {
+  if (profile !== "human" || !isHexColor(value)) return null;
+  return <span aria-hidden="true" className="mr-1 inline-block size-3 rounded-sm border border-border-300 align-middle" style={{ backgroundColor: value }} />;
+}
+
+function isHexColor(value: string) {
+  if (!value.startsWith("#") || ![4, 5, 7, 9].includes(value.length)) return false;
+  return [...value.slice(1)].every((character) => "0123456789abcdefABCDEF".includes(character));
+}
+
+function hasBlankTerminator(value: string) {
+  let newlineCount = 0;
+  for (const character of value) if (character === "\n") newlineCount += 1;
+  return newlineCount >= 2;
+}
+
+function smallestIndex(...values: number[]) {
+  return values.filter((value) => value >= 0).sort((left, right) => left - right)[0] ?? -1;
+}
+
+function classes(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(" ");
 }

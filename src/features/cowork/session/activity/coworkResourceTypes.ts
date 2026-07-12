@@ -23,6 +23,7 @@ export type CoworkResourceActivity = {
   fileName: string;
   filePath: string;
   latestId: string;
+  isError?: boolean;
   mcpServer?: {
     iconSrc?: string;
     iconType?: string;
@@ -33,6 +34,10 @@ export type CoworkResourceActivity = {
   mcpToolDisplayName?: string;
   mcpToolInput?: Record<string, unknown>;
   mcpToolName?: string;
+  mcpToolResult?: {
+    content: unknown[];
+    isError?: boolean;
+  };
   operation: CoworkResourceOperation;
   pluginId?: string;
   pluginName?: string;

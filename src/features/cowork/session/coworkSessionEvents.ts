@@ -1,12 +1,19 @@
-import type { ChatMessage } from "../../../adapters/desktopBridge/types";
 import { asRecord, rawMessageContent, stringValue } from "./recordUtils";
-import type { CoworkSessionDataState, CoworkStreamActivity } from "./types";
+import type { CoworkRawMessage, CoworkSessionDataState, CoworkStreamActivity } from "./types";
 
 export function isCoworkSessionEvent(event: unknown, sessionId: string) {
   const raw = asRecord(event);
-  if (raw.sessionId === sessionId || raw.id === sessionId) return true;
+  if (raw.sessionId === sessionId || raw.session_id === sessionId || raw.id === sessionId) return true;
+  const message = asRecord(raw.message);
   const session = asRecord(raw.session);
-  return session.id === sessionId || session.sessionId === sessionId;
+  const request = asRecord(raw.request);
+  return message.sessionId === sessionId
+    || message.session_id === sessionId
+    || session.id === sessionId
+    || session.sessionId === sessionId
+    || session.session_id === sessionId
+    || request.sessionId === sessionId
+    || request.session_id === sessionId;
 }
 
 export function coworkStreamMessage(event: unknown): Record<string, unknown> | null {
@@ -16,24 +23,14 @@ export function coworkStreamMessage(event: unknown): Record<string, unknown> | n
   return raw.type === "stream_event" ? raw : null;
 }
 
-export function coworkTranscriptMessage(event: unknown): ChatMessage | null {
+export function coworkTranscriptMessage(event: unknown): CoworkRawMessage | null {
   const raw = asRecord(event);
   if (raw.type !== "message") return null;
   const message = asRecord(raw.message);
   if (message.type === "stream_event" || message.type === "result" || message.type === "error") return null;
   const type = stringValue(message.type);
   if (type !== "assistant" && type !== "user" && type !== "system") return null;
-  return chatMessageFromRawEvent(message);
-}
-
-export function shouldReloadCoworkTranscript(event: unknown) {
-  const raw = asRecord(event);
-  const type = stringValue(raw.type);
-  if (type === "message") {
-    const messageType = stringValue(asRecord(raw.message).type);
-    return messageType === "result" || messageType === "error" || messageType === "completed";
-  }
-  return ["transcript_loaded", "result", "completed", "close", "error", "cleared", "stopped", "permission_mode_changed"].includes(type ?? "");
+  return chatMessageFromCoworkEvent(message);
 }
 
 export function shouldClearCoworkStream(event: unknown) {
@@ -41,9 +38,11 @@ export function shouldClearCoworkStream(event: unknown) {
   const type = stringValue(raw.type);
   if (type === "message") {
     const messageType = stringValue(asRecord(raw.message).type);
-    return messageType === "result" || messageType === "error" || messageType === "completed";
+    // Official session lifecycle has no manager-level type:"completed".
+    // Clear on result/error only for nested message envelopes.
+    return messageType === "result" || messageType === "error";
   }
-  return ["result", "completed", "close", "error", "cleared", "stopped"].includes(type ?? "");
+  return ["result", "close", "error", "cleared", "stopped"].includes(type ?? "");
 }
 
 export function shouldSettleCoworkStream(event: unknown) {
@@ -51,9 +50,11 @@ export function shouldSettleCoworkStream(event: unknown) {
   const type = stringValue(raw.type);
   if (type === "message") {
     const messageType = stringValue(asRecord(raw.message).type);
-    return messageType === "result" || messageType === "completed";
+    // Official settle: result (and runtime also handles top-level close/error).
+    // Do not treat synthetic "completed" as a session settle signal.
+    return messageType === "result";
   }
-  return type === "result" || type === "completed" || type === "close";
+  return type === "result" || type === "close" || type === "stopped";
 }
 
 export function isCoworkStreamStart(streamMessage: Record<string, unknown>) {
@@ -62,7 +63,7 @@ export function isCoworkStreamStart(streamMessage: Record<string, unknown>) {
 
 export function coworkStreamMessageId(streamMessage: Record<string, unknown>) {
   const event = asRecord(streamMessage.event);
-  return stringValue(asRecord(event.message).id) ?? stringValue(streamMessage.uuid) ?? null;
+  return stringValue(streamMessage.uuid) ?? stringValue(asRecord(event.message).id) ?? null;
 }
 
 export function coworkStreamActivity(streamMessage: Record<string, unknown>, current: CoworkStreamActivity) {
@@ -82,27 +83,29 @@ export function coworkStreamActivity(streamMessage: Record<string, unknown>, cur
   return current;
 }
 
-export function mergeCoworkTranscriptMessage(current: CoworkSessionDataState, nextMessage: ChatMessage) {
-  const rawMessages = current.session?.messages ?? current.messages;
+export function mergeCoworkTranscriptMessage(current: CoworkSessionDataState, nextMessage: CoworkRawMessage) {
+  const rawMessages = current.messages;
   const nextMessages = upsertMessage(rawMessages, nextMessage);
   if (nextMessages === rawMessages) return current;
   return {
     ...current,
     messages: nextMessages.filter((message) => stringValue(asRecord(message.raw).type) !== "stream_event"),
-    session: current.session ? { ...current.session, messages: nextMessages } : current.session,
+    session: current.session,
   };
 }
 
-function chatMessageFromRawEvent(rawEvent: Record<string, unknown>): ChatMessage {
+export function chatMessageFromCoworkEvent(rawEvent: Record<string, unknown>): CoworkRawMessage | null {
   const nested = asRecord(rawEvent.message);
   const rawAuthor = stringValue(rawEvent.author);
   const rawRole = stringValue(rawEvent.role) ?? stringValue(nested.role);
   const rawType = stringValue(rawEvent.type);
+  const id = stringValue(rawEvent.uuid) ?? stringValue(rawEvent.id) ?? stringValue(rawEvent.message_id) ?? stringValue(nested.id);
+  if (!id) return null;
   const role = rawRole === "assistant" || rawRole === "system" ? rawRole
     : rawAuthor === "assistant" || rawAuthor === "system" ? rawAuthor
       : rawType === "assistant" || rawType === "system" ? rawType : "user";
   return {
-    id: stringValue(rawEvent.id) ?? stringValue(rawEvent.uuid) ?? stringValue(rawEvent.message_id) ?? stringValue(nested.id) ?? `msg_${Date.now()}`,
+    id,
     role,
     text: rawEventText(rawEvent),
     createdAt: stringValue(rawEvent.createdAt) ?? stringValue(rawEvent.timestamp) ?? new Date().toISOString(),
@@ -126,7 +129,7 @@ function rawEventText(rawEvent: Record<string, unknown>) {
   }).join("");
 }
 
-function upsertMessage(messages: ChatMessage[], nextMessage: ChatMessage) {
+function upsertMessage(messages: CoworkRawMessage[], nextMessage: CoworkRawMessage) {
   const identity = messageIdentity(nextMessage);
   const index = messages.findIndex((message) => messageIdentity(message) === identity);
   if (index < 0) return [...messages, nextMessage];
@@ -136,7 +139,7 @@ function upsertMessage(messages: ChatMessage[], nextMessage: ChatMessage) {
   return nextMessages;
 }
 
-function messageIdentity(message: ChatMessage) {
+function messageIdentity(message: CoworkRawMessage) {
   const raw = asRecord(message.raw);
   return stringValue(raw.uuid) ?? stringValue(raw.id) ?? message.id;
 }

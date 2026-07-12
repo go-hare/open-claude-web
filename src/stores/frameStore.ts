@@ -55,6 +55,7 @@ export type FrameActions = {
   setMoreOpen: (open: boolean) => void;
   setNavPinnedIds: (ids: string[] | null) => void;
   setPinnedOrder: (ids: string[]) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   setSidebarHovering: (hovering: boolean) => void;
   setSidebarResizing: (resizing: boolean) => void;
   setSortBy: (mode: FrameMode, sortBy: DFrameSortBy) => void;
@@ -127,6 +128,10 @@ export function useFrameStore(): FrameStore {
     setPinnedOrder: (pinnedOrder) => setState((current) => {
       persistDFrameState({ pinnedOrder });
       return { ...current, pinnedOrder };
+    }),
+    setSidebarCollapsed: (sidebarCollapsed) => setState((current) => {
+      persistDFrameState({ collapsed: sidebarCollapsed });
+      return { ...current, sidebarCollapsed, moreOpen: false, showDragPinHint: false, sidebarHovering: false };
     }),
     setSidebarHovering: (sidebarHovering) => setState((current) => ({ ...current, sidebarHovering, showDragPinHint: sidebarHovering ? current.showDragPinHint : false })),
     setSidebarResizing: (sidebarResizing) => setState((current) => ({ ...current, sidebarResizing })),

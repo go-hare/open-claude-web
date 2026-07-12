@@ -1,4 +1,5 @@
-import type { ChatMessage } from "../../../../adapters/desktopBridge/types";
+import type { CoworkRawMessage } from "../types";
+import type { CoworkMcpToolMatch } from "../mcp/coworkMcpRegistryStore";
 
 export type CoworkContentBlock = Record<string, unknown> & {
   _isSubagentBlock?: boolean;
@@ -42,6 +43,7 @@ export type CoworkChatMessage = {
   pending?: boolean;
   sender: "assistant" | "human";
   sync_sources: unknown[];
+  stop_details?: unknown;
   stop_reason?: string;
   updated_at?: string;
   uuid: string;
@@ -60,8 +62,11 @@ export type CoworkMessageChain = {
 };
 
 export type CoworkMessageStoreOptions = {
-  pendingMessages?: ChatMessage[];
+  lookupMcpTool?: (toolName?: string) => CoworkMcpToolMatch | undefined;
+  pendingMessages?: CoworkRawMessage[];
   pluginsEnabled?: boolean;
+  reportedAuthErrorBlockIds?: Set<string>;
+  syntheticReconnectEnabled?: boolean;
 };
 
 export type CoworkMessageSegment = CoworkTimelineSegment | CoworkContentSegment;

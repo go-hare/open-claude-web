@@ -1,14 +1,24 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { SessionSummary } from "../../../adapters/desktopBridge";
-import type { LocalSessionsBridge, SlashCommand } from "../../../adapters/desktopBridge/types";
+import type { GetSupportedCommandsRequest, SlashCommand } from "../../../adapters/desktopBridge/types";
 import { filterOfficialSlashCommandItems, OfficialSlashCommandMenuProvider, OfficialSlashCommandPositioner, OfficialSlashInlineFilterHint } from "./OfficialSlashCommandMenu";
 import type { OfficialSlashCommandItem, OfficialSlashCommandMenuProps } from "./OfficialSlashTypes";
 import { officialSlashSkillChipContent } from "./OfficialSlashTypes";
 
 type EpitaxySessionRef = { id: string; type: "local" | "remote" | "bridge" };
 
+type OfficialSlashBridge = {
+  clearSession?: (id: string) => Promise<unknown>;
+  forkSession?: (id: string, messageId?: string) => Promise<unknown>;
+  getSupportedCommands?: (request?: GetSupportedCommandsRequest) => Promise<SlashCommand[]>;
+  launchUltrareview?: (idOrCwd: string, options?: unknown) => Promise<unknown>;
+  rewind?: (id: string, messageId?: string) => Promise<unknown>;
+  setMcpServers?: (id: string, mcpServers: unknown) => Promise<unknown>;
+  submitFeedback?: (input?: unknown) => Promise<unknown>;
+};
+
 type OfficialEpitaxySlashCommandMenuProps = OfficialSlashCommandMenuProps & {
-  bridge: LocalSessionsBridge;
+  bridge: OfficialSlashBridge;
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef | null;
 };
@@ -160,5 +170,4 @@ export const OfficialEpitaxySlashCommandMenu = memo(function OfficialEpitaxySlas
     </>
   );
 });
-
 

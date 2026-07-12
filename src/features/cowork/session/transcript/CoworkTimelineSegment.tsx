@@ -40,7 +40,7 @@ export function CoworkTimelineSegment({ showDoneIndicator, store, timelineIndex 
       childrenAfterTimeline={item.contentAfter ? <CoworkContentAfterTimeline store={store} timelineIndex={timelineIndex} /> : undefined}
       className={item.isFirst ? undefined : "mt-4"}
       isStreaming={isThisMessageStreaming && item.liveUpdates}
-      maxVisibleTools={item.liveUpdates ? 3 : 0}
+      maxVisibleTools={coworkTimelineMaxVisibleTools(item)}
       onStatusDisplayVisibilityChange={item.isFirst ? statusVisibility.setIsVisible : undefined}
       renderBlock={renderBlock}
       showDoneIndicator={showDoneIndicator}
@@ -54,12 +54,17 @@ export function CoworkTimelineSegment({ showDoneIndicator, store, timelineIndex 
   );
 }
 
+export function coworkTimelineMaxVisibleTools(item: { isFirst: boolean; liveUpdates: boolean }) {
+  return item.isFirst && item.liveUpdates ? 3 : 0;
+}
+
 function useTimelineBlockRenderer(
   context: ReturnType<typeof useCoworkAssistantRenderContext>,
   blocks: CoworkContentBlock[],
   liveUpdates: boolean,
   isThisMessageStreaming: boolean,
 ) {
+  // Official gst call site: isStreaming = liveUpdates && isStreaming; isThisMessageStreaming separate.
   return useCallback((block: CoworkContentBlock, index: number, meta: CoworkTimelineRenderMeta) => (
     <CoworkTimelineBlock
       allBlocks={context.blocks}
@@ -69,6 +74,7 @@ function useTimelineBlockRenderer(
       isInExpandedTimeline={meta.isInExpandedTimeline}
       isLastItem={meta.isLastItem}
       isStreaming={isThisMessageStreaming && liveUpdates}
+      isThisMessageStreaming={isThisMessageStreaming}
       key={blockKey(block, index)}
       message={context.message}
     />

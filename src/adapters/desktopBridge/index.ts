@@ -1,5 +1,5 @@
 import { fakeDesktopBridge } from "./fakeDesktopBridge";
-import { createDesktopBridgeFromOfficialNamespaces, type RawClaudeOfficeAddinBridge, type RawClaudeSettingsBridge, type RawClaudeWebBridge } from "./officialBridgeAdapter";
+import { createDesktopBridgeFromOfficialNamespaces, type RawAccountDetails, type RawClaudeOfficeAddinBridge, type RawClaudeSettingsBridge, type RawClaudeWebBridge } from "./officialBridgeAdapter";
 import type { DesktopBridge } from "./types";
 
 declare global {
@@ -38,6 +38,9 @@ export type {
   ConnectedBrowser,
   ConnectedOfficeFile,
   ContextUsage,
+  CoworkMessageEnvelope,
+  CoworkSessionSnapshot,
+  CoworkSessionsBridge,
   CoworkSpaceSummary,
   CoworkMountedProject,
   DesktopBridge,
@@ -54,3 +57,5 @@ export type {
   WorkspaceTrustResult,
   WorkspaceContext,
 } from "./types";
+
+export type { RawAccountDetails, RawClaudeWebBridge };

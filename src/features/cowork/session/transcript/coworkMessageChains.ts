@@ -16,6 +16,23 @@ export function buildOfficialCoworkMessageChains(messages: CoworkChatMessage[], 
   });
 }
 
+export function hydrateOfficialCoworkMessageChain(
+  chain: CoworkMessageChain,
+  messages: CoworkChatMessage[],
+): CoworkMessageChain {
+  const messageByUuid = Object.fromEntries(messages.map((message) => [message.uuid, message]));
+  const hydrated = createOfficialCoworkMessageChain(chain.messageUuids, messageByUuid);
+  const first = messageByUuid[hydrated.firstMessageUuid];
+  const last = messageByUuid[hydrated.lastMessageUuid];
+  return {
+    ...hydrated,
+    displayMessage: hydrated.isChain && first && last
+      ? { ...first, content: hydrated.mergedContent, stop_reason: last.stop_reason, updated_at: last.updated_at }
+      : undefined,
+    isStreaming: chain.isStreaming,
+  };
+}
+
 export function createOfficialCoworkMessageChain(messageUuids: string[], messageByUuid: Record<string, CoworkChatMessage>): CoworkMessageChain {
   const messages = messageUuids.map((uuid) => messageByUuid[uuid]).filter((message): message is CoworkChatMessage => message !== undefined);
   return {

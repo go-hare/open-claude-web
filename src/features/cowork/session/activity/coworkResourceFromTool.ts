@@ -1,5 +1,6 @@
-import type { ChatMessage } from "../../../../adapters/desktopBridge/types";
+import type { CoworkRawMessage } from "../types";
 import { basename, coworkMemoryPath, coworkResourceCategory, coworkResourceDisplayName, normalizeCoworkPath } from "./coworkResourcePaths";
+import { parseCoworkSearchResults } from "./coworkResourceSearchResults";
 import type { CoworkResourceActivity, CoworkResourceOperation, CoworkTranscriptToolUse } from "./coworkResourceTypes";
 
 export const coworkChromeMcpServerUuid = "a8f3c7e2-4b9d-4f1a-8c3e-9d2a5b7f8e1c";
@@ -8,12 +9,46 @@ type ResourceActivityInput = Omit<CoworkResourceActivity, "categoryKey" | "displ
   fileName?: string;
 };
 
-export function rawCoworkToolUses(message: ChatMessage): CoworkTranscriptToolUse[] {
-  const raw = asRecord(message.raw);
-  const nested = asRecord(raw.message);
-  const content = raw.content ?? nested.content;
-  if (!Array.isArray(content)) return [];
-  return content.flatMap((item, index) => {
+type CoworkToolResult = {
+  content: unknown;
+  isError?: boolean;
+};
+
+type CoworkMcpToolMatch = {
+  server: {
+    iconSrc?: string;
+    iconType?: string;
+    name: string;
+    uuid: string;
+  };
+  tool: {
+    displayName?: string;
+    name: string;
+  };
+};
+
+export type CoworkResourceActivityOptions = {
+  lookupMcpTool?: (toolName?: string) => CoworkMcpToolMatch | undefined;
+};
+
+export function collectCoworkToolResults(messages: CoworkRawMessage[]) {
+  const results = new Map<string, CoworkToolResult>();
+  for (const message of messages) {
+    for (const item of rawMessageContent(message)) {
+      const result = asRecord(item);
+      const toolUseId = stringValue(result.tool_use_id);
+      if (result.type !== "tool_result" || !toolUseId) continue;
+      results.set(toolUseId, {
+        content: result.content,
+        isError: booleanValue(result.is_error),
+      });
+    }
+  }
+  return results;
+}
+
+export function rawCoworkToolUses(message: CoworkRawMessage): CoworkTranscriptToolUse[] {
+  return rawMessageContent(message).flatMap((item, index) => {
     const record = asRecord(item);
     const itemType = stringValue(record.type) ?? stringValue(record.kind);
     const name = stringValue(record.name) ?? stringValue(record.tool_name);
@@ -22,44 +57,55 @@ export function rawCoworkToolUses(message: ChatMessage): CoworkTranscriptToolUse
   });
 }
 
-export function coworkResourceActivityFromTool(message: ChatMessage, messageIndex: number, tool: CoworkTranscriptToolUse) {
+export function coworkResourceActivitiesFromTool(
+  message: CoworkRawMessage,
+  messageIndex: number,
+  tool: CoworkTranscriptToolUse,
+  result: CoworkToolResult | undefined,
+  options: CoworkResourceActivityOptions,
+): CoworkResourceActivity[] {
   const operation = coworkResourceOperation(tool);
-  if (!operation) return null;
+  if (!operation) return [];
   const timestamp = coworkResourceTimestamp(message, messageIndex);
-  if (operation === "web_search") return webSearchActivity(message, tool, timestamp);
-  if (operation === "skill_invoked") return skillActivity(message, tool, timestamp);
-  if (operation === "mcp_tool") return mcpActivity(message, tool, timestamp);
+  if (operation === "web_search") return [webSearchActivity(tool, timestamp, result)];
+  if (operation === "skill_invoked") return optionalActivity(skillActivity(tool, timestamp));
+  if (operation === "mcp_tool") return optionalActivity(mcpActivity(tool, timestamp, result, options));
+  if (tool.name === "present_files" || tool.name === "mcp__cowork__present_files") {
+    return presentFilesActivities(tool, timestamp, result);
+  }
   const filePath = coworkToolFilePath(tool);
-  if (!filePath) return null;
-  return createCoworkResourceActivity({
+  if (!filePath) return [];
+  return [createCoworkResourceActivity({
     filePath,
-    latestId: `${message.id}-${tool.id}`,
+    latestId: tool.id,
     operation: coworkMemoryPath(filePath) ? "memory" : operation,
     timestamp,
     toolName: tool.name,
-  });
+  })];
 }
 
-function webSearchActivity(message: ChatMessage, tool: CoworkTranscriptToolUse, timestamp: number) {
+function webSearchActivity(tool: CoworkTranscriptToolUse, timestamp: number, result?: CoworkToolResult) {
   const query = stringValue(tool.input.query) ?? "Web search";
   return createCoworkResourceActivity({
     fileName: query,
     filePath: `web_search://${tool.id}`,
-    latestId: `${message.id}-${tool.id}`,
+    isError: result?.isError,
+    latestId: tool.id,
     operation: "web_search",
     searchQuery: query,
+    searchResults: parseCoworkSearchResults(result?.content),
     timestamp,
     toolName: tool.name,
   });
 }
 
-function skillActivity(message: ChatMessage, tool: CoworkTranscriptToolUse, timestamp: number) {
+function skillActivity(tool: CoworkTranscriptToolUse, timestamp: number) {
   const skill = stringValue(tool.input.skill) ?? stringValue(tool.input.name);
   if (!skill) return null;
   return createCoworkResourceActivity({
     fileName: basename(skill) ?? skill,
     filePath: `skill://${skill}`,
-    latestId: `${message.id}-${tool.id}`,
+    latestId: tool.id,
     operation: "skill_invoked",
     pluginName: pluginNameFromQualifiedName(skill),
     skillName: skill,
@@ -68,23 +114,63 @@ function skillActivity(message: ChatMessage, tool: CoworkTranscriptToolUse, time
   });
 }
 
-function mcpActivity(message: ChatMessage, tool: CoworkTranscriptToolUse, timestamp: number) {
-  const parsed = parseCoworkMcpToolName(tool.name);
-  if (!parsed) return null;
-  const serverName = coworkMcpServerDisplayName(parsed.server, tool.input);
-  const displayName = stringValue(tool.input.tool_display_name) ?? stringValue(tool.input.toolDisplayName) ?? parsed.tool;
+function mcpActivity(
+  tool: CoworkTranscriptToolUse,
+  timestamp: number,
+  result: CoworkToolResult | undefined,
+  options: CoworkResourceActivityOptions,
+) {
+  const match = options.lookupMcpTool?.(tool.name);
+  const parsed = match ? null : parseCoworkMcpToolName(tool.name);
+  if (!match && !parsed) return null;
+  const serverUuid = match?.server.uuid ?? parsed?.server ?? "";
+  const toolName = match?.tool.name ?? parsed?.tool ?? "";
+  const serverName = match?.server.name ?? coworkMcpServerDisplayName(serverUuid, tool.input);
+  const displayName = match?.tool.displayName
+    ?? stringValue(tool.input.tool_display_name)
+    ?? stringValue(tool.input.toolDisplayName)
+    ?? toolName;
   return createCoworkResourceActivity({
-    fileName: parsed.tool,
-    filePath: `mcp://${parsed.server}/${parsed.tool}`,
-    latestId: `${message.id}-${tool.id}`,
-    mcpServer: { name: serverName, uuid: parsed.server },
-    mcpServerUuid: parsed.server,
+    fileName: toolName,
+    filePath: `mcp://${serverUuid}/${toolName}`,
+    latestId: tool.id,
+    mcpServer: {
+      iconSrc: match?.server.iconSrc,
+      iconType: match?.server.iconType,
+      name: serverName,
+      uuid: serverUuid,
+    },
+    mcpServerUuid: serverUuid,
     mcpToolDisplayName: displayName,
     mcpToolInput: tool.input,
-    mcpToolName: parsed.tool,
+    mcpToolName: toolName,
+    mcpToolResult: result ? {
+      content: normalizeCoworkToolResultContent(result.content),
+      isError: result.isError,
+    } : undefined,
     operation: "mcp_tool",
     timestamp,
     toolName: tool.name,
+  });
+}
+
+function presentFilesActivities(tool: CoworkTranscriptToolUse, timestamp: number, result?: CoworkToolResult) {
+  if (result?.isError || !Array.isArray(result?.content)) return [];
+  return result.content.flatMap((item) => {
+    const content = asRecord(item);
+    const filePath = content.type === "local_resource"
+      ? stringValue(content.file_path)
+      : content.type === "text"
+        ? stringValue(content.text)
+        : undefined;
+    if (!filePath) return [];
+    return [createCoworkResourceActivity({
+      filePath,
+      latestId: `${tool.id}-${filePath}`,
+      operation: "create",
+      timestamp,
+      toolName: tool.name,
+    })];
   });
 }
 
@@ -100,9 +186,26 @@ function createCoworkResourceActivity(input: ResourceActivityInput): CoworkResou
   };
 }
 
-function coworkResourceTimestamp(message: ChatMessage, messageIndex: number) {
-  const parsed = Date.parse(message.createdAt);
-  return Number.isFinite(parsed) ? parsed : messageIndex;
+function coworkResourceTimestamp(message: CoworkRawMessage, messageIndex: number) {
+  return numberValue(asRecord(message.raw).receivedStreamAt) ?? messageIndex;
+}
+
+function rawMessageContent(message: CoworkRawMessage) {
+  const raw = asRecord(message.raw);
+  const nested = asRecord(raw.message);
+  const content = raw.content ?? nested.content;
+  return Array.isArray(content) ? content : [];
+}
+
+function optionalActivity(activity: CoworkResourceActivity | null) {
+  return activity ? [activity] : [];
+}
+
+function normalizeCoworkToolResultContent(content: unknown): unknown[] {
+  if (Array.isArray(content)) {
+    return content.map((item) => typeof item === "string" ? { text: item, type: "text" } : item);
+  }
+  return typeof content === "string" ? [{ text: content, type: "text" }] : [];
 }
 
 function coworkToolFilePath(tool: CoworkTranscriptToolUse) {
@@ -132,13 +235,13 @@ function pluginNameFromQualifiedName(value: string) {
 }
 
 function coworkResourceOperation(tool: CoworkTranscriptToolUse): CoworkResourceOperation | null {
+  if (tool.name === "present_files" || tool.name === "mcp__cowork__present_files") return "create";
   if (parseCoworkMcpToolName(tool.name)) return "mcp_tool";
   if (tool.name === "Read" || tool.name === "View") return "read";
   if (tool.name === "Write") return "write";
   if (["Edit", "MultiEdit", "NotebookEdit"].includes(tool.name)) return "edit";
   if (tool.name === "WebSearch") return "web_search";
   if (tool.name === "Skill") return "skill_invoked";
-  if (tool.name === "present_files" || tool.name === "mcp__cowork__present_files") return "create";
   if (tool.name === "Grep" || tool.name === "Glob") {
     const filePath = coworkToolFilePath(tool);
     return filePath && coworkMemoryPath(filePath) ? "memory" : null;
@@ -148,6 +251,14 @@ function coworkResourceOperation(tool: CoworkTranscriptToolUse): CoworkResourceO
 
 function stringValue(value: unknown) {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function booleanValue(value: unknown) {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

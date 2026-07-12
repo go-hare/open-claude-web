@@ -1,9 +1,12 @@
+import { useCallback, type MouseEvent } from "react";
 import type { CoworkContentBlock, CoworkContentSegment } from "./coworkMessageTypes";
 import type { CoworkAssistantTimelineStore } from "./coworkAssistantTimelineStore";
 import { useCoworkTimelineStoreItem } from "./coworkAssistantTimelineStore";
+import { CoworkAssistantMarkdown } from "./CoworkAssistantMarkdown";
 import { useCoworkAssistantRenderContext } from "./CoworkAssistantRenderContext";
-import { CoworkMarkdown } from "./CoworkMarkdown";
-import { CoworkToolRenderer } from "./CoworkToolRenderer";
+import { coworkComputerLinkPath } from "./coworkComputerLink";
+import { CoworkOfficialToolRenderer } from "./CoworkOfficialToolRenderer";
+import { useCoworkTranscriptActions } from "./CoworkTranscriptActions";
 
 const widgetTools = new Set([
   "AskUserQuestion", "ask_user_free_form_input_v0", "ask_user_input_v0", "image_search",
@@ -16,8 +19,16 @@ export function CoworkAssistantContentSegment({ hasTextAfter, isLastContent, seg
   segment: CoworkContentSegment;
 }) {
   const context = useCoworkAssistantRenderContext();
+  const actions = useCoworkTranscriptActions();
+  // Official ~136785: computer:// → SELECT_FILE + open drawer (toolType create_file).
+  const onLinkClick = useCallback((event: MouseEvent<HTMLAnchorElement>, url: string) => {
+    const path = coworkComputerLinkPath(url);
+    if (!path) return;
+    event.preventDefault();
+    actions?.openFile({ path, toolType: "create_file" });
+  }, [actions]);
   if (!shouldRenderContent(segment.blocks, hasTextAfter, context.isThisMessageStreaming)) return null;
-  return <>{segment.blocks.map((block, index) => renderContentBlock(block, index, context.blocks, context, isLastContent))}</>;
+  return <>{segment.blocks.map((block, index) => renderContentBlock(block, index, context.blocks, context, isLastContent, onLinkClick))}</>;
 }
 
 export function CoworkContentAfterTimeline({ store, timelineIndex }: {
@@ -41,13 +52,14 @@ function renderContentBlock(
   allBlocks: CoworkContentBlock[],
   context: ReturnType<typeof useCoworkAssistantRenderContext>,
   isLastContent: boolean,
+  onLinkClick?: (event: MouseEvent<HTMLAnchorElement>, url: string) => void,
 ) {
   const globalIndex = allBlocks.indexOf(block);
   if (block.type === "text" || block.type === "connector_text") {
     const text = block.type === "text" ? block.text : block.connector_text;
     if (!text) return null;
     const className = context.isThisMessageStreaming ? "progressive-markdown" : "standard-markdown";
-    return <div className={className} key={blockKey(block, index)}><CoworkMarkdown isStreaming={context.isThisMessageStreaming} text={text} /></div>;
+    return <CoworkAssistantMarkdown blockCitations={Array.isArray(block.citations) ? block.citations : []} className={className} isStreaming={context.isThisMessageStreaming} key={blockKey(block, index)} messageUuid={context.message.uuid} onLinkClick={onLinkClick} text={text} />;
   }
   if (block.type !== "tool_use") return null;
   const nextBlock = globalIndex >= 0 ? allBlocks[globalIndex + 1] : undefined;
@@ -55,7 +67,7 @@ function renderContentBlock(
   const isLastBlockOfMessage = globalIndex >= 0 && isLastRenderableBlock(allBlocks, globalIndex);
   const isToolStreaming = context.isStreaming && globalIndex >= allBlocks.length - 1;
   return (
-    <CoworkToolRenderer
+    <CoworkOfficialToolRenderer
       block={block}
       isFirstBlockOfMessage={globalIndex === 0}
       isFirstItem

@@ -50,7 +50,7 @@ export function parseHumanContent(message: Record<string, unknown>) {
   const syncSources = parseSyncSources(text);
   return {
     content: content.map((block) => block.type === "text" && block.text
-      ? { ...block, text: stripSystemTags(block.text) }
+      ? { ...block, text: normalizeCommandText(stripSystemTags(block.text)) }
       : block),
     files,
     syncSources,
@@ -82,6 +82,15 @@ function stripSystemTags(value: string) {
     .replace(/\s*<widget_context_hint>[\s\S]*?<\/widget_context_hint>/g, "")
     .replace(/\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, "")
     .replace(/<sync_sources>[\s\S]*?<\/sync_sources>\s*/g, "");
+}
+
+function normalizeCommandText(value: string) {
+  if (!value.includes("<command-name>") && !value.includes("<command-message>")) return value;
+  const name = value.match(/<command-name>([\s\S]*?)<\/command-name>/)?.[1]?.trim();
+  const message = value.match(/<command-message>([\s\S]*?)<\/command-message>/)?.[1]?.trim();
+  const args = value.match(/<command-args>([\s\S]*?)<\/command-args>/)?.[1]?.trim();
+  const command = name || (message ? `/${message}` : undefined);
+  return command ? [command, args].filter(Boolean).join(" ") : value;
 }
 
 function parseUploadedFiles(text: string): CoworkFile[] {

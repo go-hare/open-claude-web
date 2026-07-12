@@ -76,7 +76,7 @@ export function CoworkTimeline({
   const visibleBlocks = useMemo(() => selectVisibleBlocks(blocks, expanded, maxVisibleTools, turnIsOver, waitingForInput), [blocks, expanded, maxVisibleTools, turnIsOver, waitingForInput]);
   const blockIndexes = useMemo(() => new Map(blocks.map((block, index) => [block, index])), [blocks]);
   const exitingBlocks = useExitingBlocks(visibleBlocks, blockIndexes, turnIsOver);
-  const hasAfterTimeline = childrenAfterTimeline !== null && childrenAfterTimeline !== undefined;
+  const hasAfterTimeline = childrenAfterTimeline !== null;
   if (blocks.length === 0 && !hasAfterTimeline) return null;
 
   const working = showLiveTimeline && Boolean(statusText);
@@ -141,7 +141,11 @@ function LiveTimeline({ blocks, blockIndexes, className, exitingBlocks, hasAfter
       {show ? (
         <motion.div className={classes("row-start-1 col-start-1 relative min-w-0 z-[3] overflow-hidden", className)} exit={{ height: 0, opacity: 0 }} initial={{ opacity: 1 }} key="expanded-tools" style={{ overflowAnchor: "none" }} transition={{ duration: 0.2, ease: "easeOut" }}>
           <CoworkTimelineGroup animateEntrance={false} autoCollapse={false} borderless isFirstBlockOfMessage={false} isLastBlockOfMessage={false}>
-            {[...exitingBlocks].map(([index, block]) => <div className="timeline-block-exit" key={`exit-${index}`}>{renderBlock(block, index, { isFirstItem: false, isInExpandedTimeline: true, isLastItem: false, isTimelineExpanded: false })}</div>)}
+            {[...exitingBlocks].map(([index, block]) => (
+              <div className="timeline-block-exit" key={index}>
+                <div>{renderBlock(block, index, { isFirstItem: false, isInExpandedTimeline: true, isLastItem: false, isTimelineExpanded: false })}</div>
+              </div>
+            ))}
             {blocks.map((block, localIndex) => {
               const index = blockIndexes.get(block) ?? localIndex;
               const last = localIndex === blocks.length - 1;

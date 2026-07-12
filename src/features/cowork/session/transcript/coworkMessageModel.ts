@@ -1,4 +1,4 @@
-import type { ChatMessage } from "../../../../adapters/desktopBridge/types";
+import type { CoworkRawMessage } from "../types";
 import type { CoworkStreamSnapshot } from "../stream/coworkStreamTypes";
 import { buildOfficialCoworkMessageChains } from "./coworkMessageChains";
 import { buildCoworkChatMessages } from "./coworkMessageStore";
@@ -12,7 +12,11 @@ export type {
   CoworkMessageSegment,
 } from "./coworkMessageTypes";
 export { buildCoworkChatMessages, normalizeSdkMessages } from "./coworkMessageStore";
-export { buildOfficialCoworkMessageChains, createOfficialCoworkMessageChain } from "./coworkMessageChains";
+export {
+  buildOfficialCoworkMessageChains,
+  createOfficialCoworkMessageChain,
+  hydrateOfficialCoworkMessageChain,
+} from "./coworkMessageChains";
 export {
   arrangeCoworkAssistantSegments,
   buildCoworkAssistantSequence,
@@ -21,7 +25,11 @@ export {
   visibleCoworkAssistantBlocks,
 } from "./coworkTimelineModel";
 
-export function buildCoworkMessageChains(messages: ChatMessage[], streamSnapshot: CoworkStreamSnapshot) {
-  const chatMessages = buildCoworkChatMessages(messages, streamSnapshot);
+export function buildCoworkMessageChains(
+  messages: CoworkRawMessage[],
+  streamSnapshot: CoworkStreamSnapshot,
+  pendingMessages: CoworkRawMessage[] = [],
+) {
+  const chatMessages = buildCoworkChatMessages(messages, streamSnapshot, { pendingMessages });
   return buildOfficialCoworkMessageChains(chatMessages, streamSnapshot?.messageId);
 }

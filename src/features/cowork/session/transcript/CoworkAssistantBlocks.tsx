@@ -12,6 +12,9 @@ import {
 import { CoworkAssistantContentSegment } from "./CoworkAssistantContent";
 import { CoworkAssistantRenderProvider } from "./CoworkAssistantRenderContext";
 import { CoworkTimelineSegment } from "./CoworkTimelineSegment";
+import { CoworkResponseInterruption } from "./CoworkResponseInterruption";
+import { coworkInterruptedTimelineIndex, coworkInterruptionVariant } from "./coworkInterruptionState";
+import { useCoworkMessageContext } from "./CoworkMessageContext";
 
 export function CoworkAssistantBlocks({ blocks, isStreaming, isThisMessageStreaming, message }: {
   blocks: CoworkContentBlock[];
@@ -26,7 +29,10 @@ export function CoworkAssistantBlocks({ blocks, isStreaming, isThisMessageStream
   const stableSegments = useStableCoworkSegments(rawSegments);
   const sequence = useMemo(() => arrangeCoworkAssistantSegments(stableSegments), [stableSegments]);
   const timelineStore = useCoworkAssistantTimelineStore();
+  const { onRetry } = useCoworkMessageContext();
   useSyncCoworkAssistantTimelineStore(timelineStore, sequence, isThisMessageStreaming);
+  const interruption = coworkInterruptionVariant(sequence, message, isStreaming, isThisMessageStreaming);
+  const interruptedTimelineIndex = interruption ? coworkInterruptedTimelineIndex(sequence) : undefined;
   const context = useMemo(
     () => ({ blocks, isStreaming, isThisMessageStreaming, message }),
     [blocks, isStreaming, isThisMessageStreaming, message],
@@ -35,20 +41,21 @@ export function CoworkAssistantBlocks({ blocks, isStreaming, isThisMessageStream
   return (
     <CoworkAssistantRenderProvider value={context}>
       {sequence.map((item) => item.kind === "timeline" ? (
-        <CoworkTimelineSegment
-          key={`timeline-${item.segment.timelineIndex}`}
-          showDoneIndicator
-          store={timelineStore}
-          timelineIndex={item.segment.timelineIndex}
-        />
-      ) : (
-        <CoworkAssistantContentSegment
-          hasTextAfter={item.hasTextAfter}
-          isLastContent={item.isLastContent}
-          key={`content-${item.index}`}
-          segment={item.segment}
-        />
-      ))}
+          <CoworkTimelineSegment
+            key={`timeline-${item.segment.timelineIndex}`}
+            showDoneIndicator={item.segment.timelineIndex !== interruptedTimelineIndex}
+            store={timelineStore}
+            timelineIndex={item.segment.timelineIndex}
+          />
+        ) : (
+          <CoworkAssistantContentSegment
+            hasTextAfter={item.hasTextAfter}
+            isLastContent={item.isLastContent}
+            key={`content-${item.index}`}
+            segment={item.segment}
+          />
+        ))}
+      {interruption ? <CoworkResponseInterruption onRetry={onRetry} variant={interruption} /> : null}
     </CoworkAssistantRenderProvider>
   );
 }

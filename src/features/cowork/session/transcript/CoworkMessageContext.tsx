@@ -1,7 +1,14 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { CoworkPermissionRequest } from "../coworkPermissionTypes";
+import type { CoworkPermissionDecision, CoworkPermissionRequest } from "../coworkPermissionTypes";
 
 type CoworkMessageContextValue = {
+  onRetry?: () => Promise<void> | void;
+  onToolDecision?: (
+    requestId: string,
+    toolUseId: string,
+    input: Record<string, unknown>,
+    decision: CoworkPermissionDecision,
+  ) => void;
   toolPermissionRequests: CoworkPermissionRequest[];
 };
 

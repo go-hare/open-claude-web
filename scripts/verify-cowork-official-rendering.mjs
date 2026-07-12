@@ -3,7 +3,7 @@ import path from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
-const officialPath = "/Users/apple/work-py/hare-code/.codex-runtime/official-analysis/index-BELzQL5P.esbuild.js";
+const officialPath = "/Users/apple/work-py/hare-code/.codex-runtime/official-analysis/index-BELzQL5P.pretty.js";
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 const source = (relativePath) => ({ path: relativePath, text: read(relativePath) });
 const failures = [];
@@ -53,7 +53,7 @@ function verifyOfficialSource() {
 
 function verifyOfficialComponentBoundaries() {
   requirePattern(files.messageCell, /data-test-render-count=\{renderCount\}[\s\S]*message\.sender === "human"[\s\S]*CoworkAssistantMessage/, "Cat/wat message dispatch boundary is absent");
-  requirePattern(files.assistant, /motion\.div[\s\S]*group relative relative pb-3[\s\S]*data-is-streaming=\{isThisMessageStreaming\}/, "Rst/YYe assistant shell is absent");
+  requirePattern(files.assistant, /motion\.div[\s\S]*className="group"[\s\S]*className="group relative pb-3"[\s\S]*data-is-streaming=\{isThisMessageStreaming\}[\s\S]*CoworkMessageActions/, "Rst/YYe outer group, response bubble, or actions boundary is absent");
   requirePattern(files.assistantBlocks, /segmentCoworkMessageBlocks[\s\S]*arrangeCoworkAssistantSegments/, "Lst segmentation and sequence orchestration are absent");
   requirePattern(files.assistantBlocks, /useCoworkAssistantTimelineStore[\s\S]*useSyncCoworkAssistantTimelineStore/, "Lst/J9e timeline store wiring is absent");
   requirePattern(files.assistantStore, /createStore\(\(\) => initialState\)/, "J9e per-assistant timeline store is absent");
@@ -64,25 +64,30 @@ function verifyOfficialComponentBoundaries() {
   requirePattern(files.statusPill, /group\/status flex items-center gap-2 py-1 text-sm transition-colors cursor-pointer text-left/, "Tet status button classes differ");
   requirePattern(files.primitives, /flex flex-col font-ui leading-normal[\s\S]*TimelineContext\.Provider/, "det boundary is absent");
   requirePattern(files.primitives, /flex flex-col shrink-0[\s\S]*w-\[20px\] flex justify-center shrink-0/, "cet boundary is absent");
-  requirePattern(files.timelineBlock, /CoworkTimelineThinkingText[\s\S]*CoworkTimelineGroupItem[\s\S]*CoworkTimelineTextContent/, "gst -> Net thinking renderer is absent");
+  // Official gst thinking → Net (clock + jet), not z9e → O9e ThinkingCell.
+  requirePattern(files.timelineBlock, /CoworkTimelineThinkingItem[\s\S]*CoworkTimelineGroupItem[\s\S]*CoworkTimelineTextContent/, "gst -> Net thinking renderer is absent");
   requirePattern(files.timelineBlock, /CoworkTimelineClockGlyph className="text-text-500" size=\{16\}/, "Net leading clock icon is absent");
+  requirePattern(files.timelineBlock, /isThisMessageStreaming/, "gst isThisMessageStreaming prop is absent");
+  requirePattern(files.timelineBlock, /thinkingStreaming|isThisMessageStreaming && \(!block\.stop_timestamp/, "gst thinking stream formula is absent");
+  requirePattern(files.timelineSegment, /isThisMessageStreaming=\{isThisMessageStreaming\}/, "gst call site missing isThisMessageStreaming");
   requirePattern(files.glyphs, /M10\.386 2\.51A7\.5 7\.5 0 1 1 2\.5 10/, "official nv clock path is absent");
   requirePattern(files.glyphs, /const vectorSize = vectorSizeOverride \?\? vectorSizes\[size\]/, "official Nx vector-size mapping is absent");
   requirePattern(files.glyphs, /viewBox="0 0 20 20"/, "official Nx viewBox is absent");
-  forbidPattern(files.timelineBlock, /CoworkThinkingRow|label = expanded \? "Thought process"/, "old O9e-like timeline thinking row is still active");
+  forbidPattern(files.timelineBlock, /CoworkThinkingCell|CoworkThinkingRow|label = expanded \? "Thought process"/, "O9e ThinkingCell must not mount from gst timeline block");
   requirePattern(files.toolRow, /group\/row flex flex-row items-center rounded-lg px-2\.5 w-full/, "met tool row classes differ");
 }
 
 function verifyMessageAndPermissionFlow() {
   requirePattern(files.conversation, /relative w-full min-h-full flex flex-col/, "IYe inner scroll container is absent");
-  requirePattern(files.conversation, /Math\.floor\(node\.scrollHeight - node\.scrollTop - node\.clientHeight\) < 8/, "official pin-to-bottom threshold is absent");
+  requirePattern(files.conversation, /isCoworkNearBottom\(node\)[\s\S]*rootMargin: "0px 0px 150px 0px"/, "official IYe near-bottom helper or t$t sentinel boundary is absent");
   requirePattern(files.conversation, /\{permissionApprovals\}[\s\S]*<CoworkConversationStatus/, "LTe is not between messages and status");
   requirePattern(files.conversation, /className="h-12"[\s\S]*<CoworkConversationBottomSpacer/, "h-12 and LUt bottom spacer order differs");
-  requirePattern(files.conversationSpacer, /containerHeight - humanHeight - assistantHeight - composerHeight - extrasHeight - 98/, "LUt height calculation differs");
-  requirePattern(files.permission, /visibleRequests\.length > 0 \? "mb-6"[\s\S]*AnimatePresence/, "LTe permission boundary is absent");
+  requirePattern(files.conversationSpacer, /computeCoworkBottomSpacerHeight[\s\S]*COWORK_SPACER_DEFAULT_BUFFER_PX[\s\S]*Math\.max\(/, "LUt height model differs");
+  requirePattern(files.conversationSpacer, /initialPrevMessageCount[\s\S]*disablePinToTop[\s\S]*disableInitialScrollToBottom[\s\S]*ResizeObserver/, "LUt lifecycle controls are absent");
+  requirePattern(files.permission, /visible\.length > 0 \? "mb-6"[\s\S]*AnimatePresence/, "LTe permission boundary is absent");
   requirePattern(files.permission, /-mx-1 overflow-hidden px-1/, "LTe permission item wrapper differs");
-  requirePattern(files.permission, /Schedule task/, "scheduled-task approval branch is absent");
-  requirePattern(files.permission, /Save skill/, "save-skill approval branch is absent");
+  requirePattern(files.permission, /case "scheduled-task":[\s\S]*CoworkScheduledTaskApproval/, "scheduled-task approval branch is absent");
+  requirePattern(files.permission, /case "save-skill":[\s\S]*CoworkSaveSkillApproval/, "save-skill approval branch is absent");
 }
 
 function verifyMessageModel() {

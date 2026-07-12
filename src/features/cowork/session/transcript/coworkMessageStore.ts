@@ -1,6 +1,6 @@
-import type { ChatMessage } from "../../../../adapters/desktopBridge/types";
 import type { CoworkStreamSnapshot } from "../stream/coworkStreamTypes";
-import { asRecord, parseJsonObject, stringValue } from "../recordUtils";
+import type { CoworkRawMessage } from "../types";
+import { asRecord, stringValue } from "../recordUtils";
 import {
   apiMessageId,
   localCommandOutput,
@@ -12,21 +12,20 @@ import {
   parseHumanContent,
 } from "./coworkMessageStoreHelpers";
 import { collectAnswers, collectResultMetadata, collectToolResults, collectToolSummaries } from "./coworkMessageStoreIndexes";
+import { mergeCoworkStreamedSdkMessage, toCoworkSdkMessage } from "./coworkMessageStreamMerge";
+import { markCoworkMcpApp, syntheticCoworkReconnectBlocks } from "./coworkMcpMessageNormalization";
 import type { CoworkChatMessage, CoworkContentBlock, CoworkMessageStoreOptions } from "./coworkMessageTypes";
 
 const emptyResources = { attachments: [] as unknown[], files: [] as unknown[], files_v2: [], sync_sources: [] as unknown[] };
 const noResponseRequested = "No response requested.";
 
 export function buildCoworkChatMessages(
-  messages: ChatMessage[],
+  messages: CoworkRawMessage[],
   streamSnapshot: CoworkStreamSnapshot,
   options: CoworkMessageStoreOptions = {},
 ) {
-  const sdkMessages = messages.map(toSdkMessage);
-  const streamMessage = streamSnapshot && !sdkMessages.some((message) => messageUuid(message, "") === streamSnapshot.messageId)
-    ? sdkMessageFromStream(streamSnapshot)
-    : null;
-  return normalizeSdkMessages(streamMessage ? [...sdkMessages, streamMessage] : sdkMessages, options);
+  const sdkMessages = messages.map(toCoworkSdkMessage);
+  return normalizeSdkMessages(streamSnapshot ? mergeCoworkStreamedSdkMessage(sdkMessages, streamSnapshot) : sdkMessages, options);
 }
 
 export function normalizeSdkMessages(messages: Record<string, unknown>[], options: CoworkMessageStoreOptions = {}) {
@@ -36,6 +35,7 @@ export function normalizeSdkMessages(messages: Record<string, unknown>[], option
   const answers = collectAnswers(messages);
   const resultMetadata = collectResultMetadata(messages);
   const toolSummaries = collectToolSummaries(messages);
+  const reconnectServerUuids = new Set<string>();
   let processedCount = 0;
 
   for (const [index, message] of messages.entries()) {
@@ -50,11 +50,11 @@ export function normalizeSdkMessages(messages: Record<string, unknown>[], option
     }
     if (message.type !== "assistant") continue;
     if (startsSubagent(message)) appendSubagentAssistant(chatMessages, message, index, subagentMessageById, toolResults, toolSummaries);
-    else appendAssistant(chatMessages, message, index, subagentMessageById, toolResults, answers, resultMetadata, toolSummaries);
+    else appendAssistant(chatMessages, message, index, subagentMessageById, toolResults, answers, resultMetadata, toolSummaries, options, reconnectServerUuids);
   }
 
   for (const [index, pending] of (options.pendingMessages ?? []).entries()) {
-    const message = toSdkMessage(pending);
+    const message = toCoworkSdkMessage(pending);
     const parsed = parseHumanContent(message);
     if (parsed.content.length === 0) continue;
     chatMessages.push(createChatMessage(message, index + processedCount, "human", parsed.content, {
@@ -123,6 +123,8 @@ function appendAssistant(
   answers: Map<string, unknown>,
   resultMetadata: Map<string, Record<string, unknown>>,
   summaries: Map<string, CoworkContentBlock>,
+  options: CoworkMessageStoreOptions,
+  reconnectServerUuids: Set<string>,
 ) {
   const parentId = stringValue(message.parent_tool_use_id);
   const parent = parentId ? parents[parentId] : undefined;
@@ -132,7 +134,15 @@ function appendAssistant(
     return;
   }
   const resultByToolId = assistantResults(message, results, resultMetadata);
-  const blocks = normalizeAssistantBlocks(messageContent(message), resultByToolId, answers, summaries);
+  const blocks = normalizeAssistantBlocks(
+    messageContent(message),
+    resultByToolId,
+    answers,
+    summaries,
+    options,
+    reconnectServerUuids,
+    message.receivedStreamAt !== undefined,
+  );
   if (blocks.length === 0) return;
   const previous = output.at(-1);
   const previousHasSubagent = previous?.content.some(isTaskOrAgentTool) ?? false;
@@ -151,6 +161,9 @@ function normalizeAssistantBlocks(
   results: Map<string, CoworkContentBlock>,
   answers: Map<string, unknown>,
   summaries: Map<string, CoworkContentBlock>,
+  options: CoworkMessageStoreOptions,
+  reconnectServerUuids: Set<string>,
+  isLive: boolean,
 ) {
   const output: CoworkContentBlock[] = [];
   for (const block of blocks) {
@@ -160,11 +173,12 @@ function normalizeAssistantBlocks(
     }
     if (block.name === "mcp__cowork__mark_task_complete") continue;
     if (block.name === "ToolSearch" && asRecord(block.input).query === "select:mcp__cowork__mark_task_complete") continue;
-    const tool = normalizeToolUse(block, answers);
+    const tool = normalizeToolUse(block, answers, options.lookupMcpTool);
     output.push(tool);
     if (!block.id) continue;
     const result = normalizeSpecialResult(results.get(block.id), block.name);
     if (result) output.push(result);
+    output.push(...syntheticCoworkReconnectBlocks(block, result, options, reconnectServerUuids, isLive));
     const summary = summaries.get(block.id);
     if (summary) output.push(summary);
   }
@@ -190,9 +204,10 @@ function createChatMessage(message: Record<string, unknown>, index: number, send
     content,
     sender,
     uuid: messageUuid(message, `message-${index}`),
-    created_at: stringValue(payload.created_at) ?? stringValue(message.timestamp) ?? "",
+    created_at: "",
     metadata: Object.keys(metadata).length ? metadata : undefined,
     parent_message_uuid: stringValue(payload.parent_message_uuid) ?? stringValue(message.parent_message_uuid),
+    stop_details: payload.stop_details ?? message.stop_details,
     stop_reason: stringValue(payload.stop_reason) ?? stringValue(message.stop_reason),
     updated_at: stringValue(payload.updated_at) ?? stringValue(message.updated_at),
     ...emptyResources,
@@ -211,7 +226,7 @@ function appendApiMessageId(target: CoworkChatMessage, message: Record<string, u
 
 function registerSubagentParent(message: Record<string, unknown>, parent: CoworkChatMessage, parents: Record<string, CoworkChatMessage>) {
   const first = messageContent(message)[0];
-  if (first?.type === "tool_use" && first.id && !parents[first.id]) parents[first.id] = parent;
+  if (first?.type === "tool_use" && first.id && !(first.id in parents)) parents[first.id] = parent;
 }
 
 function startsSubagent(message: Record<string, unknown>) {
@@ -222,42 +237,23 @@ function isTaskOrAgentTool(block?: CoworkContentBlock) {
   return block?.type === "tool_use" && (block.name === "Task" || block.name === "Agent");
 }
 
-function toSdkMessage(message: ChatMessage) {
-  const raw = asRecord(message.raw);
-  if (Object.keys(raw).length > 0) return raw;
-  return { type: message.role, uuid: message.id, message: { id: message.id, role: message.role, content: [{ type: "text", text: message.text }] } };
-}
-
-function sdkMessageFromStream(snapshot: NonNullable<CoworkStreamSnapshot>) {
-  return {
-    type: "assistant",
-    uuid: snapshot.messageId,
-    receivedStreamAt: Date.now(),
-    message: {
-      id: snapshot.messageId,
-      role: "assistant",
-      content: snapshot.blocks.map((block) => block.kind === "tool"
-        ? { type: "tool_use", id: block.id, name: block.name, input: parseJsonObject(block.partialJson) ?? {}, partial_json: block.partialJson }
-        : block.kind === "thinking"
-          ? { type: "thinking", thinking: block.text }
-          : { type: "text", text: block.text }),
-    },
-  };
-}
-
 function interleaveResults(blocks: CoworkContentBlock[], results: Map<string, CoworkContentBlock>, summaries: Map<string, CoworkContentBlock>) {
   return blocks.flatMap((block) => block.type === "tool_use" && block.id
     ? [block, results.get(block.id), summaries.get(block.id)].filter((item): item is CoworkContentBlock => Boolean(item))
     : [block]);
 }
 
-function normalizeToolUse(block: CoworkContentBlock, answers: Map<string, unknown>) {
+function normalizeToolUse(
+  block: CoworkContentBlock,
+  answers: Map<string, unknown>,
+  lookupMcpTool?: CoworkMessageStoreOptions["lookupMcpTool"],
+) {
   if (block.name === "mcp__cowork__present_files") return { ...block, name: "present_files" };
   if (block.name === "mcp__cowork__launch_code_session") return { ...block, name: "launch_code_session" };
   if (block.name === "AskUserQuestion" && block.id && answers.has(block.id)) {
     return { ...block, input: { ...asRecord(block.input), answers: answers.get(block.id) } };
   }
-  return block;
+  return markCoworkMcpApp(block, lookupMcpTool);
 }
 
 function normalizeSpecialResult(result: CoworkContentBlock | undefined, toolName?: string) {

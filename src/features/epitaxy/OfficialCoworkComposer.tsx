@@ -5,7 +5,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { desktopBridge, type CoworkMountedProject, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
-import type { LocalSessionsBridge, SessionSummary } from "../../adapters/desktopBridge/types";
+import type { CoworkSessionsBridge, SessionSummary } from "../../adapters/desktopBridge/types";
 import { OfficialButton, type OfficialDropdownItem } from "./OfficialEpitaxyComponents";
 import { Icon } from "../../shell/icons";
 import { createCoworkAddMenuItems, type CoworkAddMenuProject } from "./cowork/CoworkAddMenuItems";
@@ -73,6 +73,11 @@ const coworkPermissionItems: Array<{ icon: string; label: string; value: Permiss
   { icon: "Hand4FingerStop", label: "Ask", value: "default" },
   { icon: "Warning", label: "Act", value: "auto" },
 ];
+
+type OfficialCoworkComposerBridge = Pick<CoworkSessionsBridge,
+  | "addTrustedFolder" | "clearSession" | "forkSession" | "getSupportedCommands"
+  | "isFolderTrusted" | "launchUltrareview" | "rewind" | "setMcpServers" | "submitFeedback"
+>;
 
 export function OfficialCoworkPromptBox({
   busy,
@@ -455,7 +460,7 @@ function OfficialCoworkSendButton({
 }
 
 const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
-  bridge: LocalSessionsBridge;
+  bridge: OfficialCoworkComposerBridge;
   disabled?: boolean;
   onChange: (value: string) => void;
   onSubmit: () => void;
@@ -572,7 +577,7 @@ function OfficialCoworkFolderPicker({
   recentTargets,
   selectedFolders,
 }: {
-  bridge: LocalSessionsBridge;
+  bridge: OfficialCoworkComposerBridge;
   defaultTarget: OfficialCoworkFolderTarget | null;
   disabled?: boolean;
   onSelectedFoldersChange: (folders: string[]) => void;
@@ -811,7 +816,7 @@ function OfficialCoworkFolderTrustDialog({
   onConfirm,
   pending,
 }: {
-  bridge: LocalSessionsBridge;
+  bridge: Pick<OfficialCoworkComposerBridge, "addTrustedFolder">;
   onAlwaysAllow: (path: string) => void | Promise<void>;
   onCancel: () => void;
   onConfirm: (path: string) => void;

@@ -2,6 +2,7 @@ import type {
   ChatMessage,
   ConnectedBrowser,
   ConnectedOfficeFile,
+  CoworkSessionsBridge,
   CoworkSpaceSummary,
   DesktopBridge,
   DesktopPreferences,
@@ -87,6 +88,13 @@ export function emitFakeToolPermissionRequest(event: unknown, kind: FakeSessionK
   if (requestId && sessionId) fakePermissionSessionByRequestId.set(requestId, sessionId);
   notifyFakeListeners(fakeSessionEvents[kind].permissionRequests, event);
   notifyFakeListeners(fakeSessionEvents[kind].events, event);
+}
+
+export function getFakeSessionListenerCounts(kind: FakeSessionKind = "code") {
+  return {
+    events: fakeSessionEvents[kind].events.size,
+    permissionRequests: fakeSessionEvents[kind].permissionRequests.size,
+  };
 }
 
 function fakeSessionKind(targetKind: SessionSummary["kind"]): FakeSessionKind {
@@ -674,6 +682,41 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   },
 });
 
+function createCoworkSessionBridge(): CoworkSessionsBridge {
+  const bridge = createSessionBridge("epitaxy");
+  return {
+    ...bridge,
+    addFolderToSession: async (id, folder) => {
+      const session = await bridge.addFolderToSession?.(id, folder);
+      return session
+        ? { folderPath: folder, ok: true }
+        : { error: "Session not found", ok: false };
+    },
+    addTrustedFolder: async (folder) => {
+      fakeTrustedFolders.add(folder);
+      return true;
+    },
+    isFolderTrusted: async (folder) => fakeTrustedFolders.has(folder),
+    rewind: async (id, messageId) => {
+      const session = await bridge.getSession(id);
+      const prompt = session?.messages?.find((message) => message.id === messageId)?.text ?? null;
+      const rewound = await bridge.rewind?.(id, messageId);
+      return rewound ? prompt : null;
+    },
+    getRawSession: async (id) => {
+      const session = await bridge.getSession(id);
+      if (!session) return null;
+      return {
+        ...session,
+        rawBufferedMessages: session.bufferedMessages ?? [],
+        rawMessages: session.messages ?? [],
+        rawSession: session,
+      };
+    },
+    getRawTranscript: async (id) => await bridge.getTranscript?.(id) ?? [],
+  };
+}
+
 function buildFakeCodeStats() {
   const today = new Date().toISOString().slice(0, 10);
   const codeSessions = sessions.filter((session) => session.kind === "code");
@@ -706,7 +749,7 @@ function sliceFakeMessagesThroughId(messages: NonNullable<SessionSummary["messag
 
 export const fakeDesktopBridge: DesktopBridge = {
   LocalSessions: createSessionBridge("code"),
-  LocalAgentModeSessions: createSessionBridge("epitaxy"),
+  LocalAgentModeSessions: createCoworkSessionBridge(),
   LocalSessionEnvironment: {
     get: async () => ({ ...fakeLocalSessionEnvironment }),
     save: async (env) => {
@@ -732,6 +775,13 @@ export const fakeDesktopBridge: DesktopBridge = {
   CoworkSpaces: {
     list: async () => coworkSpaces.map((space) => ({ ...space })),
     onEvent: () => () => {},
+  },
+  CoworkFilePreview: {
+    isEnabled: async () => false,
+    isVmReady: async () => false,
+    show: async () => false,
+    hide: async () => undefined,
+    parkAndCapture: async () => null,
   },
   FileSystem: {
     browseFiles: async () => [`${workspace.cwd ?? "/tmp"}/sample.txt`],
@@ -803,5 +853,7 @@ export const fakeDesktopBridge: DesktopBridge = {
     close: async () => {},
     getFullscreen: async () => false,
     getZoomFactor: async () => 1,
+    onFullscreenChanged: () => () => undefined,
+    onZoomFactorChanged: () => () => undefined,
   },
 };

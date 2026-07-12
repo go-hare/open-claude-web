@@ -1,11 +1,11 @@
-import type { ChatMessage } from "../../../../adapters/desktopBridge/types";
 import { asRecord, numberValue, stringValue } from "../recordUtils";
+import type { CoworkRawMessage } from "../types";
 import type { CoworkBackgroundTask, CoworkTaskStatus } from "./coworkActivityTypes";
 
 const notificationPattern = /<task-notification>([\s\S]*?)<\/task-notification>/g;
 const tag = (name: string) => new RegExp(`<${name}>([\\s\\S]*?)<\\/${name}>`);
 
-export function parseCoworkBackgroundTasks(messages: ChatMessage[]) {
+export function parseCoworkBackgroundTasks(messages: CoworkRawMessage[]) {
   const tasks = new Map<string, CoworkBackgroundTask>();
   for (const message of messages) {
     const raw = asRecord(message.raw);
@@ -29,7 +29,7 @@ function mergeSystemTask(tasks: Map<string, CoworkBackgroundTask>, raw: Record<s
   tasks.set(taskId, task);
 }
 
-function parseNotifications(message: ChatMessage, raw: Record<string, unknown>) {
+function parseNotifications(message: CoworkRawMessage, raw: Record<string, unknown>) {
   const text = rawUserText(raw) || message.text;
   if (!text.includes("<task-notification>")) return [];
   const results: CoworkBackgroundTask[] = [];
