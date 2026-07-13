@@ -1,7 +1,10 @@
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { desktopBridge } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
 import { Icon } from "../../shell/icons";
+import { readPersistedFrameMode } from "../../stores/frameStoreHelpers";
+import { ConnectorsEmptyPictogram } from "./ConnectorsEmptyPictogram";
+import { CustomizeIndexPictogram } from "./CustomizeIndexPictogram";
 import { CustomizeSideNav } from "./CustomizeSideNav";
 
 type EmptyAction = {
@@ -15,6 +18,8 @@ const SKILLS_ENABLED = false;
 export function CustomizePage({ onNavigate }: RouteViewProps) {
   const pathname = window.location.pathname;
   const needsTrafficLightPadding = useCustomizeTrafficLightPadding();
+  // Official H6t: mode-aware back target (cowork → /task/new, code → /code).
+  const backHref = useMemo(() => (readPersistedFrameMode() === "cowork" ? "/task/new" : "/code"), []);
   const [pluginBrowserOpen, setPluginBrowserOpen] = useState(false);
   const [pluginWarningDismissed, setPluginWarningDismissed] = useState(false);
 
@@ -76,7 +81,7 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
     <div className="flex h-full w-full flex-col">
       {needsTrafficLightPadding ? <div aria-hidden="true" className="h-10 shrink-0" data-testid="customize-traffic-light-spacer" /> : null}
       <div className="flex flex-1 min-h-0">
-        <CustomizeSideNav activePath={pathname} onNavigate={onNavigate} onBrowsePlugins={() => setPluginBrowserOpen(true)} />
+        <CustomizeSideNav activePath={pathname} backHref={backHref} onNavigate={onNavigate} onBrowsePlugins={() => setPluginBrowserOpen(true)} />
         <div className="flex-1 overflow-y-auto bg-bg-100">
           {showPluginWarning ? <PluginSkillsWarning onClose={() => setPluginWarningDismissed(true)} onNavigate={onNavigate} /> : null}
           {content}
@@ -114,15 +119,13 @@ function useCustomizeTrafficLightPadding() {
 }
 
 function CustomizeIndex({ onNavigate, onBrowsePlugins }: { onNavigate: (path: string) => void; onBrowsePlugins: () => void }) {
-  // c63a78ed4:959-981: index centered stack + option card classes/text；
-  // 5175 当前特性开关 fs() 为 false，所以不展示 Create new skills 卡。
+  // c63a78ed4 _Component63: centered stack maxWidth 530 + Va pictogram + option cards.
+  // Skills card gated by fs(); current shell keeps Skills off like prior 5175 flag.
   return (
     <div className="flex h-full w-full items-center justify-center">
       <div className="flex w-full flex-col items-center gap-10" style={{ maxWidth: 530 }}>
         <div className="flex flex-col items-center gap-4">
-          <span className="text-text-100" style={{ "--df-icon-size": "64px" } as CSSProperties}>
-            <Icon name="briefcase" />
-          </span>
+          <CustomizeIndexPictogram size="medium" />
           <h1 className="font-heading text-center text-2xl text-text-000">Customize Claude</h1>
           <p className="text-center text-sm text-text-300">Skills, connectors, and plugins shape how Claude works with you.</p>
         </div>
@@ -136,12 +139,11 @@ function CustomizeIndex({ onNavigate, onBrowsePlugins }: { onNavigate: (path: st
 }
 
 function ConnectorsRoute({ onBrowsePlugins }: { onBrowsePlugins: () => void }) {
-  // c63a78ed4:829-836 + 839-857: 无数据时只渲染全页 empty state，不渲染列表 sidebar。
-  // 5175 当前权限/能力态下 u=false，所以没有“浏览连接器/添加自定义连接器”按钮。
+  // c63a78ed4 Kt: empty uses Wa pictogram + learn-more copy; browse/add buttons gated by manage permissions.
   void onBrowsePlugins;
   return (
     <EmptyState
-      icon="connectors"
+      pictogram={<ConnectorsEmptyPictogram size="medium" />}
       message="Unlock more with Claude when you connect your team's tools. Learn more"
     />
   );
@@ -198,11 +200,15 @@ function CustomizeOptionCard({ icon, title, description, onClick }: { icon: stri
   );
 }
 
-function EmptyState({ icon, message, actions }: { icon: string; message: ReactNode; actions?: EmptyAction[] }) {
+function EmptyState({ icon, pictogram, message, actions }: { icon?: string; pictogram?: ReactNode; message: ReactNode; actions?: EmptyAction[] }) {
   return (
     <div className="flex h-full w-full items-center justify-center">
       <div className="flex flex-col items-center gap-6">
-        <div className="flex size-10 items-center justify-center rounded-full bg-bg-300 text-text-300"><Icon name={icon} /></div>
+        {pictogram ?? (
+          <div className="flex size-10 items-center justify-center rounded-full bg-bg-300 text-text-300">
+            <Icon name={icon ?? "connectors"} />
+          </div>
+        )}
         <p className="text-sm text-text-300 text-center px-6 text-pretty max-w-[300px]">{message}</p>
         {actions && actions.length > 0 ? (
           <div className="flex flex-col gap-3 w-full max-w-[200px] items-center">

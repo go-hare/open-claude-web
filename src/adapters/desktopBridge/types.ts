@@ -158,6 +158,10 @@ export type CreateScheduledTaskInput = {
   useWorktree?: boolean;
   sourceBranch?: string;
   userSelectedFolders?: string[];
+  /** Official uYt disableJitter → "Run at exact time" */
+  disableJitter?: boolean;
+  chromePermissionMode?: string;
+  spaceId?: string;
 };
 
 

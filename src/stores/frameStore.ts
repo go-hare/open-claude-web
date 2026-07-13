@@ -119,7 +119,10 @@ export function useFrameStore(): FrameStore {
       persistDFrameState({ groupByByMode });
       return { ...current, groupByByMode };
     }),
-    setMode: (mode) => setState((current) => ({ ...current, mode, moreOpen: false, showDragPinHint: false })),
+    setMode: (mode) => setState((current) => {
+      persistDFrameState({ mode });
+      return { ...current, mode, moreOpen: false, showDragPinHint: false };
+    }),
     setMoreOpen: (moreOpen) => setState((current) => ({ ...current, moreOpen })),
     setNavPinnedIds: (navPinnedIds) => setState((current) => {
       persistDFrameState({ navPinnedIds });

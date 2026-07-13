@@ -2,6 +2,8 @@ import { Icon } from "../../shell/icons";
 
 type CustomizeSideNavProps = {
   activePath: string;
+  /** Official H6t back target: cowork → /task/new, code → /code. */
+  backHref: string;
   onBrowsePlugins: () => void;
   onNavigate: (path: string) => void;
 };
@@ -9,16 +11,16 @@ type CustomizeSideNavProps = {
 const PLUGINS_ENABLED = true;
 const SKILLS_ENABLED = false;
 
-export function CustomizeSideNav({ activePath, onBrowsePlugins, onNavigate }: CustomizeSideNavProps) {
-  // index-BELzQL5P:315919-316033: unframed customize sidebar:
-  // nav w-[256px], top back/title, route links, Personal plugins block.
+export function CustomizeSideNav({ activePath, backHref, onBrowsePlugins, onNavigate }: CustomizeSideNavProps) {
+  // Official E7t unframed customize sidebar (index-BELzQL5P ~315919):
+  // nav w-[256px], back/title, Skills(gated)/Connectors, Personal plugins block.
   return (
     <nav className="flex flex-col h-full shrink-0 overflow-hidden border-r border-border-300 bg-bg-100 w-[256px]">
       <div className="flex items-center gap-2 py-3 px-4">
         <button
           type="button"
           aria-label="Back"
-          onClick={() => onNavigate("/code")}
+          onClick={() => onNavigate(backHref)}
           className="cds-reset inline-flex size-8 items-center justify-center rounded-lg text-text-300 hover:bg-bg-300 hover:text-text-100 focus-visible:shadow-focus"
         >
           <Icon name="arrowLeft" />
@@ -33,7 +35,7 @@ export function CustomizeSideNav({ activePath, onBrowsePlugins, onNavigate }: Cu
           </CustomizeNavButton>
         ) : null}
         <CustomizeNavButton active={activePath.startsWith("/customize/connectors")} icon="connectors" onClick={() => onNavigate("/customize/connectors")}>
-          连接器
+          Connectors
         </CustomizeNavButton>
 
         {PLUGINS_ENABLED ? (

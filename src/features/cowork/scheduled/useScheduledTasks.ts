@@ -7,18 +7,50 @@ export function useScheduledTasks() {
 
   useEffect(() => {
     let alive = true;
-    void desktopBridge.CoworkScheduledTasks.list()
-      .then((items) => {
+
+    const reload = async () => {
+      try {
+        const items = await desktopBridge.CoworkScheduledTasks.list();
         if (alive) setTasks(items);
-      })
-      .finally(() => {
+      } finally {
         if (alive) setIsLoading(false);
+      }
+    };
+
+    void reload();
+
+    const unsubscribe =
+      desktopBridge.CoworkScheduledTasks.onEvent?.(() => {
+        void reload();
+      }) ??
+      desktopBridge.CCDScheduledTasks.onEvent?.(() => {
+        void reload();
       });
+
     return () => {
       alive = false;
+      unsubscribe?.();
     };
   }, []);
 
-  const existingNames = useMemo(() => new Set(tasks.map((task) => task.id)), [tasks]);
+  // Official CYt/uYt existingNames: displayName ?? id (we map title → displayName)
+  // Also index normalized forms so uYt re duplicate check matches saved name ids.
+  const existingNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const task of tasks) {
+      const display = task.title || task.id;
+      names.add(display);
+      names.add(task.id);
+      const normalized = display
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9_-]/g, "")
+        .replace(/^[-_]+|[-_]+$/g, "");
+      if (normalized) names.add(normalized);
+    }
+    return names;
+  }, [tasks]);
+
   return { tasks, existingNames, isLoading };
 }

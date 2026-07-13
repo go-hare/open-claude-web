@@ -1,8 +1,14 @@
 import type { ScheduledTaskSummary } from "../../../adapters/desktopBridge";
 
-export type ScheduleFrequency = "once" | "hourly" | "daily" | "weekdays" | "weekly";
+/** Official uYt frequency values (txe options; custom/fireAt only when editing). */
+export type ScheduleFrequency = "once" | "hourly" | "daily" | "weekdays" | "weekly" | "custom" | "fireAt";
 
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+/** Official LNe: weekday long names from locale */
+export const WEEKDAY_LABELS = Array.from({ length: 7 }, (_, index) =>
+  new Date(2024, 0, 7 + index).toLocaleDateString([], { weekday: "long" }),
+);
+
+const DAYS = WEEKDAY_LABELS;
 
 export const RESERVED_TASK_IDS = new Set(["new", "new-local"]);
 
@@ -32,8 +38,9 @@ export const taskNameError = (name: string, existingNames: Set<string>) => {
   return undefined;
 };
 
+/** Official $Ne — once/fireAt omit cron; custom kept by caller. */
 export const cronForSchedule = (frequency: ScheduleFrequency, hour: number, minute: number, dayOfWeek: number) => {
-  if (frequency === "once") return undefined;
+  if (frequency === "once" || frequency === "fireAt" || frequency === "custom") return undefined;
   if (frequency === "hourly") return `${minute} * * * *`;
   if (frequency === "daily") return `${minute} ${hour} * * *`;
   if (frequency === "weekdays") return `${minute} ${hour} * * 1-5`;

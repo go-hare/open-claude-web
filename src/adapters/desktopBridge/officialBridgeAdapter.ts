@@ -1575,7 +1575,13 @@ async function getWorkspaceContext(web: RawClaudeWebBridge): Promise<WorkspaceCo
 }
 
 function normalizePreferences(value: unknown): DesktopPreferences {
-  return asRecord(value) as DesktopPreferences;
+  // Official hYt shows only when keepAwakeEnabled is defined on AppPreferences.
+  // Desktop SettingsStore defaults it to false; normalize so web always sees the key.
+  const prefs = (asRecord(value) ?? {}) as DesktopPreferences;
+  return {
+    ...prefs,
+    keepAwakeEnabled: prefs.keepAwakeEnabled === true,
+  };
 }
 
 function repoInfo(raw: Record<string, unknown>, cwd?: string): SessionSummary["repo"] {

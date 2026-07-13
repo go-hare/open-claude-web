@@ -1,118 +1,134 @@
+/**
+ * Official desktop scheduled tasks list: index-BELzQL5P zQt → CYt (B4 path).
+ * Create opens uYt modal (not /new full page).
+ * Action: Dc size sm; tabsEnd: Ide sort + gYt filter.
+ */
+import { useMemo, useState } from "react";
 import type { RouteViewProps } from "../../../app/routes";
-import type { ScheduledTaskSummary } from "../../../adapters/desktopBridge";
-import { Icon } from "../../../shell/icons";
-import { CoworkButton } from "../ui/CoworkButton";
-import { ScheduledRouteShell } from "./ScheduledPrimitives";
+import { desktopBridge, type ScheduledTaskSummary } from "../../../adapters/desktopBridge";
+import { OfficialButton } from "../../shared/OfficialButton";
+import {
+  ScheduledLocalAwakeBanner,
+  ScheduledTaskCard,
+  ScheduledTaskCardGrid,
+  ScheduledTaskStatusPill,
+  ScheduledTasksEmptyState,
+  ScheduledTasksFilterControl,
+  ScheduledTasksPageShell,
+  ScheduledTasksSortControl,
+} from "./ScheduledListPrimitives";
+import { ScheduledTaskCreateModal } from "./ScheduledTaskCreateModal";
 import { scheduleLabel, taskDisplayName } from "./scheduleUtils";
-import { scheduledTaskDetailPath, scheduledTaskNewPath } from "./scheduledPaths";
+import { scheduledTaskDetailPath } from "./scheduledPaths";
 import { useScheduledTasks } from "./useScheduledTasks";
 
-type ContentProps = {
-  tasks: ScheduledTaskSummary[];
-  isLoading: boolean;
-  onCreate: () => void;
-  onSelect: (id: string) => void;
-};
-
 export function ScheduledTasks({ onNavigate }: RouteViewProps) {
-  const { tasks, isLoading } = useScheduledTasks();
+  const { tasks, existingNames, isLoading } = useScheduledTasks();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const [sortBy, setSortBy] = useState<"nextRun" | "name">("nextRun");
+
+  const filteredTasks = useMemo(() => {
+    let next = tasks;
+    const query = filter.trim().toLowerCase();
+    if (query) {
+      next = next.filter((task) => {
+        const title = taskDisplayName(task).toLowerCase();
+        const description = (task.description ?? "").toLowerCase();
+        return title.includes(query) || description.includes(query);
+      });
+    }
+    return [...next].sort((left, right) => {
+      if (sortBy === "name") {
+        return taskDisplayName(left).localeCompare(taskDisplayName(right));
+      }
+      // Official CYt nextRun sort: enabled fireAt timestamp, else Infinity.
+      const leftTime = left.enabled && left.fireAt ? new Date(left.fireAt).getTime() : Number.POSITIVE_INFINITY;
+      const rightTime = right.enabled && right.fireAt ? new Date(right.fireAt).getTime() : Number.POSITIVE_INFINITY;
+      return leftTime - rightTime;
+    });
+  }, [filter, sortBy, tasks]);
+
+  const hasFilter = filter.trim().length > 0;
+  // Official CYt: r?.createScheduledTask
+  const canCreate =
+    typeof desktopBridge.CoworkScheduledTasks.create === "function" ||
+    typeof desktopBridge.CCDScheduledTasks.create === "function";
+
   return (
-    <ScheduledRouteShell>
-      <ScheduledTasksContent
-        isLoading={isLoading}
-        tasks={tasks}
-        onCreate={() => onNavigate(scheduledTaskNewPath())}
-        onSelect={(id) => onNavigate(scheduledTaskDetailPath(id))}
+    <div className="h-full" data-official-source="index-BELzQL5P.js:CYt">
+      <ScheduledTasksPageShell
+        action={
+          canCreate ? (
+            <OfficialButton onClick={() => setCreateOpen(true)} size="sm" variant="primary">
+              新任务
+            </OfficialButton>
+          ) : undefined
+        }
+        subheader={
+          <p className="text-sm text-text-500">
+            Run tasks on a schedule or whenever you need them. Type /schedule in any existing task to set one up.
+          </p>
+        }
+        tabsEnd={
+          <>
+            <ScheduledTasksSortControl onChange={setSortBy} value={sortBy} />
+            <ScheduledTasksFilterControl
+              onChange={setFilter}
+              placeholder="Filter scheduled tasks"
+              value={filter}
+            />
+          </>
+        }
+        title="Scheduled tasks"
+      >
+        <ScheduledLocalAwakeBanner />
+        {!isLoading && filteredTasks.length === 0 ? (
+          hasFilter ? (
+            <div className="text-sm text-text-500 mt-4">No scheduled tasks match your search.</div>
+          ) : (
+            <ScheduledTasksEmptyState />
+          )
+        ) : null}
+        {filteredTasks.length > 0 ? (
+          <ScheduledTaskCardGrid>
+            {filteredTasks.map((task) => (
+              <ScheduledTaskListCard
+                key={task.id}
+                onSelect={() => onNavigate(scheduledTaskDetailPath(task.id))}
+                task={task}
+              />
+            ))}
+          </ScheduledTaskCardGrid>
+        ) : null}
+      </ScheduledTasksPageShell>
+
+      <ScheduledTaskCreateModal
+        existingNames={existingNames}
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(id) => onNavigate(scheduledTaskDetailPath(id))}
       />
-    </ScheduledRouteShell>
-  );
-}
-
-export function ScheduledTasksContent({ tasks, isLoading, onCreate, onSelect }: ContentProps) {
-  const hasTasks = tasks.length > 0;
-  return (
-    <div className="h-full overflow-y-auto">
-      <div className="max-w-[720px] mx-auto flex flex-col gap-g8 px-p8 py-[48px]">
-        <ScheduledTasksHeader onCreate={onCreate} />
-        {hasTasks ? <LocalAwakeBanner /> : null}
-        <TaskListState isLoading={isLoading} tasks={tasks} onSelect={onSelect} />
-      </div>
     </div>
   );
 }
 
-function ScheduledTasksHeader({ onCreate }: { onCreate: () => void }) {
+function ScheduledTaskListCard({
+  onSelect,
+  task,
+}: {
+  onSelect: () => void;
+  task: ScheduledTaskSummary;
+}) {
+  const completed = !task.enabled && Boolean(task.fireAt) && Boolean(task.lastRunAt);
+  const statusLabel = task.enabled ? scheduleLabel(task) : null;
   return (
-    <div className="flex items-start justify-between gap-g6">
-      <div className="flex flex-col gap-g3">
-        <h1 className="text-heading text-t9">Scheduled tasks</h1>
-        <p className="text-body text-t6">Run tasks on a schedule or whenever you need them. Type /schedule in any session to set one up.</p>
-      </div>
-      <CoworkButton onClick={onCreate} size="base" variant="primary">新任务</CoworkButton>
-    </div>
+    <ScheduledTaskCard
+      description={task.description}
+      footer={<ScheduledTaskStatusPill completed={completed} enabled={task.enabled} label={statusLabel} />}
+      href={scheduledTaskDetailPath(task.id)}
+      onClick={onSelect}
+      title={taskDisplayName(task)}
+    />
   );
-}
-
-function LocalAwakeBanner() {
-  return (
-    <div className="flex items-center gap-g4 px-p6 py-p5 rounded-r6 bg-t1 text-body text-t7">
-      <Icon name="ShieldCheck" size="md" className="shrink-0 text-t6" />
-      <span>Local tasks only run while your computer is awake.</span>
-    </div>
-  );
-}
-
-function TaskListState({ isLoading, tasks, onSelect }: Omit<ContentProps, "onCreate">) {
-  if (isLoading && tasks.length === 0) {
-    return (
-      <div role="status" className="flex items-center justify-center py-[64px] text-t5">
-        <span className="sr-only">Loading scheduled tasks</span>
-      </div>
-    );
-  }
-  if (tasks.length === 0) return <EmptyScheduledTasks />;
-  return <div className="flex flex-col gap-g3">{tasks.map((task) => <TaskCard key={task.id} task={task} onSelect={onSelect} />)}</div>;
-}
-
-function EmptyScheduledTasks() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-g4 py-[64px] text-body text-t5">
-      <Icon name="ClockTimeslot" size="lg" />
-      <span>No scheduled tasks yet.</span>
-    </div>
-  );
-}
-
-function TaskCard({ task, onSelect }: { task: ScheduledTaskSummary; onSelect: (id: string) => void }) {
-  const label = scheduleLabel(task);
-  const nextRun = task.enabled && task.nextRunAt ? formatNextRun(task.nextRunAt) : null;
-  return (
-    <button type="button" onClick={() => onSelect(task.id)} className="flex items-center gap-g6 px-p7 py-p6 rounded-r6 bg-t1 hover:bg-t2 text-left outline-none hide-focus-ring ring-focus">
-      <div className="flex-1 min-w-0 flex flex-col gap-g1">
-        <div className="text-body text-t9 truncate">{taskDisplayName(task)}</div>
-        <div className="text-footnote text-t6 truncate">
-          {label}
-          {nextRun ? <> · Next run {nextRun}</> : null}
-        </div>
-      </div>
-      {task.fireAt ? (
-        <span className="inline-flex items-center gap-g2 px-p4 py-p1 rounded-r4 bg-t2 text-footnote text-t7">
-          <Icon name="ArrowRight" size="sm" />
-          Run once
-        </span>
-      ) : null}
-      {!task.enabled ? (
-        <span className="inline-flex items-center gap-g2 px-p4 py-p1 rounded-r4 bg-t2 text-footnote text-t7">
-          <Icon name="Stop" size="sm" />
-          Paused
-        </span>
-      ) : null}
-    </button>
-  );
-}
-
-function formatNextRun(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString(undefined, { day: "numeric", hour: "numeric", minute: "2-digit", month: "short" });
 }

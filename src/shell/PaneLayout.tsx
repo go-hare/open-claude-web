@@ -38,9 +38,16 @@ export function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLay
   usePaneSplitBounds(hostRef);
 
   const isSessionRoute = currentRoute.id === "code-session" || currentRoute.id === "cowork-session";
+  // Official cbc59a8af PaneLayout: session panes set --df-header-h:0 so yUt's
+  // md:-mt-[var(--df-header-h)] does not pull main/drawer/rightSidebar into chrome.
+  // FrameHeader is null on these routes; in-session headers (gUt / xQt) own top inset.
   const contentClassName = isSessionRoute
     ? "flex-1 min-h-0 relative flex flex-col overflow-hidden"
     : "flex-1 min-h-0 relative flex flex-col overflow-x-clip overflow-y-auto";
+  const contentStyle = useMemo(
+    () => (isSessionRoute ? ({ "--df-header-h": "0px" } as CSSProperties) : undefined),
+    [isSessionRoute],
+  );
   const focusPane = useCallback((paneIndex: number) => paneStore.setFocusedIndex(mode, paneIndex), [mode]);
   const closePane = useCallback((paneIndex: number) => paneStore.closePane(mode, paneIndex), [mode]);
   const primaryDrag = usePaneDrag(0, mode, onNavigate);
@@ -66,7 +73,7 @@ export function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLay
         role="region"
       >
         <FrameHeader currentKey={currentKey} currentRoute={currentRoute} mode={mode} />
-        <div className={contentClassName}>
+        <div className={contentClassName} style={contentStyle}>
           {children}
         </div>
       </section>

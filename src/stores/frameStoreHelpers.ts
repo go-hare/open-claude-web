@@ -9,7 +9,7 @@ const FRAME_MODE_VALUES = ["cowork", "code"] as const;
 
 type PersistedDFrameState = {
   collapsed?: unknown; collapsedGroups?: unknown; customGroupAssignments?: unknown; customGroupOrder?: unknown; customGroups?: unknown;
-  darkerCode?: unknown; groupByByMode?: unknown; navPinnedIds?: unknown; pinnedOrder?: unknown; seenDragPinHint?: unknown;
+  darkerCode?: unknown; groupByByMode?: unknown; mode?: unknown; navPinnedIds?: unknown; pinnedOrder?: unknown; seenDragPinHint?: unknown;
   sidebarWidth?: unknown; sortByByMode?: unknown; systemFont?: unknown;
 };
 
@@ -28,10 +28,16 @@ export function persistDFrameState(partial: PersistedDFrameState) {
   }
 }
 
+/** Official H6t mode read for standalone routes (e.g. /customize back target). */
+export function readPersistedFrameMode(): FrameMode {
+  const mode = readPersistedDFrameState().mode;
+  return mode === "cowork" || mode === "code" ? mode : "code";
+}
+
 export function createInitialFrameState(): FrameState {
   const persisted = readPersistedDFrameState();
   return {
-    mode: "code",
+    mode: readPersistedFrameMode(),
     collapsedGroups: getStringArray(persisted.collapsedGroups),
     customGroupAssignments: getStringRecord(persisted.customGroupAssignments),
     customGroupOrder: getStringArrayRecord(persisted.customGroupOrder),
