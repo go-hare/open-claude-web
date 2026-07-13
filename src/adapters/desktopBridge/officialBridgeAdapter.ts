@@ -130,6 +130,9 @@ type RawScheduledTasksBridge = {
 
 type RawCoworkSpacesBridge = {
   getAllSpaces?: () => Promise<unknown[]>;
+  createSpace?: (input: { name: string; instructions?: string }) => Promise<unknown>;
+  createSpaceFolder?: (location: string, name: string) => Promise<unknown>;
+  addFolderToSpace?: (spaceId: string, folderPath: string) => Promise<unknown>;
   onOnSpaceEvent?: RawEventSubscription;
   onSpaceEvent?: RawEventSubscription;
 };
@@ -945,6 +948,21 @@ function createScheduledTasksBridge(raw: RawScheduledTasksBridge | undefined): D
 function createCoworkSpacesBridge(raw: RawCoworkSpacesBridge | undefined): DesktopBridge["CoworkSpaces"] {
   return {
     list: async () => normalizeCoworkSpaces(await raw?.getAllSpaces?.()),
+    create: async (input) => {
+      const created = await raw?.createSpace?.(input);
+      if (!created) return null;
+      const spaces = normalizeCoworkSpaces([created]);
+      return spaces[0] ?? null;
+    },
+    createSpaceFolder: async (location, name) => {
+      const result = await raw?.createSpaceFolder?.(location, name);
+      if (typeof result === "string" && result.length > 0) return result;
+      const record = asRecord(result);
+      return stringValue(record.path) ?? stringValue(record.folderPath) ?? stringValue(record.folder) ?? null;
+    },
+    addFolderToSpace: async (spaceId, folderPath) => {
+      await raw?.addFolderToSpace?.(spaceId, folderPath);
+    },
     onEvent: (listener) => {
       const subscribe = raw?.onSpaceEvent ?? raw?.onOnSpaceEvent;
       return subscribe?.(listener) ?? (() => {});
@@ -1120,6 +1138,8 @@ function normalizeCoworkSpaces(items: unknown): CoworkSpaceSummary[] {
     spaces.push({
       id,
       name: stringValue(raw.name) ?? stringValue(raw.title) ?? "Untitled project",
+      description: stringValue(raw.description) ?? null,
+      createdAtMs: timestampValue(raw.createdAt) ?? timestampValue(raw.created_at) ?? undefined,
       updatedAtMs: timestampValue(raw.updatedAt) ?? timestampValue(raw.updated_at) ?? Date.now(),
       isStarred: booleanValue(raw.isStarred) ?? booleanValue(raw.starred),
       sessionIds: normalizeStringArray(raw.sessionIds ?? raw.session_ids),

@@ -119,9 +119,16 @@ export type SessionSummary = {
 export type CoworkSpaceSummary = {
   id: string;
   name: string;
+  description?: string | null;
+  createdAtMs?: number;
   updatedAtMs: number;
   isStarred?: boolean;
   sessionIds?: string[];
+};
+
+export type CreateCoworkSpaceInput = {
+  name: string;
+  instructions?: string;
 };
 
 export type ScheduledTaskSummary = {
@@ -471,6 +478,12 @@ export type ScheduledTasksBridge = {
 
 export type CoworkSpacesBridge = {
   list: () => Promise<CoworkSpaceSummary[]>;
+  /** Official gT.createSpace */
+  create?: (input: CreateCoworkSpaceInput) => Promise<CoworkSpaceSummary | null>;
+  /** Official gT.createSpaceFolder(location, name) → folder path */
+  createSpaceFolder?: (location: string, name: string) => Promise<string | null>;
+  /** Official gT.addFolderToSpace(spaceId, folderPath) */
+  addFolderToSpace?: (spaceId: string, folderPath: string) => Promise<void>;
   onEvent?: (listener: (event: unknown) => void) => () => void;
 };
 

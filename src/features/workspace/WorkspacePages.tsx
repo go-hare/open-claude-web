@@ -5,9 +5,6 @@ import { primaryButtonClass, secondaryButtonClass } from "../shared/buttonClasse
 
 type Navigate = RouteViewProps["onNavigate"];
 
-const tabClass = "font-base px-4 py-1.5 rounded-full shrink-0 flex items-center justify-center";
-const activeTabClass = `${tabClass} text-text-100 bg-bg-300`;
-const inactiveTabClass = `${tabClass} text-text-500 hover:bg-bg-200`;
 const smallPrimaryClass = `${primaryButtonClass} h-8 py-1.5`;
 const smallSecondaryClass = `${secondaryButtonClass} h-8 py-1.5`;
 const inputClass = `bg-bg-000
@@ -84,24 +81,8 @@ export function RecentsPage({ onNavigate }: RouteViewProps) {
   );
 }
 
-export function ProjectsPage({ onNavigate }: RouteViewProps) {
-  const [activeTab, setActiveTab] = useState("yours");
-  return (
-    <Surface root={false}>
-      <header className="flex w-full bg-bg-100 !border-0 shadow-[0px_1px_0px_0px_theme(colors.border-300)] shrink-0" style={{ height: 56 }}>
-        <div className="w-full h-full flex items-center px-8">
-          <h1 className="text-text-100 flex items-center gap-2 text-center max-md:hidden min-w-0 font-medium leading-tight">项目</h1>
-          <div className="ml-auto flex items-center gap-sm" style={{ marginRight: 101 }}>
-            <button className={activeTab === "yours" ? activeTabClass : inactiveTabClass} onClick={() => setActiveTab("yours")} type="button">Your projects</button>
-            <button className={activeTab === "team" ? activeTabClass : inactiveTabClass} onClick={() => setActiveTab("team")} type="button">Team</button>
-            <button className={activeTab === "shared" ? activeTabClass : inactiveTabClass} onClick={() => setActiveTab("shared")} type="button">Shared with you</button>
-          </div>
-          <button className={smallPrimaryClass} onClick={() => onNavigate("/projects/create")} style={{ height: 32, width: 94 }} type="button">New project</button>
-        </div>
-      </header>
-    </Surface>
-  );
-}
+/** Official `_Component32` cowork branch — see `./ProjectsPage`. */
+export { ProjectsPage } from "./ProjectsPage";
 
 export function ProjectCreatePage({ onNavigate }: RouteViewProps) {
   const [name, setName] = useState("");

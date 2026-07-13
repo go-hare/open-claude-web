@@ -774,6 +774,19 @@ export const fakeDesktopBridge: DesktopBridge = {
   CoworkScheduledTasks: createFakeScheduledTasksBridge(coworkScheduledTasks),
   CoworkSpaces: {
     list: async () => coworkSpaces.map((space) => ({ ...space })),
+    create: async (input) => {
+      const space = {
+        id: `space-${Date.now()}`,
+        name: input.name,
+        description: input.instructions ?? null,
+        createdAtMs: Date.now(),
+        updatedAtMs: Date.now(),
+      };
+      coworkSpaces.unshift(space);
+      return { ...space };
+    },
+    createSpaceFolder: async (location, name) => `${location.replace(/[\\/]+$/, "")}/${name}`,
+    addFolderToSpace: async () => {},
     onEvent: () => () => {},
   },
   CoworkFilePreview: {
