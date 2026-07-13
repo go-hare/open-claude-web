@@ -469,9 +469,23 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   getSupportedCommands: async () => [
     { name: "help", description: "Show available slash commands" },
     { name: "compact", description: "Compact conversation history" },
-    { name: "context", description: "Show context usage" },
     { name: "model", description: "Set the model for this session", argumentHint: "model-id" },
-    { name: "schedule", description: "Create a scheduled task that can be run on demand or automatically on an interval." },
+    {
+      name: "schedule",
+      description: "Create a scheduled task that can be run on demand or automatically on an interval.",
+      scope: "cowork",
+    },
+    {
+      name: "setup-cowork",
+      description: "Guided Cowork setup — install a matching plugin, try a skill, connect tools.",
+      scope: "cowork",
+    },
+    {
+      name: "consolidate-memory",
+      description: "Reflective pass over your memory files — merge duplicates, fix stale facts, prune the index.",
+      scope: "cowork",
+    },
+    { name: "context", description: "Show what's using your context window", scope: "cowork" },
   ],
   getWorkingTreeStatus: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
   readFileAtCwd: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),

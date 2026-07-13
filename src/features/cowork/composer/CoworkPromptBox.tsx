@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { createElement, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { desktopBridge, type CoworkMountedProject, type PermissionMode, type WorkspaceContext } from "../../../adapters/desktopBridge";
 import { Icon } from "../../../shell/icons";
 import { coworkSessionsBridge } from "../session/coworkSessionBridge";
+import { CoworkAddMenuFolderAddIcon } from "../newTask/CoworkAddMenuIcons";
 import { createCoworkAddMenuItems, type CoworkAddMenuProject } from "../newTask/CoworkAddMenuItems";
+import { useCoworkNewTaskText } from "../newTask/coworkNewTaskMessages";
 import { CoworkSelectedProjectIndicators } from "../newTask/CoworkProjectContext";
 import { CoworkSelectedFiles } from "../newTask/CoworkSelectedFiles";
 import type { CoworkUploadedFile } from "../newTask/coworkUploadedFiles";
@@ -60,20 +62,36 @@ function useCoworkPromptBoxState(props: CoworkPromptBoxProps) {
     const paths = await desktopBridge.Preferences.getDirectoryPath?.(true);
     if (paths?.length) updateFolders([...selectedFolders, ...paths]);
   }, [selectedFolders, updateFolders]);
-  const addMenuItems = useMemo(() => props.onAddFiles
-    ? createCoworkAddMenuItems({ includeAddFolder: true, onAddFiles: props.onAddFiles, onAddFolder: addFolder, onNavigate: props.onNavigate, onSelectProject: props.onProjectSelect, projects: props.projectMenuItems })
-    : [{ icon: "Folder1", label: "Add folder", onSelect: addFolder }], [addFolder, props]);
+  // Official cwt on /task/new: isAgentNewRoute && considerEnabledForNonUI → hide project/Drive/GitHub + modes.
+  // Icons: gy paperclip / cv folder / Ky connectors / Dv plugins (see CoworkAddMenuIcons).
+  const addMenuItems = useMemo(
+    () =>
+      props.onAddFiles
+        ? createCoworkAddMenuItems({
+            isAgentRoute: true,
+            includeAddFolder: true,
+            onAddFiles: props.onAddFiles,
+            onAddFolder: addFolder,
+            onNavigate: props.onNavigate,
+            onSelectProject: props.onProjectSelect,
+            projects: props.projectMenuItems,
+          })
+        : [{ icon: createElement(CoworkAddMenuFolderAddIcon, { size: 14 }), label: "Add folder", onSelect: addFolder }],
+    [addFolder, props],
+  );
   const modelItems = modelOptions.map((item, index) => ({ checked: item.value === props.model, label: item.label, noQuickKey: index === 0, onSelect: () => props.onModelChange(item.value) }));
   const permissionItems = permissionOptions.map((item) => ({ checked: item.value === props.permissionMode, icon: item.icon, label: item.label, onSelect: () => props.onPermissionModeChange(item.value) }));
   return { addMenuItems, modelItems, modelLabel: modelOptions.find((item) => item.value === props.model)?.label ?? "Default model", permissionItems, permissionLabel: permissionOptions.find((item) => item.value === props.permissionMode)?.label ?? "Ask", recentFolders, selectedFolders, updateFolders };
 }
 
 function CoworkPromptSurface({ inputRef, props, toolbarItems }: { inputRef: React.RefObject<CoworkPromptInputHandle | null>; props: CoworkPromptBoxProps; toolbarItems: CoworkDropdownItem[] }) {
+  // Official CAt placeholder id XLcM6WHfQR ("How can I help you today?" / zh 今天我可以帮你做什么？)
+  const text = useCoworkNewTaskText();
   return (
     <fieldset className="flex w-full min-w-0 flex-col">
       <input aria-hidden="true" className="absolute -z-10 h-0 w-0 opacity-0" data-testid="file-upload" tabIndex={-1} type="file" />
       <div className="relative"><div className="!box-content flex flex-col bg-bg-000 mx-2 md:mx-0 items-stretch transition-all duration-200 relative z-10 rounded-[20px] cursor-text border border-transparent md:w-full shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-300)/0.15)] hover:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] focus-within:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/7.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)]" onClick={(event) => { if (!(event.target instanceof HTMLElement && event.target.closest("button"))) inputRef.current?.focus(); }}>
-        <div className="flex flex-col m-3.5 gap-3"><div className="relative font-large"><CoworkPromptInput disabled={props.busy} onChange={props.setPrompt} onSubmit={props.onSubmit} placeholder="今天我可以帮助你做什么？" ref={inputRef} slashCwd={props.workspace.cwd} value={props.prompt} /></div>
+        <div className="flex flex-col m-3.5 gap-3"><div className="relative font-large"><CoworkPromptInput disabled={props.busy} onChange={props.setPrompt} onSubmit={props.onSubmit} placeholder={text.composerPlaceholder} ref={inputRef} slashCwd={props.workspace.cwd} value={props.prompt} /></div>
           <CoworkSelectedFiles files={props.selectedFiles ?? []} onRemove={props.onRemoveFile ?? noop} />
           <CoworkSelectedProjectIndicators onRemove={props.onRemoveProject ?? noop} projects={props.selectedProjects ?? []} />
           <CoworkPromptToolbar busy={props.busy} items={toolbarItems} onSubmit={props.onSubmit} prompt={props.prompt} />

@@ -1,5 +1,5 @@
 import { Menu } from "@base-ui-components/react/menu";
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { isValidElement, useState, type CSSProperties, type ReactNode } from "react";
 import { Icon } from "../../../shell/icons";
 import type { CoworkDropdownItem } from "./CoworkMenuTypes";
 
@@ -77,6 +77,15 @@ function CoworkMenuItems({ items }: { items: CoworkDropdownItem[] }) {
   return <>{items.map((item, index) => <CoworkMenuItem hasChecks={hasChecks} item={item} key={index} />)}</>;
 }
 
+function CoworkMenuItemIcon({ checked, icon }: { checked?: boolean; icon?: ReactNode }) {
+  if (!icon) return null;
+  return (
+    <span className={`relative flex items-center justify-center size-[14px] shrink-0 ${checked ? "text-[var(--accent)]" : ""}`} style={iconStyle}>
+      {typeof icon === "string" ? <Icon bold={Boolean(checked)} name={icon} size="sm" /> : isValidElement(icon) ? icon : null}
+    </span>
+  );
+}
+
 function CoworkMenuItem({ hasChecks, item }: { hasChecks: boolean; item: CoworkDropdownItem }) {
   if (item.type === "separator") return <CoworkMenuSeparator />;
   if (item.type === "section-header") return <div className="flex items-center px-p8 py-p2 min-h-[20px] text-footnote text-t6">{item.label}</div>;
@@ -85,7 +94,7 @@ function CoworkMenuItem({ hasChecks, item }: { hasChecks: boolean; item: CoworkD
     <>
       {item.separatorBefore ? <CoworkMenuSeparator /> : null}
       <Menu.Item aria-checked={item.checked} className={[itemClass, item.icon ? "gap-g6" : "gap-g3"].join(" ")} closeOnClick={item.keepOpen || item.closeOnClick === false ? false : undefined} disabled={item.disabled} onClick={item.onSelect} role={item.checked === undefined ? undefined : "menuitemradio"}>
-        {item.icon ? <span className={`relative flex items-center justify-center size-[14px] shrink-0 ${item.checked ? "text-[var(--accent)]" : ""}`} style={iconStyle}><Icon bold={item.checked} name={item.icon} size="sm" /></span> : null}
+        <CoworkMenuItemIcon checked={item.checked} icon={item.icon} />
         <CoworkMenuItemLabel item={item} />
         {hasChecks ? <span className="flex items-center justify-center size-[16px] shrink-0 ml-[6px] text-[var(--accent)]" style={iconStyle}>{item.checked ? <Icon name="CheckSelection" size="sm" /> : null}</span> : null}
         {item.status === true ? <span aria-hidden="true" className="size-[6px] shrink-0 rounded-full bg-[var(--accent)]" /> : item.status || null}
@@ -101,7 +110,7 @@ function CoworkSubmenu({ hasChecks, item }: { hasChecks: boolean; item: CoworkDr
   return (
     <Menu.SubmenuRoot onOpenChange={setOpen} open={open}>
       <Menu.SubmenuTrigger className={[itemClass, item.icon ? "gap-g6" : "gap-g3"].join(" ")} disabled={item.disabled} onClick={() => setOpen(true)} openOnHover>
-        {item.icon ? <span className="relative flex items-center justify-center size-[14px] shrink-0" style={iconStyle}><Icon name={item.icon} size="sm" /></span> : null}
+        <CoworkMenuItemIcon icon={item.icon} />
         <CoworkMenuItemLabel item={item} />{hasChecks ? <span className="size-[16px] shrink-0 ml-[6px]" /> : null}<Icon name="ChevronRightMedium" size="sm" />
       </Menu.SubmenuTrigger>
       <Menu.Portal><Menu.Positioner align="start" className="epitaxy-root z-[70]" side="right" sideOffset={4}><Menu.Popup className={popupClass}><span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] bg-surface-popover effect-hud" /><CoworkMenuItems items={item.items ?? []} /></Menu.Popup></Menu.Positioner></Menu.Portal>

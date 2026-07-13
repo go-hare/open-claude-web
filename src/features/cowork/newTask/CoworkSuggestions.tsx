@@ -1,42 +1,175 @@
-import { type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import { Icon } from "../../../shell/icons";
+import {
+  clearLegacyCoworkSuggestionsHiddenKey,
+  dismissCoworkSuggestions,
+  isCoworkSuggestionsDismissed,
+  useCoworkNewTaskText,
+  type CoworkNewTaskText,
+} from "./coworkNewTaskMessages";
+import {
+  DataSuggestionThumbnail,
+  InboxSuggestionThumbnail,
+  OrganizeSuggestionThumbnail,
+  PrepSuggestionThumbnail,
+} from "./CoworkSuggestionThumbnails";
 
 export type CoworkPromptSuggestion = {
   id: string;
   label: string;
   prompt: string;
-  icon: ReactNode;
+  thumbnail: ComponentType;
+  systemFolder?: "desktop" | "downloads";
 };
 
-const coworkSuggestions: CoworkPromptSuggestion[] = [
-  {
-    id: "initial-1",
-    label: "优化我的一周",
-    prompt: `帮我规划并优化这一周。我已经打开日历，准备让你查看和编辑。\n\n先查看我的日历并总结：\n- 会议总数\n- 最忙的日期\n- 哪些地方有 2 小时以上的空档\n\n在提出调整前，先问我本周目标、需要多少专注时间、是否有日历外截止日期、哪些会议可拒绝或缩短，以及要保护的个人边界。`,
-    icon: <SuggestionCalendarIcon />,
-  },
-  {
-    id: "initial-2",
-    label: "整理我的截图",
-    prompt: `帮我整理桌面上最近的截图。\n\n先扫描桌面并告诉我：\n- 截图或图片总数\n- 日期范围\n\n然后只处理最近 14 天的截图，识别内容、建议描述性文件名，并提出应放入的文件夹或可删除项。先给我计划，等我确认后再整理前 10 个文件作为预览。`,
-    icon: <SuggestionFolderIcon />,
-  },
-  {
-    id: "initial-3",
-    label: "从文件中发现洞察",
-    prompt: `帮我从一组文件里发现模式和洞察。\n\n先扫描文件夹并总结：\n- 文件总数\n- 日期范围\n- 内容类型\n\n分析前先问我希望发现什么、应优先哪些文件或时间段、最终输出什么格式。先找出 3-5 个模式，每个模式给 2-3 个具体例子。`,
-    icon: <SuggestionDataIcon />,
-  },
-];
+type SuggestionCategory = {
+  id: string;
+  name: string;
+  prompts: CoworkPromptSuggestion[];
+};
 
-export function CoworkSuggestions({ onSelect }: { onSelect: (suggestion: CoworkPromptSuggestion) => void }) {
+/**
+ * Official s6t catalog (~265540) built from Q5t/X5t/J5t/e6t/t6t message ids.
+ */
+export function buildCoworkSuggestionCategories(text: CoworkNewTaskText): SuggestionCategory[] {
+  return [
+    {
+      id: "initial",
+      name: text.initialName,
+      prompts: [
+        { id: "initial-1", label: text.label1, prompt: text.prompt1, thumbnail: PrepSuggestionThumbnail },
+        {
+          id: "initial-2",
+          label: text.label2,
+          prompt: text.prompt2,
+          thumbnail: OrganizeSuggestionThumbnail,
+          systemFolder: "desktop",
+        },
+        { id: "initial-3", label: text.label3, prompt: text.prompt3, thumbnail: DataSuggestionThumbnail },
+      ],
+    },
+    {
+      id: "organize",
+      name: text.organizeName,
+      prompts: [
+        {
+          id: "organize-downloads",
+          label: text.downloadsLabel,
+          prompt: text.downloadsPrompt,
+          thumbnail: OrganizeSuggestionThumbnail,
+          systemFolder: "downloads",
+        },
+        {
+          id: "organize-photos",
+          label: text.photosLabel,
+          prompt: text.photosPrompt,
+          thumbnail: OrganizeSuggestionThumbnail,
+        },
+        {
+          id: "organize-inbox",
+          label: text.inboxLabel,
+          prompt: text.inboxPrompt,
+          thumbnail: InboxSuggestionThumbnail,
+        },
+      ],
+    },
+    {
+      id: "prep",
+      name: text.prepName,
+      prompts: [
+        { id: "prep-meeting", label: text.meetingLabel, prompt: text.meetingPrompt, thumbnail: PrepSuggestionThumbnail },
+        { id: "prep-vacation", label: text.vacationLabel, prompt: text.vacationPrompt, thumbnail: PrepSuggestionThumbnail },
+        {
+          id: "prep-interview",
+          label: text.interviewLabel,
+          prompt: text.interviewPrompt,
+          thumbnail: PrepSuggestionThumbnail,
+        },
+      ],
+    },
+    {
+      id: "data",
+      name: text.dataName,
+      prompts: [
+        { id: "data-slack", label: text.slackLabel, prompt: text.slackPrompt, thumbnail: InboxSuggestionThumbnail },
+        {
+          id: "data-voice-memos",
+          label: text.voiceMemosLabel,
+          prompt: text.voiceMemosPrompt,
+          thumbnail: DataSuggestionThumbnail,
+        },
+        {
+          id: "data-spreadsheet",
+          label: text.spreadsheetLabel,
+          prompt: text.spreadsheetPrompt,
+          thumbnail: DataSuggestionThumbnail,
+        },
+      ],
+    },
+  ];
+}
+
+/**
+ * Official r6t (~265681): shuffle categories, hide, n6t rows, Customize with plugins.
+ * Plugin-skills branch (a6t) requires host plugin catalog; static s6t is the default surface.
+ */
+export function CoworkSuggestions({
+  onSelect,
+  onCustomizeWithPlugins,
+}: {
+  onSelect: (suggestion: CoworkPromptSuggestion) => void;
+  onCustomizeWithPlugins?: () => void;
+}) {
+  const text = useCoworkNewTaskText();
+  const categories = useMemo(() => buildCoworkSuggestionCategories(text), [text]);
+  const [categoryIndex, setCategoryIndex] = useState(0);
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    clearLegacyCoworkSuggestionsHiddenKey();
+    setHidden(isCoworkSuggestionsDismissed());
+  }, []);
+
+  const category = categories[categoryIndex] ?? categories[0];
+
+  const shuffle = useCallback(() => {
+    setCategoryIndex((current) => (current + 1) % categories.length);
+  }, [categories.length]);
+
+  const hide = useCallback(() => {
+    dismissCoworkSuggestions();
+    setHidden(true);
+  }, []);
+
+  if (hidden || !category) return null;
+
   return (
-    <section className="w-full max-w-2xl mt-8 group/suggestions">
-      <SuggestionHeader />
+    <section
+      className="w-full max-w-2xl mt-8 group/suggestions"
+      data-official-source="index-BELzQL5P.js:r6t/n6t suggestion list"
+    >
+      <div className="flex items-center justify-between mb-2 px-2">
+        <button
+          className="flex items-center gap-2 font-small text-text-500 hover:text-text-100 transition-colors"
+          onClick={shuffle}
+          type="button"
+        >
+          <Icon name="Shuffle" customSize={20} />
+          <span>{category.name}</span>
+        </button>
+        <button
+          aria-label={text.hideSuggestions}
+          className="text-text-500 hover:text-text-200 transition-colors opacity-0 group-hover/suggestions:opacity-100 border-0 bg-transparent p-0 cursor-default"
+          onClick={hide}
+          type="button"
+        >
+          <Icon name="X" customSize={16} />
+        </button>
+      </div>
       <div className="flex flex-col [&>button:hover+hr]:opacity-0 [&>hr:has(+button:hover)]:opacity-0">
-        {coworkSuggestions.map((suggestion, index) => (
+        {category.prompts.map((suggestion, index) => (
           <SuggestionRow
-            isLast={index === coworkSuggestions.length - 1}
+            isLast={index === category.prompts.length - 1}
             key={suggestion.id}
             onSelect={onSelect}
             suggestion={suggestion}
@@ -44,33 +177,17 @@ export function CoworkSuggestions({ onSelect }: { onSelect: (suggestion: CoworkP
         ))}
       </div>
       <button
-        className="font-small text-text-500 hover:text-text-300 transition-colors mt-2 ml-2 border-0 bg-transparent p-0 cursor-default"
+        className="font-small text-text-500 hover:text-text-300 transition-colors mt-1 ml-2 border-0 bg-transparent p-0 !text-text-500"
+        onClick={onCustomizeWithPlugins}
         type="button"
       >
-        用插件自定义
+        {text.customizeWithPlugins}
       </button>
     </section>
   );
 }
 
-function SuggestionHeader() {
-  return (
-    <div className="flex items-center justify-between mb-2 px-2">
-      <button className="flex items-center gap-2 font-small text-text-500 hover:text-text-100 transition-colors" type="button">
-        <Icon name="Shuffle" customSize={20} />
-        <span>随便挑个任务开始吧</span>
-      </button>
-      <button
-        aria-label="隐藏建议"
-        className="text-text-500 hover:text-text-200 transition-colors opacity-0 group-hover/suggestions:opacity-100 border-0 bg-transparent p-0 cursor-default"
-        type="button"
-      >
-        <Icon name="X" customSize={16} />
-      </button>
-    </div>
-  );
-}
-
+/** Official n6t (~265629): hover:bg-bg-300 + font-base label + caret. */
 function SuggestionRow({
   isLast,
   onSelect,
@@ -80,15 +197,20 @@ function SuggestionRow({
   onSelect: (suggestion: CoworkPromptSuggestion) => void;
   suggestion: CoworkPromptSuggestion;
 }) {
+  const Thumbnail = suggestion.thumbnail;
   return (
     <>
       <button
-        className="w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-200 hover:rounded-lg group text-left"
+        className="w-full flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-300 hover:rounded-lg group text-left"
         onClick={() => onSelect(suggestion)}
         type="button"
       >
-        <span className="flex-shrink-0 w-10 h-10 flex items-center justify-center">{suggestion.icon}</span>
-        <span className="flex-1 min-w-0"><span className="text-sm text-text-200">{suggestion.label}</span></span>
+        <span className="flex-shrink-0 w-10 h-10 flex items-center justify-center">
+          <Thumbnail />
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="font-base text-text-200">{suggestion.label}</span>
+        </span>
         <Icon name="CaretRight" customSize={16} className="hidden group-hover:block flex-shrink-0 text-text-500" />
       </button>
       {!isLast ? <hr className="border-t-0.5 border-border-300 mx-2 transition-opacity" /> : null}
@@ -96,26 +218,3 @@ function SuggestionRow({
   );
 }
 
-function SuggestionCalendarIcon() {
-  return (
-    <span className="inline-flex size-10 items-center justify-center rounded-r4 border-0.5 border-border-300 bg-bg-000 text-t6 shadow-sm">
-      <Icon name="Calendar" customSize={24} />
-    </span>
-  );
-}
-
-function SuggestionFolderIcon() {
-  return (
-    <span className="inline-flex size-10 items-center justify-center rounded-r4 border-0.5 border-border-300 bg-bg-000 text-t6 shadow-sm">
-      <Icon name="Folder" customSize={26} />
-    </span>
-  );
-}
-
-function SuggestionDataIcon() {
-  return (
-    <span className="inline-flex size-10 items-center justify-center rounded-r4 border-0.5 border-border-300 bg-bg-000 text-t6 shadow-sm">
-      <Icon name="Spreadsheet" customSize={24} />
-    </span>
-  );
-}

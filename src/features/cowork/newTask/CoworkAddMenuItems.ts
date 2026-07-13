@@ -1,4 +1,16 @@
+import { createElement, type ComponentType, type ReactElement } from "react";
 import type { CoworkDropdownItem } from "../ui/CoworkMenuTypes";
+import {
+  CoworkAddMenuConnectorsIcon,
+  CoworkAddMenuFolderAddIcon,
+  CoworkAddMenuGlobeIcon,
+  CoworkAddMenuPaperclipIcon,
+  CoworkAddMenuPluginsIcon,
+  CoworkAddMenuProjectsIcon,
+  CoworkAddMenuResearchIcon,
+  CoworkAddMenuSkillsIcon,
+  CoworkAddMenuStyleIcon,
+} from "./CoworkAddMenuIcons";
 
 export type CoworkAddMenuProject = {
   checked?: boolean;
@@ -8,15 +20,30 @@ export type CoworkAddMenuProject = {
   uuid: string;
 };
 
-type CreateCoworkAddMenuItemsOptions = {
+/**
+ * Official cwt (~178629 index-BELzQL5P):
+ * - files: awt/nwt=gy paperclip, optional Qyt=cv Add folder, optional screenshot
+ * - agent path e = dqe() || (isAgentNewRoute && considerEnabledForNonUI):
+ *   hide project / Drive / GitHub and entire modes group
+ * - tools: Skills (eRe=Vv) only if items; Connectors (Fvt=Ky); Plugins (Dv)
+ */
+export type CreateCoworkAddMenuItemsOptions = {
+  /** Official isAgentNewRoute && considerEnabledForNonUI, or dqe agent mode. Default true for /task/new. */
+  isAgentRoute?: boolean;
   includeAddFolder?: boolean;
   onAddFiles: () => void;
   onAddFolder?: () => void;
   onNavigate?: (path: string) => void;
   onSelectProject?: (project: CoworkAddMenuProject) => void;
   onToggleWebSearch?: () => void;
+  /** When false/undefined, Skills row is omitted (official h returns null if no skill items). */
+  skills?: CoworkDropdownItem[];
   projects?: CoworkAddMenuProject[];
   webSearchEnabled?: boolean;
+  /** Plugin catalog empty → official "Add plugins..."; with items → Plugins submenu. */
+  hasEnabledPlugins?: boolean;
+  /** Connectors empty → "Add connectors" button; with items → Connectors submenu. */
+  hasConnectors?: boolean;
 };
 
 type CoworkAddMenuRoutes = {
@@ -28,6 +55,11 @@ type CoworkAddMenuRoutes = {
 };
 
 const noop = () => undefined;
+const menuIconSize = 14;
+
+function icon(node: ComponentType<{ size?: number }>): ReactElement {
+  return createElement(node, { size: menuIconSize });
+}
 
 // Official reference:
 // index-BELzQL5P.js:dwt renders the Add popup with align="start",
@@ -37,22 +69,49 @@ const noop = () => undefined;
 export const coworkAddMenuOfficialSource = "index-BELzQL5P.js:cwt/dwt/pwt";
 
 export function createCoworkAddMenuItems({
+  isAgentRoute = true,
   includeAddFolder = false,
   onAddFiles,
   onAddFolder,
   onNavigate,
   onSelectProject,
   onToggleWebSearch,
+  skills,
   projects = [],
   webSearchEnabled = false,
+  hasEnabledPlugins = false,
+  hasConnectors = false,
 }: CreateCoworkAddMenuItemsOptions): CoworkDropdownItem[] {
   const routes = createCoworkAddMenuRoutes(onNavigate);
+  const fileItems = createCoworkFileItems({
+    isAgentRoute,
+    includeAddFolder,
+    onAddFiles,
+    onAddFolder,
+    onSelectProject,
+    openConnectors: routes.openConnectors,
+    openProjectCreate: routes.openProjectCreate,
+    projects,
+  });
+  const toolItems = createCoworkToolItems({
+    routes,
+    skills,
+    hasEnabledPlugins,
+    hasConnectors,
+  });
+  // Official: a = e ? [] : modes… where e = dqe || (isAgentNewRoute && considerEnabledForNonUI)
+  const modeItems = isAgentRoute
+    ? []
+    : createCoworkModeItems({
+        onToggleWebSearch,
+        openStyles: routes.openStyles,
+        webSearchEnabled,
+      });
+
   return [
-    ...createCoworkFileItems({ includeAddFolder, onAddFiles, onAddFolder, onSelectProject, openConnectors: routes.openConnectors, openProjectCreate: routes.openProjectCreate, projects }),
-    { label: "separator-tools", type: "separator" },
-    ...createCoworkToolItems(routes),
-    { label: "separator-modes", type: "separator" },
-    ...createCoworkModeItems({ onToggleWebSearch, openStyles: routes.openStyles, webSearchEnabled }),
+    ...fileItems,
+    ...(toolItems.length > 0 ? [{ label: "separator-tools", type: "separator" as const }, ...toolItems] : []),
+    ...(modeItems.length > 0 ? [{ label: "separator-modes", type: "separator" as const }, ...modeItems] : []),
   ];
 }
 
@@ -67,6 +126,7 @@ function createCoworkAddMenuRoutes(onNavigate?: (path: string) => void): CoworkA
 }
 
 function createCoworkFileItems({
+  isAgentRoute,
   includeAddFolder,
   onAddFiles,
   onAddFolder,
@@ -74,48 +134,80 @@ function createCoworkFileItems({
   openConnectors,
   openProjectCreate,
   projects,
-}: Pick<CreateCoworkAddMenuItemsOptions, "includeAddFolder" | "onAddFiles" | "onAddFolder" | "onSelectProject" | "projects"> & { openConnectors: () => void; openProjectCreate: () => void }): CoworkDropdownItem[] {
-  return [
+}: {
+  isAgentRoute: boolean;
+  includeAddFolder?: boolean;
+  onAddFiles: () => void;
+  onAddFolder?: () => void;
+  onSelectProject?: (project: CoworkAddMenuProject) => void;
+  openConnectors: () => void;
+  openProjectCreate: () => void;
+  projects?: CoworkAddMenuProject[];
+}): CoworkDropdownItem[] {
+  const items: CoworkDropdownItem[] = [
     {
-      icon: "FileAdd",
+      // Official awt icon nwt = gy
+      icon: icon(CoworkAddMenuPaperclipIcon),
       label: "Add files or photos",
       onSelect: onAddFiles,
     },
-    ...(includeAddFolder && onAddFolder ? [{
-      icon: "Folder1",
+  ];
+
+  if (includeAddFolder && onAddFolder) {
+    items.push({
+      // Official Qyt = cv
+      icon: icon(CoworkAddMenuFolderAddIcon),
       label: "Add folder",
       onSelect: onAddFolder,
-    } satisfies CoworkDropdownItem] : []),
-    ...createProjectSubmenuItem(projects ?? [], onSelectProject, openProjectCreate),
-    createDriveMenuItem(),
-    {
+    });
+  }
+
+  // Official: project / Drive / GitHub only when !(dqe || agentNewRoute)
+  if (!isAgentRoute) {
+    items.push(...createProjectSubmenuItem(projects ?? [], onSelectProject, openProjectCreate));
+    items.push(createDriveMenuItem());
+    items.push({
       icon: "GitBranch",
       label: "Add from GitHub",
       onSelect: openConnectors,
+    });
+  }
+
+  return items;
+}
+
+function createProjectSubmenuItem(
+  projects: CoworkAddMenuProject[],
+  onSelectProject: ((project: CoworkAddMenuProject) => void) | undefined,
+  openProjectCreate: () => void,
+): CoworkDropdownItem[] {
+  if (!projects.length && !onSelectProject) return [];
+  return [
+    {
+      icon: icon(CoworkAddMenuProjectsIcon),
+      items: createProjectMenuItems(projects, onSelectProject, openProjectCreate),
+      label: "Add to project",
+      type: "submenu",
     },
   ];
 }
 
-function createProjectSubmenuItem(projects: CoworkAddMenuProject[], onSelectProject: ((project: CoworkAddMenuProject) => void) | undefined, openProjectCreate: () => void): CoworkDropdownItem[] {
-  if (!projects.length && !onSelectProject) return [];
-  return [{
-    icon: "Projects",
-    items: createProjectMenuItems(projects, onSelectProject, openProjectCreate),
-    label: "Add to project",
-    type: "submenu",
-  }];
-}
-
-function createProjectMenuItems(projects: CoworkAddMenuProject[], onSelectProject: ((project: CoworkAddMenuProject) => void) | undefined, openProjectCreate: () => void): CoworkDropdownItem[] {
-  const projectItems = projects.slice(0, 8).map((project): CoworkDropdownItem => ({
-    checked: Boolean(project.checked),
-    closeOnClick: true,
-    icon: "Projects",
-    label: project.name,
-    onSelect: () => onSelectProject?.(project),
-    subtitle: project.creatorName ?? project.hostPath,
-    type: "checkbox",
-  }));
+function createProjectMenuItems(
+  projects: CoworkAddMenuProject[],
+  onSelectProject: ((project: CoworkAddMenuProject) => void) | undefined,
+  openProjectCreate: () => void,
+): CoworkDropdownItem[] {
+  const projectItems = projects.slice(0, 8).map(
+    (project): CoworkDropdownItem => ({
+      checked: Boolean(project.checked),
+      closeOnClick: true,
+      icon: icon(CoworkAddMenuProjectsIcon),
+      label: project.name,
+      onSelect: () => onSelectProject?.(project),
+      subtitle: project.creatorName ?? project.hostPath,
+      type: "checkbox",
+    }),
+  );
   return [
     ...projectItems,
     ...(projectItems.length ? [{ label: "projects-separator", type: "separator" } satisfies CoworkDropdownItem] : []),
@@ -135,60 +227,93 @@ function createDriveMenuItem(): CoworkDropdownItem {
   };
 }
 
-function createCoworkToolItems({ openConnectors, openPlugins, openSkills }: CoworkAddMenuRoutes): CoworkDropdownItem[] {
-  return [
-    {
-      icon: "Plugin",
-      items: [
-        {
-          icon: "Plugin",
-          label: "Add skills",
-          onSelect: openSkills,
-        },
-        {
-          icon: "Settings",
-          label: "Manage skills",
-          onSelect: openSkills,
-        },
-      ],
+function createCoworkToolItems({
+  routes,
+  skills,
+  hasEnabledPlugins,
+  hasConnectors,
+}: {
+  routes: CoworkAddMenuRoutes;
+  skills?: CoworkDropdownItem[];
+  hasEnabledPlugins: boolean;
+  hasConnectors: boolean;
+}): CoworkDropdownItem[] {
+  const items: CoworkDropdownItem[] = [];
+
+  // Official Skills (eRe = Vv). Omitted when no skill items.
+  if (skills && skills.length > 0) {
+    items.push({
+      icon: icon(CoworkAddMenuSkillsIcon),
+      items: skills,
       label: "Skills",
       type: "submenu",
-    },
-    {
-      icon: "Connectors",
+    });
+  }
+
+  // Official Vvt: empty → "Add connectors" button; else Connectors submenu.
+  if (hasConnectors) {
+    items.push({
+      icon: icon(CoworkAddMenuConnectorsIcon),
+      label: "Connectors",
+      type: "submenu",
+      items: [
+        {
+          icon: "Settings",
+          label: "Manage connectors",
+          onSelect: routes.openConnectors,
+        },
+      ],
+    });
+  } else {
+    items.push({
+      icon: icon(CoworkAddMenuConnectorsIcon),
       label: "Add connectors",
-      onSelect: openConnectors,
-    },
-    {
-      icon: "Plugin",
+      onSelect: routes.openConnectors,
+    });
+  }
+
+  // Official qCt: 0 plugins → "Add plugins..."; else Plugins submenu.
+  if (hasEnabledPlugins) {
+    items.push({
+      icon: icon(CoworkAddMenuPluginsIcon),
+      label: "Plugins",
+      type: "submenu",
       items: [
         {
           icon: "Settings",
           label: "Manage plugins",
-          onSelect: openPlugins,
+          onSelect: routes.openPlugins,
         },
         {
           icon: "Add",
           label: "Add plugin",
-          onSelect: openPlugins,
+          onSelect: routes.openPlugins,
         },
       ],
-      label: "Plugins",
-      type: "submenu",
-    },
-  ];
+    });
+  } else {
+    items.push({
+      icon: icon(CoworkAddMenuPluginsIcon),
+      label: "Add plugins...",
+      onSelect: routes.openPlugins,
+    });
+  }
+
+  return items;
 }
 
 function createCoworkModeItems({
   onToggleWebSearch,
   openStyles,
   webSearchEnabled,
-}: Pick<CreateCoworkAddMenuItemsOptions, "onToggleWebSearch" | "webSearchEnabled"> & { openStyles: () => void }): CoworkDropdownItem[] {
+}: Pick<CreateCoworkAddMenuItemsOptions, "onToggleWebSearch" | "webSearchEnabled"> & {
+  openStyles: () => void;
+}): CoworkDropdownItem[] {
   return [
     {
       checked: webSearchEnabled,
       closeOnClick: true,
-      icon: "Globe",
+      icon: icon(CoworkAddMenuGlobeIcon),
       label: "Web search",
       onSelect: onToggleWebSearch ?? noop,
       type: "checkbox",
@@ -196,18 +321,18 @@ function createCoworkModeItems({
     {
       checked: false,
       disabled: true,
-      icon: "Research",
+      icon: icon(CoworkAddMenuResearchIcon),
       label: "Research",
       subtitle: "Enable a search integration to use research",
       type: "checkbox",
     },
     {
-      icon: "Styles",
+      icon: icon(CoworkAddMenuStyleIcon),
       items: [
         {
           checked: true,
           closeOnClick: true,
-          icon: "Styles",
+          icon: icon(CoworkAddMenuStyleIcon),
           label: "Default",
           type: "checkbox",
         },

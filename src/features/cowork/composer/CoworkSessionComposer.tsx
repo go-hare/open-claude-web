@@ -79,7 +79,8 @@ function useCoworkComposerController(props: CoworkSessionComposerProps) {
   }), [props.sessionId, restore, sendRewindPrompt]);
   const actions = useComposerConfiguration({ model, props, setConfigBusy, setModel, setSelectedFiles });
   const modelItems: CoworkDropdownItem[] = modelOptions.map((option) => ({ checked: option.value === model, label: option.label, onSelect: () => void actions.applyModel(option.value) }));
-  const plusMenuItems = createCoworkAddMenuItems({ includeAddFolder: true, onAddFiles: () => void actions.addFiles(), onAddFolder: () => void actions.addFolder(), onNavigate: props.onNavigate });
+  // Official local_session / agent path: dqe || isAgentNewRoute → hide project/Drive/GitHub + modes.
+  const plusMenuItems = createCoworkAddMenuItems({ isAgentRoute: true, includeAddFolder: true, onAddFiles: () => void actions.addFiles(), onAddFolder: () => void actions.addFolder(), onNavigate: props.onNavigate });
   const minimizeQuestion = () => {
     setQuestionMinimized(true);
     if (!text.trim()) restore("Continue without answering");

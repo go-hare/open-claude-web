@@ -5,7 +5,8 @@ export type CoworkDropdownItem = {
   closeOnClick?: boolean;
   disabled?: boolean;
   hint?: ReactNode;
-  icon?: string;
+  /** Official menus pass JSX icons (cwt/Oqe); string names still resolve via shell Icon. */
+  icon?: ReactNode;
   items?: CoworkDropdownItem[];
   keepOpen?: boolean;
   label: ReactNode;

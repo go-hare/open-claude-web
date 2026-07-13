@@ -142,7 +142,12 @@ export function CoworkNewTaskPage({
                 <CoworkProjectWarningDialog onCancel={() => setPendingProjectWarning(null)} onConfirm={confirmProject} pending={pendingProjectWarning} />
               </div>
             </div>
-            {!busy ? <CoworkSuggestions onSelect={selectSuggestion} /> : null}
+            {!busy ? (
+              <CoworkSuggestions
+                onCustomizeWithPlugins={() => onNavigate("/customize")}
+                onSelect={selectSuggestion}
+              />
+            ) : null}
           </div>
         </div>
       </div>

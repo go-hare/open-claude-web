@@ -3,17 +3,18 @@ import { desktopBridge } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
 import { Icon } from "../../shell/icons";
 import { readPersistedFrameMode } from "../../stores/frameStoreHelpers";
-import { ConnectorsEmptyPictogram } from "./ConnectorsEmptyPictogram";
+import { ConnectorsRoute } from "./connectors/ConnectorsRoute";
+import { BROWSE_PLUGINS_CARD_VISIBLE, SKILLS_ENABLED } from "./customizeGates";
 import { CustomizeIndexPictogram } from "./CustomizeIndexPictogram";
 import { CustomizeSideNav } from "./CustomizeSideNav";
+import { SkillDocumentIcon } from "./skills/SkillDocumentIcon";
+import { SkillsRoute } from "./skills/SkillsRoute";
 
 type EmptyAction = {
   label: string;
   variant: "primary" | "secondary";
   onClick?: () => void;
 };
-
-const SKILLS_ENABLED = false;
 
 export function CustomizePage({ onNavigate }: RouteViewProps) {
   const pathname = window.location.pathname;
@@ -55,9 +56,28 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
   const content = (() => {
     switch (route.kind) {
       case "connectors":
-        return <ConnectorsRoute onBrowsePlugins={() => setPluginBrowserOpen(true)} />;
+        // Official c63a78ed4 Ht — empty Kt / list Rt + detail / directory pe("connectors").
+        return <ConnectorsRoute />;
       case "skills":
-        return <SkillsRoute onBrowseSkills={() => setPluginBrowserOpen(true)} />;
+        return (
+          <SkillsRoute
+            onBrowseSkills={() => setPluginBrowserOpen(true)}
+            onCreateWithClaude={() => {
+              // Official de: /new?q= skill-creator prompt; local shell uses cowork new task.
+              onNavigate(
+                "/task/new?q=" +
+                  encodeURIComponent(
+                    "Let's create a skill together using your skill-creator skill. First ask me what the skill should do.",
+                  ),
+              );
+            }}
+            onWriteInstructions={() => setPluginBrowserOpen(true)}
+            onUpload={() => setPluginBrowserOpen(true)}
+            onTryInCowork={(skillName) => {
+              onNavigate("/task/new?q=" + encodeURIComponent(`/${skillName}`));
+            }}
+          />
+        );
       case "pluginAgents":
       case "pluginConnectors":
       case "pluginHooks":
@@ -81,7 +101,21 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
     <div className="flex h-full w-full flex-col">
       {needsTrafficLightPadding ? <div aria-hidden="true" className="h-10 shrink-0" data-testid="customize-traffic-light-spacer" /> : null}
       <div className="flex flex-1 min-h-0">
-        <CustomizeSideNav activePath={pathname} backHref={backHref} onNavigate={onNavigate} onBrowsePlugins={() => setPluginBrowserOpen(true)} />
+        <CustomizeSideNav
+          activePath={pathname}
+          backHref={backHref}
+          onNavigate={onNavigate}
+          onBrowsePlugins={() => setPluginBrowserOpen(true)}
+          onUploadPlugin={() => setPluginBrowserOpen(true)}
+          onCreateWithClaude={() => {
+            // Official E7t K: code → /code?q=… plugin, cowork → /task/new?q=… plugin.
+            const isCode = readPersistedFrameMode() === "code";
+            const q = isCode
+              ? "Help me create a new Claude Code plugin"
+              : "Help me create a new Cowork plugin";
+            onNavigate((isCode ? "/code" : "/task/new") + "?q=" + encodeURIComponent(q));
+          }}
+        />
         <div className="flex-1 overflow-y-auto bg-bg-100">
           {showPluginWarning ? <PluginSkillsWarning onClose={() => setPluginWarningDismissed(true)} onNavigate={onNavigate} /> : null}
           {content}
@@ -119,8 +153,8 @@ function useCustomizeTrafficLightPadding() {
 }
 
 function CustomizeIndex({ onNavigate, onBrowsePlugins }: { onNavigate: (path: string) => void; onBrowsePlugins: () => void }) {
-  // c63a78ed4 _Component63: centered stack maxWidth 530 + Va pictogram + option cards.
-  // Skills card gated by fs(); current shell keeps Skills off like prior 5175 flag.
+  // Official c63a78ed4 el: centered stack maxWidth 530 + Va pictogram + option cards.
+  // Order: Connect tools → Create new skills (fs/QZ) → Browse plugins (!modeAwarenessChat).
   return (
     <div className="flex h-full w-full items-center justify-center">
       <div className="flex w-full flex-col items-center gap-10" style={{ maxWidth: 530 }}>
@@ -130,33 +164,31 @@ function CustomizeIndex({ onNavigate, onBrowsePlugins }: { onNavigate: (path: st
           <p className="text-center text-sm text-text-300">Skills, connectors, and plugins shape how Claude works with you.</p>
         </div>
         <div className="flex w-full flex-col gap-3">
-          <CustomizeOptionCard icon="connectors" title="Connect your apps" description="Let Claude read and write to the tools you already use." onClick={() => onNavigate("/customize/connectors")} />
-          <CustomizeOptionCard icon="plugin" title="Browse plugins" description="Add pre-built knowledge for your field." onClick={onBrowsePlugins} />
+          <CustomizeOptionCard
+            icon={<Icon name="connectors" customSize={20} />}
+            title="Connect your apps"
+            description="Let Claude read and write to the tools you already use."
+            onClick={() => onNavigate("/customize/connectors")}
+          />
+          {SKILLS_ENABLED ? (
+            <CustomizeOptionCard
+              icon={<SkillDocumentIcon size={20} />}
+              title="Create new skills"
+              description="Teach Claude your processes, team norms, and expertise."
+              onClick={() => onNavigate("/customize/skills")}
+            />
+          ) : null}
+          {BROWSE_PLUGINS_CARD_VISIBLE ? (
+            <CustomizeOptionCard
+              icon={<Icon name="plugin" customSize={20} />}
+              title="Browse plugins"
+              description="Add pre-built knowledge for your field."
+              onClick={onBrowsePlugins}
+            />
+          ) : null}
         </div>
       </div>
     </div>
-  );
-}
-
-function ConnectorsRoute({ onBrowsePlugins }: { onBrowsePlugins: () => void }) {
-  // c63a78ed4 Kt: empty uses Wa pictogram + learn-more copy; browse/add buttons gated by manage permissions.
-  void onBrowsePlugins;
-  return (
-    <EmptyState
-      pictogram={<ConnectorsEmptyPictogram size="medium" />}
-      message="Unlock more with Claude when you connect your team's tools. Learn more"
-    />
-  );
-}
-
-function SkillsRoute({ onBrowseSkills }: { onBrowseSkills: () => void }) {
-  // c63a78ed4:2815-2818 + 2860-2868: 无 skill 时只渲染全页 empty state。
-  return (
-    <EmptyState
-      icon="spark"
-      message="Add skills to extend Claude's capabilities. Learn more"
-      actions={[{ label: "添加 Skill", variant: "primary", onClick: onBrowseSkills }]}
-    />
   );
 }
 
@@ -188,10 +220,11 @@ function NotFoundRoute() {
   return <div className="px-0 text-sm font-medium text-text-100">Not Found</div>;
 }
 
-function CustomizeOptionCard({ icon, title, description, onClick }: { icon: string; title: ReactNode; description: ReactNode; onClick: () => void }) {
+/** Official c63a78ed4 sl option card — icon is ReactNode (Vv size 20 for skills, not spark). */
+function CustomizeOptionCard({ icon, title, description, onClick }: { icon: ReactNode; title: ReactNode; description: ReactNode; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} className="flex w-full items-center gap-4 rounded-3xl border border-border-300 bg-bg-000 p-5 text-left shadow-sm transition-colors hover:bg-bg-100">
-      <div className="flex shrink-0 items-center rounded-full bg-bg-300 p-1.5"><Icon name={icon} /></div>
+      <div className="flex shrink-0 items-center rounded-full bg-bg-300 p-1.5">{icon}</div>
       <div className="flex flex-1 flex-col gap-0.5">
         <span className="font-base-bold text-text-100">{title}</span>
         <span className="text-sm text-text-300">{description}</span>
