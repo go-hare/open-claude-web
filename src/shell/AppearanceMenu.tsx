@@ -1,4 +1,12 @@
 import { useEffect, useState } from "react";
+import {
+  applyThemeMode,
+  normalizeThemeMode,
+  readThemeMode,
+  THEME_MODE_CHANGE_EVENT,
+  writeThemeMode,
+  type ThemeMode,
+} from "../features/settings/appearanceSettings";
 import { type AppearanceMenuText, useAppearanceMenuText } from "../i18n/footerMenuMessages";
 import type { FrameStore } from "../stores/frameStore";
 import { BaseMenuGroupLabel, BaseMenuItem, BaseMenuPopup, BaseMenuSeparator, Menu } from "./BaseMenu";
@@ -13,15 +21,21 @@ const THEME_OPTIONS: Array<{ key: ThemeChoice; label: keyof AppearanceMenuText }
   { key: "auto", label: "matchSystem" },
 ];
 
-const THEME_STORAGE_KEY = "claude-rebuild-theme-mode";
-const getInitialTheme = () => {
-  if (typeof window === "undefined") return "auto";
-  return normalizeTheme(window.localStorage.getItem(THEME_STORAGE_KEY));
-};
+const getInitialTheme = (): ThemeMode => readThemeMode();
 
 export function AppearanceMenu({ frame }: { frame: FrameStore }) {
   const [theme, setTheme] = useState<ThemeChoice>(getInitialTheme);
   const text = useAppearanceMenuText();
+
+  useEffect(() => {
+    const sync = () => setTheme(readThemeMode());
+    window.addEventListener(THEME_MODE_CHANGE_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(THEME_MODE_CHANGE_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
 
   useAppearanceSideEffects(theme, frame.darkerCode, frame.systemFont);
   const selectedTheme = theme === "dark" && frame.darkerCode ? "darker" : theme;
@@ -65,27 +79,11 @@ function AppearancePopup({ onSystemFontChange, onThemeChange, systemFont, text, 
 function useAppearanceSideEffects(theme: ThemeChoice, darkerCode: boolean, systemFont: boolean) {
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => applyAppearance(theme, darkerCode, systemFont, media.matches);
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    const apply = () => applyThemeMode(normalizeThemeMode(theme), { darkerCode, systemFont });
+    writeThemeMode(normalizeThemeMode(theme));
     apply();
     if (theme !== "auto") return;
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
   }, [darkerCode, theme, systemFont]);
-}
-
-function applyAppearance(theme: ThemeChoice, darkerCode: boolean, systemFont: boolean, systemDark: boolean) {
-  const actualMode = theme === "auto" ? (systemDark ? "dark" : "light") : theme === "light" ? "light" : "dark";
-  document.documentElement.classList.toggle("dark", actualMode === "dark");
-  document.documentElement.style.colorScheme = actualMode;
-  document.querySelectorAll("[data-theme='claude'], .cds-root").forEach(el => el.setAttribute("data-mode", actualMode));
-  document.querySelectorAll(".dframe-root").forEach(el => {
-    el.toggleAttribute("data-system-font", systemFont);
-    el.toggleAttribute("data-darker-code", darkerCode);
-  });
-}
-
-function normalizeTheme(theme: string | null): ThemeChoice {
-  if (theme === "darker") return "dark";
-  return theme === "dark" || theme === "light" || theme === "auto" ? theme : "auto";
 }

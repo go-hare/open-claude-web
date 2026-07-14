@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import type { RouteViewProps } from "../../app/routes";
+import { readResolvedColorMode, THEME_MODE_CHANGE_EVENT } from "./appearanceSettings";
 import { CdsButton, SettingsDFrame, navLinkClass, sectionBodyClass } from "./SettingsShell";
 
 const adminLinks = [
@@ -9,12 +11,31 @@ const adminLinks = [
   { href: "/admin-settings/claude-code", label: "Claude Code" },
 ];
 
+function useAdminColorMode(): "light" | "dark" {
+  const [mode, setMode] = useState<"light" | "dark">(() => readResolvedColorMode());
+  useEffect(() => {
+    const sync = () => setMode(readResolvedColorMode());
+    sync();
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    media.addEventListener("change", sync);
+    window.addEventListener("storage", sync);
+    window.addEventListener(THEME_MODE_CHANGE_EVENT, sync);
+    return () => {
+      media.removeEventListener("change", sync);
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(THEME_MODE_CHANGE_EVENT, sync);
+    };
+  }, []);
+  return mode;
+}
+
 export function AdminSettingsPage({ onNavigate, pathname }: Pick<RouteViewProps, "onNavigate"> & { pathname: string }) {
+  const colorMode = useAdminColorMode();
   return (
     <SettingsDFrame title="Organization settings" onNavigate={onNavigate} trailing={<AdminBell />} withRoot={false}>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <main className="mx-auto mt-4 w-full flex-1 px-4 md:px-8 lg:mt-6 max-w-7xl !mt-0 lg:!mt-0">
-          <div className="cds-root text-primary grid grid-cols-1 md:grid-cols-[220px_minmax(0px,_1fr)] gap-x-8 w-full my-4 md:my-8" data-density="comfortable" data-mode="light" data-platform="desktop">
+          <div className="cds-root text-primary grid grid-cols-1 md:grid-cols-[220px_minmax(0px,_1fr)] gap-x-8 w-full my-4 md:my-8" data-density="comfortable" data-mode={colorMode} data-platform="desktop">
             <AdminNav onNavigate={onNavigate} pathname={pathname} />
             <div className="outline-none pt-1.5" tabIndex={-1}>{renderAdminContent(pathname)}</div>
           </div>

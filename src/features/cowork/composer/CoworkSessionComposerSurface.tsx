@@ -3,6 +3,7 @@ import { EditorContent } from "@tiptap/react";
 import { AnimatePresence, motion } from "motion/react";
 import { useLayoutEffect, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { Icon } from "../../../shell/icons";
+import { CoworkComposerPlusIcon } from "../newTask/CoworkAddMenuIcons";
 import { CoworkSelectedFiles } from "../newTask/CoworkSelectedFiles";
 import type { CoworkUploadedFile } from "../newTask/coworkUploadedFiles";
 import { bindCoworkChatInputTopMeasure } from "../session/transcript/coworkChatLayoutStore";
@@ -85,7 +86,7 @@ function ComposerToolbar(props: CoworkSessionComposerSurfaceProps & { sendDisabl
   return (
     <div className="relative flex gap-2 w-full items-center">
       <div className="relative flex-1 flex items-center shrink min-w-0 gap-1">
-        <CoworkDropdownButton align="start" alignOffset={-10} ariaLabel="Add files, connectors, and more" className="!rounded-lg hover:!bg-bg-200 aria-expanded:!bg-bg-300 active:!scale-100 ml-[2px] h-8 w-8" disabled={props.disabled} icon="PlusSmall" items={props.plusMenuItems} popupClassName="max-h-[min(var(--available-height),24rem)]" revealChevron="never" side="bottom" sideOffset={4} size="small" />
+        <CoworkDropdownButton align="start" alignOffset={-10} ariaLabel="Add files, connectors, and more" className="!rounded-lg hover:!bg-bg-200 aria-expanded:!bg-bg-300 active:!scale-100 ml-[2px] h-8 w-8" disabled={props.disabled} icon={<CoworkComposerPlusIcon size={20} />} items={props.plusMenuItems} popupClassName="max-h-[min(var(--available-height),24rem)]" revealChevron="never" side="bottom" sideOffset={4} size="small" />
       </div>
       <CoworkDropdownButton ariaLabel="Model" disabled={props.disabled} header="Models" items={props.modelItems} label={props.modelLabel} mode="text" side="bottom" size="small" />
       <div className="shrink-0 flex items-center">

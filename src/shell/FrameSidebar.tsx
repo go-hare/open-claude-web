@@ -482,6 +482,11 @@ function useSidebarShortcuts(frame: FrameStore, onSearch: () => void, onNavigate
         event.preventDefault();
         onSearch();
       }
+      // Sidebar new-session shortcut for code (sidebarData ⌘N) → session home.
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && key === "n") {
+        event.preventDefault();
+        onNavigate(sessionHomePath(frame.mode));
+      }
       if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && (key === "1" || key === "2")) {
         event.preventDefault();
         const nextMode = key === "1" ? "cowork" : "code";

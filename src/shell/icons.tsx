@@ -421,7 +421,6 @@ const OFFICIAL_ICON_ALIASES: Record<string, string> = {
   FolderPlus: "FolderAddRight",
   FolderAddRight: "FolderAddRight",
   PaperclipAttach: "PaperclipAttach",
-  NoteSquareLines: "NoteSquareLines",
   Plugin: "Plugin",
   Projects: "Projects",
   GitDiff: "ChangesDiffPlusMinusBox",

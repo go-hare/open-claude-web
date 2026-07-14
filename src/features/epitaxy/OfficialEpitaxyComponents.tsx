@@ -70,6 +70,21 @@ type OfficialDropdownButtonProps = {
   variant?: "uncontained" | "contained" | "muted";
 };
 
+/** Official Kw split control (c11959232): primary action + chevron menu. */
+type OfficialSplitDropdownButtonProps = {
+  align?: "start" | "center" | "end";
+  ariaLabel?: string;
+  busy?: boolean;
+  disabled?: boolean;
+  items?: OfficialDropdownItem[];
+  label: ReactNode;
+  menuLabel?: string;
+  onIconClick?: () => void;
+  side?: "top" | "right" | "bottom" | "left";
+  size?: "small" | "base" | "large";
+  variant?: "uncontained" | "contained" | "primary";
+};
+
 type OfficialModalProps = {
   children: ReactNode;
   isOpen: boolean;
@@ -394,6 +409,84 @@ export function OfficialModal({
       </section>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * Official Kw (c11959232 EpitaxyBranchRow PR control):
+ * split primary button + chevron Menu.Trigger with items.
+ */
+export function OfficialSplitDropdownButton({
+  align = "end",
+  ariaLabel,
+  busy = false,
+  disabled = false,
+  items = [],
+  label,
+  menuLabel = "More options",
+  onIconClick,
+  side = "top",
+  size = "base",
+  variant = "contained",
+}: OfficialSplitDropdownButtonProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const shellClass = [
+    "relative inline-flex w-fit items-center border-0 cursor-default select-none outline-none",
+    size === "small" ? "h-small rounded-small" : size === "large" ? "h-large rounded-large" : "h-base rounded-base",
+    variant === "primary"
+      ? "bg-[var(--fill-primary-default)] text-primary-default data-[popup-open]:bg-[var(--fill-primary-hover)] data-[popup-open]:text-[var(--text-primary-hover)]"
+      : variant === "contained"
+        ? "bg-[var(--fill-contained-default)] text-contained-default effect-contained-default data-[popup-open]:bg-[var(--fill-contained-selected)] data-[popup-open]:text-[var(--text-contained-selected)] data-[disabled]:shadow-none"
+        : "bg-[var(--fill-uncontained-default)] text-uncontained-default data-[popup-open]:bg-[var(--fill-uncontained-selected)] data-[popup-open]:text-[var(--text-uncontained-selected)]",
+    (disabled || busy) ? "data-[disabled]:pointer-events-none opacity-70" : "",
+  ].join(" ");
+  const sideHover =
+    variant === "primary"
+      ? "hover:bg-fill-primary-hover hover:text-primary-hover"
+      : variant === "contained"
+        ? "hover:bg-fill-contained-hover hover:text-contained-hover"
+        : "hover:bg-fill-uncontained-hover hover:text-uncontained-hover";
+  const primaryClass = `h-full inline-flex items-center justify-center bg-transparent border-0 cursor-default outline-none hide-focus-ring ring-focus rounded-l-[inherit] px-p5 gap-g4 text-body border-r border-transparent ${sideHover}`;
+  const chevronClass = `h-full inline-flex items-center justify-center bg-transparent border-0 cursor-default outline-none hide-focus-ring ring-focus rounded-r-[inherit] min-w-[16px] shrink-0 ${sideHover}`;
+
+  return (
+    <Menu.Root open={internalOpen} onOpenChange={setInternalOpen}>
+      <div className={shellClass} data-disabled={disabled || busy || undefined} data-popup-open={internalOpen ? "" : undefined}>
+        <button
+          aria-busy={busy || undefined}
+          aria-label={ariaLabel}
+          className={primaryClass}
+          disabled={disabled || busy}
+          onClick={onIconClick}
+          type="button"
+        >
+          {busy ? (
+            <span data-cds="Spinner" className="relative inline-block shrink-0 align-middle" style={{ height: 16, width: 16 }} aria-hidden="true">
+              <span className="absolute inset-0 rounded-full" style={{ border: "1.75px solid var(--cds-border, var(--t2))" }} />
+              <span className="absolute inset-0 rounded-full animate-[spin_2s_linear_infinite]" style={{ background: "conic-gradient(transparent 40%, currentColor)", WebkitMask: "radial-gradient(farthest-side, transparent calc(100% - 1.75px), #000 calc(100% - 1.25px))", mask: "radial-gradient(farthest-side, transparent calc(100% - 1.75px), #000 calc(100% - 1.25px))" }} />
+            </span>
+          ) : null}
+          <span className="truncate">{label}</span>
+        </button>
+        <Menu.Trigger aria-label={menuLabel} className={chevronClass} disabled={disabled || busy}>
+          <Icon name="ChevronDownSmall" size="xs" />
+        </Menu.Trigger>
+      </div>
+      {items.length > 0 ? (
+        <Menu.Portal>
+          <Menu.Positioner align={align} className="epitaxy-root z-[60]" side={side} sideOffset={8}>
+            <Menu.Popup className={officialMenuPopupClass} data-cds="Menu">
+              <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
+              <div className={officialMenuScrollClass}>
+                <Menu.Group className="flex flex-col">
+                  <OfficialMenuItems items={items} />
+                </Menu.Group>
+              </div>
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      ) : null}
+    </Menu.Root>
   );
 }
 

@@ -4,6 +4,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import type { SessionSummary } from "../../../adapters/desktopBridge/types";
 import { coworkSessionsBridge } from "../session/coworkSessionBridge";
+import { CoworkRotatingPlaceholder } from "./CoworkRotatingPlaceholder";
 import { CoworkSessionSlashMenu } from "./slash/CoworkSessionSlashMenu";
 import { CoworkSkillChip } from "./slash/CoworkSkillChip";
 import { CoworkSlashCommandSuggestion } from "./slash/CoworkSlashCommandSuggestion";
@@ -19,12 +20,18 @@ type CoworkPromptInputProps = {
   disabled?: boolean;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  /** Official static yYe fallback when not rotating. */
   placeholder: string;
+  /**
+   * Official yAt carousel strings (He = XLcM6WHfQR + jGTFVKPV2+).
+   * When provided and empty, hides ProseMirror ::before and mounts RotatingPlaceholder.
+   */
+  rotatingPlaceholders?: string[];
   slashCwd?: string;
   value: string;
 };
 
-export const CoworkPromptInput = forwardRef<CoworkPromptInputHandle, CoworkPromptInputProps>(function CoworkPromptInput({ disabled = false, onChange, onSubmit, placeholder, slashCwd, value }, ref) {
+export const CoworkPromptInput = forwardRef<CoworkPromptInputHandle, CoworkPromptInputProps>(function CoworkPromptInput({ disabled = false, onChange, onSubmit, placeholder, rotatingPlaceholders, slashCwd, value }, ref) {
   const editorRef = useRef<Editor | null>(null);
   const submitRef = useRef(onSubmit);
   const disabledRef = useRef(disabled);
@@ -46,10 +53,31 @@ export const CoworkPromptInput = forwardRef<CoworkPromptInputHandle, CoworkPromp
   useEffect(() => { editor?.setEditable(!disabled); }, [disabled, editor]);
   useEffect(() => syncEditorContent(editor, value), [editor, value]);
   const isEmpty = value.trim().length === 0;
+  // Official rt: new convo + empty → yAt; suppress is-editor-empty ::before when rotating.
+  // Official PromptInput (wTt/rjt): editor class includes pl-[6px] pt-[6px]; yAt uses pl-1.5 pt-[5px]
+  // against the same relative font-large box so caret and carousel text align.
+  const useRotating = Boolean(rotatingPlaceholders?.length) && isEmpty;
   return (
     <>
-      <EditorContent className={`block [outline:none!important] resize-none w-full bg-transparent text-text-100 placeholder:text-text-400 border-0 [&_.tiptap]:min-h-[48px] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:p-0 [&_.tiptap_p]:m-0 ${isEmpty ? "[&_.is-editor-empty]:before:!content-['']" : ""}`} editor={editor} />
-      {isEmpty ? <p aria-hidden="true" className="self-start absolute pointer-events-none inset-0 text-text-500 line-clamp-2">{placeholder}</p> : null}
+      <EditorContent
+        className={[
+          "block [outline:none!important] resize-none w-full overflow-y-auto bg-transparent text-text-100 placeholder:text-text-400 border-0 break-words",
+          "pl-[6px] pt-[6px]",
+          "[&_.tiptap]:min-h-[48px] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:p-0 [&_.tiptap_p]:m-0",
+          useRotating || isEmpty ? "[&_.is-editor-empty]:before:!content-['']" : "",
+        ].join(" ")}
+        editor={editor}
+      />
+      {useRotating ? (
+        <CoworkRotatingPlaceholder isVisible={useRotating} placeholders={rotatingPlaceholders ?? []} />
+      ) : isEmpty ? (
+        <p
+          aria-hidden="true"
+          className="absolute inset-0 pointer-events-none overflow-hidden pl-1.5 pt-[5px] text-text-500 line-clamp-2"
+        >
+          {placeholder}
+        </p>
+      ) : null}
     </>
   );
 });
@@ -84,9 +112,18 @@ function useCoworkPromptEditor(input: CoworkPromptEditorInput) {
   }, [input.slashMenu]);
 }
 
+/**
+ * Official wTt onKeyDownCapture (index-BELzQL5P ~6746850):
+ * Enter submits when slash menu idle, !shiftKey, !altKey, !isComposing.
+ * On desktop (!Yh mobile) plain Enter submits; Shift+Enter inserts newline.
+ * Meta/Ctrl+Enter also submits (mobile path when Yh()).
+ */
 function handlePromptKeyDown(event: KeyboardEvent, editor: Editor | null, disabledRef: React.MutableRefObject<boolean>, submitRef: React.MutableRefObject<() => void>) {
+  if (event.key !== "Enter") return false;
   const storage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
-  if (event.key !== "Enter" || !event.metaKey && !event.ctrlKey || storage?.isActive && storage.hasVisibleItems) return false;
+  if (storage?.isActive && storage.hasVisibleItems) return false;
+  if (event.shiftKey || event.altKey || event.isComposing) return false;
+  // Desktop: plain Enter; always allow mod+Enter (official !Yh() || meta/ctrl).
   event.preventDefault();
   if (!disabledRef.current) submitRef.current();
   return true;

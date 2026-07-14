@@ -1,6 +1,7 @@
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import type { RouteViewProps } from "../../app/routes";
 import { Icon } from "../../shell/icons";
+import { readResolvedColorMode, THEME_MODE_CHANGE_EVENT } from "./appearanceSettings";
 
 export type NavSection = {
   id: string;
@@ -41,6 +42,24 @@ export function isNavActive(section: NavSection, pathname: string) {
   return pathname === section.href || pathname.startsWith(`${section.href}/`);
 }
 
+function useResolvedColorMode(): "light" | "dark" {
+  const [mode, setMode] = useState<"light" | "dark">(() => readResolvedColorMode());
+  useEffect(() => {
+    const sync = () => setMode(readResolvedColorMode());
+    sync();
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    media.addEventListener("change", sync);
+    window.addEventListener("storage", sync);
+    window.addEventListener(THEME_MODE_CHANGE_EVENT, sync);
+    return () => {
+      media.removeEventListener("change", sync);
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(THEME_MODE_CHANGE_EVENT, sync);
+    };
+  }, []);
+  return mode;
+}
+
 export function SettingsDFrame({
   children,
   onNavigate,
@@ -53,6 +72,8 @@ export function SettingsDFrame({
   trailing?: ReactNode;
   withRoot?: boolean;
 }) {
+  // Official cds-root data-mode follows ThemeProvider resolved mode (not hard-coded light).
+  const colorMode = useResolvedColorMode();
   const content = (
     <div className="flex flex-col overflow-hidden bg-bg-100 h-full">
       <header className="flex h-12 shrink-0 items-center gap-1 pr-4 border-b-[0.5px] border-border-200 draggable pl-24">
@@ -82,7 +103,7 @@ export function SettingsDFrame({
                 <div className="dframe-content-inner">
                   <div className="flex-1 min-h-0 flex flex-col relative isolate">
                     {withRoot ? (
-                      <div className="cds-root text-primary h-full" data-density="comfortable" data-mode="light" data-platform="desktop">
+                      <div className="cds-root text-primary h-full" data-density="comfortable" data-mode={colorMode} data-platform="desktop">
                         {content}
                       </div>
                     ) : content}

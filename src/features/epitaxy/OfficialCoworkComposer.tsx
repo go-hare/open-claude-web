@@ -7,7 +7,18 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { desktopBridge, type CoworkMountedProject, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { CoworkSessionsBridge, SessionSummary } from "../../adapters/desktopBridge/types";
 import { OfficialButton, type OfficialDropdownItem } from "./OfficialEpitaxyComponents";
+import { OfficialButton as SharedOfficialButton } from "../shared/OfficialButton";
+import { OfficialTooltip } from "../shared/OfficialTooltip";
 import { Icon } from "../../shell/icons";
+import { CoworkDraftRiskBanner } from "../cowork/composer/CoworkDraftRiskBanner";
+import { CoworkRotatingPlaceholder } from "../cowork/composer/CoworkRotatingPlaceholder";
+import {
+  coworkPermissionModeOptionsForModes,
+  isCoworkUnsupervisedPermissionMode,
+} from "../cowork/composer/options";
+import { useCoworkPermissionModeAvailability } from "../cowork/composer/useCoworkPermissionModeAvailability";
+import { useCoworkNewTaskText } from "../cowork/newTask/coworkNewTaskMessages";
+import { CoworkComposerPlusIcon } from "../cowork/newTask/CoworkAddMenuIcons";
 import { createCoworkAddMenuItems, type CoworkAddMenuProject } from "./cowork/CoworkAddMenuItems";
 import { CoworkSelectedProjectIndicators } from "./cowork/CoworkProjectContext";
 import { CoworkSelectedFiles } from "./cowork/CoworkSelectedFiles";
@@ -69,11 +80,6 @@ const coworkModelItems = [
   { label: "Sonnet", value: "claude-sonnet-4" },
 ];
 
-const coworkPermissionItems: Array<{ icon: string; label: string; value: PermissionMode }> = [
-  { icon: "Hand4FingerStop", label: "Ask", value: "default" },
-  { icon: "Warning", label: "Act", value: "auto" },
-];
-
 type OfficialCoworkComposerBridge = Pick<CoworkSessionsBridge,
   | "addTrustedFolder" | "clearSession" | "forkSession" | "getSupportedCommands"
   | "isFolderTrusted" | "launchUltrareview" | "rewind" | "setMcpServers" | "submitFeedback"
@@ -103,6 +109,12 @@ export function OfficialCoworkPromptBox({
   const inputRef = useRef<OfficialCoworkPromptInputHandle | null>(null);
   const recentFolders = useOfficialCoworkRecentFolders();
   const selectedFolders = workspace.folders ?? [];
+  const text = useCoworkNewTaskText();
+  const permissionAvailability = useCoworkPermissionModeAvailability();
+  const rotatingPlaceholders = useMemo(
+    () => [text.composerPlaceholder, text.composerPlaceholderSkills],
+    [text.composerPlaceholder, text.composerPlaceholderSkills],
+  );
   const modelItems: OfficialDropdownItem[] = coworkModelItems.map((item, index) => ({
     checked: item.value === model,
     label: item.label,
@@ -110,13 +122,17 @@ export function OfficialCoworkPromptBox({
     onSelect: () => onModelChange(item.value),
   }));
   const modelLabel = coworkModelItems.find((item) => item.value === model)?.label ?? "Default model";
-  const permissionItems: OfficialDropdownItem[] = coworkPermissionItems.map((item) => ({
+  const permissionOptions = useMemo(
+    () => coworkPermissionModeOptionsForModes(permissionAvailability.modes),
+    [permissionAvailability.modes],
+  );
+  const permissionItems: OfficialDropdownItem[] = permissionOptions.map((item) => ({
     checked: item.value === permissionMode,
     icon: item.icon,
-    label: item.label,
+    label: item.menuLabel ?? item.label,
     onSelect: () => onPermissionModeChange(item.value),
   }));
-  const permissionLabel = coworkPermissionItems.find((item) => item.value === permissionMode)?.label ?? "Ask";
+  const permissionLabel = permissionOptions.find((item) => item.value === permissionMode)?.label ?? "Ask";
 
   const updateSelectedFolders = useCallback((folders: string[]) => {
     onWorkspaceChange({ ...workspace, folders: uniqueStrings(folders) });
@@ -135,8 +151,15 @@ export function OfficialCoworkPromptBox({
     if (focusRequestKey > 0) window.setTimeout(() => inputRef.current?.focus(), 0);
   }, [focusRequestKey]);
 
+  useEffect(() => {
+    if (!permissionAvailability.isAvailable && isCoworkUnsupervisedPermissionMode(permissionMode)) {
+      onPermissionModeChange("default");
+    }
+  }, [onPermissionModeChange, permissionAvailability.isAvailable, permissionMode]);
+
   return (
-    <div>
+    <div data-official-source="index-BELzQL5P.js:w6t/$4t CAt onpage">
+      <CoworkDraftRiskBanner visible={permissionAvailability.isAvailable && isCoworkUnsupervisedPermissionMode(permissionMode)} />
       <fieldset className="flex w-full min-w-0 flex-col">
         <input aria-hidden="true" className="absolute -z-10 h-0 w-0 overflow-hidden opacity-0 select-none" data-testid="file-upload" tabIndex={-1} type="file" />
         <div className="relative">
@@ -154,8 +177,9 @@ export function OfficialCoworkPromptBox({
                   disabled={busy}
                   onChange={setPrompt}
                   onSubmit={onSubmit}
-                  placeholder="今天我可以帮助你做什么？"
+                  placeholder={text.composerPlaceholder}
                   ref={inputRef}
+                  rotatingPlaceholders={rotatingPlaceholders}
                   slashCwd={workspace.cwd}
                   value={prompt}
                 />
@@ -176,6 +200,7 @@ export function OfficialCoworkPromptBox({
         busy={busy}
         modelItems={modelItems}
         modelLabel={modelLabel}
+        permissionAvailable={permissionAvailability.isAvailable}
         permissionItems={permissionItems}
         permissionLabel={permissionLabel}
         recentFolders={recentFolders}
@@ -221,6 +246,7 @@ function OfficialCoworkChin({
   busy,
   modelItems,
   modelLabel,
+  permissionAvailable,
   permissionItems,
   permissionLabel,
   recentFolders,
@@ -231,6 +257,7 @@ function OfficialCoworkChin({
   busy: boolean;
   modelItems: OfficialDropdownItem[];
   modelLabel: ReactNode;
+  permissionAvailable: boolean;
   permissionItems: OfficialDropdownItem[];
   permissionLabel: ReactNode;
   recentFolders: OfficialCoworkFolderTarget[];
@@ -238,6 +265,7 @@ function OfficialCoworkChin({
   updateSelectedFolders: (folders: string[]) => void;
   workspace: WorkspaceContext;
 }) {
+  // Official nkt: if (!isAvailable) return null
   return (
     <div className="relative z-0 !box-content mx-2 -mt-5 rounded-b-[20px] border border-transparent bg-always-black/[0.01] shadow-[inset_0_0_0_0.5px_hsl(var(--bg-000)/0.8),0_0_0_0.5px_hsl(var(--border-300)/0.18)] backdrop-blur-[2px] md:mx-0 md:w-full">
       <div className="flex items-center gap-1 px-2 pb-2 pt-7">
@@ -247,16 +275,18 @@ function OfficialCoworkChin({
             defaultTarget={workspace.cwd ? { path: workspace.cwd, displayName: basename(workspace.cwd), type: "folder" } : null}
             disabled={busy}
             onSelectedFoldersChange={updateSelectedFolders}
-            placeholder="在项目中工作"
+            placeholder="Work in a project"
             recentTargets={recentFolders}
             selectedFolders={selectedFolders}
           />
         </div>
-        <OfficialCoworkPermissionModeSelector
-          disabled={busy}
-          items={permissionItems}
-          label={permissionLabel}
-        />
+        {permissionAvailable ? (
+          <OfficialCoworkPermissionModeSelector
+            disabled={busy}
+            items={permissionItems}
+            label={permissionLabel}
+          />
+        ) : null}
         <div className="ml-auto flex items-center gap-1">
           <OfficialCoworkModelSelector
             disabled={busy}
@@ -272,15 +302,18 @@ function OfficialCoworkChin({
 
 function OfficialCoworkAddMenu({ disabled, items }: { disabled?: boolean; items: OfficialDropdownItem[] }) {
   const [open, setOpen] = useState(false);
+  // Official pwt: Xp tooltip + keyboardShortcut="/"
   return (
     <Menu.Root open={open} onOpenChange={setOpen}>
-      <Menu.Trigger
-        aria-label="Add files, connectors, and more"
-        className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled ring-focus !rounded-lg hover:!bg-bg-200 aria-expanded:!bg-bg-300 active:!scale-100 ml-[2px] h-8 w-8 justify-center"
-        disabled={disabled}
-      >
-        <Icon name="PlusSmall" customSize={16} />
-      </Menu.Trigger>
+      <OfficialTooltip delayDuration={0} keyboardShortcut="/" side="bottom" tooltipContent="Add files, connectors, and more">
+        <Menu.Trigger
+          aria-label="Add files, connectors, and more"
+          className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled ring-focus !rounded-lg hover:!bg-bg-200 aria-expanded:!bg-bg-300 active:!scale-100 ml-[2px] h-8 w-8 justify-center"
+          disabled={disabled}
+        >
+          <CoworkComposerPlusIcon size={20} />
+        </Menu.Trigger>
+      </OfficialTooltip>
       <Menu.Portal>
         <Menu.Positioner align="start" alignOffset={-10} className="epitaxy-root z-[60]" side="bottom" sideOffset={4}>
           <Menu.Popup className={`${officialMenuPopupClass} max-h-[min(var(--available-height),24rem)]`} data-cds="Menu">
@@ -443,19 +476,22 @@ function OfficialCoworkSendButton({
   isNewAgentModeChat?: boolean;
   onSend: () => void;
 }) {
+  // Official Fyt/send: Dc variant="claude" size="icon_sm" aria-label Start task
+  const label = isNewAgentModeChat ? "Start task" : "Send message";
+  // Shared Dc supports official icon_sm + claude (epitaxy OfficialButton types do not).
   return (
-    <div>
-      <button
-        aria-label={isNewAgentModeChat ? "Start task" : "Send message"}
-        className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-primary-default disabled:text-primary-disabled !rounded-lg !h-8 !w-8 disabled:cursor-default justify-center"
+    <OfficialTooltip tooltipContent={label}>
+      <SharedOfficialButton
+        aria-label={label}
+        className="!rounded-lg !h-8 !w-8 disabled:cursor-default"
         disabled={disabled}
         onClick={onSend}
-        type="button"
+        size="icon_sm"
+        variant="claude"
       >
-        <span aria-hidden="true" className="btn-squish absolute inset-0 -z-[1] rounded-[inherit]" style={{ backgroundColor: "#e6b5a6" }} />
-        <Icon name="ArrowUp" customSize={16} bold />
-      </button>
-    </div>
+        <Icon bold customSize={16} name="ArrowUp" />
+      </SharedOfficialButton>
+    </OfficialTooltip>
   );
 }
 
@@ -465,6 +501,7 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
   onChange: (value: string) => void;
   onSubmit: () => void;
   placeholder: string;
+  rotatingPlaceholders?: string[];
   slashCwd?: string;
   value: string;
 }>(function OfficialCoworkPromptInput({
@@ -473,6 +510,7 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
   onChange,
   onSubmit,
   placeholder,
+  rotatingPlaceholders,
   slashCwd,
   value,
 }, ref) {
@@ -508,15 +546,15 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
         class: "tiptap",
         "data-placeholder": placeholder,
       },
+      // Official wTt: Enter submits when !shift/alt/composing and slash idle (desktop plain Enter).
       handleKeyDown: (_view, event) => {
+        if (event.key !== "Enter") return false;
         const slashStorage = (editorRef.current?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
         const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
-        if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !hasSlashMenu) {
-          event.preventDefault();
-          if (!disabledRef.current) submitRef.current();
-          return true;
-        }
-        return false;
+        if (hasSlashMenu || event.shiftKey || event.altKey || event.isComposing) return false;
+        event.preventDefault();
+        if (!disabledRef.current) submitRef.current();
+        return true;
       },
     },
     extensions: [
@@ -557,13 +595,30 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
   }, [editor, value]);
 
   const isEmpty = value.trim().length === 0;
+  // Official rt → yAt RotatingPlaceholder; suppress is-editor-empty ::before when rotating.
+  // Official PromptInput: pl-[6px] pt-[6px] on editor; yAt: pl-1.5 pt-[5px] (same relative box).
+  const useRotating = Boolean(rotatingPlaceholders?.length) && isEmpty;
   return (
     <>
       <EditorContent
-        className={`block [outline:none!important] resize-none w-full bg-transparent text-text-100 placeholder:text-text-400 border-0 [&_.tiptap]:min-h-[48px] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:p-0 [&_.tiptap_p]:m-0 ${isEmpty ? "[&_.is-editor-empty]:before:!content-['']" : ""}`}
+        className={[
+          "block [outline:none!important] resize-none w-full overflow-y-auto bg-transparent text-text-100 placeholder:text-text-400 border-0 break-words",
+          "pl-[6px] pt-[6px]",
+          "[&_.tiptap]:min-h-[48px] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:p-0 [&_.tiptap_p]:m-0",
+          useRotating || isEmpty ? "[&_.is-editor-empty]:before:!content-['']" : "",
+        ].join(" ")}
         editor={editor}
       />
-      {isEmpty ? <p aria-hidden="true" className="self-start absolute pointer-events-none inset-0 text-text-500 line-clamp-2">{placeholder}</p> : null}
+      {useRotating ? (
+        <CoworkRotatingPlaceholder isVisible={useRotating} placeholders={rotatingPlaceholders ?? []} />
+      ) : isEmpty ? (
+        <p
+          aria-hidden="true"
+          className="absolute inset-0 pointer-events-none overflow-hidden pl-1.5 pt-[5px] text-text-500 line-clamp-2"
+        >
+          {placeholder}
+        </p>
+      ) : null}
     </>
   );
 });
@@ -573,7 +628,7 @@ function OfficialCoworkFolderPicker({
   defaultTarget,
   disabled,
   onSelectedFoldersChange,
-  placeholder = "在项目中工作",
+  placeholder = "Work in a project",
   recentTargets,
   selectedFolders,
 }: {

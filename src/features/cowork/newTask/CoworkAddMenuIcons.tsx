@@ -1,28 +1,88 @@
 import type { ReactNode, SVGProps } from "react";
 
 /**
- * Official ion-dist icon primitives used by cwt/dwt add menu.
- * Source: index-BELzQL5P.pretty.js — gy / cv / Vv / Ky / Dv (gc viewBox 0 0 20 20).
- * Rendered at 14–16px like official menu rows; master art is 20×20.
+ * Official ion-dist icon primitives used by cwt/dwt add menu + composer plus.
+ * Source: index-BELzQL5P / c5f4e1303 — gy / cv / Vv / Ky / Dv / sy (gc=Nx viewBox 0 0 20 20).
+ * Master art is 20×20; Nx size map: 12/14→16, 16→20, 20→20.
  */
 
-type IconProps = SVGProps<SVGSVGElement> & { size?: number };
+type IconProps = {
+  alt?: string;
+  className?: string;
+  size?: number;
+  style?: SVGProps<SVGSVGElement>["style"];
+  vectorSizeOverride?: number;
+};
 
-function IonIcon({ size = 16, children, className, style, ...props }: IconProps & { children: ReactNode }) {
-  return (
+/** Official Ix size → vector size map (c5f4e1303 Nx). */
+const ION_VECTOR_SIZE: Record<number, number> = {
+  12: 16,
+  14: 16,
+  16: 20,
+  20: 20,
+  24: 24,
+  28: 28,
+  32: 32,
+};
+
+/**
+ * Official gc / Nx icon wrapper (c5f4e1303).
+ * Outer box = size; SVG vector = Ix[size] unless vectorSizeOverride.
+ */
+function IonIcon({
+  alt,
+  children,
+  className,
+  size = 20,
+  style,
+  vectorSizeOverride,
+}: IconProps & { children: ReactNode }) {
+  const vectorSize = vectorSizeOverride ?? ION_VECTOR_SIZE[size] ?? size;
+  const svg = (
     <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      width={size}
-      height={size}
+      aria-hidden={alt ? undefined : true}
+      aria-label={alt}
+      className={vectorSizeOverride ? className : undefined}
       fill="currentColor"
-      aria-hidden="true"
-      className={className}
-      style={{ flexShrink: 0, display: "block", ...style }}
-      {...props}
+      height={vectorSize}
+      style={{ flexShrink: 0 }}
+      viewBox="0 0 20 20"
+      width={vectorSize}
+      xmlns="http://www.w3.org/2000/svg"
     >
       {children}
     </svg>
+  );
+
+  if (vectorSizeOverride) return svg;
+
+  return (
+    <div
+      className={className}
+      style={{
+        width: size,
+        height: size,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        ...style,
+      }}
+    >
+      {svg}
+    </div>
+  );
+}
+
+/**
+ * Official sy — composer / add-menu plus (index-BELzQL5P pwt → a.jsx(sy, {})).
+ * Path is the thin 20×20 plus used in cowork prompt toolbar.
+ */
+export function CoworkComposerPlusIcon({ size = 20, ...props }: IconProps) {
+  return (
+    <IonIcon size={size} {...props}>
+      <path d="M10 3a.5.5 0 0 1 .5.5v6h6l.1.01a.5.5 0 0 1 0 .98l-.1.01h-6v6a.5.5 0 0 1-1 0v-6h-6a.5.5 0 0 1 0-1h6v-6A.5.5 0 0 1 10 3" />
+    </IonIcon>
   );
 }
 

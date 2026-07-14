@@ -11,6 +11,25 @@ export function parseLocalBranches(value: unknown, fallbackBranch: string): stri
     .filter((line) => line.length > 0));
 }
 
+/**
+ * Official c11959232 base branch pick (ia):
+ * defaultBranch ?? branches.find(main|master) ?? currentBranch.
+ */
+export function resolveOfficialBaseBranch(options: {
+  branches?: string[];
+  currentBranch?: string | null;
+  defaultBranch?: string | null;
+}): string {
+  const defaultBranch = options.defaultBranch?.trim();
+  if (defaultBranch) return defaultBranch;
+  const branches = options.branches ?? [];
+  const preferred = branches.find((branch) => branch === "main" || branch === "master");
+  if (preferred) return preferred;
+  const current = options.currentBranch?.trim();
+  if (current) return current;
+  return "main";
+}
+
 export function buildRecentFolders(sessions: SessionSummary[], currentCwd?: string, existing: OfficialComposerFolderRecent[] = []) {
   const seen = new Set<string>();
   const recent: OfficialComposerFolderRecent[] = [];

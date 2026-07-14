@@ -100,7 +100,7 @@ export function OfficialTooltip({
 
   return (
     <Tooltip.Root disableHoverablePopup>
-      <Tooltip.Trigger delay={delayDuration} render={children as ReactElement} />
+      <Tooltip.Trigger delay={delayDuration} render={children as ReactElement<Record<string, unknown>>} />
       <Tooltip.Portal>
         <Tooltip.Positioner className="z-tooltip" side={side} sideOffset={sideOffset}>
           <Tooltip.Popup

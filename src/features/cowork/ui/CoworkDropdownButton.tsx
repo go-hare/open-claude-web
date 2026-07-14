@@ -10,7 +10,8 @@ type CoworkDropdownButtonProps = {
   className?: string;
   disabled?: boolean;
   header?: ReactNode;
-  icon?: string;
+  /** Official icon name string, or prebuilt node (e.g. CoworkComposerPlusIcon / sy). */
+  icon?: ReactNode;
   items?: CoworkDropdownItem[];
   label?: ReactNode;
   mode?: "text" | "icon" | "chevron";
@@ -47,7 +48,15 @@ export function CoworkDropdownButton({ align = "end", alignOffset, ariaLabel, cl
     <Menu.Root onOpenChange={onOpenChange} open={open}>
       <Menu.Trigger aria-label={ariaLabel} className={["group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus", variantClass[variant], sizeClass[size], actualModeClass(actualMode), className ?? ""].join(" ")} disabled={disabled}>
         <span aria-hidden="true" className={`absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none ${backgroundClass[variant]}`} />
-        {actualMode === "icon" && icon ? <span className="relative inline-flex"><Icon className={pressed ? "text-[var(--accent)]" : undefined} name={icon} size={size === "large" ? "md" : size === "base" ? "sm" : "xs"} /></span> : null}
+        {actualMode === "icon" && icon ? (
+          <span className={`relative inline-flex ${pressed ? "text-[var(--accent)]" : ""}`}>
+            {typeof icon === "string" ? (
+              <Icon name={icon} size={size === "large" ? "md" : size === "base" ? "sm" : "xs"} />
+            ) : isValidElement(icon) ? (
+              icon
+            ) : null}
+          </span>
+        ) : null}
         {actualMode === "text" ? <span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap">{label}</span> : null}
         {revealChevron !== "never" ? <Icon className={revealChevron === "hover" ? "shrink-0 opacity-0 group-hover/dd:opacity-100 group-aria-[expanded=true]/dd:opacity-100" : "shrink-0"} name="ChevronDownSmall" size="xs" /> : null}
       </Menu.Trigger>

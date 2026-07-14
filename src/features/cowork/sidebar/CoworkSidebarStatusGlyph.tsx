@@ -17,7 +17,16 @@ export function CoworkSidebarStatusGlyph({ className = "", session }: { classNam
       </span>
     );
   }
-  if (hasError) return <Icon className={["text-extended-pink", className].filter(Boolean).join(" ")} name="XCircle" size="sm" />;
+  // Official mje (CoworkStatusGlyph error): $be icon Lbe "Warning" + text-warning-100 dark:text-warning-000
+  if (hasError) {
+    return (
+      <Icon
+        className={["text-warning-100 dark:text-warning-000", className].filter(Boolean).join(" ")}
+        name="Warning"
+        size="sm"
+      />
+    );
+  }
   if (session.isAgentCompleted || session.hasCompleted) return <Icon className={["text-text-400", className].filter(Boolean).join(" ")} name="CheckCircle" size="sm" />;
   if (session.isUnread) return <span className={["status-dot", className].filter(Boolean).join(" ")} data-kind="ready" />;
   if (session.isArchived) return <Icon className={["text-text-500 opacity-80", className].filter(Boolean).join(" ")} name="Archive" size="sm" />;

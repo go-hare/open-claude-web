@@ -21,6 +21,8 @@ export const COWORK_NEW_TASK_MESSAGES = {
   hideSuggestions: { defaultMessage: "Hide suggestions", id: "8/jokSbxkH" },
   customizeWithPlugins: { defaultMessage: "Customize with plugins", id: "i2yl4bVuRw" },
   composerPlaceholder: { defaultMessage: "How can I help you today?", id: "XLcM6WHfQR" },
+  /** Official yAt second carousel string (jGTFVKPV2+). */
+  composerPlaceholderSkills: { defaultMessage: "Type / for skills", id: "jGTFVKPV2+" },
   initialName: { defaultMessage: "Pick a task, any task", id: "OnaQpdV9zK" },
   organizeName: { defaultMessage: "Tidy up and get organized", id: "Wi8J5SkAVq" },
   prepName: { defaultMessage: "Plan for what's ahead", id: "huISnRRpZW" },
