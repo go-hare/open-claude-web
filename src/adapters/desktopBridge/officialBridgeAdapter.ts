@@ -674,8 +674,10 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     getWorkingTreeStatus: async (idOrCwd) => normalizeGitCommandResult(await raw?.getWorkingTreeStatus?.(idOrCwd)),
     clearSession: async (id) => raw?.clearSession?.(id),
     launchUltrareview: async (idOrCwd, options) => raw?.launchUltrareview?.(idOrCwd, options),
-    readFileAtCwd: async (idOrCwd, filePath) => normalizeGitCommandResult(await raw?.readFileAtCwd?.(idOrCwd, filePath)),
-    readSessionFile: async (id, filePath) => (await raw?.readSessionFile?.(id, filePath) ?? null) as string | null | Record<string, unknown>,
+    // Official / local handler may return utf8 string, null, or structured
+    // `{ contents|tooLarge|isDirectory|error }` — not GitCommandResult.
+    readFileAtCwd: async (idOrCwd, filePath) => normalizeFileReadResult(await raw?.readFileAtCwd?.(idOrCwd, filePath)) as unknown as GitCommandResult,
+    readSessionFile: async (id, filePath) => normalizeFileReadResult(await raw?.readSessionFile?.(id, filePath)) as string | null | Record<string, unknown>,
     readSessionImageAsDataUrl: async (id, filePath) => {
       const result = await raw?.readSessionImageAsDataUrl?.(id, filePath);
       return typeof result === "string" ? result : null;
@@ -841,11 +843,11 @@ function createCoworkFileBridge(raw: RawLocalSessionsBridge | undefined): Cowork
     // can fall through instead of treating a missing method as {ok:false}.
     readFileAtCwd: async (idOrCwd, filePath) => {
       if (!raw?.readFileAtCwd) return null as unknown as GitCommandResult;
-      return normalizeGitCommandResult(await raw.readFileAtCwd(idOrCwd, filePath));
+      return normalizeFileReadResult(await raw.readFileAtCwd(idOrCwd, filePath)) as unknown as GitCommandResult;
     },
     readSessionFile: async (id, filePath) => {
       if (!raw?.readSessionFile) return null;
-      return (await raw.readSessionFile(id, filePath) ?? null) as string | null | Record<string, unknown>;
+      return normalizeFileReadResult(await raw.readSessionFile(id, filePath)) as string | null | Record<string, unknown>;
     },
     readSessionImageAsDataUrl: async (id, filePath) => {
       if (!raw?.readSessionImageAsDataUrl) return null;
@@ -1421,6 +1423,58 @@ function normalizeGitCommandResult(value: unknown): GitCommandResult {
     error: stringValue(raw.error),
     code: raw.code,
   };
+}
+
+/**
+ * File preview reads (readFileAtCwd / readSessionFile / readLocalFile):
+ * - success: utf8 string or `{ contents|content|stdout|text }`
+ * - too large: `{ tooLarge, size }`
+ * - directory: `{ isDirectory: true, error? }`
+ * Do not force through GitCommandResult (drops contents / isDirectory).
+ */
+function normalizeFileReadResult(value: unknown): string | Record<string, unknown> | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (typeof value !== "object") return value == null ? null : String(value);
+  const raw = asRecord(value);
+  if (raw.isDirectory === true) {
+    return {
+      path: stringValue(raw.path) ?? stringValue(raw.absPath),
+      absPath: stringValue(raw.absPath) ?? stringValue(raw.path),
+      isDirectory: true,
+      error: stringValue(raw.error) ?? "Cannot preview a directory",
+    };
+  }
+  if (raw.tooLarge === true) {
+    return {
+      path: stringValue(raw.path) ?? stringValue(raw.absPath),
+      absPath: stringValue(raw.absPath) ?? stringValue(raw.path),
+      size: typeof raw.size === "number" ? raw.size : undefined,
+      tooLarge: true,
+    };
+  }
+  const contents =
+    stringValue(raw.contents) ??
+    stringValue(raw.content) ??
+    stringValue(raw.stdout) ??
+    stringValue(raw.text);
+  if (contents != null) {
+    return {
+      ...raw,
+      contents,
+      absPath: stringValue(raw.absPath) ?? stringValue(raw.path),
+      path: stringValue(raw.path) ?? stringValue(raw.absPath),
+    };
+  }
+  if (stringValue(raw.error)) {
+    return {
+      path: stringValue(raw.path) ?? stringValue(raw.absPath),
+      absPath: stringValue(raw.absPath) ?? stringValue(raw.path),
+      error: stringValue(raw.error),
+    };
+  }
+  // Preserve unknown structured payloads rather than emptying them.
+  return raw;
 }
 
 /** Official H7i / aOt: `{ oldText, newText } | null` (not GitCommandResult). */

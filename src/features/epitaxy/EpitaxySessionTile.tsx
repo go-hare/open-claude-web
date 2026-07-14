@@ -1538,23 +1538,55 @@ function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: LocalSessi
 }
 
 async function readPreviewText(bridge: LocalSessionsBridge, sessionId: string, filePath: string) {
-  const sessionValue = await bridge.readSessionFile?.(sessionId, filePath).catch(() => null);
+  const sessionValue = await bridge.readSessionFile?.(sessionId, filePath).catch((error) => {
+    throw previewReadError(error, filePath);
+  });
   const sessionText = previewTextFromBridgeValue(sessionValue);
   if (sessionText !== null) return sessionText;
-  const localValue = await desktopBridge.FileSystem.readLocalFile?.(filePath).catch(() => null);
+  const localValue = await desktopBridge.FileSystem.readLocalFile?.(filePath).catch((error) => {
+    throw previewReadError(error, filePath);
+  });
   const localText = previewTextFromBridgeValue(localValue);
   if (localText !== null) return localText;
-  const cwdResult = await bridge.readFileAtCwd?.(sessionId, filePath);
-  if (cwdResult?.ok === false) throw new Error(cwdResult.error ?? cwdResult.stderr ?? "Failed to read file");
-  return cwdResult?.stdout ?? "";
+  let cwdResult: unknown;
+  try {
+    cwdResult = await bridge.readFileAtCwd?.(sessionId, filePath);
+  } catch (error) {
+    throw previewReadError(error, filePath);
+  }
+  const cwdText = previewTextFromBridgeValue(cwdResult);
+  if (cwdText !== null) return cwdText;
+  const raw = asRecord(cwdResult);
+  if (raw.ok === false) throw new Error(stringValue(raw.error) ?? stringValue(raw.stderr) ?? "Failed to read file");
+  return "";
 }
 
 function previewTextFromBridgeValue(value: unknown): string | null {
   if (typeof value === "string") return value;
+  if (value == null) return null;
   const raw = asRecord(value);
+  if (raw.isDirectory === true) throw new Error("Cannot preview a directory");
+  if (stringValue(raw.error) && raw.contents == null && raw.content == null && raw.stdout == null && raw.text == null) {
+    throw new Error(stringValue(raw.error) ?? "Failed to read file");
+  }
   if (raw.tooLarge === true) throw new Error(`File is too large to preview (${numberValue(raw.size)} bytes).`);
-  const text = stringValue(raw.stdout) ?? stringValue(raw.contents) ?? stringValue(raw.content) ?? stringValue(raw.text);
+  const text = stringValue(raw.contents) ?? stringValue(raw.content) ?? stringValue(raw.stdout) ?? stringValue(raw.text);
   return text ?? null;
+}
+
+/** Collapse Node EISDIR / remote IPC noise into a short file-pane message. */
+function previewReadError(error: unknown, filePath: string) {
+  const message = error instanceof Error ? error.message : String(error ?? "Failed to read file");
+  if (/EISDIR|illegal operation on a directory|is a directory|Cannot preview a directory/i.test(message)) {
+    return new Error("Cannot preview a directory");
+  }
+  if (/ENOENT|no such file/i.test(message)) {
+    return new Error(`File not found: ${filePath}`);
+  }
+  // Strip electron remote invoke wrapper: Error invoking remote method '...': Error: ...
+  const remote = message.match(/Error invoking remote method '[^']+':\s*(?:Error:\s*)?(.*)$/i);
+  if (remote?.[1]) return new Error(remote[1].trim() || message);
+  return error instanceof Error ? error : new Error(message);
 }
 
 function isPreviewImagePath(filePath: string) {
