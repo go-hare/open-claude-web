@@ -92,7 +92,11 @@ export function RecentsControls({ mode, sessions, value, onChange }: { mode: Fra
   return (
     <Menu.Root>
       <Menu.Trigger aria-label={active ? text.filterActive : text.filter} className={triggerClassName}>
-        <Icon name="Filter" />
+        {/*
+          Official ca0135bc5: xs Button → Icon size "s" (Filter/s paths).
+          .df-chrome-btn svg { width/height: var(--df-chrome-icon-size, 16px) } scales the glyph.
+        */}
+        <Icon name="Filter" size="xs" style={{ width: "var(--df-chrome-icon-size, 16px)", height: "var(--df-chrome-icon-size, 16px)" }} />
       </Menu.Trigger>
       <BaseMenuPopup align="end" className="!min-w-[200px]" side="bottom" sideOffset={4}>
         <RecentsFilterMenu mode={mode} sessions={sessions} text={text} value={value} onChange={onChange} />

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useReducer, useState, type CSSProperties, type Reac
 import { createPortal } from "react-dom";
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
+import { OfficialTooltip } from "../shared/OfficialTooltip";
 
 export type OfficialSessionRef = {
   id: string;
@@ -42,6 +43,11 @@ type OfficialButtonProps = {
   onClick?: () => void;
   pressed?: boolean;
   size?: "small" | "base" | "large";
+  /** Official yd tooltip: icon mode falls back to aria-label (c87b7760f Button). null disables. */
+  tooltip?: ReactNode | null;
+  tooltipSide?: "top" | "bottom" | "left" | "right";
+  tooltipDelay?: number;
+  tooltipShortcut?: string;
   type?: "button" | "submit";
   variant?: "uncontained" | "contained" | "primary" | "destructive" | "toggle" | "accent" | "link" | "muted";
 };
@@ -339,11 +345,18 @@ export function OfficialButton({
   onClick,
   pressed,
   size = "base",
+  tooltip,
+  tooltipSide = "top",
+  // Official button tooltip wrapper `c` default delay is 400 (c87b7760f)
+  tooltipDelay = 400,
+  tooltipShortcut,
   type = "button",
   variant = "uncontained",
 }: OfficialButtonProps) {
   const modeClass = mode === "icon" ? "justify-center aspect-square px-p3" : `gap-g3 ${buttonTextPadding[size]}`;
-  return (
+  // Official A/yd: T = icon mode ? (tooltip ?? aria-label) : tooltip; wrap when tooltip !== null && T
+  const tooltipLabel = mode === "icon" ? (tooltip ?? ariaLabel) : tooltip;
+  const button = (
     <button
       aria-label={ariaLabel}
       aria-pressed={pressed || undefined}
@@ -362,6 +375,19 @@ export function OfficialButton({
       {customIcon ?? (icon ? <Icon name={icon} size={size === "small" ? "xs" : size === "large" ? "md" : "sm"} /> : null)}
       {children}
     </button>
+  );
+  if (tooltip === null || tooltipLabel == null || tooltipLabel === false || tooltipLabel === "") {
+    return button;
+  }
+  return (
+    <OfficialTooltip
+      delayDuration={tooltipDelay}
+      keyboardShortcut={tooltipShortcut}
+      side={tooltipSide}
+      tooltipContent={tooltipLabel}
+    >
+      {button}
+    </OfficialTooltip>
   );
 }
 

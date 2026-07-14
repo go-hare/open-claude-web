@@ -1438,8 +1438,18 @@ function OfficialPreviewPane({ bridge, previewTarget, session, sessionRef }: { b
   );
 }
 
+/** Official vN (c11959232) empty body when `!ee` / no readable contents. */
+const OFFICIAL_FILE_UNREADABLE_MESSAGE =
+  "File could not be read. It may have been deleted or moved, or it lives outside the session folder.";
+
 function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: LocalSessionsBridge; fileView: OfficialFileViewTarget | null; sessionRef: EpitaxySessionRef | null }) {
-  const [state, setState] = useState<{ dataUrl?: string; error?: string; isLoading: boolean; text?: string }>({ isLoading: false });
+  const [state, setState] = useState<{
+    dataUrl?: string;
+    error?: string;
+    isLoading: boolean;
+    text?: string;
+    unreadable?: boolean;
+  }>({ isLoading: false });
   const [sourceMode, setSourceMode] = useState(false);
   const [copied, setCopied] = useState<"contents" | "path" | null>(null);
   const filePath = fileView?.path ?? "";
@@ -1456,15 +1466,23 @@ function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: LocalSessi
     setState({ isLoading: true });
     const load = isPreviewImagePath(fileView.path)
       ? bridge.readSessionImageAsDataUrl
-        ? bridge.readSessionImageAsDataUrl(sessionRef.id, fileView.path).then((dataUrl) => ({ dataUrl: dataUrl ?? undefined }))
-        : Promise.reject(new Error("Image preview is unavailable."))
-      : readPreviewText(bridge, sessionRef.id, fileView.path).then((text) => ({ text }));
+        ? bridge.readSessionImageAsDataUrl(sessionRef.id, fileView.path).then((dataUrl) => {
+            if (!dataUrl) return { unreadable: true as const };
+            return { dataUrl };
+          })
+        : Promise.resolve({ unreadable: true as const })
+      : readPreviewText(bridge, sessionRef.id, fileView.path);
     void load.then((result) => {
       if (!alive) return;
       setState({ ...result, isLoading: false });
     }).catch((error) => {
       if (!alive) return;
-      setState({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+      const normalized = previewReadError(error, fileView.path);
+      setState({
+        isLoading: false,
+        unreadable: normalized.unreadable,
+        error: normalized.unreadable ? undefined : normalized.message,
+      });
     });
     return () => { alive = false; };
   }, [bridge, fileView, fileView?.scrollNonce, sessionRef]);
@@ -1514,7 +1532,16 @@ function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: LocalSessi
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         {state.isLoading ? (
-          <div role="status" className="h-full flex items-center justify-center gap-g3 text-t5"><OfficialSpinner /><span>Loading file…</span></div>
+          // Official vN loading: spinner + sr-only "Loading file"
+          <div role="status" className="h-full flex items-center justify-center text-t5">
+            <OfficialSpinner />
+            <span className="sr-only">Loading file</span>
+          </div>
+        ) : state.unreadable || (state.text === undefined && !state.dataUrl && !state.error) ? (
+          // Official vN `!ee`: muted centered copy (not pink IPC / custom directory text)
+          <div className="h-full flex items-center justify-center px-p8 text-body text-t6 text-center text-balance select-text">
+            {OFFICIAL_FILE_UNREADABLE_MESSAGE}
+          </div>
         ) : state.error ? (
           <div className="h-full flex items-center justify-center px-p8 text-center text-body text-extended-pink">{state.error}</div>
         ) : state.dataUrl ? (
@@ -1537,56 +1564,101 @@ function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: LocalSessi
   );
 }
 
-async function readPreviewText(bridge: LocalSessionsBridge, sessionId: string, filePath: string) {
-  const sessionValue = await bridge.readSessionFile?.(sessionId, filePath).catch((error) => {
-    throw previewReadError(error, filePath);
-  });
-  const sessionText = previewTextFromBridgeValue(sessionValue);
-  if (sessionText !== null) return sessionText;
-  const localValue = await desktopBridge.FileSystem.readLocalFile?.(filePath).catch((error) => {
-    throw previewReadError(error, filePath);
-  });
-  const localText = previewTextFromBridgeValue(localValue);
-  if (localText !== null) return localText;
-  let cwdResult: unknown;
+/**
+ * Official epitaxy-file query: null / no contents → unreadable empty state.
+ * Directory / missing / outside session folder all map to the same soft empty body.
+ */
+async function readPreviewText(
+  bridge: LocalSessionsBridge,
+  sessionId: string,
+  filePath: string,
+): Promise<{ text?: string; unreadable?: boolean }> {
   try {
-    cwdResult = await bridge.readFileAtCwd?.(sessionId, filePath);
+    const sessionValue = await bridge.readSessionFile?.(sessionId, filePath);
+    const sessionText = previewTextFromBridgeValue(sessionValue);
+    if (sessionText !== null) return { text: sessionText };
+    if (isUnreadableFilePayload(sessionValue)) return { unreadable: true };
   } catch (error) {
-    throw previewReadError(error, filePath);
+    const normalized = previewReadError(error, filePath);
+    if (normalized.unreadable) return { unreadable: true };
+    throw new Error(normalized.message);
   }
-  const cwdText = previewTextFromBridgeValue(cwdResult);
-  if (cwdText !== null) return cwdText;
-  const raw = asRecord(cwdResult);
-  if (raw.ok === false) throw new Error(stringValue(raw.error) ?? stringValue(raw.stderr) ?? "Failed to read file");
-  return "";
+
+  try {
+    const localValue = await desktopBridge.FileSystem.readLocalFile?.(filePath);
+    const localText = previewTextFromBridgeValue(localValue);
+    if (localText !== null) return { text: localText };
+    if (isUnreadableFilePayload(localValue)) return { unreadable: true };
+  } catch (error) {
+    const normalized = previewReadError(error, filePath);
+    if (normalized.unreadable) return { unreadable: true };
+    throw new Error(normalized.message);
+  }
+
+  try {
+    const cwdResult = await bridge.readFileAtCwd?.(sessionId, filePath);
+    const cwdText = previewTextFromBridgeValue(cwdResult);
+    if (cwdText !== null) return { text: cwdText };
+    if (isUnreadableFilePayload(cwdResult)) return { unreadable: true };
+    const raw = asRecord(cwdResult);
+    if (raw.ok === false) {
+      const err = stringValue(raw.error) ?? stringValue(raw.stderr) ?? "Failed to read file";
+      if (isSoftUnreadableMessage(err)) return { unreadable: true };
+      throw new Error(err);
+    }
+  } catch (error) {
+    const normalized = previewReadError(error, filePath);
+    if (normalized.unreadable) return { unreadable: true };
+    throw new Error(normalized.message);
+  }
+
+  return { unreadable: true };
 }
 
 function previewTextFromBridgeValue(value: unknown): string | null {
   if (typeof value === "string") return value;
   if (value == null) return null;
   const raw = asRecord(value);
-  if (raw.isDirectory === true) throw new Error("Cannot preview a directory");
+  if (raw.isDirectory === true || raw.tooLarge === true) return null;
   if (stringValue(raw.error) && raw.contents == null && raw.content == null && raw.stdout == null && raw.text == null) {
-    throw new Error(stringValue(raw.error) ?? "Failed to read file");
+    return null;
   }
-  if (raw.tooLarge === true) throw new Error(`File is too large to preview (${numberValue(raw.size)} bytes).`);
-  const text = stringValue(raw.contents) ?? stringValue(raw.content) ?? stringValue(raw.stdout) ?? stringValue(raw.text);
-  return text ?? null;
+  return stringValue(raw.contents) ?? stringValue(raw.content) ?? stringValue(raw.stdout) ?? stringValue(raw.text);
 }
 
-/** Collapse Node EISDIR / remote IPC noise into a short file-pane message. */
-function previewReadError(error: unknown, filePath: string) {
+function isUnreadableFilePayload(value: unknown): boolean {
+  if (value == null) return true;
+  if (typeof value === "string") return false;
+  const raw = asRecord(value);
+  return (
+    raw.isDirectory === true ||
+    raw.tooLarge === true ||
+    (Boolean(stringValue(raw.error)) &&
+      raw.contents == null &&
+      raw.content == null &&
+      raw.stdout == null &&
+      raw.text == null)
+  );
+}
+
+function isSoftUnreadableMessage(message: string) {
+  return /EISDIR|illegal operation on a directory|is a directory|Cannot preview a directory|ENOENT|no such file|Not a regular file|too large/i.test(
+    message,
+  );
+}
+
+/** Collapse Node EISDIR / remote IPC noise; soft failures → official unreadable empty state. */
+function previewReadError(error: unknown, _filePath: string): { message: string; unreadable: boolean } {
   const message = error instanceof Error ? error.message : String(error ?? "Failed to read file");
-  if (/EISDIR|illegal operation on a directory|is a directory|Cannot preview a directory/i.test(message)) {
-    return new Error("Cannot preview a directory");
+  if (isSoftUnreadableMessage(message)) {
+    return { message: OFFICIAL_FILE_UNREADABLE_MESSAGE, unreadable: true };
   }
-  if (/ENOENT|no such file/i.test(message)) {
-    return new Error(`File not found: ${filePath}`);
-  }
-  // Strip electron remote invoke wrapper: Error invoking remote method '...': Error: ...
   const remote = message.match(/Error invoking remote method '[^']+':\s*(?:Error:\s*)?(.*)$/i);
-  if (remote?.[1]) return new Error(remote[1].trim() || message);
-  return error instanceof Error ? error : new Error(message);
+  const cleaned = remote?.[1]?.trim() || message;
+  if (isSoftUnreadableMessage(cleaned)) {
+    return { message: OFFICIAL_FILE_UNREADABLE_MESSAGE, unreadable: true };
+  }
+  return { message: cleaned, unreadable: false };
 }
 
 function isPreviewImagePath(filePath: string) {
@@ -3946,14 +4018,19 @@ function ToolPathButton({ path }: { path: string }) {
   );
 }
 
+// Official c11959232 `_Component28`: only file_path / notebook_path use fileRef → open side file pane.
+// Generic keys like Glob/LS `path` stay plain text (often directories).
+const OFFICIAL_FILE_OPEN_INPUT_KEYS = new Set(["file_path", "notebook_path"]);
+
 function ToolInputLine({ input, inputKey }: { input: Record<string, unknown>; inputKey: string }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
-  const value = inputValueText(input[inputKey]);
-  const isPath = inputKey === "file_path" || inputKey === "notebook_path" || inputKey === "path";
+  const raw = input[inputKey];
+  const value = inputValueText(raw);
+  const isOpenableFilePath = OFFICIAL_FILE_OPEN_INPUT_KEYS.has(inputKey) && typeof raw === "string";
   return (
     <div>
       {inputKey}:{" "}
-      {isPath ? (
+      {isOpenableFilePath ? (
         <button
           className="rounded-[4px] outline-none hide-focus-ring ring-focus bg-transparent border-0 p-0 m-0 text-left cursor-default"
           onClick={(event) => {
