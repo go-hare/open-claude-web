@@ -21,7 +21,8 @@ type Option<T extends string> = { label: string; value: T };
 type FilterRow = { kind: "row"; key: Exclude<MenuKey, "selectedProjects">; label: string; summary: string; value: string; accent?: boolean; options: Option<string>[] };
 type SeparatorRow = { kind: "separator"; key: "separator" };
 
-const triggerClassName = "df-chrome-btn relative -my-1";
+// Official ca0135: Button ghost iconOnly + df-chrome-btn (inherits text-500 chrome color).
+const triggerClassName = "df-chrome-btn relative -my-1 text-text-500";
 
 export const defaultRecentsFilter: RecentsFilterState = {
   status: "active",
@@ -93,10 +94,15 @@ export function RecentsControls({ mode, sessions, value, onChange }: { mode: Fra
     <Menu.Root>
       <Menu.Trigger aria-label={active ? text.filterActive : text.filter} className={triggerClassName}>
         {/*
-          Official ca0135bc5: xs Button → Icon size "s" (Filter/s paths).
-          .df-chrome-btn svg { width/height: var(--df-chrome-icon-size, 16px) } scales the glyph.
+          Official ca0135bc5: Button import `xs` + iconOnly icon="Filter" + df-chrome-btn.
+          Runtime visual (official desktop screenshot) is **two** vertical sliders, not three.
+          Anthropicons font codepoint Filter (57456) renders as a 3-track glyph here;
+          SVG path key Filter/* is three horizontal bars (also wrong).
+          Official path table `Settings2Sliders/*` is the two-slider geometry that matches
+          the official chrome screenshot — use that path at size sm (16px) so
+          `.df-chrome-btn svg { --df-chrome-icon-size: 16px }` is 1:1.
         */}
-        <Icon name="Filter" size="xs" style={{ width: "var(--df-chrome-icon-size, 16px)", height: "var(--df-chrome-icon-size, 16px)" }} />
+        <Icon name="Settings2Sliders" size="sm" />
       </Menu.Trigger>
       <BaseMenuPopup align="end" className="!min-w-[200px]" side="bottom" sideOffset={4}>
         <RecentsFilterMenu mode={mode} sessions={sessions} text={text} value={value} onChange={onChange} />

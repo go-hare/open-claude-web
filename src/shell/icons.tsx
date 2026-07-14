@@ -454,7 +454,10 @@ const OFFICIAL_ICON_ALIASES: Record<string, string> = {
   connectors: "PluginBlockCustomize",
   copy: "CopySquareBehind",
   external: "SquareArrowTopRightOpenLink",
-  filter: "Settings2Sliders",
+  // Official ca0135 uses icon:"Filter" (Anthropicons / path key Filter).
+  // Do NOT alias filter → Settings2Sliders — that swaps the recents chrome glyph.
+  filter: "Filter",
+  Filter: "Filter",
   pin: "Pin",
   plugin: "Plugin",
   plus: "PlusSmall",
@@ -517,6 +520,13 @@ type IconProps = {
   size?: IconSizeProp;
   customSize?: number;
   bold?: boolean;
+  /**
+   * Prefer Anthropicons font glyph over SVG path map.
+   * Official CDS Button (`c43c5949a` `_n`) always uses the font; dframe chrome
+   * Filter is `Button iconOnly icon="Filter"` so it must not take the SVG path
+   * branch (and must not be forced by `.df-chrome-btn svg { 16px }`).
+   */
+  preferFont?: boolean;
   alt?: string;
   className?: string;
   style?: CSSProperties;
@@ -581,11 +591,11 @@ function resolveOfficialIconPaths(rawName: string | undefined, iconSize: IconSiz
   );
 }
 
-export function Icon({ name, icon, size = "sm", customSize, bold = false, alt, className, style }: IconProps) {
+export function Icon({ name, icon, size = "sm", customSize, bold = false, preferFont = false, alt, className, style }: IconProps) {
   const rawName = name ?? icon?.name;
   const selectedSize = customSize === undefined ? normalizeIconSize(size) : nearestSize(customSize);
   const pixelSize = customSize ?? ICON_SIZES[selectedSize].px;
-  const officialPaths = resolveOfficialIconPaths(rawName, selectedSize, bold);
+  const officialPaths = preferFont ? undefined : resolveOfficialIconPaths(rawName, selectedSize, bold);
 
   if (officialPaths) {
     const officialSize = OFFICIAL_SIZE_FOR_ICON_SIZE[selectedSize];

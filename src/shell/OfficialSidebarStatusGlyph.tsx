@@ -85,7 +85,9 @@ export function OfficialSidebarStatusGlyph({ className = "", session }: { classN
     return <Icon name="Archive" size="sm" className={["text-text-500 opacity-80", className].filter(Boolean).join(" ")} />;
   }
 
-  // Official pje({ square: false })
+  // Official pje({ square: false }) — index-BELzQL5P:
+  // className:"block size-[6px] border border-text-400 opacity-50 "+(e?"rounded-[2px]":"rounded-full")
+  // Mounted under ije wrapper `span.flex.shrink-0` (tooltip trigger); leading slot already flex-centers.
   return (
     <span
       aria-hidden="true"
