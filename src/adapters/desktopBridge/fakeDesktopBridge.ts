@@ -448,16 +448,40 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   getDefaultEffort: async () => "medium",
   getDefaultPermissionMode: async () => null,
   getDetectedProjects: async () => fakeDetectedProjects(targetKind),
-  getDiffFileContent: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
+  getDiffFileContent: async () => null,
   getEffort: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind)?.effort ?? "medium",
   getGitInfo: async (idOrCwd) => ({
     cwd: idOrCwd,
     root: idOrCwd,
     branch: workspace.branchName,
+    defaultBranch: workspace.defaultBranch ?? "main",
   }),
-  getGitDiff: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
-  getGitDiffStats: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
+  getGitDiff: async () => null,
+  getGitDiffStats: async () => ({ ok: true, success: true, stdout: " 2 files changed, 65 insertions(+), 7 deletions(-)\n", stderr: "" }),
+  getMergeBase: async () => ({ ok: true, success: true, stdout: "deadbeefcafebabe000000000000000000000001\n", stderr: "" }),
   getLocalBranches: async () => ({ ok: true, success: true, stdout: "* main\n  v3\n  feature/workspace-trust\n", stderr: "" }),
+  getPrStateForBranch: async () => null,
+  getPrChecks: async () => ({ ok: true, checkRuns: [], status: null }),
+  getPrDetails: async () => null,
+  generateLocalPrContent: async () => ({
+    title: "Update project",
+    body: "## Summary\nFake PR body for local bridge.\n",
+    branch: workspace.branchName || "feature/workspace-trust",
+  }),
+  createLocalPr: async () => ({ ok: true, success: true, stdout: "https://github.com/example/repo/pull/1\n", stderr: "" }),
+  summarizeSession: async (id) => {
+    const session = sessions.find((item) => item.id === id && item.kind === targetKind);
+    if (!session) return null;
+    if (!session.title || session.title === "General coding session" || session.title === "Coding session" || /^\d+$/.test(session.title)) {
+      const firstUser = session.messages?.find((message) => message.role === "user")?.text?.trim();
+      if (firstUser) {
+        session.title = firstUser.split("\n")[0]!.slice(0, 40);
+      }
+    }
+    // Mirror desktop summarizeSession → session_updated so recents/header listeners refresh.
+    emitFakeLocalSessionEvent({ type: "session_updated", sessionId: id, session }, targetKind === "epitaxy" ? "epitaxy" : "code");
+    return { summary: session.messages?.map((message) => message.text).join("\n").slice(0, 1000) ?? "", title: session.title, session };
+  },
   checkTrust: async (folder) => ({ trusted: fakeTrustedFolders.has(folder), sources: [] }),
   checkRemoteTrust: async () => ({ trusted: false, remote: true, sources: [] }),
   saveTrust: async (folder) => {

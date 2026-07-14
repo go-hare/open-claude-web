@@ -299,6 +299,62 @@ export type GitCommandResult = {
   code?: unknown;
 };
 
+/**
+ * Official LocalSessions.getDiffFileContent result (electron-shell H7i / aOt):
+ * `{ oldText, newText }` where either side may be null, or null when both unavailable.
+ */
+export type DiffFileContentResult = {
+  oldText: string | null;
+  newText: string | null;
+} | null;
+
+/** Official H$A / a2A LocalSessions.getGitDiff comparison (not GitCommandResult). */
+export type OfficialGitDiffFile = {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+  previous_filename?: string;
+};
+
+export type OfficialGitDiffComparison = {
+  base_ref: string;
+  head_ref: string;
+  merge_base: string;
+  files: OfficialGitDiffFile[];
+  ahead_by: number;
+  behind_by: number;
+  total_commits: number;
+};
+
+
+/** Local `gh pr create` / generate content (c11959232 EpitaxyBranchRow create path). */
+export type LocalPrContent = {
+  body?: string;
+  branch?: string;
+  commits?: string;
+  stat?: string;
+  status?: string;
+  title?: string;
+};
+
+export type LocalPrState = {
+  draft?: boolean;
+  merged?: boolean;
+  number?: number;
+  state?: string;
+  title?: string;
+  url?: string;
+};
+
+export type CreateLocalPrOptions = {
+  body?: string;
+  draft?: boolean;
+  title?: string;
+};
+
 export type SlashCommand = {
   aliases?: string[];
   argumentHint?: string;
@@ -340,12 +396,20 @@ export type LocalSessionsBridge = {
   getDefaultEffort?: () => Promise<EffortLevel | null>;
   getDefaultPermissionMode?: (cwd?: string) => Promise<string | null>;
   getDetectedProjects?: () => Promise<SessionSummary[]>;
-  getDiffFileContent?: (idOrCwd: string, refOrFilePath: string, filePath?: string, previousFilePath?: string) => Promise<GitCommandResult>;
+  getDiffFileContent?: (idOrCwd: string, mergeBase: string, filePath: string, previousFilePath?: string) => Promise<DiffFileContentResult>;
   getEffort?: (id: string) => Promise<EffortLevel | string>;
   getGitInfo?: (idOrCwd: string) => Promise<unknown>;
-  getGitDiff?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
+  getGitDiff?: (idOrCwd: string, base?: string) => Promise<OfficialGitDiffComparison | null>;
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
+  /** Official nN: git merge-base HEAD <baseBranch> for file original content. */
+  getMergeBase?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
   getLocalBranches?: (idOrCwd: string) => Promise<GitCommandResult | string[]>;
+  getPrStateForBranch?: (idOrCwd: string, branch?: string) => Promise<LocalPrState | null>;
+  getPrChecks?: (idOrCwd: string, prNumberOrBranch?: string | number) => Promise<unknown>;
+  getPrDetails?: (idOrCwd: string, prNumberOrBranch?: string | number) => Promise<unknown>;
+  generateLocalPrContent?: (idOrCwd: string) => Promise<LocalPrContent | null>;
+  createLocalPr?: (idOrCwd: string, options?: CreateLocalPrOptions) => Promise<GitCommandResult>;
+  summarizeSession?: (id: string) => Promise<{ summary?: string; title?: string | null; session?: SessionSummary | null } | string | null>;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<string>;
   getSupportedCommands?: (request?: GetSupportedCommandsRequest) => Promise<SlashCommand[]>;
@@ -416,11 +480,12 @@ export type CoworkSessionsBridge = {
   getDefaultEffort?: () => Promise<EffortLevel | null>;
   getDefaultPermissionMode?: (cwd?: string) => Promise<string | null>;
   getDetectedProjects?: () => Promise<SessionSummary[]>;
-  getDiffFileContent?: (idOrCwd: string, refOrFilePath: string, filePath?: string, previousFilePath?: string) => Promise<GitCommandResult>;
+  getDiffFileContent?: (idOrCwd: string, mergeBase: string, filePath: string, previousFilePath?: string) => Promise<DiffFileContentResult>;
   getEffort?: (id: string) => Promise<EffortLevel | string>;
   getGitInfo?: (idOrCwd: string) => Promise<unknown>;
-  getGitDiff?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
+  getGitDiff?: (idOrCwd: string, base?: string) => Promise<OfficialGitDiffComparison | null>;
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
+  getMergeBase?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
   getLocalBranches?: (idOrCwd: string) => Promise<GitCommandResult | string[]>;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<string>;

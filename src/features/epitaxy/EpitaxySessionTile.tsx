@@ -28,6 +28,8 @@ import {
   type OfficialViewPane,
 } from "./OfficialEpitaxyComponents";
 import { OfficialEpitaxyBranchRows } from "./OfficialEpitaxyBranchRows";
+import { OfficialDiffPane, type OfficialDiffCompareMeta } from "./OfficialDiffPane";
+import { OfficialPierreWorkerPool } from "./diff/OfficialPierreWorkerPool";
 import { parseEpitaxyUploadedFilesText, type EpitaxyUploadedFile } from "./epitaxyUploadedFiles";
 import { createOfficialSessionStreamSmoother, type OfficialStreamSnapshot } from "./officialStreamSmoother";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
@@ -388,54 +390,75 @@ function EpitaxyChatPanel({
     </>
   );
 
+  // Official kI wraps session with `sg` (PierreWorkerPool) so Diff/File Zd mounts with a warm pool.
+  // Official ur (ca0135): first open beside chat → Xs({direction:"row", children:[["chat",2], side]}).
+  // c119 YI: flexGrow from tile.flex, flexShrink:1, flexBasis:0, minWidth:minTilePx(100).
+  const chatTileStyle = useMemo<CSSProperties>(() => {
+    if (!activeView) return { height: "100%", minWidth: 0, flex: "1 1 0" };
+    if (sidePaneWidth !== undefined) {
+      // After user resize: chat takes remaining space (official live flexGrow update on drag).
+      return { height: "100%", minWidth: sidePaneMinWidth, flex: "1 1 0" };
+    }
+    return {
+      height: "100%",
+      minWidth: sidePaneMinWidth,
+      flexGrow: chatDefaultFlex,
+      flexShrink: 1,
+      flexBasis: 0,
+    };
+  }, [activeView, sidePaneWidth]);
+
   return (
-    <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
-    <div className="relative h-full min-w-0 flex">
-      <div className="relative h-full min-w-0 flex flex-col flex-1">
-        <EpitaxyChatHeader
-          activeView={activeView}
-          dragHandle={dragHandle}
-          hasRunningTasks={hasRunningTasks}
-          isTitleLoading={isLoading && !session}
-          isTopLeft={isTopLeft}
-          onClose={onClose}
-          onSessionRemoved={onSessionRemoved}
-          onTranscriptModeChange={setTranscriptMode}
-          onViewSelect={selectView}
-          paneIndex={paneIndex}
-          session={session}
-          sessionRef={effectiveSessionRef}
-          title={title}
-          transcriptMode={transcriptMode}
-        />
-        {chatBody}
-      </div>
-      {activeView ? (
-        <EpitaxySidePaneTile
-          activeView={activeView}
-          fileView={fileView}
-          isTopLeft={isTopLeft}
-          onClose={() => setActiveView(undefined)}
-          previewTarget={previewTarget}
-          session={session}
-          sessionRef={effectiveSessionRef}
-          sidePaneWidth={sidePaneWidth}
-          subagentView={subagentView}
-          onSidePaneWidthChange={setSidePaneWidth}
-        />
-      ) : null}
-    </div>
-    </EpitaxyTranscriptActionContext.Provider>
+    <OfficialPierreWorkerPool>
+      <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
+        <div className="relative h-full min-w-0 flex">
+          <div className="relative min-w-0 flex flex-col" style={chatTileStyle}>
+            <EpitaxyChatHeader
+              activeView={activeView}
+              dragHandle={dragHandle}
+              hasRunningTasks={hasRunningTasks}
+              isTitleLoading={isLoading && !session}
+              isTopLeft={isTopLeft}
+              onClose={onClose}
+              onSessionRemoved={onSessionRemoved}
+              onTranscriptModeChange={setTranscriptMode}
+              onViewSelect={selectView}
+              paneIndex={paneIndex}
+              session={session}
+              sessionRef={effectiveSessionRef}
+              title={title}
+              transcriptMode={transcriptMode}
+            />
+            {chatBody}
+          </div>
+          {activeView ? (
+            <EpitaxySidePaneTile
+              activeView={activeView}
+              fileView={fileView}
+              isTopLeft={isTopLeft}
+              onClose={() => setActiveView(undefined)}
+              previewTarget={previewTarget}
+              session={session}
+              sessionRef={effectiveSessionRef}
+              sidePaneWidth={sidePaneWidth}
+              subagentView={subagentView}
+              onSidePaneWidthChange={setSidePaneWidth}
+            />
+          ) : null}
+        </div>
+      </EpitaxyTranscriptActionContext.Provider>
+    </OfficialPierreWorkerPool>
   );
 }
 
 function officialSessionHeaderTitle(session: SessionSummary | null, initialSessionId: string | undefined) {
   if (!initialSessionId) return "Claude Code";
   const title = session?.title?.trim();
-  if (!title || title === "Untitled" || (/^\d+$/.test(title) && (session?.kind === "code" || session?.kind === "epitaxy"))) {
+  // Official local code empty/placeholder → "Coding session" (c11959232 header fallback).
+  if (isPlaceholderCodingTitle(title) || (title && /^\d+$/.test(title) && (session?.kind === "code" || session?.kind === "epitaxy"))) {
     return "Coding session";
   }
-  return title;
+  return title!;
 }
 
 function EpitaxyChatHeader({ activeView, dragHandle, hasRunningTasks, hideViews = false, isTitleLoading, isTopLeft, onClose, onSessionRemoved, onTranscriptModeChange, onViewSelect, paneIndex, session, sessionRef, title, transcriptMode = "normal" }: {
@@ -500,12 +523,18 @@ function useEpitaxyViewShortcuts(onSelect: (view: OfficialViewPane) => void, ena
   }, [enabled, onSelect]);
 }
 
-const sidePaneMinWidth = 320;
-const sidePaneMaxWidth = 760;
-const sidePaneMinMainWidth = 360;
+/**
+ * Official tile layout (ca0135bc5 `ur` / `Xs` / c119 `YI` / `nE`):
+ * - open side pane beside chat: `[["chat", 2], sideTile]` → flexGrow chat=2, side=1
+ * - tile wrap: flexGrow / flexShrink:1 / flexBasis:0, minSize = minTilePx:100
+ * - no 42% / 760 invent-width; width comes from flex until user resizes
+ */
+const sidePaneMinWidth = 100;
 const sidePaneResizeStep = 24;
 const sidePaneResizeHandleSize = 12;
-const sidePaneDefaultRatio = 0.42;
+/** Official ur: chat flex 2 vs side flex 1 → side ≈ 1/3 until resized. */
+const sidePaneDefaultFlex = 1;
+const chatDefaultFlex = 2;
 
 const sidePaneBoundaryHandleStyle: CSSProperties = {
   position: "relative",
@@ -533,25 +562,32 @@ const sidePaneBoundaryAffordanceStyle: CSSProperties = {
   height: "var(--tile-resize-length)",
 };
 
-function clampSidePaneWidth(width: number, maxWidth = sidePaneMaxWidth) {
+function clampSidePaneWidth(width: number, maxWidth: number) {
   return Math.max(sidePaneMinWidth, Math.min(maxWidth, Math.round(width)));
 }
 
 function getSidePaneMaxWidth(containerWidth?: number) {
-  const viewportWidth = typeof window === "undefined" ? sidePaneMaxWidth + sidePaneMinMainWidth : window.innerWidth;
-  const usableWidth = Math.max(sidePaneMinWidth, (containerWidth ?? viewportWidth) - sidePaneMinMainWidth);
-  return Math.max(sidePaneMinWidth, Math.min(sidePaneMaxWidth, usableWidth));
+  const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
+  // Leave at least minTilePx for chat (official nE.minTilePx = 100).
+  const usable = Math.max(sidePaneMinWidth, (containerWidth ?? viewportWidth) - sidePaneMinWidth);
+  return usable;
 }
 
 function getDefaultSidePaneWidth(containerWidth?: number) {
-  const viewportWidth = typeof window === "undefined" ? sidePaneMaxWidth + sidePaneMinMainWidth : window.innerWidth;
-  const baseWidth = (containerWidth ?? viewportWidth) * sidePaneDefaultRatio;
+  const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
+  const total = containerWidth ?? viewportWidth;
+  // Official default flex share: side / (chat+side) = 1/3.
+  const baseWidth = (total * sidePaneDefaultFlex) / (chatDefaultFlex + sidePaneDefaultFlex);
   return clampSidePaneWidth(baseWidth, getSidePaneMaxWidth(containerWidth));
 }
 
-function sidePaneWidthToAriaValue(width: number | undefined) {
-  if (width === undefined) return Math.round(sidePaneDefaultRatio * 100);
-  const maxWidth = getSidePaneMaxWidth();
+function sidePaneWidthToAriaValue(width: number | undefined, containerWidth?: number) {
+  // Official separator valueNow ≈ leftFlex/(left+right)*100 with default chat:2 side:1 → ~67 for chat side of handle.
+  // Our handle reports side share so 33 when default.
+  if (width === undefined) {
+    return Math.round((sidePaneDefaultFlex / (chatDefaultFlex + sidePaneDefaultFlex)) * 100);
+  }
+  const maxWidth = getSidePaneMaxWidth(containerWidth);
   const range = Math.max(1, maxWidth - sidePaneMinWidth);
   return Math.max(0, Math.min(100, Math.round(((width - sidePaneMinWidth) / range) * 100)));
 }
@@ -581,12 +617,18 @@ function EpitaxySidePaneTile({
 }) {
   const codeSurface = activeView === "terminal" || activeView === "diff";
   const bridge = desktopBridge.LocalSessions;
-  const [diffShowTree, setDiffShowTree] = useState(true);
+  // Official Lr (ca0135bc5): diffShowTree:!1 — tree off until user clicks Show files.
+  const [diffShowTree, setDiffShowTree] = useState(false);
+  // Official oN: diffCanFitTree[repoKey] ?? true — Hide/Show files only when d (canFitTree).
+  const [diffCanFitTree, setDiffCanFitTree] = useState(true);
+  const [diffCompareMeta, setDiffCompareMeta] = useState<OfficialDiffCompareMeta | null>(null);
   const [terminalTabs, setTerminalTabs] = useState<TerminalTabsState>(() => createDefaultTerminalTabs());
   const plan = useMemo(() => activeView === "plan" ? parseOfficialPlan(session?.messages ?? []) : { content: undefined, path: undefined }, [activeView, session?.messages]);
 
   useEffect(() => {
     setTerminalTabs(createDefaultTerminalTabs());
+    setDiffCompareMeta(null);
+    setDiffCanFitTree(true);
   }, [sessionRef?.id]);
 
   const addTerminalTab = useCallback(() => {
@@ -629,13 +671,24 @@ function EpitaxySidePaneTile({
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const [isResizingSidePane, setIsResizingSidePane] = useState(false);
   const ariaValueNow = sidePaneWidthToAriaValue(sidePaneWidth);
-  const renderedSidePaneMaxWidth = getSidePaneMaxWidth();
-  const sidePaneStyle = useMemo<CSSProperties>(() => ({
-    height: "100%",
-    maxWidth: renderedSidePaneMaxWidth,
-    minWidth: sidePaneMinWidth,
-    width: sidePaneWidth === undefined ? "42%" : `${sidePaneWidth}px`,
-  }), [renderedSidePaneMaxWidth, sidePaneWidth]);
+  // Official YI tile wrap: flexGrow / flexShrink:1 / flexBasis:0 until user resizes to a fixed width.
+  const sidePaneStyle = useMemo<CSSProperties>(() => {
+    if (sidePaneWidth === undefined) {
+      return {
+        height: "100%",
+        minWidth: sidePaneMinWidth,
+        flexGrow: sidePaneDefaultFlex,
+        flexShrink: 1,
+        flexBasis: 0,
+      };
+    }
+    return {
+      height: "100%",
+      minWidth: sidePaneMinWidth,
+      width: `${sidePaneWidth}px`,
+      flex: "0 0 auto",
+    };
+  }, [sidePaneWidth]);
   const commitSidePaneWidth = useCallback((width: number, maxWidth?: number) => {
     onSidePaneWidthChange(clampSidePaneWidth(width, maxWidth));
   }, [onSidePaneWidthChange]);
@@ -724,7 +777,7 @@ function EpitaxySidePaneTile({
       </div>
       <aside
         ref={asideRef}
-        className={`min-w-0 shrink-0 relative isolate flex flex-col rounded-r6${codeSurface ? " epitaxy-code-surface" : ""}`}
+        className={`min-w-0 relative isolate flex flex-col rounded-r6${codeSurface ? " epitaxy-code-surface" : ""}`}
         style={sidePaneStyle}
       >
         <div aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated" data-surface="sidebar" />
@@ -732,6 +785,8 @@ function EpitaxySidePaneTile({
           <div className="draggable absolute inset-0 -z-[1]" aria-hidden="true" />
             {renderSidePaneTitle(activeView, session, sessionRef, {
               activeTab: activeTerminalTab,
+              diffCanFitTree,
+              diffCompareMeta,
               diffShowTree,
               fileView,
               onDiffShowTreeChange: setDiffShowTree,
@@ -748,7 +803,19 @@ function EpitaxySidePaneTile({
           </div>
         </div>
         <div className="flex-1 min-h-0 overflow-hidden rounded-b-r6">
-          <ViewPaneBody activeTerminalTab={activeTerminalTab} activeView={activeView} bridge={bridge} diffShowTree={diffShowTree} fileView={fileView} previewTarget={previewTarget} session={session} sessionRef={sessionRef} subagentView={subagentView} />
+          <ViewPaneBody
+            activeTerminalTab={activeTerminalTab}
+            activeView={activeView}
+            bridge={bridge}
+            diffShowTree={diffShowTree}
+            fileView={fileView}
+            onDiffCanFitTreeChange={setDiffCanFitTree}
+            onDiffCompareMetaChange={setDiffCompareMeta}
+            previewTarget={previewTarget}
+            session={session}
+            sessionRef={sessionRef}
+            subagentView={subagentView}
+          />
         </div>
       </aside>
     </>
@@ -779,6 +846,10 @@ type TerminalTabsState = {
 
 type TerminalTitleState = {
   activeTab?: TerminalTab;
+  /** Official oN: Hide/Show files only when canFitTree (width >= 400). */
+  diffCanFitTree?: boolean;
+  /** Official oN: baseBranch → working tree / head */
+  diffCompareMeta?: OfficialDiffCompareMeta | null;
   diffShowTree?: boolean;
   fileView?: OfficialFileViewTarget | null;
   onDiffShowTreeChange?: (showTree: boolean) => void;
@@ -822,19 +893,25 @@ function renderSidePaneTitle(activeView: OfficialViewPane, session: SessionSumma
   }
 
   if (activeView === "diff" && sessionRef) {
+    // Official oN (c11959232): FolderOpenFront Hide/Show files only when canFitTree + base → head
+    const baseLabel = terminalState?.diffCompareMeta?.base ?? "main";
+    const headLabel = terminalState?.diffCompareMeta?.headLabel ?? "working tree";
+    const canFitTree = terminalState?.diffCanFitTree ?? true;
     return (
       <div className="relative z-[1] flex items-center gap-g3 min-w-0 draggable-none">
-        <OfficialButton
-          ariaLabel={terminalState?.diffShowTree ? "Hide files" : "Show files"}
-          className="-ml-[4px]"
-          icon="FolderOpenFront"
-          onClick={() => terminalState?.onDiffShowTreeChange?.(!terminalState.diffShowTree)}
-          pressed={terminalState?.diffShowTree}
-        />
+        {canFitTree ? (
+          <OfficialButton
+            ariaLabel={terminalState?.diffShowTree ? "Hide files" : "Show files"}
+            className="-ml-[4px]"
+            icon="FolderOpenFront"
+            onClick={() => terminalState?.onDiffShowTreeChange?.(!terminalState.diffShowTree)}
+            pressed={terminalState?.diffShowTree}
+          />
+        ) : null}
         <span className="flex items-center gap-g3 text-body text-t6 min-w-0 -ml-[2px]">
-          <span className="text-t7 truncate">{session?.repo?.branch ?? "HEAD"}</span>
+          <span className="text-t7 truncate">{baseLabel}</span>
           <span className="text-t4">→</span>
-          <span className="text-t7 truncate">working tree</span>
+          <span className="text-t7 truncate">{headLabel}</span>
         </span>
       </div>
     );
@@ -998,14 +1075,47 @@ function OfficialPlanHeaderActions({ bridge, plan, session }: { bridge: LocalSes
   );
 }
 
-function ViewPaneBody({ activeTerminalTab, activeView, bridge, diffShowTree, fileView, previewTarget, session, sessionRef, subagentView }: { activeTerminalTab?: TerminalTab; activeView: OfficialViewPane; bridge: LocalSessionsBridge; diffShowTree: boolean; fileView: OfficialFileViewTarget | null; previewTarget: OfficialPreviewTarget | null; session: SessionSummary | null; sessionRef: EpitaxySessionRef | null; subagentView: OfficialSubagentTarget | null }) {
+function ViewPaneBody({
+  activeTerminalTab,
+  activeView,
+  bridge,
+  diffShowTree,
+  fileView,
+  onDiffCanFitTreeChange,
+  onDiffCompareMetaChange,
+  previewTarget,
+  session,
+  sessionRef,
+  subagentView,
+}: {
+  activeTerminalTab?: TerminalTab;
+  activeView: OfficialViewPane;
+  bridge: LocalSessionsBridge;
+  diffShowTree: boolean;
+  fileView: OfficialFileViewTarget | null;
+  onDiffCanFitTreeChange?: (canFit: boolean) => void;
+  onDiffCompareMetaChange?: (meta: OfficialDiffCompareMeta) => void;
+  previewTarget: OfficialPreviewTarget | null;
+  session: SessionSummary | null;
+  sessionRef: EpitaxySessionRef | null;
+  subagentView: OfficialSubagentTarget | null;
+}) {
   switch (activeView) {
     case "preview":
       return <OfficialPreviewPane bridge={bridge} previewTarget={previewTarget} session={session} sessionRef={sessionRef} />;
     case "file":
       return <OfficialFilePane bridge={bridge} fileView={fileView} sessionRef={sessionRef} />;
     case "diff":
-      return sessionRef ? <OfficialDiffPane bridge={bridge} session={session} sessionRef={sessionRef} showTree={diffShowTree} /> : null;
+      return sessionRef ? (
+        <OfficialDiffPane
+          bridge={bridge}
+          onCanFitTreeChange={onDiffCanFitTreeChange}
+          onCompareMetaChange={onDiffCompareMetaChange}
+          session={session}
+          sessionRef={sessionRef}
+          showTree={diffShowTree}
+        />
+      ) : null;
     case "terminal":
       return sessionRef ? <OfficialShellPtyPane bridge={bridge} ptyKey={terminalPtyKey(sessionRef.id, activeTerminalTab?.id ?? defaultTerminalTabId)} sessionRef={sessionRef} /> : null;
     case "tasks":
@@ -1459,177 +1569,6 @@ function isMarkdownPreviewPath(filePath: string) {
   return /\.(?:md|mdx|markdown)$/i.test(filePath);
 }
 
-type DiffFileEntry = {
-  diff: string;
-  isDeleted: boolean;
-  isNew: boolean;
-  isRenamed: boolean;
-  oldPath?: string;
-  path: string;
-  status: "A" | "D" | "M" | "R";
-};
-
-function OfficialDiffPane({ bridge, session, sessionRef, showTree }: { bridge: LocalSessionsBridge; session: SessionSummary | null; sessionRef: EpitaxySessionRef; showTree: boolean }) {
-  const [state, setState] = useState<{ diff: string; error?: string; isLoading: boolean; stats: string }>({ diff: "", isLoading: true, stats: "" });
-  const [contentState, setContentState] = useState<{ error?: string; isLoading: boolean; modified: string; original: string }>({ isLoading: false, modified: "", original: "" });
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    setState({ diff: "", isLoading: true, stats: "" });
-    setSelectedPath(null);
-    void Promise.all([
-      bridge.getGitDiff?.(sessionRef.id, "HEAD") ?? Promise.resolve({ ok: false, error: "getGitDiff unavailable", stdout: "", stderr: "" }),
-      bridge.getGitDiffStats?.(sessionRef.id, "HEAD") ?? Promise.resolve({ ok: false, error: "getGitDiffStats unavailable", stdout: "", stderr: "" }),
-    ]).then(([diffResult, statsResult]) => {
-      if (!alive) return;
-      const diffOk = diffResult.ok !== false && !diffResult.error;
-      const statsOk = statsResult.ok !== false && !statsResult.error;
-      setState({
-        diff: diffOk ? diffResult.stdout ?? "" : "",
-        error: diffOk ? undefined : diffResult.error ?? diffResult.stderr ?? "Failed to load diff",
-        isLoading: false,
-        stats: statsOk ? statsResult.stdout ?? "" : "",
-      });
-    }).catch((error) => {
-      if (alive) setState({ diff: "", error: error instanceof Error ? error.message : "Failed to load diff", isLoading: false, stats: "" });
-    });
-    return () => { alive = false; };
-  }, [bridge, sessionRef.id]);
-
-  const files = useMemo(() => parseDiffFiles(state.diff), [state.diff]);
-  const activeFile = useMemo(() => {
-    if (files.length === 0) return null;
-    return files.find((file) => file.path === selectedPath) ?? files[0];
-  }, [files, selectedPath]);
-  const diffTarget = `${sessionRef.id}:${activeFile?.path ?? ""}:${activeFile?.oldPath ?? ""}`;
-
-  useEffect(() => {
-    let alive = true;
-    if (!activeFile) {
-      setContentState({ isLoading: false, modified: "", original: "" });
-      return () => { alive = false; };
-    }
-
-    setContentState({ isLoading: true, modified: "", original: "" });
-    const originalPromise = activeFile.isNew
-      ? Promise.resolve({ ok: true, stdout: "", stderr: "" })
-      : bridge.getDiffFileContent?.(sessionRef.id, "HEAD", activeFile.path, activeFile.oldPath)
-        ?? bridge.getDiffFileContent?.(sessionRef.id, activeFile.oldPath ?? activeFile.path)
-        ?? Promise.resolve({ ok: false, error: "getDiffFileContent unavailable", stdout: "", stderr: "" });
-    const modifiedPromise = activeFile.isDeleted
-      ? Promise.resolve({ ok: true, stdout: "", stderr: "" })
-      : bridge.readFileAtCwd?.(sessionRef.id, activeFile.path)
-        ?? Promise.resolve({ ok: false, error: "readFileAtCwd unavailable", stdout: "", stderr: "" });
-
-    void Promise.all([originalPromise, modifiedPromise]).then(([original, modified]) => {
-      if (!alive) return;
-      const originalError = "error" in original ? original.error : undefined;
-      const modifiedError = "error" in modified ? modified.error : undefined;
-      setContentState({
-        error: originalError || modifiedError,
-        isLoading: false,
-        modified: modified.ok === false ? "" : modified.stdout ?? "",
-        original: original.ok === false ? "" : original.stdout ?? "",
-      });
-    }).catch((error) => {
-      if (alive) {
-        setContentState({
-          error: error instanceof Error ? error.message : "Failed to load file diff",
-          isLoading: false,
-          modified: "",
-          original: "",
-        });
-      }
-    });
-    return () => { alive = false; };
-  }, [activeFile, bridge, diffTarget, sessionRef.id]);
-
-  if (state.isLoading) {
-    return <div role="status" className="h-full flex items-center justify-center text-t5"><OfficialSpinner /><span className="sr-only">Loading diff</span></div>;
-  }
-
-  if (state.error) {
-    return <div className="h-full flex items-center justify-center text-body text-t5 px-p8 text-center">{state.error}</div>;
-  }
-
-  if (!state.diff.trim()) {
-    return <div className="h-full flex items-center justify-center text-body text-t5">No changes to show.</div>;
-  }
-
-  return (
-    <div className="h-full select-text flex min-w-0 text-body text-t8">
-      {showTree && files.length > 0 ? (
-        <aside className="w-[200px] shrink-0 overflow-y-auto border-r border-border-300 py-p4">
-          {files.map((file) => (
-            <button
-              key={file.path}
-              aria-pressed={file.path === activeFile?.path || undefined}
-              className="group/btn relative isolate flex h-small w-full items-center gap-g3 border-0 bg-transparent px-p6 text-left text-footnote text-t7 outline-none hide-focus-ring ring-focus"
-              onClick={() => setSelectedPath(file.path)}
-              type="button"
-            >
-              <span aria-hidden="true" className={`absolute inset-y-0 left-[6px] right-[6px] -z-[1] rounded-r4 ${file.path === activeFile?.path ? "bg-[var(--fill-uncontained-selected)]" : "group-hover/btn:bg-[var(--fill-uncontained-hover)]"}`} />
-              <Icon name="Document" size="xs" />
-              <span className="truncate">{file.path}</span>
-              <span className="ml-auto shrink-0 text-t5">{file.status}</span>
-            </button>
-          ))}
-        </aside>
-      ) : null}
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {state.stats.trim() ? <pre className="m-0 border-b border-border-300 p-p6 text-code text-t6 whitespace-pre-wrap">{state.stats.trim()}</pre> : null}
-        <div className="flex-1 min-h-0 overflow-auto">
-          {contentState.isLoading ? (
-            <div role="status" className="h-full flex items-center justify-center text-t5"><OfficialSpinner /><span className="sr-only">Loading file diff</span></div>
-          ) : contentState.error ? (
-            <pre className="m-0 min-w-max p-p6 text-code text-t8 leading-[18px] whitespace-pre-wrap">{activeFile?.diff ?? state.diff}</pre>
-          ) : (
-            <OfficialSplitDiffView file={activeFile} modified={contentState.modified} original={contentState.original} />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OfficialSplitDiffView({ file, modified, original }: { file: DiffFileEntry | null; modified: string; original: string }) {
-  if (!file) return null;
-  const originalLines = splitDiffText(original);
-  const modifiedLines = splitDiffText(modified);
-  const rows = Math.max(originalLines.length, modifiedLines.length, 1);
-  return (
-    <div className="min-w-[720px]">
-      <div className="sticky top-0 z-[2] grid grid-cols-2 border-b border-border-300 bg-bg-000 text-footnote text-t6">
-        <div className="truncate border-r border-border-300 px-p6 py-p4">{file.oldPath ?? file.path}</div>
-        <div className="truncate px-p6 py-p4">{file.path}</div>
-      </div>
-      <div className="grid grid-cols-2 text-code text-t8 leading-[18px]">
-        <div className="min-w-0 border-r border-border-300">
-          {Array.from({ length: rows }, (_, index) => (
-            <DiffCodeLine key={`old-${index}`} line={originalLines[index] ?? ""} lineNumber={index + 1} muted={file.isNew} variant={file.isDeleted ? "delete" : "plain"} />
-          ))}
-        </div>
-        <div className="min-w-0">
-          {Array.from({ length: rows }, (_, index) => (
-            <DiffCodeLine key={`new-${index}`} line={modifiedLines[index] ?? ""} lineNumber={index + 1} muted={file.isDeleted} variant={file.isNew ? "add" : "plain"} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DiffCodeLine({ line, lineNumber, muted, variant }: { line: string; lineNumber: number; muted?: boolean; variant: "add" | "delete" | "plain" }) {
-  const bg = variant === "add" ? "bg-[rgba(30,158,60,0.08)]" : variant === "delete" ? "bg-[rgba(255,58,48,0.08)]" : "";
-  return (
-    <div className={`grid grid-cols-[48px_minmax(0,1fr)] min-h-[18px] ${bg}`}>
-      <span className="select-none pr-p3 text-right text-t5">{muted ? "" : lineNumber}</span>
-      <span className={`whitespace-pre-wrap break-words pr-p6 ${muted ? "text-t4" : ""}`}>{line}</span>
-    </div>
-  );
-}
-
 type OfficialShellTerminalEntry = {
   closed: boolean;
   fitAddon: FitAddon;
@@ -1893,49 +1832,6 @@ const officialLightTerminalTheme = {
   brightCyan: "#8e6bd9",
   brightWhite: "#d6d6d6",
 };
-
-function parseDiffFiles(diff: string): DiffFileEntry[] {
-  const files: DiffFileEntry[] = [];
-  const seen = new Set<string>();
-  const matches = Array.from(diff.matchAll(/^diff --git a\/(.*?) b\/(.*?)$/gm));
-  for (let index = 0; index < matches.length; index += 1) {
-    const match = matches[index];
-    const start = match.index ?? 0;
-    const end = matches[index + 1]?.index ?? diff.length;
-    const fileDiff = diff.slice(start, end).trimEnd();
-    const renameFrom = fileDiff.match(/^rename from (.+)$/m)?.[1];
-    const renameTo = fileDiff.match(/^rename to (.+)$/m)?.[1];
-    const oldHeader = fileDiff.match(/^--- (.+)$/m)?.[1];
-    const newHeader = fileDiff.match(/^\+\+\+ (.+)$/m)?.[1];
-    const isNew = oldHeader === "/dev/null" || /^new file mode /m.test(fileDiff);
-    const isDeleted = newHeader === "/dev/null" || /^deleted file mode /m.test(fileDiff);
-    const isRenamed = Boolean(renameFrom || renameTo || /^similarity index /m.test(fileDiff));
-    const path = normalizeDiffPath(renameTo ?? newHeader ?? match[2] ?? match[1]);
-    const oldPath = normalizeDiffPath(renameFrom ?? oldHeader ?? match[1]);
-    if (path && !seen.has(path)) {
-      seen.add(path);
-      files.push({
-        diff: fileDiff,
-        isDeleted,
-        isNew,
-        isRenamed,
-        oldPath: oldPath && oldPath !== path ? oldPath : undefined,
-        path,
-        status: isNew ? "A" : isDeleted ? "D" : isRenamed ? "R" : "M",
-      });
-    }
-  }
-  return files;
-}
-
-function normalizeDiffPath(value?: string) {
-  if (!value || value === "/dev/null") return undefined;
-  return value.replace(/^"[ab]\//, "").replace(/"$/, "").replace(/^[ab]\//, "");
-}
-
-function splitDiffText(value: string) {
-  return value.length === 0 ? [] : value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-}
 
 const taskNotificationPattern = /<task-notification>([\s\S]*?)<\/task-notification>/g;
 const taskIdPattern = /<task-id>([^<]+)<\/task-id>/;
@@ -6095,6 +5991,15 @@ function useEpitaxySessionData(sessionId?: string) {
             if (streamGenerationRef.current !== streamGeneration) return;
             finalizeStreamGenerationRef.current = null;
             clearStreamState(true);
+            // Official: after turn settle, promote placeholder titles (desktop summarizeSession / refreshTitleFromMessages).
+            void refreshSessionTitleAfterSettle(sessionId).then((nextSession) => {
+              if (!nextSession) return;
+              if (streamGenerationRef.current !== streamGeneration) return;
+              setState((current) => ({
+                ...current,
+                session: normalizeSessionSummaryPatch(current.session, nextSession) ?? current.session,
+              }));
+            });
           };
           if (shouldSettleOfficialStreamForEvent(event)) {
             if (finalizeStreamGenerationRef.current === streamGeneration) return;
@@ -6105,6 +6010,16 @@ function useEpitaxySessionData(sessionId?: string) {
             });
           } else {
             finalize();
+          }
+        } else if (stringValue(asRecord(event).type) === "session_updated") {
+          const nextSession = asRecord(event).session ?? asRecord(asRecord(event).payload).session;
+          if (nextSession) {
+            setState((current) => ({
+              ...current,
+              session: normalizeSessionSummaryPatch(current.session, nextSession) ?? current.session,
+            }));
+          } else {
+            void reload();
           }
         } else {
           void reload();
@@ -6177,6 +6092,7 @@ function shouldReloadTranscriptForEvent(event: unknown) {
     const messageType = stringValue(asRecord(raw.message).type);
     return messageType === "result" || messageType === "error" || messageType === "completed";
   }
+  // session_updated carries title promotion from desktop summarize/setRunning.
   return type === "transcript_loaded"
     || type === "result"
     || type === "completed"
@@ -6184,7 +6100,79 @@ function shouldReloadTranscriptForEvent(event: unknown) {
     || type === "error"
     || type === "cleared"
     || type === "stopped"
-    || type === "permission_mode_changed";
+    || type === "permission_mode_changed"
+    || type === "session_updated";
+}
+
+function isPlaceholderCodingTitle(title?: string | null) {
+  const text = title?.trim() ?? "";
+  if (!text) return true;
+  if (/^\d+$/.test(text)) return true;
+  return text === "Untitled"
+    || text === "Untitled session"
+    || text === "Coding session"
+    || text === "General coding session"
+    || text === "New session";
+}
+
+async function refreshSessionTitleAfterSettle(sessionId: string): Promise<SessionSummary | null> {
+  const bridge = desktopBridge.LocalSessions;
+  if (!bridge.summarizeSession) return null;
+  try {
+    const result = await bridge.summarizeSession(sessionId);
+    // Desktop also dispatches session_updated; apply return shape so fake/web-only bridges update header immediately.
+    if (!result || typeof result === "string") return null;
+    const title = typeof result.title === "string" ? result.title : null;
+    const sessionPatch = result.session ?? (title ? { id: sessionId, title } : null);
+    if (!sessionPatch && !title) return null;
+    const cache = officialSessionDataCache.get(sessionId);
+    const nextSession = normalizeSessionSummaryPatch(
+      cache?.session ?? null,
+      sessionPatch ?? { id: sessionId, title },
+    );
+    if (nextSession && cache) {
+      officialSessionDataCache.set(sessionId, { ...cache, session: nextSession });
+    }
+    return nextSession;
+  } catch {
+    // Title refresh is best-effort.
+    return null;
+  }
+}
+
+function normalizeSessionSummaryPatch(current: SessionSummary | null, patch: unknown): SessionSummary | null {
+  if (!patch || typeof patch !== "object") return current;
+  const raw = asRecord(patch);
+  const id = stringValue(raw.id) ?? current?.id;
+  if (!id) return current;
+  const title = stringValue(raw.title);
+  const updatedAtMs = typeof raw.updatedAtMs === "number"
+    ? raw.updatedAtMs
+    : typeof raw.updatedAt === "string"
+      ? Date.parse(raw.updatedAt) || current?.updatedAtMs
+      : current?.updatedAtMs;
+  if (!current) {
+    return {
+      id,
+      kind: (stringValue(raw.kind) as SessionSummary["kind"]) ?? "code",
+      title: title ?? "Coding session",
+      updatedAtMs: updatedAtMs ?? Date.now(),
+      isRunning: raw.isRunning === true,
+      isArchived: raw.isArchived === true,
+      isUnread: raw.isUnread === true,
+    } as SessionSummary;
+  }
+  return {
+    ...current,
+    title: title ?? current.title,
+    updatedAtMs: updatedAtMs ?? current.updatedAtMs,
+    isRunning: typeof raw.isRunning === "boolean" ? raw.isRunning : current.isRunning,
+    isArchived: typeof raw.isArchived === "boolean" ? raw.isArchived : current.isArchived,
+    isUnread: typeof raw.isUnread === "boolean" ? raw.isUnread : current.isUnread,
+    isAgentCompleted: typeof raw.isAgentCompleted === "boolean" ? raw.isAgentCompleted : current.isAgentCompleted,
+    hasCompleted: typeof raw.hasCompleted === "boolean" ? raw.hasCompleted : current.hasCompleted,
+    error: stringValue(raw.error) ?? current.error,
+  };
 }
 
 function streamEventMessageFromBridgeEvent(event: unknown): Record<string, unknown> | null {

@@ -12,6 +12,8 @@ import type {
   CreateScheduledTaskInput,
   DesktopBridge,
   DesktopPreferences,
+  DiffFileContentResult,
+  OfficialGitDiffComparison,
   GitCommandResult,
   GetSupportedCommandsRequest,
   LocalSessionsBridge,
@@ -42,7 +44,7 @@ type RawLocalSessionsBridge = {
   getDefaultEffort?: () => Promise<unknown>;
   getDefaultPermissionMode?: (cwd?: string) => Promise<unknown>;
   getDetectedProjects?: () => Promise<unknown[]>;
-  getDiffFileContent?: (idOrCwd: string, refOrFilePath: string, filePath?: string, previousFilePath?: string) => Promise<unknown>;
+  getDiffFileContent?: (idOrCwd: string, mergeBase: string, filePath: string, previousFilePath?: string) => Promise<unknown>;
   getEffort?: (id: string) => Promise<unknown>;
   getSession?: (id: string, options?: Record<string, unknown>) => Promise<unknown | null>;
   getSessionsForScheduledTask?: (taskId: string) => Promise<unknown[]>;
@@ -50,7 +52,14 @@ type RawLocalSessionsBridge = {
   getGitInfo?: (idOrCwd: string) => Promise<unknown>;
   getGitDiff?: (idOrCwd: string, base?: string) => Promise<unknown>;
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<unknown>;
+  getMergeBase?: (idOrCwd: string, base?: string) => Promise<unknown>;
   getLocalBranches?: (idOrCwd: string) => Promise<unknown>;
+  getPrStateForBranch?: (idOrCwd: string, branch?: string) => Promise<unknown>;
+  getPrChecks?: (idOrCwd: string, prNumberOrBranch?: string | number) => Promise<unknown>;
+  getPrDetails?: (idOrCwd: string, prNumberOrBranch?: string | number) => Promise<unknown>;
+  generateLocalPrContent?: (idOrCwd: string) => Promise<unknown>;
+  createLocalPr?: (idOrCwd: string, title?: string, body?: string, options?: Record<string, unknown>) => Promise<unknown>;
+  summarizeSession?: (id: string) => Promise<unknown>;
   isFolderTrusted?: (folder: string) => Promise<unknown>;
   mcpCallTool?: (serverName: string, toolName: string, input?: Record<string, unknown>) => Promise<unknown>;
   checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<unknown>;
@@ -100,7 +109,7 @@ type CoworkQueryBridge = Pick<CoworkSessionsBridge,
   | "list" | "getSessionsForScheduledTask" | "getCodeStats" | "getContextUsage"
   | "getDefaultEffort" | "getDefaultPermissionMode" | "getDetectedProjects"
   | "getDiffFileContent" | "getEffort" | "getGitInfo" | "getGitDiff"
-  | "getGitDiffStats" | "getLocalBranches" | "checkRemoteTrust" | "checkTrust"
+  | "getGitDiffStats" | "getMergeBase" | "getLocalBranches" | "checkRemoteTrust" | "checkTrust"
   | "isFolderTrusted" | "saveTrust" | "addTrustedFolder" | "openInEditor" | "getPermissionMode" | "getSupportedCommands"
   | "getWorkingTreeStatus"
 >;
@@ -628,12 +637,34 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     getDefaultEffort: async () => normalizeEffort(await raw?.getDefaultEffort?.().catch(() => null)),
     getDefaultPermissionMode: async (cwd) => stringValue(await raw?.getDefaultPermissionMode?.(cwd).catch(() => null)) ?? null,
     getDetectedProjects: async () => normalizeDetectedProjectList(await raw?.getDetectedProjects?.().catch(() => []), targetKind),
-    getDiffFileContent: async (idOrCwd, refOrFilePath, filePath, previousFilePath) => normalizeGitCommandResult(await raw?.getDiffFileContent?.(idOrCwd, refOrFilePath, filePath, previousFilePath)),
+    getDiffFileContent: async (idOrCwd, mergeBase, filePath, previousFilePath) => normalizeDiffFileContentResult(await raw?.getDiffFileContent?.(idOrCwd, mergeBase, filePath, previousFilePath)),
     getEffort: async (id) => String(await raw?.getEffort?.(id).catch(() => "medium") ?? "medium"),
     getGitInfo: async (idOrCwd) => raw?.getGitInfo?.(idOrCwd),
-    getGitDiff: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiff?.(idOrCwd, base)),
+    getGitDiff: async (idOrCwd, base = "HEAD") => normalizeOfficialGitDiffComparison(await raw?.getGitDiff?.(idOrCwd, base)),
     getGitDiffStats: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiffStats?.(idOrCwd, base)),
+    getMergeBase: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getMergeBase?.(idOrCwd, base)),
     getLocalBranches: async (idOrCwd) => normalizeLocalBranches(await raw?.getLocalBranches?.(idOrCwd)),
+    getPrStateForBranch: async (idOrCwd, branch) => normalizeLocalPrState(await raw?.getPrStateForBranch?.(idOrCwd, branch).catch(() => null)),
+    getPrChecks: async (idOrCwd, prNumberOrBranch) => raw?.getPrChecks?.(idOrCwd, prNumberOrBranch).catch(() => null),
+    getPrDetails: async (idOrCwd, prNumberOrBranch) => raw?.getPrDetails?.(idOrCwd, prNumberOrBranch).catch(() => null),
+    generateLocalPrContent: async (idOrCwd) => normalizeLocalPrContent(await raw?.generateLocalPrContent?.(idOrCwd).catch(() => null)),
+    createLocalPr: async (idOrCwd, options) => {
+      const title = options?.title;
+      const body = options?.body;
+      return normalizeGitCommandResult(await raw?.createLocalPr?.(idOrCwd, title, body, options as Record<string, unknown> | undefined));
+    },
+    summarizeSession: async (id) => {
+      const result = await raw?.summarizeSession?.(id).catch(() => null);
+      if (result == null) return null;
+      if (typeof result === "string") return { summary: result, title: null, session: null };
+      const rawResult = asRecord(result);
+      const sessionRaw = rawResult.session;
+      return {
+        summary: stringValue(rawResult.summary) ?? (typeof result === "string" ? result : undefined),
+        title: stringValue(rawResult.title),
+        session: sessionRaw ? normalizeSession(sessionRaw, targetKind) : null,
+      };
+    },
     checkRemoteTrust: async (sshConfig, folder) => normalizeTrustResult(await raw?.checkRemoteTrust?.(sshConfig, folder)),
     checkTrust: async (folder) => normalizeTrustResult(await raw?.checkTrust?.(folder)),
     saveTrust: async (folder) => raw?.saveTrust?.(folder),
@@ -783,11 +814,12 @@ function createCoworkQueryBridge(raw: RawLocalSessionsBridge | undefined): Cowor
     getDefaultEffort: async () => normalizeEffort(await raw?.getDefaultEffort?.().catch(() => null)),
     getDefaultPermissionMode: async (cwd) => stringValue(await raw?.getDefaultPermissionMode?.(cwd).catch(() => null)) ?? null,
     getDetectedProjects: async () => normalizeDetectedProjectList(await raw?.getDetectedProjects?.().catch(() => []), "epitaxy"),
-    getDiffFileContent: async (idOrCwd, refOrFilePath, filePath, previousFilePath) => normalizeGitCommandResult(await raw?.getDiffFileContent?.(idOrCwd, refOrFilePath, filePath, previousFilePath)),
+    getDiffFileContent: async (idOrCwd, mergeBase, filePath, previousFilePath) => normalizeDiffFileContentResult(await raw?.getDiffFileContent?.(idOrCwd, mergeBase, filePath, previousFilePath)),
     getEffort: async (id) => String(await raw?.getEffort?.(id).catch(() => "medium") ?? "medium"),
     getGitInfo: async (idOrCwd) => raw?.getGitInfo?.(idOrCwd),
-    getGitDiff: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiff?.(idOrCwd, base)),
+    getGitDiff: async (idOrCwd, base = "HEAD") => normalizeOfficialGitDiffComparison(await raw?.getGitDiff?.(idOrCwd, base)),
     getGitDiffStats: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiffStats?.(idOrCwd, base)),
+    getMergeBase: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getMergeBase?.(idOrCwd, base)),
     getLocalBranches: async (idOrCwd) => normalizeLocalBranches(await raw?.getLocalBranches?.(idOrCwd)),
     checkRemoteTrust: async (sshConfig, folder) => normalizeTrustResult(await raw?.checkRemoteTrust?.(sshConfig, folder)),
     checkTrust: async (folder) => normalizeTrustResult(await raw?.checkTrust?.(folder)),
@@ -1253,6 +1285,33 @@ function normalizeLocalBranches(value: unknown): GitCommandResult | string[] {
   return normalizeGitCommandResult(value);
 }
 
+function normalizeLocalPrContent(value: unknown): import("./types").LocalPrContent | null {
+  const raw = asRecord(value);
+  if (!raw || Object.keys(raw).length === 0) return null;
+  return {
+    title: stringValue(raw.title),
+    body: stringValue(raw.body),
+    branch: stringValue(raw.branch),
+    status: stringValue(raw.status),
+    stat: stringValue(raw.stat),
+    commits: stringValue(raw.commits),
+  };
+}
+
+function normalizeLocalPrState(value: unknown): import("./types").LocalPrState | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = asRecord(value);
+  const number = typeof raw.number === "number" ? raw.number : undefined;
+  return {
+    number,
+    state: stringValue(raw.state),
+    title: stringValue(raw.title),
+    url: stringValue(raw.url) ?? stringValue(raw.html_url),
+    draft: booleanValue(raw.draft),
+    merged: booleanValue(raw.merged) ?? (raw.merged_at != null ? true : undefined),
+  };
+}
+
 function normalizeEnvironmentMap(value: unknown): Record<string, string> {
   const raw = asRecord(value);
   const env = asRecord(raw.env ?? value);
@@ -1362,6 +1421,58 @@ function normalizeGitCommandResult(value: unknown): GitCommandResult {
     error: stringValue(raw.error),
     code: raw.code,
   };
+}
+
+/** Official H7i / aOt: `{ oldText, newText } | null` (not GitCommandResult). */
+
+/** Official H$A comparison from LocalSessions.getGitDiff (not GitCommandResult). */
+function normalizeOfficialGitDiffComparison(value: unknown): OfficialGitDiffComparison | null {
+  if (value == null || typeof value !== 'object') return null;
+  const raw = asRecord(value);
+  if (!Array.isArray(raw.files)) {
+    // Legacy: raw git stdout bridge — cannot build structured comparison here.
+    return null;
+  }
+  const files = raw.files
+    .map((item) => {
+      const file = asRecord(item);
+      const filename = stringValue(file.filename);
+      if (!filename) return null;
+      return {
+        filename,
+        status: stringValue(file.status) ?? 'modified',
+        additions: typeof file.additions === 'number' ? file.additions : 0,
+        deletions: typeof file.deletions === 'number' ? file.deletions : 0,
+        changes: typeof file.changes === 'number' ? file.changes : 0,
+        patch: stringValue(file.patch),
+        previous_filename: stringValue(file.previous_filename),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+  return {
+    base_ref: stringValue(raw.base_ref) ?? '',
+    head_ref: stringValue(raw.head_ref) ?? '',
+    merge_base: stringValue(raw.merge_base) ?? '',
+    files,
+    ahead_by: typeof raw.ahead_by === 'number' ? raw.ahead_by : 0,
+    behind_by: typeof raw.behind_by === 'number' ? raw.behind_by : 0,
+    total_commits: typeof raw.total_commits === 'number' ? raw.total_commits : 0,
+  };
+}
+function normalizeDiffFileContentResult(value: unknown): DiffFileContentResult {
+  if (value == null) return null;
+  if (typeof value !== "object") return null;
+  const raw = asRecord(value);
+  const oldText =
+    raw.oldText === null ? null : typeof raw.oldText === "string" ? raw.oldText : null;
+  const newText =
+    raw.newText === null ? null : typeof raw.newText === "string" ? raw.newText : null;
+  // Accept legacy git-show bridge shape during migration: { ok, stdout } as oldText only.
+  if (oldText === null && newText === null && typeof raw.stdout === "string") {
+    return { oldText: raw.stdout, newText: null };
+  }
+  if (oldText === null && newText === null) return null;
+  return { oldText, newText };
 }
 
 function normalizeSupportedCommands(value: unknown): SlashCommand[] {
