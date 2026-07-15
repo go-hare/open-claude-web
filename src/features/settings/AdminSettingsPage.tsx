@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 import type { RouteViewProps } from "../../app/routes";
 import { readResolvedColorMode, THEME_MODE_CHANGE_EVENT } from "./appearanceSettings";
 import { CdsButton, SettingsDFrame, navLinkClass, sectionBodyClass } from "./SettingsShell";
+import { useSettingsBootstrap } from "./useSettingsBootstrap";
 
+/**
+ * Official admin nav (cf400e6a4 ~16464): Organization, Members, Billing?, Usage?,
+ * Data and privacy, Identity?, Capabilities, Claude Code, Chrome?, Cowork?, …
+ * Desktop 3P shell shows the always-relevant subset; gated enterprise rows omitted
+ * until org capability arms exist.
+ */
 const adminLinks = [
   { href: "/admin-settings/organization", label: "Organization" },
   { href: "/admin-settings/members", label: "Members" },
@@ -49,7 +56,34 @@ export function AdminSettingsPage({ onNavigate, pathname }: Pick<RouteViewProps,
 function renderAdminContent(pathname: string) {
   if (pathname === "/admin-settings/members") return <MembersContent />;
   if (pathname === "/admin-settings/organization") return <OrganizationContent />;
+  // Official admin routes exist (cf400e6a4 admin nav). Without org API arms, render
+  // titled shells instead of a bare Not Found so side-nav targets stay navigable.
+  if (pathname === "/admin-settings/data-privacy-controls") {
+    return <AdminPlaceholder title="数据与隐私" body="组织级数据与隐私策略由管理员在 Anthropic 控制台配置。Gateway 组织下个人隐私说明见 Personal settings → 隐私。" />;
+  }
+  if (pathname === "/admin-settings/capabilities") {
+    return <AdminPlaceholder title="功能" body="组织级功能开关需要管理员 API；当前桌面 3P 壳未接入该控制面。" />;
+  }
+  if (pathname === "/admin-settings/claude-code") {
+    return <AdminPlaceholder title="Claude Code" body="组织级 Claude Code 策略页。个人会话选项见 Personal settings → Claude Code。" />;
+  }
+  if (pathname === "/admin-settings/connectors") {
+    return <AdminPlaceholder title="连接器" body="组织连接器库。个人侧已迁移到自定义 → 连接器。" />;
+  }
   return <p>Not Found</p>;
+}
+
+function AdminPlaceholder({ body, title }: { body: string; title: string }) {
+  return (
+    <section className="mb-xl last:mb-0">
+      <div className="mb-md flex items-start justify-between gap-lg">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h3 className="text-heading-semibold text-primary">{title}</h3>
+          <p className="text-footnote text-secondary">{body}</p>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function MembersContent() {
@@ -126,10 +160,13 @@ function AdminLink({ active, link, onNavigate }: Pick<RouteViewProps, "onNavigat
 }
 
 function OrganizationContent() {
+  const { bootstrap } = useSettingsBootstrap();
+  const teamName = bootstrap.org?.name || "Organization";
+  const orgId = bootstrap.org?.uuid || "org_workbench";
   return (
     <main>
       <AdminSection title="Team overview">
-        <AdminRow control={<CdsButton>Update</CdsButton>} label="Team name" value={<span>Workbench Org</span>} />
+        <AdminRow control={<CdsButton>Update</CdsButton>} label="Team name" value={<span>{teamName}</span>} />
         <div className="grid grid-cols-2 gap-lg py-md md:grid-cols-3">
           <AdminMetric action={<InlineLink href="/admin-settings/identity">Update</InlineLink>} label="Allowed email domains" value={<span className="block truncate">-</span>} />
           <AdminMetric action={<InlineButton>Manage</InlineButton>} label="Total seats" value={<LoadingSkeleton />} />
@@ -137,7 +174,7 @@ function OrganizationContent() {
         </div>
       </AdminSection>
       <AdminSection title="Organization">
-        <AdminRow control={<OrgIdChip />} label="Organization ID" />
+        <AdminRow control={<OrgIdChip orgId={orgId} />} label="Organization ID" />
         <div className="flex items-center justify-between gap-lg py-md" role="group">
           <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
             <div className="text-body text-primary">Delete organization</div>
@@ -191,11 +228,18 @@ function LoadingSkeleton() {
   );
 }
 
-function OrgIdChip() {
+function OrgIdChip({ orgId }: { orgId: string }) {
   return (
-    <button aria-label="Copy organization ID" className="cds-reset group block rounded-chip focus-visible:shadow-focus" type="button">
+    <button
+      aria-label="Copy organization ID"
+      className="cds-reset group block rounded-chip focus-visible:shadow-focus"
+      onClick={() => {
+        void navigator.clipboard?.writeText?.(orgId);
+      }}
+      type="button"
+    >
       <span className="inline-flex items-center align-middle h-control-nested rounded-chip px-sm text-caption font-medium leading-tight shrink-0 bg-neutral-chip text-secondary relative overflow-hidden whitespace-nowrap font-mono transition-colors hover:bg-neutral-chip-hover">
-        <span className="whitespace-nowrap group-hover:[mask-image:linear-gradient(to_left,transparent,transparent_1.25rem,black_2.5rem)] group-data-[copied=true]:[mask-image:linear-gradient(to_left,transparent,transparent_1.25rem,black_2.5rem)]">org_workbench</span>
+        <span className="whitespace-nowrap group-hover:[mask-image:linear-gradient(to_left,transparent,transparent_1.25rem,black_2.5rem)] group-data-[copied=true]:[mask-image:linear-gradient(to_left,transparent,transparent_1.25rem,black_2.5rem)]">{orgId}</span>
         <span className="absolute right-0.5 top-1/2 -translate-y-1/2 text-secondary opacity-0 group-hover:opacity-100"></span>
       </span>
     </button>

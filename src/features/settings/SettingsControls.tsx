@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { desktopBridge, type DesktopPreferences } from "../../adapters/desktopBridge";
 import { BaseMenuItem, BaseMenuPopup, Menu } from "../../shell/BaseMenu";
 import { Icon } from "../../shell/icons";
@@ -37,14 +37,47 @@ export function AvatarControl({ avatar, onClear, onRandomize }: { avatar: number
   );
 }
 
-export function TextInputControl({ ariaLabel, defaultValue = "" }: { ariaLabel: string; defaultValue?: string }) {
-  const [value, setValue] = useState(defaultValue);
+/** Official General profile $ (c0db37792): controlled text, save on blur/Enter when trimmed value changes. */
+export function TextInputControl({
+  ariaLabel,
+  defaultValue = "",
+  disabled = false,
+  onSave,
+  value: controlledValue,
+}: {
+  ariaLabel: string;
+  defaultValue?: string;
+  disabled?: boolean;
+  onSave?: (value: string) => void;
+  value?: string;
+}) {
+  const committed = controlledValue ?? defaultValue;
+  const [value, setValue] = useState(committed);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setValue(committed);
+  }, [committed, focused]);
   return (
     <input
       aria-label={ariaLabel}
       className="cds-input cds-reset h-control pl-sm rounded bg-fill-field focus-visible:bg-surface-popover backdrop-blur-sm shadow-field-ring data-[invalid]:shadow-field-invalid text-body text-primary transition duration-fast pr-sm w-56 placeholder:text-muted outline-none enabled:[&:hover:not(:focus):not([data-invalid])]:shadow-field-hover focus-visible:shadow-focus disabled:opacity-50 "
+      disabled={disabled}
       value={value}
       onChange={(event) => setValue(event.currentTarget.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => {
+        setFocused(false);
+        const next = value.trim();
+        if (!next || next === committed.trim()) return;
+        onSave?.(next);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape" && value.trim() !== committed.trim()) {
+          event.stopPropagation();
+          setValue(committed);
+        }
+      }}
     />
   );
 }

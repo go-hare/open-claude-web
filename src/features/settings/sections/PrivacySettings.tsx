@@ -1,14 +1,25 @@
+import {
+  providerDisplayName,
+  useSettingsBootstrap,
+} from "../useSettingsBootstrap";
+
 /**
- * Official Privacy gateway provider card for 3P path (cc989143e / gateway provider card).
- * Anthropic-hosted privacy toggles are omitted when org uses external inference.
+ * Official Privacy personal page (cc989143e):
+ * - cn gate: dn() = !raven, else redirect admin privacy /settings
+ * - Body _Component18 → _Component16 gateway provider card when org uses external inference
+ *   (custom3p / Gateway path). Anthropic-hosted privacy toggles need account GrowthBook arms —
+ *   do not invent them here.
  */
 export function PrivacySettings() {
+  const { bootstrap } = useSettingsBootstrap();
+  const providerName = providerDisplayName(bootstrap, "Gateway");
+
   return (
     <main className="flex flex-col pb-10">
       <div className="pb-xl">
         <div className="flex flex-col rounded-card bg-surface-1 p-lg shadow-card-ring">
           <p className="pb-md text-footnote">
-            你当前正通过组织自己的推理提供方（Gateway）使用 Claude。你的对话会发送到该提供方，而不是 Anthropic，并受你组织与该提供方协议的约束。
+            你当前正通过组织自己的推理提供方（{providerName}）使用 Claude。你的对话会发送到该提供方，而不是 Anthropic，并受你组织与该提供方协议的约束。
           </p>
           <div className="border-t border-alpha-1 pt-sm">
             <div className="flex flex-col gap-md pt-xs">

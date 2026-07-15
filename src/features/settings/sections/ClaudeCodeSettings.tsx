@@ -1,34 +1,30 @@
-import { useCallback, useState } from "react";
 import { SettingsRow, SettingsSection, Switch } from "../SettingsShell";
 import { BranchInput, WorktreeSelect } from "../SettingsControls";
 import { useDesktopPreferences } from "../useDesktopPreferences";
-
-/** Official account setting key for nested draft PR (cc989143e _t: ccr_auto_create_pr_as_draft). */
-const CREATE_PR_AS_DRAFT_KEY = "ccr_auto_create_pr_as_draft";
-
-function readCreateAsDraft(): boolean {
-  if (typeof window === "undefined") return true;
-  const raw = window.localStorage.getItem(CREATE_PR_AS_DRAFT_KEY);
-  if (raw === null) return true;
-  try {
-    return JSON.parse(raw) !== false;
-  } catch {
-    return raw !== "false";
-  }
-}
+import { useSettingsBootstrap } from "../useSettingsBootstrap";
 
 /**
  * Official ClaudeCodePage (cc989143e): Local sessions Ct + Pull requests _t.
- * Nested Create as draft: official f("ccr_auto_create_pr_as_draft", h); persist until account settings bridge.
+ * Local: te.setPreference desktop bridge.
+ * PR: account.settings ccr_auto_create_pr_on_push / ccr_auto_create_pr_as_draft via mutate J().
  */
 export function ClaudeCodeSettings() {
   const [preferences, setPreference] = useDesktopPreferences();
-  const [createAsDraft, setCreateAsDraftState] = useState(readCreateAsDraft);
-  const setCreateAsDraft = useCallback((checked: boolean) => {
-    setCreateAsDraftState(checked);
-    window.localStorage.setItem(CREATE_PR_AS_DRAFT_KEY, JSON.stringify(checked));
-  }, []);
-  const autoCreatePr = !!preferences.autoCreatePullRequests;
+  const { bootstrap, updateAccountSetting } = useSettingsBootstrap();
+  const settings = bootstrap.account?.settings ?? {};
+  // Official: g = settings.ccr_auto_create_pr_on_push ?? false; h = settings.ccr_auto_create_pr_as_draft ?? true
+  const autoCreatePr = settings.ccr_auto_create_pr_on_push === true
+    || (settings.ccr_auto_create_pr_on_push === undefined && !!preferences.autoCreatePullRequests);
+  const createAsDraft = settings.ccr_auto_create_pr_as_draft !== false;
+
+  const setAccountFlag = (key: "ccr_auto_create_pr_on_push" | "ccr_auto_create_pr_as_draft", next: boolean) => {
+    void updateAccountSetting(key, next);
+    if (key === "ccr_auto_create_pr_on_push") {
+      // Keep desktop preference in sync for remote-session consumers that still read bridge prefs.
+      setPreference("autoCreatePullRequests", next);
+    }
+  };
+
   return (
     <main>
       <SettingsSection title="本地会话">
@@ -57,14 +53,24 @@ export function ClaudeCodeSettings() {
         <SettingsRow
           description="When Claude pushes changes to a branch, it automatically opens a pull request without asking first. Applies to remote sessions only."
           label="自动创建拉取请求"
-          control={<Switch checked={autoCreatePr} onCheckedChange={(checked) => setPreference("autoCreatePullRequests", checked)} />}
+          control={
+            <Switch
+              checked={autoCreatePr}
+              onCheckedChange={(checked) => setAccountFlag("ccr_auto_create_pr_on_push", checked)}
+            />
+          }
         />
         {autoCreatePr ? (
           <SettingsRow
             className="pl-6"
             description="Open auto-created pull requests as drafts instead of ready for review."
             label="Create as draft"
-            control={<Switch checked={createAsDraft} onCheckedChange={setCreateAsDraft} />}
+            control={
+              <Switch
+                checked={createAsDraft}
+                onCheckedChange={(checked) => setAccountFlag("ccr_auto_create_pr_as_draft", checked)}
+              />
+            }
           />
         ) : null}
         <SettingsRow
