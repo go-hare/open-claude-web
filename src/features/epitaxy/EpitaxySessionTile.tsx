@@ -1,4 +1,4 @@
-import { Fragment, createContext, createElement, forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type Ref } from "react";
+import { Fragment, createContext, createElement, forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactElement, type ReactNode, type Ref } from "react";
 import { Popover } from "@base-ui-components/react/popover";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -9,9 +9,18 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { desktopBridge, type ContextUsage, type SessionSummary } from "../../adapters/desktopBridge";
+import { desktopBridge, type CodeStats, type ContextUsage, type SessionSummary } from "../../adapters/desktopBridge";
 import type { ChatMessage, LocalSessionsBridge, SendMessageInput } from "../../adapters/desktopBridge/types";
+import {
+  canResetRateLimitsFromBootstrap,
+  fetchBootstrapPayload,
+  organizationUuidFromBootstrap,
+  postOrganizationResetRateLimits,
+} from "../settings/accountSettingsApi";
+import { BaseContextMenuItem, BaseContextMenuPopup, BaseContextMenuSeparator, ContextMenu } from "../../shell/BaseMenu";
 import { Icon } from "../../shell/icons";
+import { isOfficialMermaidMarkdownLanguage, OfficialMermaidDiagramCard } from "./OfficialMermaidDiagramCard";
+import { OfficialSearchTree, officialSearchTreeLanguage } from "./OfficialSearchTree";
 import { sessionHomePath, sessionPath } from "../../shell/sessionPaths";
 import type { PaneSlot } from "../../stores/paneStore";
 import { EpitaxyTileLayout } from "./EpitaxyFrameSurface";
@@ -30,24 +39,55 @@ import {
 import { OfficialEpitaxyBranchRows } from "./OfficialEpitaxyBranchRows";
 import { OfficialDiffPane, type OfficialDiffCompareMeta } from "./OfficialDiffPane";
 import { OfficialPierreWorkerPool } from "./diff/OfficialPierreWorkerPool";
+import {
+  buildOfficialToolDiffMeta,
+  OfficialToolDiffBadge,
+  OfficialToolDiffDetails,
+  OfficialToolReadFileDetails,
+  type OfficialToolDiffMeta,
+} from "./diff/OfficialToolDiffDetails";
+import {
+  idleStreamActivityMode,
+  officialCodeSessionStore,
+  useOfficialCodeSessionBucket,
+  type StreamActivityMode,
+} from "./session/officialCodeSessionStore";
+import { classifyOfficialMemoryOp, isOfficialMemoryTool } from "./session/officialMemoryPath";
+import { CodeStatsCard } from "./CodeStatsCard";
 import { parseEpitaxyUploadedFilesText, type EpitaxyUploadedFile } from "./epitaxyUploadedFiles";
-import { createOfficialSessionStreamSmoother, type OfficialStreamSnapshot } from "./officialStreamSmoother";
+import { OfficialContextWindowUsage } from "./OfficialComposerContextUsage";
+import type { OfficialStreamSnapshot } from "./officialStreamSmoother";
+import {
+  officialClearTurnStarted,
+  officialGetStreamTokenEstimate,
+  officialGetTurnStartedAt,
+  officialMarkTurnStarted,
+  officialSetStreamCharBudget,
+  officialStreamClear,
+  officialStreamFeed,
+  officialStreamHasListeners,
+  officialStreamSetVisibility,
+  officialStreamSettleAfterReveal,
+  officialStreamSubscribe,
+} from "./session/officialStreamSessionStore";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
 import { OfficialSlashCommandSuggestion } from "./slash/OfficialSlashCommandSuggestion";
 import type { OfficialSlashCommandMenuProps } from "./slash/OfficialSlashTypes";
 
 type EpitaxySessionType = "local" | "remote" | "bridge";
-type StreamActivityMode = "idle" | "requesting" | "thinking" | "responding" | "tool-use";
+// StreamActivityMode + idleStreamActivityMode imported from officialCodeSessionStore.
 
 type EpitaxyTranscriptActionContextValue = {
+  /** Official onAttachAsContext: insert message/selection text into the session composer. */
+  attachAsContext?: (text: string) => void;
   bridge: LocalSessionsBridge;
   openFile: (target: OfficialFileViewTarget) => void;
   openPreview: (target: OfficialPreviewTarget) => void;
   openSubagent: (target: OfficialSubagentTarget) => void;
   openTasks: () => void;
   onNavigate: (path: string) => void;
-  reload: () => Promise<void>;
+  reload: (options?: { silent?: boolean }) => Promise<void>;
   sessionId?: string;
 };
 
@@ -129,7 +169,6 @@ type EpitaxySessionTileProps = {
 };
 
 const draftPersistKey = "epitaxy-draft";
-const idleStreamActivityMode: StreamActivityMode = "idle";
 const officialSparkBundlePath = "/assets/v1/cad8c092d-DAwbTyVP.js";
 const officialSparkMaskPath = "/assets/v1/epitaxy-spark-mask.webp";
 let officialThinkingSparkAnimationCache: OfficialSparkAnimation | null = null;
@@ -261,7 +300,7 @@ function EpitaxyChatPanel({
   sessionType = "local",
   slot,
 }: EpitaxyChatPanelProps) {
-  const { entries, error, isLoading, isResponding, isSessionNotFound, messages, pendingTurnStartedAt, reload, session, streamTokenEstimate } = useEpitaxySessionData(initialSessionId);
+  const { beginLocalUserTurn, entries, error, isLoading, isResponding, isSessionNotFound, messages, pendingTurnStartedAt, reload, session, stopLiveTurn, streamTokenEstimate } = useEpitaxySessionData(initialSessionId);
   const [activeView, setActiveView] = useState<OfficialViewPane | undefined>(undefined);
   const [transcriptMode, setTranscriptMode] = useState<OfficialTranscriptMode>("normal");
   const [fileView, setFileView] = useState<OfficialFileViewTarget | null>(null);
@@ -289,6 +328,7 @@ function EpitaxyChatPanel({
   const openDiff = useCallback(() => setActiveView("diff"), []);
   const transcriptRef = useRef<OfficialTranscriptHandle | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
+  const composerAttachRef = useRef<((text: string) => void) | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showBottomFade, setShowBottomFade] = useState(false);
   const updateTranscriptScrollState = useCallback((state: OfficialTranscriptScrollState) => {
@@ -303,7 +343,11 @@ function EpitaxyChatPanel({
     const node = transcriptScrollRef.current;
     if (node) scrollElementToBottom(node, behavior);
   }, []);
+  const attachAsContext = useCallback((text: string) => {
+    composerAttachRef.current?.(text);
+  }, []);
   const transcriptActionContext = useMemo(() => ({
+    attachAsContext,
     bridge,
     openFile,
     openPreview,
@@ -312,7 +356,7 @@ function EpitaxyChatPanel({
     onNavigate,
     reload,
     sessionId: initialSessionId,
-  }), [bridge, initialSessionId, onNavigate, openFile, openPreview, openSubagent, openTasks, reload]);
+  }), [attachAsContext, bridge, initialSessionId, onNavigate, openFile, openPreview, openSubagent, openTasks, reload]);
   const selectView = useCallback((view: OfficialViewPane) => {
     setActiveView((current) => current === view ? undefined : view);
   }, []);
@@ -371,13 +415,19 @@ function EpitaxyChatPanel({
         </div>
         {!hideComposer && initialSessionId && !isSessionNotFound ? (
           <ExistingSessionComposer
+            attachRef={composerAttachRef}
             bridge={bridge}
             disabled={isLoading || Boolean(error)}
             isResponding={isResponding}
             onOpenDiff={openDiff}
+            onStop={stopLiveTurn}
             onSubmit={async (text, input) => {
+              // Official: seed user turn + beginPendingTurn; stream/message events fill assistant.
+              // Do not hard-reload transcript (avoids switch/send flash).
+              beginLocalUserTurn(text);
+              // Official keeps pin and sticks to bottom on send (scrollHeight).
+              scrollTranscriptToBottom();
               await sendMessageToSession(initialSessionId, text, input);
-              await reload();
             }}
             reload={reload}
             session={session}
@@ -2228,35 +2278,62 @@ function OfficialSparkSpinner({ className = "", isWorking = true, size = "m" }: 
   );
 }
 
-function OfficialWorkingStatus({ isWorking, sessionId: _sessionId, startedAt, tokenEstimate = 0 }: { isWorking: boolean; sessionId?: string; startedAt?: number | null; tokenEstimate?: number }) {
-  const startedAtRef = useRef(startedAt ?? Date.now());
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+/**
+ * Official Gv (c11959232):
+ * - elapsed/tokens from session-level maps (je / _e), NOT props that reset every stream tick
+ * - l = isWorking && !suppressed; meta opacity when (spawnLabel || elapsed>=2 || compacting) && l
+ * - spark stays mounted; meta uses opacity transition (does not unmount on brief content updates)
+ */
+function OfficialWorkingStatus({
+  isWorking,
+  sessionId,
+  tokenEstimate = 0,
+}: {
+  isWorking: boolean;
+  sessionId?: string;
+  startedAt?: number | null;
+  tokenEstimate?: number;
+}) {
+  // Official je(t): stable turn start for this sessionId.
+  const startedAt = sessionId
+    ? (officialGetTurnStartedAt(sessionId) ?? (isWorking ? officialMarkTurnStarted(sessionId) : null))
+    : null;
+  const [elapsedSeconds, setElapsedSeconds] = useState(() => (
+    startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0
+  ));
+  const [tokens, setTokens] = useState(tokenEstimate);
 
   useEffect(() => {
-    if (!isWorking) {
+    // Official je(t): only zero when there is no turn-start timestamp for the session.
+    // Do NOT clear elapsed merely because isWorking briefly flickers when text appears.
+    if (startedAt == null || !sessionId) {
       setElapsedSeconds(0);
-      startedAtRef.current = startedAt ?? Date.now();
       return undefined;
     }
-    startedAtRef.current = startedAt ?? Date.now();
-    setElapsedSeconds(0);
-    const update = () => setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000)));
+    const update = () => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+      setTokens(officialGetStreamTokenEstimate(sessionId) || tokenEstimate);
+    };
+    update();
     const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
-  }, [isWorking, startedAt]);
+  }, [sessionId, startedAt, tokenEstimate]);
 
-  const showMeta = isWorking && elapsedSeconds >= 2;
-  const showTokens = showMeta && tokenEstimate > 0;
+  // Official Gv: d=elapsed>=2; meta opacity = (d||spawn||compacting) && isWorking
+  // Spark stays mounted; when isWorking false, meta opacity→0 but timer map stays until settle.
+  const showMeta = elapsedSeconds >= 2;
+  const showTokens = showMeta && tokens > 0;
+  const metaVisible = isWorking && showMeta;
   return (
     <div className="flex items-center gap-[16px] h-h3">
       <OfficialSparkSpinner isWorking={isWorking} size="m" />
-      <div className={`flex items-center text-footnote text-assistant-secondary tabular-nums shrink-0 transition-opacity ${showMeta && isWorking ? "opacity-100" : "opacity-0"}`}>
+      <div className={`flex items-center text-footnote text-assistant-secondary tabular-nums shrink-0 transition-opacity ${metaVisible ? "opacity-100" : "opacity-0"}`}>
         {formatElapsedSeconds(elapsedSeconds)}
         {showTokens ? (
           <>
             {" · "}
             <Icon name="ArrowDown" size="xs" />
-            {formatGeneratedTokenCount(tokenEstimate)} tokens
+            {formatGeneratedTokenCount(tokens)} tokens
           </>
         ) : null}
       </div>
@@ -2275,6 +2352,32 @@ function formatGeneratedTokenCount(tokens: number) {
   return tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
 }
 
+/** Official c11959232: Za = delayed(Ja, 20) before showing Loading conversation spinner. */
+function useOfficialDelayedFlag(active: boolean, delayMs: number) {
+  const [elapsed, setElapsed] = useState(false);
+  useEffect(() => {
+    if (!active) {
+      setElapsed(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setElapsed(true), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [active, delayMs]);
+  return active && elapsed;
+}
+
+/** Official Ja/Za loading branch — must be a component so the delayed flag is a valid hook. */
+function OfficialConversationLoading() {
+  const showSpinner = useOfficialDelayedFlag(true, 20);
+  if (!showSpinner) return null;
+  return (
+    <div role="status" className="h-full flex items-center justify-center text-t5">
+      <OfficialSparkSpinner isWorking size="l" />
+      <span className="sr-only">Loading conversation</span>
+    </div>
+  );
+}
+
 function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState, pendingTurnStartedAt, ref, reload, scrollRef, session, streamTokenEstimate, tasks, transcriptMode }: {
   entries: TranscriptEntry[];
   error: Error | null;
@@ -2286,7 +2389,7 @@ function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isR
   onScrollState: (state: OfficialTranscriptScrollState) => void;
   pendingTurnStartedAt?: number | null;
   ref: Ref<OfficialTranscriptHandle>;
-  reload: () => Promise<void>;
+  reload: (options?: { silent?: boolean }) => Promise<void>;
   scrollRef: MutableRefObject<HTMLDivElement | null>;
   session: SessionSummary | null;
   streamTokenEstimate: number;
@@ -2297,13 +2400,9 @@ function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isR
   if (error && entries.length === 0) return <SessionError error={error} onRetry={reload} />;
   if (!initialSessionId) return <div className="h-full overflow-y-auto overflow-x-hidden">{landingBody ?? null}</div>;
   const transcriptKey = `${initialSessionId}:messages`;
+  // Official Ja: Boolean(D) && 0===Ya.length && (B||J) — only when nothing to show yet.
   if (isLoading && entries.length === 0 && !session) {
-    return (
-      <div role="status" className="h-full flex items-center justify-center text-t5">
-        <OfficialSparkSpinner isWorking size="l" />
-        <span className="sr-only">Loading conversation</span>
-      </div>
-    );
+    return <OfficialConversationLoading />;
   }
   if (entries.length === 0 && !isResponding) return <div className="h-full flex items-center justify-center text-body text-t5">No messages yet.</div>;
   return <Transcript key={transcriptKey} entries={entries} isAwaitingReply={officialIsAwaitingReply(session, isResponding)} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} transcriptMode={transcriptMode} />;
@@ -2324,6 +2423,7 @@ type TranscriptRow =
   | { id: string; kind: "loader" }
   | { id: string; kind: "running-tasks" };
 
+/** Official Fu (c119 / c3d5) transcript restore: pin + measurements + anchor. */
 type OfficialTranscriptRestore = {
   anchorKey?: string;
   anchorOffsetPx: number;
@@ -2355,6 +2455,12 @@ type CodeUserChapter = {
 
 const emptyCodeUserChaptersByAfterId = new Map<string, CodeUserChapter[]>();
 
+/**
+ * Official Gb/R transcript (c11959232):
+ *   Fu({ items, getKey, estimateSize, overscan, paddingStart:48, paddingEnd:48 })
+ *   DOM: scrollRef > sizerRef(height) > absolute translateY(virtualItems[0].start) > measureElement rows
+ *   scrollToBottom: setPinned(true); scrollTo({ top: scrollHeight })
+ */
 const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isAwaitingReply, isResponding, onScrollState, pendingTurnStartedAt, restoreKey, scrollRef, sessionId, streamTokenEstimate, tasks, transcriptMode }, ref) {
   const rowsRef = useRef<TranscriptRow[]>([]);
   const initialCount = useRef(entries.length);
@@ -2362,7 +2468,7 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
   const rows = useMemo(() => buildTranscriptRows(entries), [entries]);
   const userChaptersByAfterId = useMemo(() => groupCodeUserChaptersByAfterId(userChapters), [userChapters]);
   const lastEntryIdx = entries.length - 1;
-  const lastTextLength = entries.at(-1)?.items.flatMap((item) => item.kind === "text" ? [item.text] : []).join("\n").length ?? 0;
+
   const officialVirtualizer = useOfficialTranscriptVirtualizer({
     estimateSize: estimateTranscriptRowSize,
     getKey: (row) => row.id,
@@ -2371,7 +2477,6 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
     paddingEnd: 48,
     paddingStart: 48,
     restoreKey,
-    useFlushSync: false,
   });
   const virtualItems = officialVirtualizer.virtualItems;
   const translateY = virtualItems[0]?.start ?? 0;
@@ -2387,6 +2492,13 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
     };
   }, [officialVirtualizer.scrollRef, scrollRef]);
 
+  // Official R (c119 Gb): scroll listener only drives showScrollButton / showBottomFade.
+  // Pin state lives entirely in Fu — never toggle pin from distance-from-bottom here.
+  const onScrollStateRef = useRef(onScrollState);
+  useLayoutEffect(() => {
+    onScrollStateRef.current = onScrollState;
+  }, [onScrollState]);
+
   useLayoutEffect(() => {
     const node = officialVirtualizer.scrollRef.current;
     const sizer = officialVirtualizer.sizerRef.current;
@@ -2394,7 +2506,7 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
     const updateScrollState = () => {
       if (node.offsetParent === null) return;
       const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-      onScrollState({ showScrollButton: distanceFromBottom > 200, showBottomFade: distanceFromBottom > 8 });
+      onScrollStateRef.current({ showScrollButton: distanceFromBottom > 200, showBottomFade: distanceFromBottom > 8 });
     };
     node.addEventListener("scroll", updateScrollState, { passive: true });
     const observer = new ResizeObserver(updateScrollState);
@@ -2404,15 +2516,16 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
     return () => {
       node.removeEventListener("scroll", updateScrollState);
       observer.disconnect();
-      onScrollState({ showScrollButton: false, showBottomFade: false });
+      onScrollStateRef.current({ showScrollButton: false, showBottomFade: false });
     };
-  }, [officialVirtualizer.scrollRef, officialVirtualizer.sizerRef, onScrollState]);
+  }, [officialVirtualizer.scrollRef, officialVirtualizer.sizerRef]);
 
   useImperativeHandle(ref, () => ({
     scrollToBottom: (behavior) => {
+      // Official R: setPinned(true); scrollTo({ top: scrollHeight, behavior ?? "instant" })
       officialVirtualizer.setPinned(true);
       const node = officialVirtualizer.scrollRef.current;
-      if (node) scrollElementToBottom(node, behavior);
+      node?.scrollTo({ top: node.scrollHeight, behavior: (behavior ?? "instant") as ScrollBehavior });
     },
     scrollToEntry: (entryId) => {
       const index = rowsRef.current.findIndex((row) => (row.kind === "user" || row.kind === "assistant") && row.entry.id === entryId);
@@ -2420,6 +2533,7 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
     },
   }), [officialVirtualizer]);
 
+  // Official R: pointer/keyboard on the list unpins (user intent). Wheel/touch unpin is Fu scroll-direction.
   const unpinTranscript = useCallback(() => {
     officialVirtualizer.setPinned(false);
   }, [officialVirtualizer]);
@@ -2444,16 +2558,32 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
     setUserChapters((current) => current.filter((chapter) => chapter.afterId !== afterId));
   }, []);
 
+  // Official DOM structure (c119 Gb return) — NOT bare virtua <Virtualizer>.
   return (
     <div ref={officialVirtualizer.scrollRef} data-testid="epitaxy-virtual-transcript" className="h-full overflow-y-auto overflow-x-hidden [contain:strict]">
       <div ref={officialVirtualizer.sizerRef} className="relative epitaxy-chat-column" style={{ height: officialVirtualizer.sizerHeight }}>
         <div onPointerDownCapture={unpinTranscript} onKeyDownCapture={unpinTranscriptFromKeyboard} className="absolute top-0 left-0 w-full" style={{ transform: `translateY(${translateY}px)` }}>
           {virtualItems.map((virtualRow) => {
             const row = rows[virtualRow.index];
+            if (!row) return null;
             return (
               <div data-index={virtualRow.index} key={virtualRow.key} ref={officialVirtualizer.measureElement}>
                 <div className={virtualRow.index < rows.length - 1 ? "epitaxy-chat-size pb-[var(--chat-turn-gap)] empty:pb-0" : "epitaxy-chat-size"}>
-                  <TranscriptRowContent initialCount={initialCount.current} isAwaitingReply={isAwaitingReply} isResponding={isResponding} lastEntryIdx={lastEntryIdx} onPinUserChapter={pinUserChapter} onUnpinUserChapters={unpinUserChapters} pendingTurnStartedAt={pendingTurnStartedAt} row={row} sessionId={sessionId} streamTokenEstimate={streamTokenEstimate} tasks={tasks} transcriptMode={transcriptMode} userChaptersByAfterId={userChaptersByAfterId} />
+                  <TranscriptRowContent
+                    initialCount={initialCount.current}
+                    isAwaitingReply={isAwaitingReply}
+                    isResponding={isResponding}
+                    lastEntryIdx={lastEntryIdx}
+                    onPinUserChapter={pinUserChapter}
+                    onUnpinUserChapters={unpinUserChapters}
+                    pendingTurnStartedAt={pendingTurnStartedAt}
+                    row={row}
+                    sessionId={sessionId}
+                    streamTokenEstimate={streamTokenEstimate}
+                    tasks={tasks}
+                    transcriptMode={transcriptMode}
+                    userChaptersByAfterId={userChaptersByAfterId}
+                  />
                 </div>
               </div>
             );
@@ -2480,30 +2610,34 @@ function officialChapterTitleFromText(text: string) {
   return firstLine.length > 40 ? `${title}…` : title || "Chapter";
 }
 
+function estimateTranscriptRowSize(row: TranscriptRow) {
+  if (row.kind === "assistant") return 400;
+  if (row.kind === "user") return 80;
+  return 48;
+}
+
+/**
+ * Official Fu virtualizer (c3d5 `ve`, used as Fu from c119 Gb/R):
+ * - pin is set only by scroll-direction in Fu, setPinned/scrollToIndex, or restore
+ * - while pinned + not mid-user-scroll, stick scrollTop = totalSize
+ * - unmount saves isPinned + anchorKey + anchorOffsetPx + measurements for restoreKey
+ */
 function useOfficialTranscriptVirtualizer<TItem>({
   estimateSize,
   getKey,
   items,
-  nearTopThresholdPx = 400,
-  onAnchorNotFound,
-  onNearTop,
   overscan = 6,
-  paddingEnd,
-  paddingStart,
+  paddingEnd = 48,
+  paddingStart = 48,
   restoreKey,
-  useFlushSync,
 }: {
   estimateSize: (item: TItem, index: number) => number;
   getKey: (item: TItem) => string;
   items: TItem[];
-  nearTopThresholdPx?: number;
-  onAnchorNotFound?: () => void;
-  onNearTop?: () => void;
   overscan?: number;
   paddingEnd?: number;
   paddingStart?: number;
   restoreKey?: string;
-  useFlushSync?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sizerRef = useRef<HTMLDivElement | null>(null);
@@ -2512,27 +2646,41 @@ function useOfficialTranscriptVirtualizer<TItem>({
   if (restoreRef.current === null) {
     restoreRef.current = restoreKey !== undefined ? officialTranscriptScrollRestores.get(restoreKey) : undefined;
   }
-
   const pinnedRef = useRef(restoreRef.current?.isPinned ?? true);
-  const initialOffsetRef = useRef<number | undefined>(undefined);
-  if (initialOffsetRef.current === undefined) {
-    initialOffsetRef.current = pinnedRef.current
-      ? (paddingStart ?? 0) + items.reduce((total, item, index) => total + estimateSize(item, index), 0) + (paddingEnd ?? 0)
-      : 0;
-  }
-
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const getKeyRef = useRef(getKey);
   getKeyRef.current = getKey;
-  const onNearTopRef = useRef(onNearTop);
-  onNearTopRef.current = onNearTop;
-  const onAnchorNotFoundRef = useRef(onAnchorNotFound);
-  onAnchorNotFoundRef.current = onAnchorNotFound;
+  const estimateSizeRef = useRef(estimateSize);
+  estimateSizeRef.current = estimateSize;
+
+  // Official Fu refs: last observed scroll / total, last programmatic top, restore target index, missing anchor.
+  const lastObservedScrollTopRef = useRef(0);
+  const lastObservedTotalSizeRef = useRef(0);
+  const lastProgrammaticScrollTopRef = useRef(-1);
+  const restoreTargetIndexRef = useRef<number | null>(null);
+  const pendingMissingAnchorKeyRef = useRef<string | null>(null);
+  const didInitRestoreRef = useRef(false);
+  const lastItemCountForMissingRef = useRef(0);
+
+  const initialOffsetRef = useRef<number | undefined>(undefined);
+  if (initialOffsetRef.current === undefined) {
+    const restored = restoreRef.current;
+    if (pinnedRef.current) {
+      initialOffsetRef.current = (paddingStart ?? 0)
+        + items.reduce((total, item, index) => total + estimateSize(item, index), 0)
+        + (paddingEnd ?? 0);
+    } else if (restored?.anchorKey && restored.measurements?.length) {
+      const anchor = restored.measurements.find((item) => String(item.key) === restored.anchorKey);
+      initialOffsetRef.current = anchor ? Math.max(0, anchor.start + (restored.anchorOffsetPx ?? 0)) : 0;
+    } else {
+      initialOffsetRef.current = 0;
+    }
+  }
 
   const virtualizer = useVirtualizer({
     count: itemCount,
-    estimateSize: (index) => estimateSize(itemsRef.current[index], index),
+    estimateSize: (index) => estimateSizeRef.current(itemsRef.current[index], index),
     getItemKey: (index) => getKeyRef.current(itemsRef.current[index]),
     getScrollElement: () => scrollRef.current,
     initialMeasurementsCache: restoreRef.current?.measurements,
@@ -2540,287 +2688,177 @@ function useOfficialTranscriptVirtualizer<TItem>({
     overscan,
     paddingEnd,
     paddingStart,
-    useFlushSync,
   });
-  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => !pinnedRef.current && item.end <= (instance.scrollOffset ?? 0);
+  // Official Fu assigns this on the instance (not as a useVirtualizer option).
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => (
+    !pinnedRef.current && item.end <= (instance.scrollOffset ?? 0)
+  );
 
+  const virtualizerRef = useRef(virtualizer);
+  virtualizerRef.current = virtualizer;
   const totalSize = virtualizer.getTotalSize();
+  const viewportHeight = virtualizer.scrollRect?.height ?? 0;
   const isScrolling = virtualizer.isScrolling;
-  const lastScrollTopRef = useRef(0);
-  const lastTotalSizeRef = useRef(0);
-  const programmaticScrollTopRef = useRef(-1);
-  const pendingAnchorIndexRef = useRef<number | null>(null);
-  const pendingAnchorKeyRef = useRef<string | null>(null);
-  const anchorRestoredThisPassRef = useRef(false);
-  const sizerTransformOffsetRef = useRef(0);
+  // Official sizerHeight: max(totalSize, viewport) so short transcripts still fill and pin-to-bottom works.
+  const sizerHeight = Math.max(totalSize, viewportHeight);
 
-  const adjustScrollBy = useCallback((delta: number, node: HTMLElement) => {
-    if (virtualizer.isScrolling) {
-      sizerTransformOffsetRef.current += delta;
-      const sizer = sizerRef.current;
-      if (sizer) sizer.style.transform = `translateY(${-sizerTransformOffsetRef.current}px)`;
-      return;
-    }
-    node.scrollTop += delta;
-    lastScrollTopRef.current = node.scrollTop;
-  }, [virtualizer]);
+  const applySizerHeight = useCallback((size: number) => {
+    const sizer = sizerRef.current;
+    if (!sizer) return;
+    const height = virtualizerRef.current.scrollRect?.height ?? 0;
+    sizer.style.height = `${Math.max(size, height)}px`;
+  }, []);
 
-  const scrollToVirtualOffset = useCallback((node: HTMLElement, offset: number) => {
-    virtualizer.scrollToOffset(offset);
-    node.scrollTop = offset;
-  }, [virtualizer]);
+  const tryRestoreAnchorKey = useCallback((anchorKey: string) => {
+    const index = itemsRef.current.findIndex((item) => getKeyRef.current(item) === anchorKey);
+    if (index < 0) return false;
+    restoreTargetIndexRef.current = index;
+    pendingMissingAnchorKeyRef.current = null;
+    pinnedRef.current = false;
+    return true;
+  }, []);
 
-  const updatePinnedFromScroll = useCallback((node: HTMLElement) => {
-    const nextTotalSize = virtualizer.getTotalSize();
-    const nextScrollTop = node.scrollTop + sizerTransformOffsetRef.current;
-    const scrollDelta = lastScrollTopRef.current - nextScrollTop;
-    const shrinkDelta = Math.max(0, lastTotalSizeRef.current - nextTotalSize);
-    lastScrollTopRef.current = nextScrollTop;
-    lastTotalSizeRef.current = nextTotalSize;
-    if (Math.abs(scrollDelta) > shrinkDelta + 8) {
-      pendingAnchorIndexRef.current = null;
-      pendingAnchorKeyRef.current = null;
-    }
-    const scrolledUp = scrollDelta > shrinkDelta + 1;
-    if (nextTotalSize - nextScrollTop - node.clientHeight < 8 && !scrolledUp) {
-      pinnedRef.current = true;
-    } else if (scrolledUp) {
-      pinnedRef.current = false;
-    }
-    const firstStart = virtualizer.measurementsCache[0]?.start ?? 0;
-    if (!pinnedRef.current && nextScrollTop < firstStart + nearTopThresholdPx) onNearTopRef.current?.();
-  }, [nearTopThresholdPx, virtualizer]);
-
-  const initializedRef = useRef(false);
-  const anchorWaitCountRef = useRef(0);
-  useLayoutEffect(() => {
-    anchorRestoredThisPassRef.current = false;
-    if (itemCount === 0) return;
+  // Official Fu scroll handler: direction vs content shrink decides pin — never distance-from-bottom alone.
+  useEffect(() => {
     const node = scrollRef.current;
-    const setPendingAnchor = (key: string) => {
-      const index = itemsRef.current.findIndex((item) => getKeyRef.current(item) === key);
-      if (index < 0) return false;
-      pendingAnchorIndexRef.current = index;
-      pendingAnchorKeyRef.current = null;
-      pinnedRef.current = false;
-      anchorRestoredThisPassRef.current = true;
-      return true;
-    };
-
-    if (initializedRef.current) {
-      if (pendingAnchorKeyRef.current !== null && itemCount > anchorWaitCountRef.current) {
-        anchorWaitCountRef.current = itemCount;
-        if (!setPendingAnchor(pendingAnchorKeyRef.current)) onAnchorNotFoundRef.current?.();
+    if (!node) return undefined;
+    const onScroll = () => {
+      const vz = virtualizerRef.current;
+      const nextTotal = vz.getTotalSize();
+      const scrollTop = node.scrollTop;
+      const deltaUp = lastObservedScrollTopRef.current - scrollTop;
+      const shrinkAllowance = Math.max(0, lastObservedTotalSizeRef.current - nextTotal);
+      lastObservedScrollTopRef.current = scrollTop;
+      lastObservedTotalSizeRef.current = nextTotal;
+      if (Math.abs(deltaUp) > shrinkAllowance + 8) {
+        restoreTargetIndexRef.current = null;
+        pendingMissingAnchorKeyRef.current = null;
       }
-    } else {
-      initializedRef.current = true;
+      const scrollingUp = deltaUp > shrinkAllowance + 1;
+      const distanceFromBottom = nextTotal - scrollTop - node.clientHeight;
+      if (distanceFromBottom < 8 && !scrollingUp) pinnedRef.current = true;
+      else if (scrollingUp) pinnedRef.current = false;
+    };
+    node.addEventListener("scroll", onScroll, { passive: true });
+    return () => node.removeEventListener("scroll", onScroll);
+  }, [itemCount]);
+
+  // Official Fu layout: restore anchor once, else while pinned stick to totalSize (skip if user is mid-scroll).
+  useLayoutEffect(() => {
+    if (itemCount === 0) return;
+    const vz = virtualizerRef.current;
+    const node = scrollRef.current;
+
+    if (!didInitRestoreRef.current) {
+      didInitRestoreRef.current = true;
       const anchorKey = restoreRef.current?.anchorKey;
       if (!pinnedRef.current) {
-        if (anchorKey === undefined || setPendingAnchor(anchorKey)) {
+        if (anchorKey === undefined || tryRestoreAnchorKey(anchorKey)) {
           if (anchorKey === undefined) pinnedRef.current = true;
         } else {
-          pendingAnchorKeyRef.current = anchorKey;
-          anchorWaitCountRef.current = itemCount;
+          pendingMissingAnchorKeyRef.current = anchorKey;
+          lastItemCountForMissingRef.current = itemCount;
+          // Official falls back to pin until the missing anchor appears.
           pinnedRef.current = true;
-          onAnchorNotFoundRef.current?.();
         }
       }
+    } else if (
+      pendingMissingAnchorKeyRef.current
+      && itemCount > lastItemCountForMissingRef.current
+    ) {
+      lastItemCountForMissingRef.current = itemCount;
+      tryRestoreAnchorKey(pendingMissingAnchorKeyRef.current);
     }
 
-    if (pendingAnchorIndexRef.current !== null && node) {
-      if (isScrolling && node.scrollTop !== programmaticScrollTopRef.current) return;
-      const measurement = virtualizer.measurementsCache[pendingAnchorIndexRef.current];
-      if (measurement) {
-        const anchorOffset = restoreRef.current?.anchorOffsetPx ?? 0;
-        const nextScrollTop = measurement.start + anchorOffset;
-        const scrollOffset = virtualizer.scrollOffset;
-        if (scrollOffset !== null && Math.abs(scrollOffset - nextScrollTop) < 1) {
-          pendingAnchorIndexRef.current = null;
+    if (restoreTargetIndexRef.current !== null && node) {
+      if (isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
+      const targetItem = vz.measurementsCache[restoreTargetIndexRef.current];
+      if (targetItem) {
+        const offset = restoreRef.current?.anchorOffsetPx ?? 0;
+        const targetTop = targetItem.start + offset;
+        const currentOffset = vz.scrollOffset;
+        if (currentOffset !== null && Math.abs(currentOffset - targetTop) < 1) {
+          restoreTargetIndexRef.current = null;
           return;
         }
-        const nextTotalSize = virtualizer.getTotalSize();
-        if (sizerRef.current) {
-          const viewportHeight = virtualizer.scrollRect?.height ?? 0;
-          sizerRef.current.style.height = `${Math.max(nextTotalSize, viewportHeight)}px`;
-        }
-        scrollToVirtualOffset(node, nextScrollTop);
-        programmaticScrollTopRef.current = node.scrollTop;
-        lastScrollTopRef.current = node.scrollTop;
-        lastTotalSizeRef.current = nextTotalSize;
+        applySizerHeight(vz.getTotalSize());
+        node.scrollTop = targetTop;
+        lastProgrammaticScrollTopRef.current = node.scrollTop;
+        lastObservedScrollTopRef.current = node.scrollTop;
+        lastObservedTotalSizeRef.current = vz.getTotalSize();
       }
       return;
     }
 
     if (!pinnedRef.current || !node) return;
-    if (isScrolling && node.scrollTop !== programmaticScrollTopRef.current) return;
-    const nextTotalSize = virtualizer.getTotalSize();
-    if (sizerRef.current) {
-      const viewportHeight = virtualizer.scrollRect?.height ?? 0;
-      sizerRef.current.style.height = `${Math.max(nextTotalSize, viewportHeight)}px`;
-    }
-    scrollToVirtualOffset(node, nextTotalSize);
-    programmaticScrollTopRef.current = node.scrollTop;
-    lastScrollTopRef.current = node.scrollTop;
-    lastTotalSizeRef.current = nextTotalSize;
-    if (nextTotalSize <= (virtualizer.scrollRect?.height ?? 0)) onNearTopRef.current?.();
-  }, [itemCount, totalSize, isScrolling, scrollToVirtualOffset, updatePinnedFromScroll, virtualizer]);
+    // Official: if user is actively scrolling away from our last programmatic top, do not re-pin.
+    if (isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
 
-  const firstKeyRef = useRef<string | null>(null);
-  const previousTotalSizeRef = useRef(0);
-  const adjustedForPrependRef = useRef(false);
-  useLayoutEffect(() => {
-    const firstKey = itemCount > 0 ? getKeyRef.current(itemsRef.current[0]) : null;
-    const previousFirstKey = firstKeyRef.current;
-    firstKeyRef.current = firstKey;
-    const sizeDelta = totalSize - previousTotalSizeRef.current;
-    previousTotalSizeRef.current = totalSize;
-    adjustedForPrependRef.current = false;
-    if (previousFirstKey === null || firstKey === previousFirstKey) return;
-    if (pinnedRef.current) return;
-    if (anchorRestoredThisPassRef.current) return;
-    if (pendingAnchorIndexRef.current !== null) {
-      const previousIndex = itemsRef.current.findIndex((item) => getKeyRef.current(item) === previousFirstKey);
-      if (previousIndex > 0) pendingAnchorIndexRef.current += previousIndex;
-    }
-    const node = scrollRef.current;
-    if (node && sizeDelta !== 0) {
-      adjustedForPrependRef.current = true;
-      adjustScrollBy(sizeDelta, node);
-      lastTotalSizeRef.current = totalSize;
-    }
-  }, [adjustScrollBy, itemCount, totalSize]);
-
-  const paddingStartRef = useRef(paddingStart ?? 0);
-  useLayoutEffect(() => {
-    const previousPaddingStart = paddingStartRef.current;
-    const nextPaddingStart = paddingStart ?? 0;
-    paddingStartRef.current = nextPaddingStart;
-    if (nextPaddingStart === previousPaddingStart) return;
-    if (pinnedRef.current) return;
-    if (pendingAnchorIndexRef.current !== null) return;
-    if (adjustedForPrependRef.current) return;
-    const node = scrollRef.current;
-    if (node) adjustScrollBy(nextPaddingStart - previousPaddingStart, node);
-  }, [adjustScrollBy, paddingStart]);
+    const nextTotal = vz.getTotalSize();
+    applySizerHeight(nextTotal);
+    node.scrollTop = nextTotal;
+    lastProgrammaticScrollTopRef.current = node.scrollTop;
+    lastObservedScrollTopRef.current = node.scrollTop;
+    lastObservedTotalSizeRef.current = nextTotal;
+  }, [applySizerHeight, isScrolling, itemCount, totalSize, tryRestoreAnchorKey]);
 
   useLayoutEffect(() => {
-    if (isScrolling) return;
-    const offset = sizerTransformOffsetRef.current;
-    if (offset === 0) return;
-    const node = scrollRef.current;
     const sizer = sizerRef.current;
-    if (!node || !sizer) return;
-    sizerTransformOffsetRef.current = 0;
-    sizer.style.transform = "";
-    node.scrollTop += offset;
-    lastScrollTopRef.current = node.scrollTop;
-  }, [isScrolling]);
+    if (sizer) sizer.style.height = `${sizerHeight}px`;
+  }, [sizerHeight]);
 
-  useEffect(() => {
-    const node = scrollRef.current;
-    if (!node) return undefined;
-    const handler = () => updatePinnedFromScroll(node);
-    node.addEventListener("scroll", handler, { passive: true });
-    return () => node.removeEventListener("scroll", handler);
-  }, [updatePinnedFromScroll]);
-
-  const latestRestoreKeyRef = useRef(restoreKey);
-  latestRestoreKeyRef.current = restoreKey;
+  // Official Fu unmount save: isPinned + anchor + measurements for session switch restore.
+  const restoreKeyRef = useRef(restoreKey);
+  restoreKeyRef.current = restoreKey;
   useEffect(() => () => {
-    const key = latestRestoreKeyRef.current;
+    const key = restoreKeyRef.current;
     if (key === undefined) return;
-    if (pendingAnchorKeyRef.current !== null && restoreRef.current) {
+    if (pendingMissingAnchorKeyRef.current && restoreRef.current) {
       officialTranscriptScrollRestores.set(key, restoreRef.current);
       return;
     }
-    const scrollOffset = (virtualizer.scrollOffset ?? 0) + sizerTransformOffsetRef.current;
-    const measurements = virtualizer.measurementsCache;
-    const anchor = measurements.find((measurement) => measurement.end > scrollOffset);
+    const vz = virtualizerRef.current;
+    const node = scrollRef.current;
+    const scrollOffset = node?.scrollTop ?? vz.scrollOffset ?? 0;
+    const measurements = vz.measurementsCache;
+    const anchor = measurements.find((item) => item.end > scrollOffset);
     officialTranscriptScrollRestores.set(key, {
+      isPinned: pinnedRef.current,
       anchorKey: anchor ? String(anchor.key) : undefined,
       anchorOffsetPx: anchor ? scrollOffset - anchor.start : 0,
-      isPinned: pinnedRef.current,
-      measurements,
+      measurements: measurements.slice(),
     });
-  }, [virtualizer]);
+  }, []);
 
-  const viewportHeight = virtualizer.scrollRect?.height ?? 0;
-  const anchorOffset = Math.max(0, viewportHeight - totalSize);
-  const resizeObserverState = useMemo(() => {
-    if (typeof ResizeObserver === "undefined") return null;
-    const observed = new Set<Element>();
-    return {
-      observed,
-      ro: new ResizeObserver((entries) => {
-        for (const entry of entries) virtualizer.measureElement(entry.target as HTMLElement);
-        if (!pinnedRef.current) return;
-        const node = scrollRef.current;
-        const sizer = sizerRef.current;
-        if (!node || !sizer) return;
-        if (virtualizer.isScrolling && node.scrollTop !== programmaticScrollTopRef.current) return;
-        const nextTotalSize = virtualizer.getTotalSize();
-        if (nextTotalSize === lastTotalSizeRef.current) return;
-        const nextViewportHeight = virtualizer.scrollRect?.height ?? 0;
-        sizer.style.height = `${Math.max(nextTotalSize, nextViewportHeight)}px`;
-        scrollToVirtualOffset(node, nextTotalSize);
-        programmaticScrollTopRef.current = node.scrollTop;
-        lastScrollTopRef.current = node.scrollTop;
-        lastTotalSizeRef.current = nextTotalSize;
-      }),
-    };
-  }, [virtualizer]);
-
-  useEffect(() => {
-    if (!resizeObserverState) return undefined;
-    for (const element of resizeObserverState.observed) resizeObserverState.ro.observe(element, { box: "border-box" });
-    return () => resizeObserverState.ro.disconnect();
-  }, [resizeObserverState]);
-
+  // Official measureElement: measure only; pin stick is handled by the layout effect above.
   const measureElement = useCallback((node: HTMLElement | null) => {
-    virtualizer.measureElement(node);
-    if (!resizeObserverState) return;
-    if (node) {
-      if (!resizeObserverState.observed.has(node)) {
-        resizeObserverState.observed.add(node);
-        resizeObserverState.ro.observe(node, { box: "border-box" });
-      }
-      return;
-    }
-    for (const element of resizeObserverState.observed) {
-      if (!element.isConnected) {
-        resizeObserverState.ro.unobserve(element);
-        resizeObserverState.observed.delete(element);
-      }
-    }
-  }, [resizeObserverState, virtualizer]);
+    virtualizerRef.current.measureElement(node);
+  }, []);
 
   const scrollToIndex = useCallback((index: number, align: "start" | "center" | "end" | "auto" = "start") => {
     pinnedRef.current = false;
-    pendingAnchorIndexRef.current = null;
-    virtualizer.scrollToIndex(index, { align });
-  }, [virtualizer]);
-
-  const setPinned = useCallback((value: boolean) => {
-    pinnedRef.current = value;
-    if (!value) pendingAnchorIndexRef.current = null;
+    restoreTargetIndexRef.current = null;
+    virtualizerRef.current.scrollToIndex(index, { align });
   }, []);
 
+  // Official setPinned: only flips the flag (and clears restore target when unpinning). Does NOT scroll.
+  const setPinned = useCallback((value: boolean) => {
+    pinnedRef.current = value;
+    if (!value) restoreTargetIndexRef.current = null;
+  }, []);
+
+  const isPinned = useCallback(() => pinnedRef.current, []);
+
   return {
-    anchorOffset,
+    isPinned,
     measureElement,
     scrollRef,
     scrollToIndex,
     setPinned,
-    sizerHeight: Math.max(totalSize, viewportHeight),
+    sizerHeight,
     sizerRef,
     virtualItems: virtualizer.getVirtualItems(),
   };
-}
-
-function estimateTranscriptRowSize(row: TranscriptRow) {
-  if (row.kind === "assistant") return 400;
-  if (row.kind === "user") return 80;
-  return 48;
 }
 
 function buildTranscriptRows(entries: TranscriptEntry[]): TranscriptRow[] {
@@ -2974,14 +3012,74 @@ type TranscriptEntry = {
   timestamp?: string;
 };
 
+/** Official group-level task event placement (`at` = tool index in the group). */
+type OfficialToolGroupTaskEvent = {
+  at: number;
+  event: {
+    description?: string;
+    id: string;
+    kind: "task_event";
+    status: OfficialTaskStatus;
+    summary?: string;
+    taskId: string;
+    taskType?: string;
+  };
+};
+
 type TranscriptEntryItem =
   | { id: string; kind: "bash"; command?: string; error?: string; output?: string }
+  /** Official eke nke / $we mark_chapter → chapter (Lh). */
+  | { id: string; kind: "chapter"; summary?: string; title: string }
+  /** Official eke local_command dCe → context (Ku). */
+  | { id: string; kind: "context"; usage: ContextUsage }
   | { id: string; kind: "error"; code?: string; text: string }
   | { id: string; kind: "event"; content: string; eventType?: string }
+  /** Official Ike: attachment file chips (Hb `file`). */
+  | { fileName: string; id: string; kind: "file" }
+  /** Official Ike: image content blocks (Hb `image`). */
+  | { data: string; id: string; kind: "image"; mimeType: string }
+  /** Official Ike/Cke: cross-session / teammate / channel peer messages (Hb `peer`). */
+  | {
+    content: string;
+    id: string;
+    kind: "peer";
+    origin: {
+      from?: string;
+      kind: "channel" | "coordinator" | "peer" | "teammate";
+      name?: string;
+      server?: string;
+    };
+  }
+  /** Local bridge file chips kept for composer uploads (rendered via Hb file path). */
   | { file: EpitaxyUploadedFile; id: string; kind: "uploaded-file" }
+  /** Official eke local_command swe → stats ($x / CodeStatsCard). */
+  | { id: string; kind: "stats"; stats: CodeStats | null }
+  | { description?: string; id: string; kind: "task_event"; status: OfficialTaskStatus; summary?: string; taskId: string; taskType?: string }
   | { id: string; kind: "text"; text: string }
   | { id: string; kind: "thinking"; text: string }
-  | { id: string; kind: "tools"; tools: TranscriptToolUse[] };
+  | {
+    id: string;
+    kind: "tools";
+    /** Official iv taskEvents: chips interleaved at tool indices inside a default group. */
+    taskEvents?: OfficialToolGroupTaskEvent[];
+    tools: TranscriptToolUse[];
+  }
+  /** Official eke result→turn_error (index-BELzQL5P) / rv card (c11959232). */
+  | { errors: string[]; id: string; kind: "turn_error"; subtype?: string };
+
+/** Official $we chapter tool name (index-BELzQL5P). */
+const OFFICIAL_CHAPTER_TOOL_NAME = "mcp__ccd_session__mark_chapter";
+
+/**
+ * Official Vwe: tools that do not absorb task_events into their group
+ * (session UI interrupts — always push task_event as its own row).
+ */
+const OFFICIAL_NON_ABSORB_TOOL_NAMES = new Set([
+  "AskUserQuestion",
+  "ExitPlanMode",
+  "SendUserMessage",
+  "SendUserFile",
+]);
 
 type TranscriptToolUse = {
   id: string;
@@ -2989,6 +3087,10 @@ type TranscriptToolUse = {
   isError?: boolean;
   name: string;
   output?: string;
+  /** Official Zg outputImages — rendered inside collapse when inGroup, outside when standalone. */
+  outputImages?: Array<{ data?: string; media_type?: string; mimeType?: string; url?: string }>;
+  /** Official Kwe: thinking text buffered before a tool group is flushed into tools. */
+  precedingThinking?: string[];
   status: "awaiting_approval" | "completed" | "error" | "running";
   subagentActivity?: {
     latestToolName?: string;
@@ -2997,60 +3099,499 @@ type TranscriptToolUse = {
   };
 };
 
+/**
+ * Official eke (index-BELzQL5P) → durable transcript entries.
+ * Critical control flow (must not invent):
+ * 1. ake(content, messageId, pendingTools) ALWAYS runs for assistant — registers tool
+ *    object refs into pendingTools before any streaming skip.
+ * 2. if message.id === streamingMessageId: skip pushing the entry (Va owns it) but keep
+ *    tools in pendingTools so later rke(user tool_result) mutates the same objects.
+ * 3. user messages: rke(content, pendingTools, toolUseResult) mutates tool.status/output
+ *    by reference, then optionally push user text/bash via Ike-shaped parse.
+ * 4. parent_tool_use_id: uke(subagent activity) only — do not push as main transcript.
+ */
 function parseOfficialTranscriptEntries(messages: ChatMessage[], streamingMessageId?: string | null): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
   const pendingTools = new Map<string, TranscriptToolUse>();
-  const pushEntry = (entry: TranscriptEntry) => {
-    if (entry.items.length === 0) return;
+  let lastTimestamp: string | undefined;
+
+  // Official f(): merge consecutive assistant items onto the last assistant entry.
+  const pushAuthorItems = (
+    author: "assistant" | "user",
+    items: TranscriptEntryItem[],
+    entryId: string,
+    synthetic?: boolean,
+  ) => {
+    if (items.length === 0) return;
     const previous = entries.at(-1);
-    if (previous?.author === "assistant" && entry.author === "assistant") {
-      entries[entries.length - 1] = {
-        ...previous,
-        items: mergeAdjacentAssistantItems([...previous.items, ...entry.items]),
-        timestamp: entry.timestamp ?? previous.timestamp,
-      };
+    if (previous && previous.author === author && author === "assistant") {
+      const nextItems = items.slice();
+      const first = nextItems[0];
+      if (first?.kind === "tools") {
+        // Official: peel trailing thinking into precedingThinking of first tool group.
+        let lastItem = previous.items[previous.items.length - 1];
+        while (lastItem?.kind === "thinking") {
+          previous.items.pop();
+          const thinkingText = lastItem.text;
+          const firstTool = first.tools[0];
+          if (firstTool) {
+            firstTool.precedingThinking = [thinkingText, ...(firstTool.precedingThinking ?? [])];
+          }
+          lastItem = previous.items[previous.items.length - 1];
+        }
+      }
+      const lastItem = previous.items[previous.items.length - 1];
+      if (lastItem?.kind === "tools" && first?.kind === "tools") {
+        lastItem.tools.push(...first.tools);
+        previous.items.push(...nextItems.slice(1));
+      } else {
+        previous.items.push(...nextItems);
+      }
+      if (lastTimestamp) previous.timestamp = lastTimestamp;
       return;
     }
-    entries.push({ ...entry, items: entry.author === "assistant" ? mergeAdjacentAssistantItems(entry.items) : entry.items });
+    entries.push({
+      author,
+      id: entryId,
+      items: author === "assistant" ? mergeAdjacentAssistantItems(items) : items,
+      ...(lastTimestamp ? { timestamp: lastTimestamp } : {}),
+      ...(synthetic ? { /* synthetic user answers from lke — not stored on type */ } : {}),
+    });
   };
 
   messages.forEach((message, index) => {
     const raw = asRecord(message.raw);
     const rawType = stringValue(raw.type);
-    if (rawType === "result") return;
-    if (rawType === "stream_event" || raw.parent_tool_use_id || raw.parentToolUseId) return;
-    if (rawType === "user" && rawMessageContentContainsToolResult(raw)) {
-      attachToolResultMessages(raw, pendingTools);
+    lastTimestamp = stringValue(raw.timestamp) ?? message.createdAt;
+
+    // Official eke: result (no parent_tool_use_id) → interrupt pending tools; is_error → turn_error.
+    const resultParentId = raw.parent_tool_use_id ?? raw.parentToolUseId;
+    if (rawType === "result" && !resultParentId) {
+      for (const tool of pendingTools.values()) {
+        tool.status = "error";
+        tool.isError = true;
+        tool.output = tool.output ?? "Tool execution was interrupted.";
+      }
+      pendingTools.clear();
+      if (raw.is_error === true || raw.isError === true) {
+        const subtype = stringValue(raw.subtype);
+        if (subtype === "error_during_execution" && officialResultErrorDuringExecutionSkippable(messages, index)) {
+          return;
+        }
+        const errors = Array.isArray(raw.errors) && raw.errors.length > 0
+          ? raw.errors.map(String)
+          : typeof raw.result === "string" && raw.result
+            ? [raw.result]
+            : message.text.trim()
+              ? [message.text]
+              : [];
+        const entryId = stringValue(raw.uuid) ?? `result-${index}`;
+        pushAuthorItems("assistant", [{
+          errors,
+          id: entryId,
+          kind: "turn_error",
+          subtype,
+        }], entryId);
+      }
       return;
     }
+
+    if (rawType === "stream_event") return;
+
+    // Official eke: system local_command / local_command_output → context | stats | text.
+    if (rawType === "system" && (stringValue(raw.subtype) === "local_command" || stringValue(raw.subtype) === "local_command_output")) {
+      const content = typeof raw.content === "string" ? raw.content : stringValue(raw.content);
+      if (content && !officialSkipLocalCommandStdout(content)) {
+        const stdout = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/)?.[1]?.trim();
+        const stderr = content.match(/<local-command-stderr>([\s\S]*?)<\/local-command-stderr>/)?.[1]?.trim();
+        const body = stderr || stdout;
+        if (body) {
+          const entryId = stringValue(raw.uuid) ?? stringValue(raw.id) ?? `sys-${index}`;
+          const contextUsage = parseOfficialContextUsageMarkdown(body);
+          const codeStats = parseOfficialCodeStatsXml(body);
+          const items: TranscriptEntryItem[] = contextUsage
+            ? [{ id: `${entryId}-ctx`, kind: "context", usage: contextUsage }]
+            : codeStats.kind === "data" || codeStats.kind === "loading"
+              ? [{ id: `${entryId}-stats`, kind: "stats", stats: codeStats.kind === "data" ? codeStats.stats : null }]
+              : [{ id: entryId, kind: "text", text: body }];
+          pushAuthorItems("assistant", items, entryId);
+        }
+      }
+      return;
+    }
+
+    // Official eke system task_* → absorb into trailing tools group when possible (Vwe rules).
+    if (rawType === "system" && isOfficialTaskEvent(raw)) {
+      officialAbsorbOrPushTaskEvent(entries, raw, index, pushAuthorItems);
+      return;
+    }
+
+    if (rawType !== "user" && rawType !== "assistant") {
+      // Fall through for ChatMessage.role when raw.type missing (optimistic local user).
+      if (message.role !== "user" && message.role !== "assistant") return;
+    }
+
+    // Official uke: parent_tool_use_id messages only update subagent activity on the parent tool.
+    const parentToolUseId = stringValue(raw.parent_tool_use_id) ?? stringValue(raw.parentToolUseId);
+    if (parentToolUseId) {
+      if (rawType === "assistant" || message.role === "assistant") {
+        officialUkeSubagentActivity(raw, parentToolUseId, pendingTools);
+      }
+      return;
+    }
+
     const nestedMessage = asRecord(raw.message);
-    const role = rawType === "assistant" || rawType === "user"
+    const role: "assistant" | "user" | undefined = rawType === "assistant" || rawType === "user"
       ? rawType
       : message.role === "assistant" || message.role === "user"
         ? message.role
-        : stringValue(nestedMessage.role);
+        : (stringValue(nestedMessage.role) === "assistant" || stringValue(nestedMessage.role) === "user"
+          ? stringValue(nestedMessage.role) as "assistant" | "user"
+          : undefined);
     if (role !== "assistant" && role !== "user") return;
-    if (role === "assistant" && streamingMessageId && stringValue(nestedMessage.id) === streamingMessageId) return;
+
     const content = Array.isArray(nestedMessage.content) || typeof nestedMessage.content === "string"
       ? nestedMessage.content
       : Array.isArray(raw.content) || typeof raw.content === "string"
         ? raw.content
         : undefined;
-    const items = role === "assistant"
-      ? parseAssistantTranscriptItems(content, pendingTools, index, message.text)
-      : parseUserTranscriptItems(content, index, message.text);
-    pushEntry({
-      author: role,
-      id: stringValue(raw.id) ?? stringValue(raw.uuid) ?? stringValue(nestedMessage.id) ?? message.id,
-      items,
-      timestamp: stringValue(raw.timestamp) ?? message.createdAt,
-    });
+    const toolUseResult = raw.tool_use_result ?? raw.toolUseResult;
+
+    if (role === "assistant") {
+      // Official Bwe: API error messages.
+      if (raw.isApiErrorMessage === true || (typeof raw.error === "string" && raw.error.length > 0)) {
+        const entryId = stringValue(raw.uuid) ?? `${rawType ?? "assistant"}-${index}`;
+        const errText = typeof content === "string"
+          ? content
+          : Array.isArray(content) && asRecord(content[0]).type === "text"
+            ? (stringValue(asRecord(content[0]).text) ?? "")
+            : (stringValue(raw.error) ?? message.text ?? "");
+        pushAuthorItems("assistant", [{
+          code: stringValue(raw.error),
+          id: entryId,
+          kind: "error",
+          text: errText,
+        }], stringValue(nestedMessage.id) ?? entryId);
+        return;
+      }
+
+      // Official ake FIRST — registers tool refs into pendingTools even when entry is skipped.
+      const anthropicMessageId = stringValue(nestedMessage.id) ?? stringValue(raw.message_id);
+      const entryId = anthropicMessageId
+        ?? stringValue(raw.uuid)
+        ?? stringValue(raw.id)
+        ?? message.id;
+      const items = parseAssistantTranscriptItems(content, pendingTools, entryId, message.text);
+
+      // Official: if (t && e === t) { mark deferred hoist tool ids; continue } — Va owns the row.
+      if (streamingMessageId && anthropicMessageId && anthropicMessageId === streamingMessageId) {
+        return;
+      }
+
+      pushAuthorItems("assistant", items, entryId);
+      return;
+    }
+
+    // Official user path: rke mutates pending tool refs, then Ike-shaped user items.
+    officialRkeAttachToolResults(content, pendingTools, toolUseResult);
+    // Also accept top-level / non-array tool_result envelopes from the local CLI bridge.
+    if (rawMessageContentContainsToolResult(raw)) {
+      attachToolResultMessages(raw, pendingTools);
+    }
+    const entryId = stringValue(raw.uuid) ?? stringValue(raw.id) ?? message.id;
+    const userItems = parseUserTranscriptItems(content, index, message.text);
+    // Pure tool_result user rows often have no visible text — rke already settled tools.
+    if (userItems.length === 0) return;
+    pushAuthorItems("user", userItems, entryId);
   });
 
   return entries;
 }
 
+/** Official uke: fold child-agent tool_use activity onto the parent tool in pendingTools. */
+function officialUkeSubagentActivity(
+  raw: Record<string, unknown>,
+  parentToolUseId: string,
+  pendingTools: Map<string, TranscriptToolUse>,
+) {
+  const parent = pendingTools.get(parentToolUseId);
+  if (!parent) return;
+  const nested = asRecord(raw.message);
+  const model = typeof nested.model === "string" ? nested.model : undefined;
+  const content = nested.content;
+  if (!Array.isArray(content)) return;
+  for (const block of content) {
+    const record = asRecord(block);
+    if (stringValue(record.type) !== "tool_use" || !stringValue(record.name)) continue;
+    const previous = parent.subagentActivity;
+    parent.subagentActivity = {
+      latestToolName: stringValue(record.name),
+      model: model ?? previous?.model,
+      toolCallCount: (previous?.toolCallCount ?? 0) + 1,
+    };
+  }
+}
+
+/**
+ * Official rke: walk user content for tool_result blocks; mutate pendingTools by tool_use_id.
+ * Object identity is the settle mechanism — same refs live inside already-pushed assistant entries.
+ */
+function officialRkeAttachToolResults(
+  content: unknown,
+  pendingTools: Map<string, TranscriptToolUse>,
+  toolUseResult?: unknown,
+) {
+  if (!Array.isArray(content)) return;
+  for (const block of content) {
+    const record = asRecord(block);
+    if (stringValue(record.type) !== "tool_result") continue;
+    const toolUseId = stringValue(record.tool_use_id) ?? stringValue(record.toolUseId);
+    if (!toolUseId) continue;
+    const tool = pendingTools.get(toolUseId);
+    if (!tool) continue;
+    const isError = record.is_error === true || record.isError === true;
+    tool.isError = isError;
+    tool.status = isError ? "error" : "completed";
+    const { text, images } = officialDkeToolResultContent(record.content);
+    tool.output = text;
+    if (images.length > 0) tool.outputImages = images;
+    // toolUseResult kept on the raw envelope for specialized tools (AskUserQuestion etc.).
+    void toolUseResult;
+    pendingTools.delete(toolUseId);
+  }
+}
+
+/** Official dke: tool_result content → text + images. */
+function officialDkeToolResultContent(content: unknown): {
+  text: string;
+  images: Array<{ data?: string; media_type?: string; mimeType?: string }>;
+} {
+  if (typeof content === "string") {
+    return { text: content, images: [] };
+  }
+  if (!Array.isArray(content)) {
+    return { text: toolResultText(content), images: [] };
+  }
+  const texts: string[] = [];
+  const images: Array<{ data?: string; media_type?: string; mimeType?: string }> = [];
+  for (const part of content) {
+    const record = asRecord(part);
+    if (stringValue(record.type) === "text" && stringValue(record.text)) {
+      texts.push(stringValue(record.text)!);
+    } else if (stringValue(record.type) === "image") {
+      const source = asRecord(record.source);
+      const data = stringValue(source.data) ?? stringValue(record.data);
+      const mimeType = stringValue(source.media_type) ?? stringValue(record.mimeType) ?? "image/png";
+      if (data) images.push({ data, mimeType, media_type: mimeType });
+    }
+  }
+  return { text: texts.join("\n"), images };
+}
+
+/** Official jke: walk back; if prior assistant exists return false; if prior user, return whether user has image blocks. */
+function officialResultErrorDuringExecutionSkippable(messages: ChatMessage[], resultIndex: number) {
+  for (let index = resultIndex - 1; index >= 0; index -= 1) {
+    const raw = asRecord(messages[index]?.raw);
+    const type = stringValue(raw.type);
+    if (type === "assistant") return false;
+    if (type === "user") return rawMessageContentContainsImage(raw);
+  }
+  return false;
+}
+
+function rawMessageContentContainsImage(raw: Record<string, unknown>) {
+  return rawMessageContent(raw).some((item) => {
+    const record = asRecord(item);
+    return (stringValue(record.type) ?? stringValue(record.kind)) === "image";
+  });
+}
+
+function officialTaskEventItemFromSystemRaw(raw: Record<string, unknown>, index: number): Extract<TranscriptEntryItem, { kind: "task_event" }> | null {
+  const subtype = stringValue(raw.subtype);
+  const taskId = stringValue(raw.task_id) ?? stringValue(raw.taskId);
+  if (!taskId) return null;
+  // Official eke: skip_transcript task_started never enters the transcript.
+  if (raw.skip_transcript === true || raw.skipTranscript === true) return null;
+  let status: OfficialTaskStatus = "running";
+  if (subtype === "task_notification") {
+    const rawStatus = stringValue(raw.status);
+    status = rawStatus === "completed" || rawStatus === "failed" || rawStatus === "stopped" || rawStatus === "running"
+      ? rawStatus
+      : "failed";
+  } else if (subtype === "task_progress") {
+    status = "running";
+  }
+  return {
+    description: stringValue(raw.description),
+    id: stringValue(raw.uuid) ?? stringValue(raw.id) ?? `task-event-${index}`,
+    kind: "task_event",
+    status,
+    summary: stringValue(raw.summary),
+    taskId,
+    taskType: stringValue(raw.task_type) ?? stringValue(raw.taskType),
+  };
+}
+
+/**
+ * Official eke task absorb (index-BELzQL5P):
+ * tryAbsorb(ev, toolUseId):
+ *   last entry must be assistant; last item tools; not all Vwe tools;
+ *   if toolUseId already in group tools → drop; else push {at: tools.length, ev}.
+ * Returns "absorbed" | "pushed" | "dropped" | "updated".
+ */
+function officialAbsorbOrPushTaskEvent(
+  entries: TranscriptEntry[],
+  raw: Record<string, unknown>,
+  index: number,
+  pushAuthorItems: (
+    author: "assistant" | "user",
+    items: TranscriptEntryItem[],
+    entryId: string,
+    synthetic?: boolean,
+  ) => void,
+) {
+  const taskEvent = officialTaskEventItemFromSystemRaw(raw, index);
+  if (!taskEvent) return;
+
+  // Official: if this taskId already exists, mutate status/description/summary in place.
+  const existing = findOfficialTaskEventRef(entries, taskEvent.taskId);
+  if (existing) {
+    if (taskEvent.description) existing.description = taskEvent.description;
+    if (taskEvent.summary !== undefined) existing.summary = taskEvent.summary;
+    if (taskEvent.taskType) existing.taskType = taskEvent.taskType;
+    existing.status = taskEvent.status;
+    return;
+  }
+
+  const toolUseId = stringValue(raw.tool_use_id) ?? stringValue(raw.toolUseId);
+  const last = entries.at(-1);
+  if (last?.author === "assistant") {
+    const lastItem = last.items.at(-1);
+    if (lastItem?.kind === "tools" && !lastItem.tools.every((tool) => OFFICIAL_NON_ABSORB_TOOL_NAMES.has(tool.name))) {
+      // Official: if the group already contains the spawning tool id, drop the chip.
+      if (toolUseId && lastItem.tools.some((tool) => tool.id === toolUseId)) {
+        return;
+      }
+      (lastItem.taskEvents ??= []).push({ at: lastItem.tools.length, event: taskEvent });
+      return;
+    }
+  }
+  pushAuthorItems("assistant", [taskEvent], taskEvent.id);
+}
+
+/** Walk entries for an existing task_event (standalone or absorbed in tools.taskEvents). */
+function findOfficialTaskEventRef(
+  entries: TranscriptEntry[],
+  taskId: string,
+): Extract<TranscriptEntryItem, { kind: "task_event" }> | null {
+  for (const entry of entries) {
+    for (const item of entry.items) {
+      if (item.kind === "task_event" && item.taskId === taskId) return item;
+      if (item.kind === "tools") {
+        for (const placed of item.taskEvents ?? []) {
+          if (placed.event.taskId === taskId) return placed.event;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/** Official Nke: skip model-set local_command noise. */
+function officialSkipLocalCommandStdout(content: string) {
+  if (content.includes("<command-name>/model</command-name>")) return true;
+  const stdout = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/)?.[1];
+  return stdout?.trimStart().startsWith("Set model to ") ?? false;
+}
+
+/** Official iCe: parse "1.2k" / "3.4m" token counts. */
+function officialParseTokenCountLabel(value: string | undefined) {
+  if (!value) return 0;
+  const match = /^([\d.]+)\s*([km])?$/i.exec(value.trim());
+  if (!match) return 0;
+  const amount = Number.parseFloat(match[1]);
+  if (!Number.isFinite(amount)) return 0;
+  const unit = match[2]?.toLowerCase();
+  const scale = unit === "m" ? 1_000_000 : unit ? 1_000 : 1;
+  return Math.round(amount * scale);
+}
+
+const officialContextModelRe = /\*\*Model:\*\*\s*(.+?)\s*$/m;
+const officialContextTokensRe = /\*\*Tokens:\*\*\s*(\S+)\s*\/\s*(\S+)\s*\((\d+)%\)/;
+
+function officialParseMarkdownTableSection(text: string, heading: string) {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`### ${escaped}\\n\\n([\\s\\S]*?)(?=\\n###|\\n##|$)`).exec(text);
+  if (!match) return [] as string[][];
+  return match[1]
+    .split("\n")
+    .filter((line) => line.startsWith("|") && !/^\|[-\s|:]+\|$/.test(line))
+    .slice(1)
+    .map((line) => line.split("|").slice(1, -1).map((cell) => cell.trim()));
+}
+
+/** Official dCe: parse `## Context Usage` local_command stdout into ContextUsage. */
+function parseOfficialContextUsageMarkdown(text: string): ContextUsage | null {
+  if (!text.startsWith("## Context Usage")) return null;
+  const model = officialContextModelRe.exec(text)?.[1];
+  const tokens = officialContextTokensRe.exec(text);
+  if (!model || !tokens) return null;
+  const rawMaxTokens = officialParseTokenCountLabel(tokens[2]);
+  if (rawMaxTokens === 0) return null;
+  const categories = officialParseMarkdownTableSection(text, "Estimated usage by category").map(([name, count]) => ({
+    name: name ?? "",
+    tokens: officialParseTokenCountLabel(count),
+  }));
+  const mcpTools = officialParseMarkdownTableSection(text, "MCP Tools").map(([name, serverName, count]) => ({
+    name: name ?? "",
+    serverName: serverName ?? "",
+    tokens: officialParseTokenCountLabel(count),
+  }));
+  const memoryFiles = officialParseMarkdownTableSection(text, "Memory Files").map(([_type, path, count]) => ({
+    path: path ?? "",
+    tokens: officialParseTokenCountLabel(count),
+  }));
+  const agents = officialParseMarkdownTableSection(text, "Custom Agents").map(([agentType, , count]) => ({
+    agentType: agentType ?? "",
+    tokens: officialParseTokenCountLabel(count),
+  }));
+  return {
+    agents,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: 0,
+    categories,
+    inputTokens: 0,
+    mcpTools,
+    memoryFiles,
+    model,
+    outputTokens: 0,
+    percentage: Number(tokens[3]),
+    rawMaxTokens,
+    totalTokens: officialParseTokenCountLabel(tokens[1]),
+  } as ContextUsage & { model?: string };
+}
+
+const officialCodeStatsXmlRe = /<code-stats>([\s\S]*?)<\/code-stats>/;
+
+/** Official swe: parse `<code-stats>…</code-stats>` local_command stdout. */
+function parseOfficialCodeStatsXml(text: string): { kind: "none" } | { kind: "loading" } | { kind: "data"; stats: CodeStats } {
+  const match = officialCodeStatsXmlRe.exec(text);
+  if (!match) return { kind: "none" };
+  const payload = match[1].trim();
+  if (!payload) return { kind: "loading" };
+  try {
+    const parsed = JSON.parse(payload) as CodeStats;
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.dailyActivity)) {
+      return { kind: "data", stats: parsed };
+    }
+    return { kind: "none" };
+  } catch {
+    return { kind: "none" };
+  }
+}
+
 function parseOfficialSubagentTranscriptEntries(messages: ChatMessage[], parentToolUseId: string): TranscriptEntry[] {
+  // Same eke control flow as main transcript, filtered to parent_tool_use_id === parentToolUseId.
   const entries: TranscriptEntry[] = [];
   const pendingTools = new Map<string, TranscriptToolUse>();
   const pushEntry = (entry: TranscriptEntry) => {
@@ -3073,10 +3614,6 @@ function parseOfficialSubagentTranscriptEntries(messages: ChatMessage[], parentT
     if (rawType === "result" || rawType === "stream_event") return;
     const parent = stringValue(raw.parent_tool_use_id) ?? stringValue(raw.parentToolUseId);
     if (parent !== parentToolUseId) return;
-    if (rawType === "user" && rawMessageContentContainsToolResult(raw)) {
-      attachToolResultMessages(raw, pendingTools);
-      return;
-    }
     const nestedMessage = asRecord(raw.message);
     const role = rawType === "assistant" || rawType === "user"
       ? rawType
@@ -3089,13 +3626,33 @@ function parseOfficialSubagentTranscriptEntries(messages: ChatMessage[], parentT
       : Array.isArray(raw.content) || typeof raw.content === "string"
         ? raw.content
         : undefined;
-    const items = role === "assistant"
-      ? parseAssistantTranscriptItems(content, pendingTools, index, message.text)
-      : parseUserTranscriptItems(content, index, message.text);
+    if (role === "assistant") {
+      const entryId = stringValue(nestedMessage.id)
+        ?? stringValue(raw.message_id)
+        ?? stringValue(raw.uuid)
+        ?? stringValue(raw.id)
+        ?? message.id;
+      // ake first (registers pendingTools), always push in subagent view (no Va suppress).
+      const items = parseAssistantTranscriptItems(content, pendingTools, entryId, message.text);
+      pushEntry({
+        author: "assistant",
+        id: entryId,
+        items,
+        timestamp: stringValue(raw.timestamp) ?? message.createdAt,
+      });
+      return;
+    }
+    // rke then optional user text
+    officialRkeAttachToolResults(content, pendingTools, raw.tool_use_result ?? raw.toolUseResult);
+    if (rawMessageContentContainsToolResult(raw)) {
+      attachToolResultMessages(raw, pendingTools);
+    }
+    const userItems = parseUserTranscriptItems(content, index, message.text);
+    if (userItems.length === 0) return;
     pushEntry({
-      author: role,
-      id: stringValue(raw.id) ?? stringValue(raw.uuid) ?? stringValue(nestedMessage.id) ?? message.id,
-      items,
+      author: "user",
+      id: stringValue(raw.uuid) ?? stringValue(raw.id) ?? message.id,
+      items: userItems,
       timestamp: stringValue(raw.timestamp) ?? message.createdAt,
     });
   });
@@ -3103,68 +3660,331 @@ function parseOfficialSubagentTranscriptEntries(messages: ChatMessage[], parentT
   return entries;
 }
 
-function parseAssistantTranscriptItems(content: unknown, pendingTools: Map<string, TranscriptToolUse>, messageIndex: number, fallbackText: string): TranscriptEntryItem[] {
-  const source = typeof content === "string" ? [{ type: "text", text: content }] : Array.isArray(content) ? content : fallbackText.trim() ? [{ type: "text", text: fallbackText }] : [];
+/**
+ * Official ake(content, messageId, pendingTools):
+ * - text / connector_text → text items with stable `${messageId}-tN` ids
+ * - thinking buffered then flushed as `${messageId}-thN`
+ * - tool_use → status always "running", registered into pendingTools by id
+ * - consecutive tool_use share one tools group; group id = first tool id
+ */
+function parseAssistantTranscriptItems(
+  content: unknown,
+  pendingTools: Map<string, TranscriptToolUse>,
+  messageId: string,
+  fallbackText: string,
+): TranscriptEntryItem[] {
+  if (typeof content === "string") {
+    const text = content.trim();
+    return text ? [{ id: messageId, kind: "text", text }] : [];
+  }
+  const source = Array.isArray(content)
+    ? content
+    : fallbackText.trim()
+      ? [{ type: "text", text: fallbackText }]
+      : [];
   const items: TranscriptEntryItem[] = [];
-  let toolBuffer: TranscriptToolUse[] = [];
-  const flushTools = () => {
-    if (toolBuffer.length === 0) return;
-    items.push({ id: `assistant-${messageIndex}-tools-${items.length}`, kind: "tools", tools: toolBuffer });
-    toolBuffer = [];
+  let textIndex = 0;
+  let thinkingIndex = 0;
+  let toolGroup: TranscriptToolUse[] | null = null;
+  let thinkingBuffer: string[] = [];
+  const flushThinking = () => {
+    for (const text of thinkingBuffer) {
+      items.push({ id: `${messageId}-th${thinkingIndex++}`, kind: "thinking", text });
+    }
+    thinkingBuffer = [];
   };
 
+  for (const item of source) {
+    const record = asRecord(item);
+    const kind = stringValue(record.type) ?? stringValue(record.kind);
+    if (kind === "thinking") {
+      const text = (stringValue(record.thinking) ?? stringValue(record.text) ?? "").trim();
+      if (text) thinkingBuffer.push(text);
+      continue;
+    }
+    const textBody = kind === "text"
+      ? (stringValue(record.text) ?? stringValue(record.content))
+      : kind === "connector_text"
+        ? stringValue(record.connector_text) ?? stringValue(record.connectorText)
+        : undefined;
+    if (textBody) {
+      const text = textBody.trim();
+      if (!text) continue;
+      toolGroup = null;
+      flushThinking();
+      // context / stats from local_command-shaped assistant text (official dCe/swe on ake path).
+      const contextUsage = parseOfficialContextUsageMarkdown(text);
+      const codeStats = parseOfficialCodeStatsXml(text);
+      const idBase = `${messageId}-t${textIndex++}`;
+      if (contextUsage) {
+        items.push({ id: `${idBase}-ctx`, kind: "context", usage: contextUsage });
+      } else if (codeStats.kind === "data" || codeStats.kind === "loading") {
+        items.push({ id: `${idBase}-stats`, kind: "stats", stats: codeStats.kind === "data" ? codeStats.stats : null });
+      } else {
+        items.push({ id: idBase, kind: "text", text });
+      }
+      continue;
+    }
+    if (kind === "tool_use") {
+      const toolId = stringValue(record.id);
+      const toolName = stringValue(record.name) ?? stringValue(record.tool_name);
+      if (!toolId || !toolName) continue;
+      // Official ake/nke: $we mark_chapter → { kind:"chapter", id, title, summary }.
+      if (toolName === OFFICIAL_CHAPTER_TOOL_NAME) {
+        toolGroup = null;
+        flushThinking();
+        const input = asRecord(record.input);
+        const title = stringValue(input.title)?.trim() ?? "";
+        const summary = stringValue(input.summary)?.trim();
+        items.push({
+          id: toolId,
+          kind: "chapter",
+          title,
+          ...(summary ? { summary } : {}),
+        });
+        continue;
+      }
+      const tool: TranscriptToolUse = {
+        id: toolId,
+        input: asRecord(record.input),
+        name: toolName,
+        // Official ake always starts tools as running; rke settles via object ref.
+        status: "running",
+        ...(thinkingBuffer.length > 0 ? { precedingThinking: thinkingBuffer.slice() } : {}),
+      };
+      thinkingBuffer = [];
+      pendingTools.set(tool.id, tool);
+      if (toolGroup) {
+        toolGroup.push(tool);
+      } else {
+        toolGroup = [tool];
+        items.push({ id: tool.id, kind: "tools", tools: toolGroup });
+      }
+      continue;
+    }
+    if (kind === "error") {
+      toolGroup = null;
+      flushThinking();
+      items.push({
+        code: stringValue(record.code),
+        id: stringValue(record.id) ?? `${messageId}-err${textIndex++}`,
+        kind: "error",
+        text: stringValue(record.text) ?? stringValue(record.error) ?? "Error",
+      });
+    }
+  }
+  flushThinking();
+  return items;
+}
+
+/**
+ * Official Ike (index-BELzQL5P): user content → file | image | peer | event | bash | text.
+ * Also accepts local bridge shapes used by the desktop CLI runner.
+ */
+function parseUserTranscriptItems(content: unknown, messageIndex: number, fallbackText: string): TranscriptEntryItem[] {
+  const entryId = `user-${messageIndex}`;
+  // Official Ike string path: peer envelope → event → bash → plain text.
+  if (typeof content === "string" || (!content && fallbackText.trim())) {
+    const text = typeof content === "string" ? content : fallbackText;
+    const peer = parseOfficialPeerTaggedText(text);
+    if (peer) {
+      return [{ content: peer.content, id: entryId, kind: "peer", origin: peer.origin }];
+    }
+    const event = parseOfficialWebhookEventText(text);
+    if (event) {
+      return [{ content: event.content, eventType: event.eventType, id: entryId, kind: "event" }];
+    }
+    const bash = parseOfficialBashTaggedText(text);
+    if (bash) {
+      return [{
+        command: bash.command,
+        id: `${entryId}-bash`,
+        kind: "bash",
+        output: bash.output || undefined,
+      }];
+    }
+  }
+  const source = typeof content === "string"
+    ? [{ type: "text", text: content }]
+    : Array.isArray(content)
+      ? content
+      : fallbackText.trim()
+        ? [{ type: "text", text: fallbackText }]
+        : [];
+  const items: TranscriptEntryItem[] = [];
+  const textChunks: string[] = [];
+  let imageIndex = 0;
+  let peerIndex = 0;
+  let eventIndex = 0;
+  let bashIndex = 0;
   source.forEach((item, index) => {
     const record = asRecord(item);
     const kind = stringValue(record.type) ?? stringValue(record.kind);
-    if (kind === "tool_use") {
-      const tool = normalizeToolUse(record, index);
-      toolBuffer.push(tool);
-      pendingTools.set(tool.id, tool);
+    const id = stringValue(record.id) ?? `${entryId}-${index}`;
+    if (kind === "text") {
+      const text = stringValue(record.text) ?? stringValue(record.content);
+      if (!text) return;
+      const peer = parseOfficialPeerTaggedText(text);
+      if (peer) {
+        items.push({ content: peer.content, id: `${entryId}-peer${peerIndex++}`, kind: "peer", origin: peer.origin });
+        return;
+      }
+      const event = parseOfficialWebhookEventText(text);
+      if (event) {
+        items.push({ content: event.content, eventType: event.eventType, id: `${entryId}-ev${eventIndex++}`, kind: "event" });
+        return;
+      }
+      const bash = parseOfficialBashTaggedText(text);
+      if (bash) {
+        items.push({
+          command: bash.command,
+          id: `${entryId}-bash${bashIndex++}`,
+          kind: "bash",
+          output: bash.output || undefined,
+        });
+        return;
+      }
+      // Local bridge may embed uploaded-file markers inside plain text.
+      // Keep uploaded-file (path-openable) only — do not also emit official `file` chips.
+      const parsed = parseEpitaxyUploadedFilesText(text);
+      parsed.files.forEach((file, fileIndex) => {
+        items.push({ file, id: `${id}-uploaded-${fileIndex}`, kind: "uploaded-file" });
+      });
+      if (parsed.text) textChunks.push(parsed.text);
       return;
     }
-    flushTools();
-    const id = stringValue(record.id) ?? `assistant-${messageIndex}-${index}`;
-    if (kind === "text") {
-      const text = stringValue(record.text) ?? stringValue(record.content);
-      if (text) items.push({ id, kind: "text", text });
-    } else if (kind === "thinking") {
-      const text = stringValue(record.thinking) ?? stringValue(record.text);
-      if (text) items.push({ id, kind: "thinking", text });
-    } else if (kind === "error") {
-      items.push({ code: stringValue(record.code), id, kind: "error", text: stringValue(record.text) ?? stringValue(record.error) ?? "Error" });
+    if (kind === "image") {
+      const sourceRecord = asRecord(record.source);
+      const data = stringValue(sourceRecord.data) ?? stringValue(record.data);
+      const mimeType = stringValue(sourceRecord.media_type)
+        ?? stringValue(record.mimeType)
+        ?? stringValue(record.media_type)
+        ?? "image/png";
+      if (data) {
+        items.push({ data, id: `${entryId}-img${imageIndex++}`, kind: "image", mimeType });
+      }
+      return;
     }
-  });
-  flushTools();
-  return items;
-}
-
-function parseUserTranscriptItems(content: unknown, messageIndex: number, fallbackText: string): TranscriptEntryItem[] {
-  const source = typeof content === "string" ? [{ type: "text", text: content }] : Array.isArray(content) ? content : fallbackText.trim() ? [{ type: "text", text: fallbackText }] : [];
-  const items: TranscriptEntryItem[] = [];
-  source.forEach((item, index) => {
-    const record = asRecord(item);
-    const kind = stringValue(record.type) ?? stringValue(record.kind);
-    const id = stringValue(record.id) ?? `user-${messageIndex}-${index}`;
-    if (kind === "text") {
-      const text = stringValue(record.text) ?? stringValue(record.content);
-      if (text) pushUserTextAndUploadedFiles(items, id, text);
-    } else if (kind === "bash") {
-      items.push({ command: stringValue(record.command), error: stringValue(record.error), id, kind: "bash", output: stringValue(record.output) });
-    } else if (kind === "event") {
+    if (kind === "file" || kind === "document") {
+      const fileName = stringValue(record.file_name)
+        ?? stringValue(record.fileName)
+        ?? stringValue(record.name)
+        ?? "file";
+      items.push({ fileName, id: `${entryId}-file${index}`, kind: "file" });
+      return;
+    }
+    if (kind === "bash") {
+      items.push({
+        command: stringValue(record.command),
+        error: stringValue(record.error),
+        id,
+        kind: "bash",
+        output: stringValue(record.output),
+      });
+      return;
+    }
+    if (kind === "event") {
       const eventText = stringValue(record.content) ?? stringValue(record.text);
       if (eventText) items.push({ content: eventText, eventType: stringValue(record.eventType), id, kind: "event" });
+      return;
+    }
+    if (kind === "peer") {
+      const originRecord = asRecord(record.origin);
+      const originKind = stringValue(originRecord.kind);
+      if (
+        originKind === "peer"
+        || originKind === "teammate"
+        || originKind === "channel"
+        || originKind === "coordinator"
+      ) {
+        items.push({
+          content: stringValue(record.content) ?? "",
+          id,
+          kind: "peer",
+          origin: {
+            kind: originKind,
+            ...(stringValue(originRecord.from) ? { from: stringValue(originRecord.from) } : {}),
+            ...(stringValue(originRecord.name) ? { name: stringValue(originRecord.name) } : {}),
+            ...(stringValue(originRecord.server) ? { server: stringValue(originRecord.server) } : {}),
+          },
+        });
+      }
     }
   });
+  if (textChunks.length > 0) {
+    items.push({ id: entryId, kind: "text", text: textChunks.join("\n") });
+  }
   return items;
 }
 
-function pushUserTextAndUploadedFiles(items: TranscriptEntryItem[], id: string, text: string) {
-  const parsed = parseEpitaxyUploadedFilesText(text);
-  parsed.files.forEach((file, index) => items.push({ file, id: `${id}-file-${index}`, kind: "uploaded-file" }));
-  if (parsed.text) items.push({ id, kind: "text", text: parsed.text });
+/** Official Cke / yke peer envelope tags. */
+function parseOfficialPeerTaggedText(text: string): {
+  content: string;
+  origin: Extract<TranscriptEntryItem, { kind: "peer" }>["origin"];
+} | null {
+  const match = text.match(
+    /^\s*<(cross-session-message|teammate-message|channel-message)([^>]*)>([\s\S]*?)<\/\1>\s*$/,
+  );
+  if (!match) return null;
+  const tag = match[1];
+  const attrs = match[2] ?? "";
+  const content = (match[3] ?? "").trim();
+  const attr = (name: string) => attrs.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1];
+  if (tag === "cross-session-message") {
+    return { content, origin: { kind: "peer", from: attr("from") ?? "unknown" } };
+  }
+  if (tag === "teammate-message") {
+    return { content, origin: { kind: "teammate", from: attr("teammate_id") ?? "unknown" } };
+  }
+  return { content, origin: { kind: "channel", server: attr("server") } };
+}
+
+/** Official bke / pke webhook / CI event envelopes. */
+function parseOfficialWebhookEventText(text: string): { content: string; eventType: string } | null {
+  const trimmed = text.trim();
+  const patterns: Array<[string, RegExp]> = [
+    ["github", /^<github-webhook-activity>([\s\S]*)<\/github-webhook-activity>$/],
+    ["ci", /^<ci-monitor-event>([\s\S]*)<\/ci-monitor-event>$/],
+  ];
+  for (const [eventType, pattern] of patterns) {
+    const match = trimmed.match(pattern);
+    if (match) return { content: (match[1] ?? "").trim(), eventType };
+  }
+  const hook = trimmed.match(/^\w+ hook feedback:\n([\s\S]+)$/);
+  if (hook) return { content: hook[1].trim(), eventType: "hook" };
+  return null;
+}
+
+/**
+ * Official Ske (index-BELzQL5P): parse bash / local_command tags from a text blob.
+ * Returns null when the blob is a bare <command-message> without bash/local-command streams.
+ */
+function parseOfficialBashTaggedText(text: string): { command: string; output: string } | null {
+  if (
+    text.includes("<command-message>")
+    && !text.includes("<bash-input>")
+    && !text.includes("<local-command-stdout>")
+    && !text.includes("<bash-stdout>")
+    && !text.includes("<local-command-stderr>")
+    && !text.includes("<bash-stderr>")
+  ) {
+    return null;
+  }
+  const command = text.match(/<command-name>(.*?)<\/command-name>/)?.[1]
+    ?? text.match(/<bash-input>([\s\S]*?)<\/bash-input>/)?.[1]?.trim();
+  const stdout = text.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/)?.[1]?.trim()
+    ?? text.match(/<bash-stdout>([\s\S]*?)<\/bash-stdout>/)?.[1]?.trim();
+  const stderr = text.match(/<local-command-stderr>([\s\S]*?)<\/local-command-stderr>/)?.[1]?.trim()
+    ?? text.match(/<bash-stderr>([\s\S]*?)<\/bash-stderr>/)?.[1]?.trim();
+  if (command === undefined && stdout === undefined && stderr === undefined) return null;
+  return {
+    command: command ?? "",
+    output: (stdout ?? "") + (stderr ? `\n${stderr}` : ""),
+  };
 }
 
 function attachToolResultMessages(raw: Record<string, unknown>, pendingTools: Map<string, TranscriptToolUse>) {
+  // Bridge-tolerant rke: same mutation semantics as officialRkeAttachToolResults.
   for (const item of rawMessageContent(raw)) {
     const record = asRecord(item);
     if ((stringValue(record.type) ?? stringValue(record.kind)) !== "tool_result") continue;
@@ -3174,7 +3994,9 @@ function attachToolResultMessages(raw: Record<string, unknown>, pendingTools: Ma
     const isError = record.is_error === true || record.isError === true;
     tool.isError = isError;
     tool.status = isError ? "error" : "completed";
-    tool.output = toolResultText(record.content);
+    const { text, images } = officialDkeToolResultContent(record.content);
+    tool.output = text;
+    if (images.length > 0) tool.outputImages = images;
     pendingTools.delete(tool.id);
   }
 }
@@ -3184,7 +4006,21 @@ function mergeAdjacentAssistantItems(items: TranscriptEntryItem[]) {
   for (const item of items) {
     const previous = merged.at(-1);
     if (previous?.kind === "tools" && item.kind === "tools") {
-      merged[merged.length - 1] = { ...previous, tools: [...previous.tools, ...item.tools] };
+      const shiftedEvents = (item.taskEvents ?? []).map((entry) => ({
+        ...entry,
+        at: entry.at + previous.tools.length,
+      }));
+      merged[merged.length - 1] = {
+        ...previous,
+        taskEvents: [...(previous.taskEvents ?? []), ...shiftedEvents],
+        tools: [...previous.tools, ...item.tools],
+      };
+    } else if (previous?.kind === "tools" && item.kind === "task_event") {
+      // Official: task events attach into the surrounding default tool group at current length.
+      merged[merged.length - 1] = {
+        ...previous,
+        taskEvents: [...(previous.taskEvents ?? []), { at: previous.tools.length, event: item }],
+      };
     } else {
       merged.push(item);
     }
@@ -3192,39 +4028,76 @@ function mergeAdjacentAssistantItems(items: TranscriptEntryItem[]) {
   return merged;
 }
 
-function mergeOfficialStreamSnapshot(entries: TranscriptEntry[], snapshot: OfficialStreamSnapshot): TranscriptEntry[] {
+/**
+ * Official Kwe / lo(Xa, Va) from index-BELzQL5P — pure control flow only:
+ *   if (!Va) return Xa
+ *   items = map(Va.blocks)  // tools always status:"running"
+ *   if items empty return Xa
+ *   last = Xa[Xa.length-1]
+ *   if last.author === "assistant":
+ *     Gwe id overlap → return Xa
+ *     else merge tools groups or append items onto last
+ *   else append { id: Va.messageId, author:"assistant", items }
+ *
+ * Tool settle is eke/rke (pendingTools object refs), not a post-merge invent.
+ */
+function mergeOfficialStreamSnapshot(
+  entries: TranscriptEntry[],
+  snapshot: OfficialStreamSnapshot,
+): TranscriptEntry[] {
   if (!snapshot) return entries;
   const streamItems = streamSnapshotToTranscriptItems(snapshot);
   if (streamItems.length === 0) return entries;
-  const lastEntry = entries.at(-1);
-  if (lastEntry?.author !== "assistant") {
-    return [...entries, { author: "assistant", id: snapshot.messageId, items: streamItems }];
+
+  const last = entries[entries.length - 1];
+  if (last?.author === "assistant") {
+    // Official Gwe: collect item/tool ids; any overlap → return Xa unchanged.
+    const streamIds = new Set<string>();
+    collectOfficialTranscriptItemIds(streamItems, streamIds);
+    const lastIds = new Set<string>();
+    collectOfficialTranscriptItemIds(last.items, lastIds);
+    for (const id of streamIds) {
+      if (lastIds.has(id)) return entries;
+    }
+    const lastItem = last.items[last.items.length - 1];
+    const firstStream = streamItems[0];
+    const nextItems = lastItem?.kind === "tools" && firstStream?.kind === "tools"
+      ? [
+          ...last.items.slice(0, -1),
+          { ...lastItem, tools: [...lastItem.tools, ...firstStream.tools] },
+          ...streamItems.slice(1),
+        ]
+      : [...last.items, ...streamItems];
+    return [...entries.slice(0, -1), { ...last, items: nextItems }];
   }
-  const incomingToolIds = new Set(streamItems.flatMap((item) => item.kind === "tools" ? item.tools.map((tool) => tool.id) : []));
-  if (incomingToolIds.size > 0) {
-    const existingToolIds = new Set(lastEntry.items.flatMap((item) => item.kind === "tools" ? item.tools.map((tool) => tool.id) : []));
-    for (const id of incomingToolIds) if (existingToolIds.has(id)) return entries;
-  }
-  const previousLastItem = lastEntry.items.at(-1);
-  const firstStreamItem = streamItems[0];
-  const nextItems = previousLastItem?.kind === "tools" && firstStreamItem?.kind === "tools"
-    ? [...lastEntry.items.slice(0, -1), { ...previousLastItem, tools: [...previousLastItem.tools, ...firstStreamItem.tools] }, ...streamItems.slice(1)]
-    : [...lastEntry.items, ...streamItems];
-  return [...entries.slice(0, -1), { ...lastEntry, items: nextItems }];
+  return [...entries, { author: "assistant", id: snapshot.messageId, items: streamItems }];
 }
 
+/** Official Gwe: add item.id and nested tool ids into a set. */
+function collectOfficialTranscriptItemIds(items: TranscriptEntryItem[], into: Set<string>) {
+  for (const item of items) {
+    into.add(item.id);
+    if (item.kind === "tools") {
+      for (const tool of item.tools) into.add(tool.id);
+    }
+  }
+}
+
+/** Official Kwe block→item mapping: stable `${messageId}-tN` / `-thN` ids. */
 function streamSnapshotToTranscriptItems(snapshot: NonNullable<OfficialStreamSnapshot>): TranscriptEntryItem[] {
   const items: TranscriptEntryItem[] = [];
-  let toolBuffer: TranscriptToolUse[] = [];
+  let textIndex = 0;
+  let thinkingIndex = 0;
+  let toolGroup: TranscriptToolUse[] | null = null;
   let thinkingBuffer: string[] = [];
   const flushThinking = () => {
-    for (const text of thinkingBuffer) items.push({ id: `${snapshot.messageId}-thinking-${items.length}`, kind: "thinking", text });
+    for (const text of thinkingBuffer) {
+      items.push({ id: `${snapshot.messageId}-th${thinkingIndex++}`, kind: "thinking", text });
+    }
     thinkingBuffer = [];
   };
   const flushTools = () => {
-    if (toolBuffer.length === 0) return;
-    items.push({ id: `${snapshot.messageId}-tools-${items.length}`, kind: "tools", tools: toolBuffer });
-    toolBuffer = [];
+    toolGroup = null;
   };
 
   for (const block of snapshot.blocks) {
@@ -3235,21 +4108,43 @@ function streamSnapshotToTranscriptItems(snapshot: NonNullable<OfficialStreamSna
     }
     if (block.kind === "text") {
       if (!block.text) continue;
-      flushTools();
+      toolGroup = null;
       flushThinking();
-      items.push({ id: `${snapshot.messageId}-text-${items.length}`, kind: "text", text: block.text });
+      items.push({ id: `${snapshot.messageId}-t${textIndex++}`, kind: "text", text: block.text });
       continue;
     }
-    flushThinking();
-    toolBuffer.push({
+    // Official Kwe: $we mark_chapter → nke chapter item (not tools group).
+    if (block.name === OFFICIAL_CHAPTER_TOOL_NAME) {
+      toolGroup = null;
+      flushThinking();
+      const input = parseJsonObject(block.partialJson) ?? {};
+      const title = stringValue(input.title)?.trim() ?? "";
+      const summary = stringValue(input.summary)?.trim();
+      items.push({
+        id: block.id,
+        kind: "chapter",
+        title,
+        ...(summary ? { summary } : {}),
+      });
+      continue;
+    }
+    const tool: TranscriptToolUse = {
       id: block.id,
       input: parseJsonObject(block.partialJson) ?? {},
       name: block.name,
       status: "running",
-    });
+      ...(thinkingBuffer.length > 0 ? { precedingThinking: thinkingBuffer.slice() } : {}),
+    };
+    thinkingBuffer = [];
+    if (toolGroup) {
+      toolGroup.push(tool);
+    } else {
+      toolGroup = [tool];
+      items.push({ id: block.id, kind: "tools", tools: toolGroup });
+    }
   }
-  flushTools();
   flushThinking();
+  void flushTools;
   return items;
 }
 
@@ -3262,34 +4157,85 @@ function estimateOfficialStreamSnapshotTokens(snapshot: OfficialStreamSnapshot) 
   return Math.round(charCount / 4);
 }
 
+/**
+ * Official Hb user entry (c11959232):
+ * filters file/image/text/event/bash/peer, then branch layouts
+ * (bash-only / peer-only / event-only / default bubble).
+ */
 function CodeUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
   const textItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "text" }> => item.kind === "text");
   const bashItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "bash" }> => item.kind === "bash");
   const eventItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "event" }> => item.kind === "event");
-  const fileItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "uploaded-file" }> => item.kind === "uploaded-file");
+  const peerItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "peer" }> => item.kind === "peer");
+  const imageItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "image" }> => item.kind === "image");
+  const fileItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "file" }> => item.kind === "file");
+  const uploadedItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "uploaded-file" }> => item.kind === "uploaded-file");
   const copyText = textItems.map((item) => item.text).join("\n\n") || undefined;
   const forkFromHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.forkSession) return;
     const forked = await actions.bridge.forkSession(actions.sessionId, entry.id);
     if (forked?.id) actions.onNavigate(sessionPath(forked));
-  }, [actions]);
+  }, [actions, entry.id]);
   const rewindToHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.rewind) return;
     await actions.bridge.rewind(actions.sessionId, entry.id);
-    await actions.reload();
+    await actions.reload({ silent: true });
   }, [actions, entry.id]);
   const onFork = actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
   const onRewind = actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
   const [expandedLongText, setExpandedLongText] = useState(false);
   const isLongText = (copyText?.length ?? 0) > 1200;
+  const attachmentStrip = (
+    <OfficialUserAttachments
+      files={fileItems}
+      images={imageItems}
+      uploaded={uploadedItems}
+    />
+  );
+
+  // Official Hb: bash-only branch (no images/text/events).
+  if (bashItems.length > 0 && imageItems.length === 0 && textItems.length === 0 && eventItems.length === 0 && peerItems.length === 0) {
+    return (
+      <div className="flex flex-col gap-g6 w-full" data-official-source="c11959232-h_zsw3wI.js:Hb bash-only">
+        {attachmentStrip}
+        {bashItems.map((item) => <UserBashBlock item={item} key={item.id} />)}
+      </div>
+    );
+  }
+
+  // Official Hb: peer-only branch.
+  if (peerItems.length > 0 && imageItems.length === 0 && textItems.length === 0) {
+    return (
+      <div className="flex flex-col gap-g3 w-full" data-official-source="c11959232-h_zsw3wI.js:Hb peer-only">
+        {attachmentStrip}
+        {peerItems.map((item) => <OfficialUserPeerCard item={item} key={item.id} />)}
+      </div>
+    );
+  }
+
+  // Official Hb: event-only branch.
+  if (eventItems.length > 0 && imageItems.length === 0 && textItems.length === 0) {
+    return (
+      <div className="flex flex-col gap-g3 w-full" data-official-source="c11959232-h_zsw3wI.js:Hb event-only">
+        {attachmentStrip}
+        {eventItems.map((item) => <OfficialUserEventCard item={item} key={item.id} />)}
+      </div>
+    );
+  }
+
   const messageBody = (
     <>
-      {fileItems.length > 0 ? <UserUploadedFiles files={fileItems.map((item) => item.file)} /> : null}
+      {attachmentStrip}
       <div className={isLongText && !expandedLongText ? "flex flex-col gap-g4 max-h-[16rem] overflow-clip [mask-image:linear-gradient(to_bottom,black_calc(100%_-_3rem),transparent)]" : "flex flex-col gap-g4"}>
-        {textItems.map((item) => <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty" key={item.id}>{renderInlineMarkdown(item.text, item.id)}</p>)}
+        {textItems.map((item) => (
+          <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty" key={item.id}>
+            {renderInlineMarkdown(item.text, item.id)}
+          </p>
+        ))}
         {bashItems.map((item) => <UserBashBlock item={item} key={item.id} />)}
-        {eventItems.map((item) => <p className="text-body text-t7 whitespace-pre-wrap [overflow-wrap:anywhere]" key={item.id}>{item.content}</p>)}
+        {eventItems.map((item) => <OfficialUserEventCard item={item} key={item.id} />)}
+        {peerItems.map((item) => <OfficialUserPeerCard item={item} key={item.id} />)}
       </div>
       {isLongText ? (
         <OfficialButton className="self-start" onClick={() => setExpandedLongText((value) => !value)} size="small" variant="uncontained">
@@ -3306,16 +4252,85 @@ function CodeUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
   );
 }
 
-function UserUploadedFiles({ files }: { files: EpitaxyUploadedFile[] }) {
+/** Official Sv attachment strip: images (data URLs) + file chips. */
+function OfficialUserAttachments({
+  files,
+  images,
+  uploaded,
+}: {
+  files: Array<Extract<TranscriptEntryItem, { kind: "file" }>>;
+  images: Array<Extract<TranscriptEntryItem, { kind: "image" }>>;
+  uploaded: Array<Extract<TranscriptEntryItem, { kind: "uploaded-file" }>>;
+}) {
   const actions = useContext(EpitaxyTranscriptActionContext);
+  if (files.length === 0 && images.length === 0 && uploaded.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-g2">
+    <div className="flex flex-wrap gap-g2" data-official-source="c11959232-h_zsw3wI.js:Sv">
+      {images.map((image) => (
+        <img
+          alt=""
+          className="max-h-[180px] max-w-[240px] rounded-r4 border border-border-300 object-contain"
+          key={image.id}
+          src={`data:${image.mimeType};base64,${image.data}`}
+        />
+      ))}
       {files.map((file) => (
-        <button className="inline-flex max-w-full items-center gap-g2 rounded-r4 bg-fill-contained-default px-p4 py-p2 text-footnote text-t8 effect-contained-default" key={`${file.path}-${file.fileUuid ?? "local"}`} onClick={() => actions?.openFile({ path: file.path })} type="button">
+        <span
+          className="inline-flex max-w-full items-center gap-g2 rounded-r4 bg-fill-contained-default px-p4 py-p2 text-footnote text-t8 effect-contained-default"
+          key={file.id}
+        >
           <Icon name="Document" size="xs" />
           <span className="max-w-[220px] truncate">{file.fileName}</span>
+        </span>
+      ))}
+      {uploaded.map((item) => (
+        <button
+          className="inline-flex max-w-full items-center gap-g2 rounded-r4 bg-fill-contained-default px-p4 py-p2 text-footnote text-t8 effect-contained-default border-0 cursor-default outline-none hide-focus-ring ring-focus"
+          key={item.id}
+          onClick={() => actions?.openFile({ path: item.file.path })}
+          type="button"
+        >
+          <Icon name="Document" size="xs" />
+          <span className="max-w-[220px] truncate">{item.file.fileName}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+/** Official Ib peer card (c11959232). */
+function OfficialUserPeerCard({ item }: { item: Extract<TranscriptEntryItem, { kind: "peer" }> }) {
+  const title = (() => {
+    switch (item.origin.kind) {
+      case "peer":
+        return `Message from session ${item.origin.name ?? item.origin.from ?? "unknown"}`;
+      case "teammate":
+        return `Message from teammate ${item.origin.from ?? "unknown"}`;
+      case "coordinator":
+        return "Message from team lead";
+      case "channel":
+        return item.origin.server ? `Message from ${item.origin.server}` : "Channel message";
+      default:
+        return "Message";
+    }
+  })();
+  return (
+    <div className="flex w-full flex-col gap-g3 rounded-r6 border border-t3 bg-t1 p-p5" data-official-source="c11959232-h_zsw3wI.js:Ib">
+      <div className="flex items-center gap-g3 text-body text-t6">
+        <Icon name="ChatBubble" size="xs" />
+        <span className="font-medium text-t7">{title}</span>
+      </div>
+      <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty m-0">{item.content}</p>
+    </div>
+  );
+}
+
+/** Official Rb event card (c11959232). */
+function OfficialUserEventCard({ item }: { item: Extract<TranscriptEntryItem, { kind: "event" }> }) {
+  return (
+    <div className="flex w-full flex-col gap-g2 rounded-r6 border border-border-300 bg-bg-100 p-p4" data-official-source="c11959232-h_zsw3wI.js:Rb">
+      <div className="text-footnote font-mono text-t5">{item.eventType ? `${item.eventType} event` : "event"}</div>
+      <pre className="m-0 whitespace-pre-wrap break-words text-code text-t7">{item.content}</pre>
     </div>
   );
 }
@@ -3342,13 +4357,24 @@ function CodeAssistantEntryMessage({
   const visibleItems = entry.items.filter(isVisibleAssistantEntryItem);
   const copyText = visibleItems.flatMap((item) => item.kind === "text" ? [item.text] : []).join("\n\n") || undefined;
   const firstVisibleItem = visibleItems[0];
-  const pinnedChapters = firstVisibleItem ? chaptersByAfterId.get(firstVisibleItem.id) : undefined;
-  const onPinChapter = firstVisibleItem && onPinUserChapter && onUnpinUserChapters
-    ? () => {
-      if (pinnedChapters?.length) onUnpinUserChapters(firstVisibleItem.id);
-      else onPinUserChapter(firstVisibleItem.id, copyText ?? "");
+  const hasErrorItem = visibleItems.some((item) => item.kind === "error");
+  const pinHandlersForItem = useCallback((itemId: string, textForTitle: () => string) => {
+    const pinned = chaptersByAfterId.get(itemId);
+    if (!onPinUserChapter || !onUnpinUserChapters) return { isPinned: Boolean(pinned?.length) };
+    if (pinned?.length) {
+      return {
+        isPinned: true,
+        onPinChapter: () => pinned.forEach((chapter) => onUnpinUserChapters(itemId)),
+      };
     }
-    : undefined;
+    return {
+      isPinned: false,
+      onPinChapter: () => onPinUserChapter(itemId, textForTitle()),
+    };
+  }, [chaptersByAfterId, onPinUserChapter, onUnpinUserChapters]);
+  const firstPin = firstVisibleItem
+    ? pinHandlersForItem(firstVisibleItem.id, () => copyText ?? "")
+    : { isPinned: false as boolean };
   const forkFromHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.forkSession) return;
     const forked = await actions.bridge.forkSession(actions.sessionId, entry.id);
@@ -3357,10 +4383,16 @@ function CodeAssistantEntryMessage({
   const rewindToHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.rewind) return;
     await actions.bridge.rewind(actions.sessionId, entry.id);
-    await actions.reload();
+    await actions.reload({ silent: true });
+  }, [actions, entry.id]);
+  const retryLastTurn = useCallback(async () => {
+    if (!actions?.sessionId || !actions.bridge.rewind) return;
+    await actions.bridge.rewind(actions.sessionId, entry.id);
+    await actions.reload({ silent: true });
   }, [actions, entry.id]);
   const onFork = !isStreaming && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
   const onRewind = !isStreaming && actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
+  const onRetry = !isStreaming && actions?.bridge.rewind ? () => { void retryLastTurn(); } : undefined;
   const onRateMessage = !isStreaming && actions?.sessionId && actions.bridge.submitTranscriptFeedback
     ? (messageUuid: string, rating: "negative" | "positive") => {
       void actions.bridge.submitTranscriptFeedback?.(actions.sessionId, {
@@ -3373,31 +4405,446 @@ function CodeAssistantEntryMessage({
     : undefined;
   if (visibleItems.length === 0) return null;
 
+  // Official Kb (c11959232): shell + per-item Uv context menu on text/tools + Vv message actions.
   return (
-    <OfficialAssistantMessage copyText={copyText} createdAt={isStreaming ? undefined : entry.timestamp} isPinned={Boolean(pinnedChapters?.length)} onFork={onFork} onPinChapter={onPinChapter} onRateMessage={onRateMessage} onRewind={onRewind} rateMessageUuid={entry.id} showAwaitingDot={showAwaitingDot}>
+    <OfficialAssistantMessage
+      copyText={copyText}
+      createdAt={isStreaming ? undefined : entry.timestamp}
+      isPinned={Boolean(firstPin.isPinned)}
+      onFork={onFork}
+      onPinChapter={firstPin.onPinChapter}
+      onRateMessage={onRateMessage}
+      onRewind={onRewind}
+      rateMessageUuid={entry.id}
+      showAwaitingDot={showAwaitingDot}
+    >
       {visibleItems.map((item) => (
         <Fragment key={item.id}>
           {chaptersByAfterId.get(item.id)?.map((chapter) => <CodeChapterTitle chapter={chapter} key={chapter.id} />)}
-          {renderCodeAssistantEntryItem(item, isStreaming, transcriptMode)}
+          {/* Official Kb: hide turn_error when same entry already has error items (x). */}
+          {item.kind === "turn_error" && hasErrorItem
+            ? null
+            : renderCodeAssistantEntryItem(item, {
+              isStreaming,
+              onAttachAsContext: actions?.attachAsContext,
+              onFork,
+              onRetry: hasErrorItem ? undefined : onRetry,
+              onRewind,
+              pin: pinHandlersForItem,
+              sessionId: actions?.sessionId,
+              transcriptMode,
+            })}
         </Fragment>
       ))}
     </OfficialAssistantMessage>
   );
 }
 
-function renderCodeAssistantEntryItem(item: Exclude<TranscriptEntryItem, { kind: "uploaded-file" }>, isStreaming: boolean, transcriptMode: OfficialTranscriptMode) {
-  if (item.kind === "thinking") return <CodeThinkingBlock text={item.text} transcriptMode={transcriptMode} />;
-  if (item.kind === "text") return <div><OfficialCodeMarkdown isStreaming={isStreaming} text={item.text} /></div>;
-  if (item.kind === "tools") return <AssistantToolsBlock item={item} transcriptMode={transcriptMode} />;
-  if (item.kind === "error") return <div className="rounded-r3 border border-[var(--fill-destructive-default)] px-p3 py-p2 text-code text-destructive-default whitespace-pre-wrap break-words">{item.text}</div>;
+function renderCodeAssistantEntryItem(
+  item: Exclude<TranscriptEntryItem, { kind: "file" | "image" | "peer" | "uploaded-file" }>,
+  options: {
+    isStreaming: boolean;
+    onAttachAsContext?: (text: string) => void;
+    onFork?: () => void;
+    onRetry?: () => void;
+    onRewind?: () => void;
+    pin: (itemId: string, textForTitle: () => string) => { isPinned?: boolean; onPinChapter?: () => void };
+    sessionId?: string;
+    transcriptMode: OfficialTranscriptMode;
+  },
+) {
+  if (item.kind === "thinking") return <CodeThinkingBlock text={item.text} transcriptMode={options.transcriptMode} />;
+  if (item.kind === "text") {
+    const pin = options.pin(item.id, () => item.text);
+    return (
+      <CodeTranscriptItemMenu
+        isPinned={pin.isPinned}
+        onAttachAsContext={options.onAttachAsContext}
+        onFork={options.onFork}
+        onPinChapter={pin.onPinChapter}
+        onRewind={options.onRewind}
+        text={item.text}
+      >
+        <div>
+          <OfficialCodeMarkdown isStreaming={options.isStreaming} text={item.text} />
+        </div>
+      </CodeTranscriptItemMenu>
+    );
+  }
+  if (item.kind === "tools") {
+    const pin = options.pin(item.id, () => officialToolsCopyText(item.tools));
+    return (
+      <CodeTranscriptItemMenu
+        isPinned={pin.isPinned}
+        onAttachAsContext={options.onAttachAsContext}
+        onFork={options.onFork}
+        onPinChapter={pin.onPinChapter}
+        onRewind={options.onRewind}
+        text={officialToolsCopyText(item.tools) || undefined}
+      >
+        <div className="flex flex-col gap-[var(--chat-item-gap)]">
+          <AssistantToolsBlock item={item} transcriptMode={options.transcriptMode} />
+        </div>
+      </CodeTranscriptItemMenu>
+    );
+  }
+  if (item.kind === "error") {
+    return <CodeApiErrorBlock code={item.code} onRetry={options.onRetry} sessionId={options.sessionId} text={item.text} />;
+  }
+  // Official Kb: turn_error → rv (hidden when same message also has error items).
+  if (item.kind === "turn_error") {
+    return (
+      <CodeTurnErrorBlock
+        errors={item.errors}
+        onRetry={options.onRetry}
+        onRewind={options.onRewind}
+        sessionId={options.sessionId}
+        subtype={item.subtype}
+      />
+    );
+  }
+  // Official Kb: task_event → ev EpitaxyTaskChip
+  if (item.kind === "task_event") {
+    return <CodeTaskEventChip item={item} />;
+  }
+  // Official Kb: chapter → Lh
+  if (item.kind === "chapter") {
+    return <CodeOfficialChapterItem item={item} sessionId={options.sessionId} />;
+  }
+  // Official Kb: context → Ku; stats → $x
+  if (item.kind === "context") {
+    return (
+      <div className="max-w-[520px]" data-official-source="c11959232-h_zsw3wI.js:Ku + index dCe">
+        <OfficialContextWindowUsage usage={item.usage} />
+      </div>
+    );
+  }
+  if (item.kind === "stats") {
+    return <CodeStatsCard stats={item.stats} />;
+  }
   if (item.kind === "bash") return <UserBashBlock item={item} />;
   return <div className="text-body text-t6 whitespace-pre-wrap break-words">{item.content}</div>;
+}
+
+/** Official Uv (c11959232): context menu on text/tools items — copy, pin, attach, rewind, fork. */
+function CodeTranscriptItemMenu({
+  children,
+  isPinned = false,
+  onAttachAsContext,
+  onFork,
+  onPinChapter,
+  onRewind,
+  text,
+}: {
+  children: ReactElement;
+  isPinned?: boolean;
+  onAttachAsContext?: (text: string) => void;
+  onFork?: () => void;
+  onPinChapter?: () => void;
+  onRewind?: () => void;
+  text?: string;
+}) {
+  const hasText = text !== undefined;
+  const [selectionIsPartial, setSelectionIsPartial] = useState(false);
+  const canAttach = Boolean(onAttachAsContext) && hasText;
+  if (!hasText && !onPinChapter && !onFork && !onRewind && !canAttach) return children;
+
+  const copyMessage = () => {
+    if (text === undefined) return;
+    void navigator.clipboard?.writeText(text);
+  };
+  const copyMarkdown = () => {
+    if (text === undefined) return;
+    void navigator.clipboard?.writeText(text).catch(() => undefined);
+  };
+  const attachAsContext = () => {
+    if (!onAttachAsContext || text === undefined) return;
+    const selected = window.getSelection()?.toString().trim() ?? "";
+    const payload = selected.length >= 2 ? selected : text;
+    if (payload) onAttachAsContext(payload);
+  };
+
+  return (
+    <ContextMenu.Root
+      onOpenChange={(open) => {
+        if (!open) {
+          setSelectionIsPartial(false);
+          return;
+        }
+        const selected = window.getSelection()?.toString().trim() ?? "";
+        setSelectionIsPartial(selected.length >= 2);
+      }}
+    >
+      <ContextMenu.Trigger render={children} />
+      <BaseContextMenuPopup>
+        {hasText ? <BaseContextMenuItem onClick={copyMessage}>Copy message</BaseContextMenuItem> : null}
+        {hasText ? <BaseContextMenuItem onClick={copyMarkdown}>Copy as Markdown</BaseContextMenuItem> : null}
+        {canAttach ? (
+          <BaseContextMenuItem onClick={attachAsContext}>
+            {selectionIsPartial ? "Attach selection as context" : "Attach message as context"}
+          </BaseContextMenuItem>
+        ) : null}
+        {onPinChapter ? (
+          <BaseContextMenuItem onClick={onPinChapter}>{isPinned ? "Unpin chapter" : "Pin as chapter"}</BaseContextMenuItem>
+        ) : null}
+        {(onRewind || onFork) && (hasText || onPinChapter || canAttach) ? <BaseContextMenuSeparator /> : null}
+        {onRewind ? <BaseContextMenuItem onClick={onRewind}>Rewind to here</BaseContextMenuItem> : null}
+        {onFork ? <BaseContextMenuItem onClick={onFork}>Fork from here</BaseContextMenuItem> : null}
+      </BaseContextMenuPopup>
+    </ContextMenu.Root>
+  );
+}
+
+/** Official Bb API Error card (c11959232) + Dh reset_rate_limits when gated. */
+function CodeApiErrorBlock({
+  code,
+  onRetry,
+  sessionId: _sessionId,
+  text,
+}: {
+  code?: string;
+  onRetry?: () => void;
+  sessionId?: string;
+  text: string;
+}) {
+  const isRateLimit = code === "rate_limit" || /hit your limit|out of (extra )?usage|usage allocation|monthly usage limit/i.test(text);
+  const [resetState, setResetState] = useState<"idle" | "pending" | "done" | "error">("idle");
+  const [canReset, setCanReset] = useState(false);
+  const [orgUuid, setOrgUuid] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isRateLimit) return undefined;
+    let alive = true;
+    void fetchBootstrapPayload().then((bootstrap) => {
+      if (!alive) return;
+      const uuid = organizationUuidFromBootstrap(bootstrap);
+      setOrgUuid(uuid);
+      setCanReset(Boolean(uuid) && canResetRateLimitsFromBootstrap(bootstrap));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [isRateLimit]);
+
+  const resetLimits = async () => {
+    if (!orgUuid || resetState === "pending") return;
+    setResetState("pending");
+    const result = await postOrganizationResetRateLimits(orgUuid);
+    setResetState(result.ok ? "done" : "error");
+  };
+
+  return (
+    <div className="rounded-r3 border border-[var(--fill-destructive-default)] overflow-hidden" data-official-source="c11959232-h_zsw3wI.js:Bb+Dh">
+      <div className="px-p3 py-p2 bg-[var(--fill-destructive-default)] text-destructive-default text-footnote flex items-center justify-between gap-g3">
+        <span>API Error</span>
+        {isRateLimit && canReset ? (
+          <OfficialButton
+            disabled={resetState === "pending" || resetState === "done"}
+            onClick={() => void resetLimits()}
+            size="small"
+            variant="uncontained"
+          >
+            {resetState === "pending" ? "Resetting…" : resetState === "done" ? "Limits reset" : resetState === "error" ? "Reset failed" : "Reset limits"}
+          </OfficialButton>
+        ) : null}
+      </div>
+      <div className="px-p3 py-p2">
+        <code className="text-code break-words whitespace-pre-wrap">{text}</code>
+      </div>
+      {onRetry && !isRateLimit ? (
+        <div className="flex flex-wrap items-center gap-g3 px-p3 pb-p3">
+          <OfficialButton onClick={onRetry} size="small" variant="contained">
+            Try again
+          </OfficialButton>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Official rv turn_error card (c11959232). */
+function CodeTurnErrorBlock({
+  errors,
+  onRetry,
+  onRewind,
+  sessionId: _sessionId,
+  subtype,
+}: {
+  errors: string[];
+  onRetry?: () => void;
+  onRewind?: () => void;
+  sessionId?: string;
+  subtype?: string;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const title = officialTurnErrorTitle(subtype);
+  const statusCode = officialHttpStatusFromErrors(errors);
+  const imageTooLarge = errors.some((line) => /exceeds the dimension limit/i.test(line));
+  const detailText = errors.join("\n");
+  const guidance = officialTurnErrorGuidance(subtype, statusCode, imageTooLarge);
+  const showDetailToggle = detailText.length > 0 && detailText.trim().toLowerCase() !== title.trim().toLowerCase();
+  const preferRewind = Boolean(onRewind) && (imageTooLarge || subtype === "error_max_turns");
+  const showRetry = Boolean(onRetry) && !preferRewind && subtype !== "error_max_turns";
+  const mutedGuidance = statusCode === 429 || (statusCode !== undefined && statusCode >= 500);
+
+  return (
+    <div className="rounded-r3 border border-[var(--fill-destructive-default)] overflow-hidden" data-official-source="c11959232-h_zsw3wI.js:rv">
+      <div className="px-p3 py-p2 bg-[var(--fill-destructive-default)] text-destructive-default text-footnote">{title}</div>
+      <div className="flex flex-col gap-g3 px-p3 py-p3">
+        <p className={`text-body ${mutedGuidance ? "text-assistant-secondary" : "text-assistant-primary"}`}>{guidance}</p>
+        {showDetailToggle && detailsOpen ? (
+          <code className="rounded-r3 bg-t1 px-p3 py-p2 text-code text-t7 break-words whitespace-pre-wrap">{detailText}</code>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-g3">
+          {preferRewind && onRewind ? (
+            <OfficialButton onClick={onRewind} size="small" variant="contained">Rewind</OfficialButton>
+          ) : null}
+          {showRetry && onRetry ? (
+            <OfficialButton onClick={onRetry} size="small" variant="contained">Try again</OfficialButton>
+          ) : null}
+          {showDetailToggle ? (
+            <button
+              aria-expanded={detailsOpen}
+              className="flex items-center gap-g2 text-footnote text-assistant-secondary hover:text-t7 hide-focus-ring focus:ring-focus rounded-r3 border-0 bg-transparent cursor-pointer p-0"
+              onClick={() => setDetailsOpen((value) => !value)}
+              type="button"
+            >
+              <Icon name={detailsOpen ? "ChevronDownSmall" : "ChevronRightSmall"} size="xs" />
+              Details
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function officialTurnErrorTitle(subtype?: string) {
+  if (subtype === "error_during_execution") return "Claude couldn't process that message";
+  if (subtype === "error_max_turns") return "Reached maximum number of turns";
+  return "Turn failed";
+}
+
+function officialTurnErrorGuidance(subtype: string | undefined, statusCode: number | undefined, imageTooLarge: boolean) {
+  if (subtype === "error_max_turns") return "Rewind to an earlier message or clear the session to continue.";
+  if (imageTooLarge) return "This image is too large to send. Rewind to remove it and try again.";
+  if (statusCode === 429) return "Rate limited — try again in a moment.";
+  if (statusCode === 401) return "Authentication failed — sign in again and retry.";
+  if (statusCode === 403) return "Request was blocked — check your permissions and retry.";
+  if (statusCode !== undefined && statusCode >= 500) return "Service is busy — try again in a moment, or switch to a different model.";
+  return "Try sending your message again.";
+}
+
+function officialHttpStatusFromErrors(errors: string[]) {
+  for (const line of errors) {
+    const match = /\b(4\d{2}|5\d{2})\b/.exec(line);
+    if (match) return Number(match[1]);
+  }
+  return undefined;
+}
+
+/** Official ev / EpitaxyTaskChip (c11959232). */
+function CodeTaskEventChip({ item }: { item: Extract<TranscriptEntryItem, { kind: "task_event" }> }) {
+  const actions = useContext(EpitaxyTranscriptActionContext);
+  const failed = item.status === "failed";
+  const noun = officialTaskTypeNoun(item.taskType);
+  const statusWord = officialTaskStatusWord(item.status);
+  const label = item.description ?? item.summary;
+  const body = (
+    <>
+      <span className={`text-body min-w-0 truncate ${failed ? "text-extended-pink" : "text-assistant-primary"}`}>
+        Background {noun} {statusWord}
+      </span>
+      {label ? <span className="text-body text-assistant-secondary min-w-0 truncate">{label}</span> : null}
+    </>
+  );
+  if (actions?.openTasks) {
+    return (
+      <button
+        aria-label="View background task"
+        className="flex items-center gap-g3 py-0 max-w-full text-left cursor-pointer hover:opacity-80 transition-opacity border-0 bg-transparent p-0"
+        data-official-source="c11959232-h_zsw3wI.js:ev EpitaxyTaskChip"
+        onClick={actions.openTasks}
+        type="button"
+      >
+        {body}
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-g3 py-0 max-w-full" data-official-source="c11959232-h_zsw3wI.js:ev EpitaxyTaskChip">
+      {body}
+    </div>
+  );
+}
+
+function officialTaskTypeNoun(taskType?: string) {
+  switch (taskType) {
+    case "local_bash":
+      return "shell";
+    case "local_agent":
+    case "remote_agent":
+    case "in_process_teammate":
+      return "agent";
+    case "local_workflow":
+      return "workflow";
+    case "monitor_mcp":
+      return "monitor";
+    case "dream":
+      return "dream";
+    default:
+      return "task";
+  }
+}
+
+function officialTaskStatusWord(status: OfficialTaskStatus) {
+  switch (status) {
+    case "running":
+      return "started";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "stopped":
+      return "stopped";
+    default:
+      return status;
+  }
+}
+
+function officialToolsCopyText(tools: TranscriptToolUse[]) {
+  const tool = tools[0];
+  if (!tool) return "";
+  const inputString = (key: string) => stringValue(tool.input[key]);
+  return inputString("description") ?? inputString("command") ?? inputString("file_path") ?? inputString("pattern") ?? inputString("prompt") ?? tool.name;
 }
 
 function CodeChapterTitle({ chapter }: { chapter: CodeUserChapter }) {
   return (
     <div id={chapter.id} className="text-body-semibold text-assistant-primary select-text scroll-mt-[56px]">
       {chapter.title}
+    </div>
+  );
+}
+
+/** Official Lh chapter item from nke / mark_chapter (c11959232). */
+function CodeOfficialChapterItem({
+  item,
+  sessionId: _sessionId,
+}: {
+  item: Extract<TranscriptEntryItem, { kind: "chapter" }>;
+  sessionId?: string;
+}) {
+  return (
+    <div
+      className="text-body-semibold text-assistant-primary select-text scroll-mt-[56px]"
+      data-official-source="c11959232-h_zsw3wI.js:Lh + index nke"
+      id={item.id}
+    >
+      {item.title || "Chapter"}
+      {item.summary ? (
+        <div className="text-body text-assistant-secondary font-normal mt-p2">{item.summary}</div>
+      ) : null}
     </div>
   );
 }
@@ -3416,44 +4863,155 @@ function officialTranscriptModeExpandsDetails(mode: OfficialTranscriptMode) {
 }
 
 function AssistantToolsBlock({ item, transcriptMode = "normal" }: { item: Extract<TranscriptEntryItem, { kind: "tools" }>; transcriptMode?: OfficialTranscriptMode }) {
-  const runs = groupOfficialToolRuns(item.tools);
+  // Official Kb: _v(tools, memoryPath?, taskEvents) → map iv groups.
+  const runs = groupOfficialToolRuns(item.tools, item.taskEvents);
   if (runs.length === 1) {
     const run = runs[0];
-    return run.tools.length === 1 ? <OfficialToolRow tool={run.tools[0]} transcriptMode={transcriptMode} /> : <OfficialToolGroup tools={run.tools} transcriptMode={transcriptMode} />;
+    return run.tools.length === 1 && run.bucket !== "memory" && !(run.taskEvents?.length)
+      ? <OfficialToolRow tool={run.tools[0]} transcriptMode={transcriptMode} />
+      : <OfficialToolGroup memoryOps={run.memoryOps} taskEvents={run.taskEvents} tools={run.tools} transcriptMode={transcriptMode} />;
   }
   return (
     <div className="flex flex-col gap-[var(--chat-item-gap)] w-full">
-      {runs.map((run) => run.tools.length === 1
+      {runs.map((run) => run.tools.length === 1 && run.bucket !== "memory" && !(run.taskEvents?.length)
         ? <OfficialToolRow key={run.id} tool={run.tools[0]} transcriptMode={transcriptMode} />
-        : <OfficialToolGroup key={run.id} tools={run.tools} transcriptMode={transcriptMode} />)}
+        : <OfficialToolGroup key={run.id} memoryOps={run.memoryOps} taskEvents={run.taskEvents} tools={run.tools} transcriptMode={transcriptMode} />)}
     </div>
   );
 }
 
-const standaloneToolNames = new Set(["AskUserQuestion", "EnterPlanMode", "ExitPlanMode", "TodoWrite", "TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskStop"]);
+/**
+ * Official standalone buckets (do not coalesce into default runs):
+ * - todos family + ExitPlanMode (ion c1a1184fb Phe-like)
+ * - AskUserQuestion / EnterPlanMode / SendUser* (session UI interrupts)
+ */
+const standaloneToolNames = new Set([
+  "AskUserQuestion",
+  "EnterPlanMode",
+  "ExitPlanMode",
+  "TodoWrite",
+  "TodoRead",
+  "TaskCreate",
+  "TaskUpdate",
+  "TaskGet",
+  "TaskList",
+  "TaskStop",
+  "SendUserMessage",
+  "SendUserFile",
+]);
 
-function groupOfficialToolRuns(tools: TranscriptToolUse[]) {
-  const groups: Array<{ bucket: "default" | "standalone"; id: string; tools: TranscriptToolUse[] }> = [];
-  tools.forEach((tool) => {
-    const bucket = standaloneToolNames.has(tool.name) ? "standalone" : "default";
+type OfficialMemoryOps = { read: number; search: number; write: number };
+
+type OfficialToolRunGroup = {
+  bucket: "default" | "memory" | "standalone";
+  id: string;
+  memoryOps?: OfficialMemoryOps;
+  taskEvents?: OfficialToolGroupTaskEvent[];
+  tools: TranscriptToolUse[];
+};
+
+function aggregateOfficialMemoryOps(tools: TranscriptToolUse[]): OfficialMemoryOps | undefined {
+  const ops: OfficialMemoryOps = { read: 0, search: 0, write: 0 };
+  let any = false;
+  for (const tool of tools) {
+    if (!isOfficialMemoryTool(tool)) continue;
+    const kind = classifyOfficialMemoryOp(tool);
+    if (!kind) continue;
+    ops[kind] += 1;
+    any = true;
+  }
+  return any ? ops : undefined;
+}
+
+/**
+ * Official _v grouping:
+ * standalone (vs) | memory (bs) | default, with taskEvents snapped into nearest default group.
+ */
+function groupOfficialToolRuns(tools: TranscriptToolUse[], taskEvents?: OfficialToolGroupTaskEvent[]) {
+  const groups: OfficialToolRunGroup[] = [];
+  tools.forEach((tool, index) => {
+    const bucket: OfficialToolRunGroup["bucket"] = standaloneToolNames.has(tool.name)
+      ? "standalone"
+      : isOfficialMemoryTool(tool)
+        ? "memory"
+        : "default";
     const previous = groups.at(-1);
     if (previous && previous.bucket === bucket && bucket !== "standalone") {
       previous.tools.push(tool);
       return;
     }
-    groups.push({ bucket, id: `${bucket}:${tool.id}`, tools: [tool] });
+    groups.push({
+      bucket,
+      id: `${bucket}:${tool.id}:${index}`,
+      tools: [tool],
+    });
   });
+  for (const group of groups) {
+    if (group.bucket === "memory") group.memoryOps = aggregateOfficialMemoryOps(group.tools);
+  }
+  if (taskEvents?.length && groups.length > 0) {
+    const starts: number[] = [];
+    let offset = 0;
+    for (const group of groups) {
+      starts.push(offset);
+      offset += group.tools.length;
+    }
+    for (const event of taskEvents) {
+      // Official: place into the group whose tool range covers `at`, prefer default bucket.
+      let groupIndex = groups.length - 1;
+      for (let index = 0; index < groups.length; index += 1) {
+        const end = starts[index] + groups[index].tools.length;
+        if (event.at <= end || index === groups.length - 1) {
+          groupIndex = index;
+          break;
+        }
+      }
+      if (groups[groupIndex].bucket !== "default") {
+        const after = groups.findIndex((group, idx) => idx > groupIndex && group.bucket === "default");
+        if (after >= 0) groupIndex = after;
+        else {
+          for (let back = groupIndex - 1; back >= 0; back -= 1) {
+            if (groups[back].bucket === "default") {
+              groupIndex = back;
+              break;
+            }
+          }
+        }
+      }
+      const at = Math.max(0, Math.min(event.at - starts[groupIndex], groups[groupIndex].tools.length));
+      (groups[groupIndex].taskEvents ??= []).push({ at, event: event.event });
+    }
+  }
   return groups;
 }
 
-function OfficialToolGroup({ tools, transcriptMode = "normal" }: { tools: TranscriptToolUse[]; transcriptMode?: OfficialTranscriptMode }) {
+function officialMemorySummaryPieces(ops: OfficialMemoryOps): ToolSummaryPiece[] {
+  // Official: recalled {a memory|# memories}, saved {a memory|# memories}
+  const pieces: ToolSummaryPiece[] = [];
+  const recalled = ops.read + ops.search;
+  if (recalled > 0) pieces.push({ meta: officialCountNoun(recalled, "memory", "memories", "a"), verb: "recalled" });
+  if (ops.write > 0) pieces.push({ meta: officialCountNoun(ops.write, "memory", "memories", "a"), verb: "saved" });
+  return pieces.length ? pieces : [{ meta: "memories", verb: "used" }];
+}
+
+function OfficialToolGroup({
+  memoryOps,
+  taskEvents,
+  tools,
+  transcriptMode = "normal",
+}: {
+  memoryOps?: OfficialMemoryOps;
+  taskEvents?: OfficialToolGroupTaskEvent[];
+  tools: TranscriptToolUse[];
+  transcriptMode?: OfficialTranscriptMode;
+}) {
   const [expanded, setExpanded] = useState(false);
   const isVerbose = officialTranscriptModeExpandsDetails(transcriptMode);
   const toolsKey = tools.map((tool) => tool.id).join("|");
   useEffect(() => {
     setExpanded(false);
   }, [toolsKey]);
-  const summary = officialToolSummaryPieces(tools);
+  const summary = memoryOps ? officialMemorySummaryPieces(memoryOps) : officialToolSummaryPieces(tools);
   const status = aggregateToolStatus(tools);
   const isRunning = status === "running";
   const isAwaitingApproval = status === "awaiting_approval";
@@ -3462,6 +5020,18 @@ function OfficialToolGroup({ tools, transcriptMode = "normal" }: { tools: Transc
   const displayedRunningTool = debouncedRunningToolId !== "settled" ? tools.find((tool) => tool.id === debouncedRunningToolId) : undefined;
   const runningSummary = displayedRunningTool ? officialToolRowSummary(displayedRunningTool) : undefined;
   const isExpanded = isVerbose || expanded;
+  // Official: Map<index, taskEvent[]> for chips before tool at index, plus trailing at tools.length.
+  const taskEventsByIndex = useMemo(() => {
+    if (!taskEvents?.length) return undefined;
+    const map = new Map<number, OfficialToolGroupTaskEvent["event"][]>();
+    for (const entry of taskEvents) {
+      const at = Math.min(Math.max(entry.at, 0), tools.length);
+      const list = map.get(at) ?? [];
+      list.push(entry.event);
+      map.set(at, list);
+    }
+    return map;
+  }, [taskEvents, tools.length]);
   const toggle = () => {
     if (isVerbose) return;
     setExpanded((value) => !value);
@@ -3492,7 +5062,13 @@ function OfficialToolGroup({ tools, transcriptMode = "normal" }: { tools: Transc
       </button>
       <OfficialCollapse expanded={isExpanded}>
         <div className="flex flex-col gap-g3 bg-t1 rounded-r6 p-p7 mt-[var(--p6)]">
-          {tools.map((tool) => <OfficialToolRow inGroup key={tool.id} tool={tool} transcriptMode={transcriptMode} />)}
+          {tools.map((tool, index) => (
+            <Fragment key={tool.id}>
+              {taskEventsByIndex?.get(index)?.map((event) => <CodeTaskEventChip item={event} key={event.id} />)}
+              <OfficialToolRow inGroup tool={tool} transcriptMode={transcriptMode} />
+            </Fragment>
+          ))}
+          {taskEventsByIndex?.get(tools.length)?.map((event) => <CodeTaskEventChip item={event} key={event.id} />)}
         </div>
       </OfficialCollapse>
     </div>
@@ -3502,6 +5078,12 @@ function OfficialToolGroup({ tools, transcriptMode = "normal" }: { tools: Transc
 function OfficialToolRow({ inGroup = false, tool, transcriptMode = "normal" }: { inGroup?: boolean; tool: TranscriptToolUse; transcriptMode?: OfficialTranscriptMode }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
   const summary = useMemo(() => officialToolRowSummary(tool), [tool]);
+  // Official Zg C: diffMeta for Write/Edit when !error.
+  const diffMeta = useMemo(
+    () => (summary.kind === "diff" ? buildOfficialToolDiffMeta(tool) : null),
+    [summary.kind, tool],
+  );
+  // Official Zg: j = !(todos && empty); details always available unless empty todos.
   const hasDetails = hasToolDetails(tool, summary);
   const [expanded, setExpanded] = useState(false);
   const isVerbose = officialTranscriptModeExpandsDetails(transcriptMode);
@@ -3512,6 +5094,12 @@ function OfficialToolRow({ inGroup = false, tool, transcriptMode = "normal" }: {
   const isAwaitingApproval = tool.status === "awaiting_approval";
   const opensSubagent = (tool.name === "Task" || tool.name === "Agent") && Boolean(actions?.openSubagent);
   const metaHref = summary.metaHref && /^https:\/\//i.test(summary.metaHref) ? summary.metaHref : undefined;
+  // Official P = !inGroup — output images sit outside collapse when standalone, inside when grouped.
+  const showImagesOutsideCollapse = !inGroup;
+  // Official M=useRef(v): flash +N-M when the row started as running.
+  const flashDiffBadgeRef = useRef(isRunning);
+  if (isRunning) flashDiffBadgeRef.current = true;
+  const showDiffBadge = Boolean(diffMeta) && !isRunning && ((diffMeta?.counts.additions ?? 0) > 0 || (diffMeta?.counts.deletions ?? 0) > 0);
   const toggle = () => {
     if (opensSubagent && actions?.openSubagent) {
       actions.openSubagent({ description: stringValue(tool.input.description) ?? tool.name, toolUseId: tool.id });
@@ -3520,6 +5108,12 @@ function OfficialToolRow({ inGroup = false, tool, transcriptMode = "normal" }: {
     if (isVerbose || !hasDetails || isQuestionPrompt) return;
     setExpanded((value) => !value);
   };
+  const details = hasDetails ? (
+    <OfficialCollapse expanded={isExpanded}>
+      <OfficialToolDetails diffMeta={diffMeta} tool={tool} />
+      {inGroup ? <OfficialToolOutputImages images={tool.outputImages} /> : null}
+    </OfficialCollapse>
+  ) : null;
   return (
     <div className="flex flex-col w-full">
       <div
@@ -3554,11 +5148,18 @@ function OfficialToolRow({ inGroup = false, tool, transcriptMode = "normal" }: {
           )
         ) : null}
         {isRunning ? <span className="sr-only">running</span> : null}
+        {/* Official Vg+Xg: settled diff counts after meta */}
+        {showDiffBadge && diffMeta ? (
+          <OfficialToolDiffBadge
+            adds={diffMeta.counts.additions}
+            dels={diffMeta.counts.deletions}
+            flashOnMount={flashDiffBadgeRef.current}
+          />
+        ) : null}
         {hasDetails ? <ToolChevron expanded={isExpanded} /> : null}
       </div>
-      <OfficialCollapse expanded={isExpanded}>
-        <OfficialToolDetails tool={tool} />
-      </OfficialCollapse>
+      {details}
+      {showImagesOutsideCollapse ? <OfficialToolOutputImages images={tool.outputImages} /> : null}
     </div>
   );
 }
@@ -3883,22 +5484,56 @@ function renderToolSummaryPiece(piece: ToolSummaryPiece, index: number) {
   );
 }
 
+/**
+ * Official index-BELzQL5P `rhe` tool-group settled labels (all tools, not just Read):
+ *   read:  Read a file / Read {n} files
+ *   write: Created a file / Created {n} files
+ *   edit:  Edited a file / Edited {n} files
+ *   bash:  Ran a command / Ran {n} commands
+ *   grep:  Searched code / Searched {n} patterns
+ *   glob:  Found files / Searched {n} patterns
+ *   web:   Searched the web
+ *   task:  Ran an agent / Ran {n} agents
+ * Verb is lowercase; renderToolSummaryPiece capitalizes the first piece.
+ */
 function officialToolKindSummary(kind: string, count: number, isError?: boolean): ToolSummaryPiece[] {
   switch (kind) {
-    case "bash": return [{ isError, meta: plural(count, "command", "commands"), verb: "ran" }];
-    case "read": return [{ isError, meta: plural(count, "file", "files"), verb: "read" }];
-    case "view": return [{ isError, meta: plural(count, "file", "files"), verb: "viewed" }];
-    case "write": return [{ isError, meta: plural(count, "file", "files"), verb: "created" }];
-    case "edit": return [{ isError, meta: plural(count, "file", "files"), verb: "edited" }];
-    case "notebook_edit": return [{ isError, meta: plural(count, "notebook", "notebooks"), verb: "edited" }];
-    case "delete_file": return [{ isError, meta: plural(count, "file", "files"), verb: "deleted" }];
-    case "grep": return [{ isError, meta: "code", verb: "searched" }];
-    case "glob": return [{ isError, meta: "files", verb: "found" }];
-    case "web": return [{ isError, meta: "the web", verb: "browsed" }];
-    case "task": return [{ isError, meta: plural(count, "agent", "agents", "an"), verb: "ran" }];
-    case "todo": return [{ isError, meta: "todos", verb: "updated" }];
-    case "exit_plan_mode": return [{ isError, meta: "a plan", verb: "proposed" }];
-    default: return [];
+    case "bash":
+      return [{ isError, meta: officialCountNoun(count, "command", "commands", "a"), verb: "ran" }];
+    case "read":
+      return [{ isError, meta: officialCountNoun(count, "file", "files", "a"), verb: "read" }];
+    case "view":
+      return [{ isError, meta: officialCountNoun(count, "file", "files", "a"), verb: "viewed" }];
+    case "write":
+      return [{ isError, meta: officialCountNoun(count, "file", "files", "a"), verb: "created" }];
+    case "edit":
+      return [{ isError, meta: officialCountNoun(count, "file", "files", "a"), verb: "edited" }];
+    case "notebook_edit":
+      return [{ isError, meta: officialCountNoun(count, "notebook", "notebooks", "a"), verb: "edited" }];
+    case "delete_file":
+      return [{ isError, meta: officialCountNoun(count, "file", "files", "a"), verb: "deleted" }];
+    case "grep":
+      // Official: 1 → "Searched code"; n → "Searched {n} patterns"
+      return count === 1
+        ? [{ isError, meta: "code", verb: "searched" }]
+        : [{ isError, meta: `${count} patterns`, verb: "searched" }];
+    case "glob":
+      // Official: 1 → "Found files"; n → "Searched {n} patterns"
+      return count === 1
+        ? [{ isError, meta: "files", verb: "found" }]
+        : [{ isError, meta: `${count} patterns`, verb: "searched" }];
+    case "web":
+      return [{ isError, meta: "the web", verb: "searched" }];
+    case "task":
+      return [{ isError, meta: officialCountNoun(count, "agent", "agents", "an"), verb: "ran" }];
+    case "todo":
+      return [{ isError, meta: "todos", verb: "updated" }];
+    case "skill":
+      return [{ isError, meta: officialCountNoun(count, "skill", "skills", "a"), verb: "ran" }];
+    case "exit_plan_mode":
+      return [{ isError, meta: "a plan", verb: "proposed" }];
+    default:
+      return [];
   }
 }
 
@@ -3914,8 +5549,17 @@ function officialToolKind(name: string) {
   if (name === "Glob" || name === "LS") return "glob";
   if (name === "WebFetch" || name === "WebSearch") return "web";
   if (name === "Task" || name === "Agent") return "task";
-  if (name === "TodoWrite") return "todo";
+  if (name === "Skill") return "skill";
+  if (
+    name === "TodoWrite"
+    || name === "TaskCreate"
+    || name === "TaskUpdate"
+    || name === "TaskGet"
+    || name === "TaskList"
+    || name === "TaskStop"
+  ) return "todo";
   if (name === "ExitPlanMode") return "exit_plan_mode";
+  // MCP tools still get per-row running/settled verbs; group falls through to "used N tools".
   return undefined;
 }
 
@@ -3936,11 +5580,127 @@ function officialTodoItems(input: Record<string, unknown>) {
   });
 }
 
-function OfficialToolDetails({ tool }: { tool: TranscriptToolUse }) {
+function OfficialToolDetails({ diffMeta, tool }: { diffMeta?: OfficialToolDiffMeta | null; tool: TranscriptToolUse }) {
+  const actions = useContext(EpitaxyTranscriptActionContext);
+  const summaryKind = officialToolRowKind(tool.name);
+  // Official sx order: todos → plan → question → bash → diff+meta → file → error/generic.
+  if (summaryKind === "todos") {
+    const todos = officialTodoItems(tool.input);
+    return todos.length > 0 ? <OfficialTodosToolDetails todos={todos} /> : null;
+  }
+  if (summaryKind === "plan") return <OfficialPlanToolDetails tool={tool} />;
+  if (summaryKind === "question" && typeof tool.output !== "string" && !tool.isError) {
+    return <OfficialQuestionToolDetails tool={tool} />;
+  }
   if (tool.name === "Bash" || tool.name === "BashTool") return <OfficialBashToolDetails tool={tool} />;
   if (tool.name === "Read" && tool.output && !tool.isError) return <OfficialReadFileToolDetails tool={tool} />;
-  if (tool.name === "ExitPlanMode" && typeof tool.input.plan === "string") return <OfficialTextToolDetails label="Plan" text={tool.input.plan} />;
+  // Official sx diff branch: `"diff"===s.kind&&n` → pierre File / FileDiff body.
+  if (diffMeta) {
+    const copyText = diffMeta.pureSide === "deletions" ? diffMeta.oldFile.contents : diffMeta.newFile.contents;
+    return (
+      <OfficialToolDiffDetails
+        copySlot={<ToolDetailsCopyButton text={copyText} />}
+        diffMeta={diffMeta}
+        onOpenPath={(path) => actions?.openFile({ path })}
+      />
+    );
+  }
   return <OfficialGenericToolDetails tool={tool} />;
+}
+
+/** Official px: checklist body for TodoWrite / Task* tools. */
+function OfficialTodosToolDetails({ todos }: { todos: Array<{ content: string; id: string; status: "completed" | "in_progress" | "pending" }> }) {
+  return (
+    <ul className="flex flex-col gap-[var(--p5)] text-body py-p3">
+      {todos.map((todo) => (
+        <li
+          className={`flex items-start gap-g3 ${todo.status === "completed" ? "line-through decoration-1 text-assistant-secondary" : "text-assistant-primary"}`}
+          key={todo.id}
+        >
+          <OfficialTodoStatusIcon status={todo.status} />
+          <span>{todo.content}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function OfficialTodoStatusIcon({ status }: { status: "completed" | "in_progress" | "pending" }) {
+  // Official ux + dx: 14px status slot.
+  const className = "flex size-[14px] shrink-0 items-center justify-center text-assistant-primary";
+  if (status === "completed") {
+    return (
+      <span className={className}>
+        <Icon name="CheckSelection" size="sm" />
+        <span className="sr-only">done</span>
+      </span>
+    );
+  }
+  if (status === "in_progress") {
+    return (
+      <span className={className}>
+        <Icon name="StatusInProgressQuarterCircle" size="sm" />
+        <span className="sr-only">in progress</span>
+      </span>
+    );
+  }
+  // Official pending: empty 12px circle border, not an icon glyph.
+  return (
+    <span className={className}>
+      <span aria-hidden className="block w-[12px] h-[12px] rounded-full border border-[var(--t5)]" />
+      <span className="sr-only">not done</span>
+    </span>
+  );
+}
+
+/** Official mx: ExitPlanMode plan body (pending border / approved check). */
+function OfficialPlanToolDetails({ tool }: { tool: TranscriptToolUse }) {
+  const plan = typeof tool.input.plan === "string" ? tool.input.plan : "";
+  if (tool.status === "running" || tool.status === "awaiting_approval") {
+    return plan ? (
+      <div className="text-body text-assistant-secondary whitespace-pre-wrap break-words pl-p6 border-l-2 border-[var(--border-default)] py-p3">
+        {plan}
+      </div>
+    ) : null;
+  }
+  return (
+    <div className="flex flex-col gap-g3 py-p3">
+      {tool.isError ? null : (
+        <div className="flex items-center gap-g3 text-body text-extended-green">
+          <Icon name="CircleCheck" size="sm" />
+          <span>Plan approved</span>
+        </div>
+      )}
+      {plan ? (
+        <div className="text-body text-assistant-secondary whitespace-pre-wrap break-words pl-p6 border-l-2 border-[var(--border-default)]">
+          {plan}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Official hx: AskUserQuestion pending prompt body — question texts only. */
+function OfficialQuestionToolDetails({ tool }: { tool: TranscriptToolUse }) {
+  const questions = useMemo(() => {
+    const raw = Array.isArray(tool.input.questions) ? tool.input.questions : [];
+    return raw
+      .map((item) => {
+        const record = asRecord(item);
+        return typeof record.question === "string" ? record.question : "";
+      })
+      .filter(Boolean);
+  }, [tool.input.questions]);
+  if (questions.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-g3 pt-p3">
+      {questions.map((question, index) => (
+        <div className="text-body text-assistant-secondary [overflow-wrap:anywhere]" key={`${index}-${question.slice(0, 24)}`}>
+          {question}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function OfficialBashToolDetails({ tool }: { tool: TranscriptToolUse }) {
@@ -3963,33 +5723,62 @@ function OfficialBashToolDetails({ tool }: { tool: TranscriptToolUse }) {
 }
 
 function OfficialReadFileToolDetails({ tool }: { tool: TranscriptToolUse }) {
+  const actions = useContext(EpitaxyTranscriptActionContext);
   const path = stringValue(tool.input.file_path) ?? "file";
   const contents = normalizeReadFileOutput(tool.output ?? "");
+  // Official sx file branch → pierre File (iu), not plain <pre>.
   return (
-    <div className="group/body py-p6">
-      <div className="bg-t1 rounded-r6 overflow-clip flex flex-col">
-        <div className="flex items-center gap-g3 px-p6 py-p5">
-          <ToolPathButton path={path} />
-          <ToolDetailsCopyButton text={contents} />
+    <OfficialToolReadFileDetails
+      contents={contents}
+      copySlot={<ToolDetailsCopyButton text={contents} />}
+      onOpenPath={(nextPath) => actions?.openFile({ path: nextPath })}
+      path={path}
+    />
+  );
+}
+
+/** Official c11959232 sx generic branch: only render when ox(tool) is non-empty; error output is pink. */
+function OfficialGenericToolDetails({ tool }: { tool: TranscriptToolUse }) {
+  const inputKeys = Object.keys(tool.input);
+  const copyText = toolCopyText(tool);
+  // Official: if (t.isError && t.output) error body; else if (ox(t)) generic; else null.
+  if (tool.isError && tool.output) {
+    return (
+      <div className="group/body relative flex flex-col w-full pt-p3">
+        <div className="flex w-full">
+          <div className="flex-1 min-w-0 flex flex-col gap-g4 text-body whitespace-pre-wrap break-words">
+            {inputKeys.length > 0 ? <div className="text-assistant-secondary">{inputKeys.map((key) => <ToolInputLine input={tool.input} inputKey={key} key={key} />)}</div> : null}
+            <div className="text-extended-pink">{tool.output}</div>
+          </div>
+          <ToolDetailsCopyButton text={copyText} />
         </div>
-        <pre className="m-0 px-p6 pb-p8 text-code text-assistant-secondary whitespace-pre-wrap break-all">{contents}</pre>
+      </div>
+    );
+  }
+  if (!copyText) return null;
+  return (
+    <div className="group/body relative flex flex-col w-full pt-p3">
+      <div className="flex w-full">
+        <div className="flex-1 min-w-0 flex flex-col gap-g4 text-body text-assistant-secondary whitespace-pre-wrap break-words">
+          {inputKeys.length > 0 ? <div className="text-assistant-secondary">{inputKeys.map((key) => <ToolInputLine input={tool.input} inputKey={key} key={key} />)}</div> : null}
+          {tool.output ? <div>{tool.output}</div> : null}
+        </div>
+        <ToolDetailsCopyButton text={copyText} />
       </div>
     </div>
   );
 }
 
-function OfficialGenericToolDetails({ tool }: { tool: TranscriptToolUse }) {
-  const inputKeys = Object.keys(tool.input);
-  const copyText = toolCopyText(tool);
+/** Official gx — tool output images; placement depends on inGroup (Zg P=!inGroup). */
+function OfficialToolOutputImages({ images }: { images?: TranscriptToolUse["outputImages"] }) {
+  if (!images?.length) return null;
   return (
-    <div className="group/body relative flex flex-col w-full pt-p3">
-      <div className="flex w-full">
-        <div className={`flex-1 min-w-0 flex flex-col gap-g4 text-body whitespace-pre-wrap break-words ${tool.isError ? "" : "text-assistant-secondary"}`}>
-          {inputKeys.length > 0 ? <div className="text-assistant-secondary">{inputKeys.map((key) => <ToolInputLine input={tool.input} inputKey={key} key={key} />)}</div> : null}
-          {tool.output ? <div className={tool.isError ? "text-extended-pink" : undefined}>{tool.output}</div> : null}
-        </div>
-        <ToolDetailsCopyButton text={copyText} />
-      </div>
+    <div className="flex flex-wrap gap-g3 pt-p3">
+      {images.map((image, index) => {
+        const src = image.url ?? (image.data ? `data:${image.mimeType ?? image.media_type ?? "image/png"};base64,${image.data}` : undefined);
+        if (!src) return null;
+        return <img alt="" className="max-h-[240px] max-w-[320px] rounded-lg" key={`${src}-${index}`} src={src} />;
+      })}
     </div>
   );
 }
@@ -4085,6 +5874,12 @@ function ToolDetailsCopyButton({ text }: { text: string }) {
   );
 }
 
+/** Official ICU one/other for tool-group counts: one → "a file", other → "3 files". */
+function officialCountNoun(count: number, singular: string, pluralValue: string, oneArticle: "a" | "an") {
+  if (count === 1) return `${oneArticle} ${singular}`;
+  return `${count} ${pluralValue}`;
+}
+
 function plural(count: number, singular: string, pluralValue: string, oneArticle?: string) {
   if (count === 1) return oneArticle ? `${oneArticle} ${singular}` : `1 ${singular}`;
   return `${count} ${pluralValue}`;
@@ -4138,8 +5933,14 @@ function normalizeToolStatus(status: unknown, isError?: boolean, output?: string
   return "running";
 }
 
-function isVisibleAssistantEntryItem(item: TranscriptEntryItem): item is Exclude<TranscriptEntryItem, { kind: "uploaded-file" }> {
-  return item.kind !== "uploaded-file";
+function isVisibleAssistantEntryItem(
+  item: TranscriptEntryItem,
+): item is Exclude<TranscriptEntryItem, { kind: "file" | "image" | "peer" | "uploaded-file" }> {
+  // Official Kb only switches assistant kinds; user-only Ike kinds never render here.
+  return item.kind !== "uploaded-file"
+    && item.kind !== "file"
+    && item.kind !== "image"
+    && item.kind !== "peer";
 }
 
 type MarkdownBlock =
@@ -4416,7 +6217,16 @@ function parseListItem(line: string) {
 function renderMarkdownBlock(block: MarkdownBlock, keyScope = "block") {
   const blockKey = `${keyScope}-${block.key}`;
   if (block.kind === "heading") return createElement(`h${block.level}`, { key: blockKey }, renderInlineMarkdown(block.text, blockKey));
-  if (block.kind === "code") return <pre key={blockKey}><code className={block.language ? `language-${block.language}` : undefined}>{block.text}</code></pre>;
+  if (block.kind === "code") {
+    // Official hit (index-BELzQL5P): language-mermaid → eit; language-search_tree → ait SearchTree.
+    if (isOfficialMermaidMarkdownLanguage(block.language)) {
+      return <OfficialMermaidDiagramCard key={blockKey} source={block.text} />;
+    }
+    if ((block.language?.trim() ?? "") === officialSearchTreeLanguage) {
+      return <OfficialSearchTree content={block.text} key={blockKey} />;
+    }
+    return <pre key={blockKey}><code className={block.language ? `language-${block.language}` : undefined}>{block.text}</code></pre>;
+  }
   if (block.kind === "list") return createElement(block.ordered ? "ol" : "ul", { key: blockKey }, block.items.map((item, index) => <li key={index}>{renderInlineMarkdown(item, `${blockKey}-${index}`)}</li>));
   if (block.kind === "blockquote") return <blockquote key={blockKey}>{block.lines.map((line, index) => <p key={index}>{renderInlineMarkdown(line, `${blockKey}-${index}`)}</p>)}</blockquote>;
   if (block.kind === "table") return <MarkdownTable block={block} key={blockKey} keyPrefix={blockKey} />;
@@ -4634,6 +6444,9 @@ function InlineToolPermissionApprovals({ bridge, sessionId }: { bridge: LocalSes
   const [requests, setRequests] = useState<InlineToolPermissionRequest[]>([]);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  // Also read session.pendingToolPermissions from the code session store so session_updated
+  // (after control_request) can hydrate the card even if a permission event was missed.
+  const storePending = useOfficialCodeSessionBucket(sessionId)?.session?.pendingToolPermissions;
 
   useEffect(() => {
     if (!sessionId) {
@@ -4641,21 +6454,27 @@ function InlineToolPermissionApprovals({ bridge, sessionId }: { bridge: LocalSes
       return undefined;
     }
     let alive = true;
+    const hydrateFromPending = (pending: NonNullable<SessionSummary["pendingToolPermissions"]> | undefined) => {
+      if (!pending?.length) return;
+      setRequests((current) => mergeInlinePermissionRequests(current, pending.map(inlinePermissionFromPending)));
+    };
     void bridge.getSession(sessionId).then((session) => {
-      if (!alive || !session?.pendingToolPermissions?.length) return;
-      setRequests(session.pendingToolPermissions.map((item) => ({
-        alwaysAllowScope: item.alwaysAllowScope,
-        decisionReason: item.decisionReason,
-        description: item.description,
-        hasAlwaysAllow: item.hasAlwaysAllow,
-        input: asRecord(item.input),
-        requestId: item.requestId,
-        sessionId: item.sessionId,
-        toolName: item.toolName,
-        toolUseId: item.toolUseId,
-      })));
+      if (!alive) return;
+      hydrateFromPending(session?.pendingToolPermissions);
     }).catch(() => {});
     const onPermissionEvent = (event: unknown) => {
+      // session_updated carries the full pending queue after register/clear.
+      const raw = asRecord(event);
+      if (stringValue(raw.type) === "session_updated") {
+        const session = asRecord(raw.session);
+        const sessionIdFromEvent = stringValue(raw.sessionId) ?? stringValue(session.id) ?? stringValue(session.sessionId);
+        if (sessionIdFromEvent && sessionIdFromEvent !== sessionId) return;
+        const pending = session.pendingToolPermissions;
+        if (Array.isArray(pending)) {
+          setRequests(pending.map((item) => inlinePermissionFromPending(item as NonNullable<SessionSummary["pendingToolPermissions"]>[number])));
+        }
+        return;
+      }
       const resolvedId = toolPermissionResolvedId(event, sessionId);
       if (resolvedId) {
         setRequests((current) => current.filter((request) => request.requestId !== resolvedId));
@@ -4681,6 +6500,11 @@ function InlineToolPermissionApprovals({ bridge, sessionId }: { bridge: LocalSes
     };
   }, [bridge, sessionId]);
 
+  useEffect(() => {
+    if (!sessionId || !storePending) return;
+    setRequests((current) => mergeInlinePermissionRequests(current, storePending.map(inlinePermissionFromPending)));
+  }, [sessionId, storePending]);
+
   const request = requests[0];
   const hasAlwaysAllow = request?.hasAlwaysAllow !== false;
   const decide = useCallback(async (decision: "always" | "deny" | "once") => {
@@ -4689,9 +6513,18 @@ function InlineToolPermissionApprovals({ bridge, sessionId }: { bridge: LocalSes
     setResolvingId(request.requestId);
     setResolveError(null);
     try {
-      const result = await bridge.respondToToolPermission(request.requestId, decision, request.input);
+      // Pass sessionId inside updatedInput so desktop IPC can resolve the live turn
+      // without relying only on findSessionIdForPermission store fallback.
+      const result = await bridge.respondToToolPermission(request.requestId, decision, {
+        ...request.input,
+        sessionId: request.sessionId,
+      });
       if (toolPermissionResponseFailed(result)) {
         setResolveError(toolPermissionResponseError(result));
+        // Stale turn: drop the card so the user is not stuck on a dead approval.
+        if (toolPermissionResponseError(result).includes("no_active_turn")) {
+          setRequests((current) => current.filter((item) => item.requestId !== request.requestId));
+        }
         return;
       }
       setRequests((current) => current.filter((item) => item.requestId !== request.requestId));
@@ -5007,25 +6840,41 @@ function toolPermissionResponseError(value: unknown) {
   return stringValue(raw.error) ?? "Permission response failed.";
 }
 
+/** Plain text → TipTap doc (same shape as OfficialCodeComposer). */
+function tiptapDocFromPlainText(value: string) {
+  if (!value) return { type: "doc", content: [] as Array<{ type: string; content?: Array<{ type: string; text: string }> }> };
+  return {
+    type: "doc",
+    content: value.split("\n").map((line) => ({
+      type: "paragraph",
+      content: line ? [{ type: "text", text: line }] : [],
+    })),
+  };
+}
+
 function ExistingSessionComposer({
+  attachRef,
   bridge,
   disabled,
   isResponding,
   onOpenDiff,
   onScrollToBottom,
+  onStop,
   onSubmit,
   reload,
   session,
   sessionRef,
   showScrollButton,
 }: {
+  attachRef?: MutableRefObject<((text: string) => void) | null>;
   bridge: LocalSessionsBridge;
   disabled: boolean;
   isResponding: boolean;
   onOpenDiff?: () => void;
   onScrollToBottom: () => void;
+  onStop?: () => void | Promise<void>;
   onSubmit: (text: string, input?: SendMessageInput) => Promise<void>;
-  reload: () => Promise<void>;
+  reload: (options?: { silent?: boolean }) => Promise<void>;
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef | null;
   showScrollButton: boolean;
@@ -5126,6 +6975,17 @@ function ExistingSessionComposer({
     editor?.chain().focus("start").insertContent("/").run();
   }, [editor]);
 
+  /** Official onAttachAsContext → setComposerText + focus (c119 Ye.current). */
+  const attachTextAsContext = useCallback((value: string) => {
+    const next = value.trim();
+    if (!next || !editor || editor.isDestroyed) return;
+    const current = editor.getText({ blockSeparator: "\n" }).trim();
+    const combined = current ? `${current}\n\n${next}` : next;
+    editor.commands.setContent(tiptapDocFromPlainText(combined), { emitUpdate: true });
+    setText(editor.getText({ blockSeparator: "\n" }));
+    editor.commands.focus("end");
+  }, [editor]);
+
   const submit = useCallback(async () => {
     if (!canSubmit) return;
     setSubmitting(true);
@@ -5142,10 +7002,23 @@ function ExistingSessionComposer({
     clearComposerRef.current = clearComposer;
   }, [clearComposer, submit]);
 
+  useEffect(() => {
+    if (!attachRef) return undefined;
+    attachRef.current = attachTextAsContext;
+    return () => {
+      if (attachRef.current === attachTextAsContext) attachRef.current = null;
+    };
+  }, [attachRef, attachTextAsContext]);
+
   const stopResponse = async () => {
     if (!sessionRef || !bridge.stop) return;
-    await bridge.stop(sessionRef.id);
-    await reload();
+    // Official wt(): clear local stream first, then await LocalSessions.stop.
+    await onStop?.();
+    try {
+      await bridge.stop(sessionRef.id);
+    } finally {
+      await reload({ silent: true });
+    }
   };
 
   const applyModel = async (nextModel: string) => {
@@ -5154,7 +7027,7 @@ function ExistingSessionComposer({
     setConfigBusy(true);
     try {
       await bridge.setModel?.(sessionRef.id, nextModel);
-      await reload();
+      await reload({ silent: true });
     } finally {
       setConfigBusy(false);
     }
@@ -5166,7 +7039,7 @@ function ExistingSessionComposer({
     setConfigBusy(true);
     try {
       await bridge.setPermissionMode?.(sessionRef.id, nextMode);
-      await reload();
+      await reload({ silent: true });
     } finally {
       setConfigBusy(false);
     }
@@ -5178,7 +7051,7 @@ function ExistingSessionComposer({
     setConfigBusy(true);
     try {
       await bridge.setEffort?.(sessionRef.id, nextEffort);
-      await reload();
+      await reload({ silent: true });
     } finally {
       setConfigBusy(false);
     }
@@ -5192,7 +7065,7 @@ function ExistingSessionComposer({
     setConfigBusy(true);
     try {
       await bridge.addFolderToSession?.(sessionRef.id, folder);
-      await reload();
+      await reload({ silent: true });
     } finally {
       setConfigBusy(false);
     }
@@ -5930,142 +7803,177 @@ function useFocusedSession(sessionId?: string) {
   }, [sessionId]);
 }
 
-type SessionDataState = {
-  error: Error | null;
-  isLoading: boolean;
-  isSessionNotFound: boolean;
-  messages: ChatMessage[];
-  pendingTurnStartedAt: number | null;
-  session: SessionSummary | null;
-  streamActivityMode: StreamActivityMode;
-  streamingMessageId: string | null;
-  streamSnapshot: OfficialStreamSnapshot;
-};
-
-function emptySessionDataState(isLoading: boolean): SessionDataState {
-  return {
-    error: null,
-    isLoading,
-    isSessionNotFound: false,
-    messages: [],
-    pendingTurnStartedAt: null,
-    session: null,
-    streamActivityMode: idleStreamActivityMode,
-    streamingMessageId: null,
-    streamSnapshot: null,
-  };
-}
-
-const officialSessionDataCache = new Map<string, SessionDataState>();
-type SessionDataStateUpdater = SessionDataState | ((current: SessionDataState) => SessionDataState);
-
+/**
+ * Official session data hook:
+ * - durable meta/messages: `officialCodeSessionStore` (`he`/`tm`)
+ * - live stream: official `Pe` (`officialStreamSessionStore`) → local Va state
+ *   (stream is NOT written into durable bucket until settle promote)
+ */
 function useEpitaxySessionData(sessionId?: string) {
   const finalizeStreamGenerationRef = useRef<number | null>(null);
-  const loadSeqRef = useRef(0);
   const streamGenerationRef = useRef(0);
-  const smootherRef = useRef(createOfficialSessionStreamSmoother());
-  const [, forceSessionDataRender] = useState(0);
-  const state = sessionId ? officialSessionDataCache.get(sessionId) ?? emptySessionDataState(true) : emptySessionDataState(false);
-  const setState = useCallback((updater: SessionDataStateUpdater) => {
-    if (!sessionId) {
-      forceSessionDataRender((version) => version + 1);
-      return;
-    }
-    const current = officialSessionDataCache.get(sessionId) ?? emptySessionDataState(true);
-    const next = typeof updater === "function" ? updater(current) : updater;
-    officialSessionDataCache.set(sessionId, next);
-    forceSessionDataRender((version) => version + 1);
-  }, [sessionId]);
+  const store = officialCodeSessionStore;
+  // Never mutate the store during render (ensureBucket → set would break useSyncExternalStore).
+  // Bucket is created in effects / beginPendingTurn / reload / openSession from Recents.
+  const bucket = useOfficialCodeSessionBucket(sessionId);
+  // Official Va: local stream snapshot state (not he.buckets).
+  const [streamSnapshot, setStreamSnapshot] = useState<OfficialStreamSnapshot>(null);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [streamActivityMode, setStreamActivityMode] = useState<StreamActivityMode>(idleStreamActivityMode);
+  const streamMessageIdRef = useRef<string | null>(null);
+  const streamSnapshotRef = useRef<OfficialStreamSnapshot>(null);
+  const streamActivityModeRef = useRef<StreamActivityMode>(idleStreamActivityMode);
+  streamSnapshotRef.current = streamSnapshot;
+  streamActivityModeRef.current = streamActivityMode;
 
   useEffect(() => {
-    const smoother = createOfficialSessionStreamSmoother();
-    smootherRef.current.dispose();
-    smootherRef.current = smoother;
-    const unsubscribe = smoother.subscribe((streamSnapshot) => {
-      setState((current) => ({ ...current, streamSnapshot }));
+    if (!sessionId) {
+      setStreamSnapshot(null);
+      setStreamingMessageId(null);
+      setStreamActivityMode(idleStreamActivityMode);
+      streamMessageIdRef.current = null;
+      return undefined;
+    }
+    store.getState().ensureBucket(sessionId);
+    // Official Pe.subscribe(sessionId, listener) + Pe.setVisibility (c119).
+    const transcriptVisibleRef = { current: true };
+    officialStreamSetVisibility(sessionId, () => transcriptVisibleRef.current);
+    const unsubscribe = officialStreamSubscribe(sessionId, (snapshot) => {
+      const nextId = snapshot?.messageId ?? null;
+      if (snapshot) {
+        const chars = snapshot.blocks.reduce((total, block) => {
+          if (block.kind === "text") return total + block.text.length;
+          if (block.kind === "tool") return total + 1 + block.partialJson.length;
+          return total;
+        }, 0);
+        officialSetStreamCharBudget(sessionId, chars);
+      }
+      // Paint every smoother tick. Official c119 uses startTransition for same-messageId, but
+      // under concurrent React that can drop intermediate reveals and look like a single dump.
+      // Typewriter needs the 60fps Va frames to actually commit.
+      streamMessageIdRef.current = nextId;
+      setStreamSnapshot(snapshot);
+      if (nextId) setStreamingMessageId(nextId);
     });
     return () => {
       unsubscribe();
-      smoother.dispose();
+      // Official: if no listeners left, setVisibility(() => false)
+      if (!officialStreamHasListeners(sessionId)) {
+        officialStreamSetVisibility(sessionId, () => false);
+      }
     };
-  }, [sessionId]);
+  }, [sessionId, store]);
 
   useEffect(() => {
-    loadSeqRef.current += 1;
     streamGenerationRef.current += 1;
     finalizeStreamGenerationRef.current = null;
-    smootherRef.current.clear();
-    setState((current) => {
-      if (!sessionId) return emptySessionDataState(false);
-      return officialSessionDataCache.get(sessionId) ?? emptySessionDataState(true);
-    });
+    if (!sessionId) return;
+    officialStreamClear(sessionId);
+    setStreamSnapshot(null);
+    setStreamingMessageId(null);
+    setStreamActivityMode(idleStreamActivityMode);
+    streamMessageIdRef.current = null;
   }, [sessionId]);
 
   const clearStreamState = useCallback((markSessionSettled = false) => {
-    smootherRef.current.clear();
-    setState((current) => ({
-      ...current,
-      pendingTurnStartedAt: null,
-      session: markSessionSettled && current.session ? { ...current.session, isRunning: false } : current.session,
-      streamActivityMode: idleStreamActivityMode,
-      streamingMessageId: null,
-      streamSnapshot: null,
-    }));
-  }, []);
-
-  const reload = useCallback(async () => {
-    const loadSeq = ++loadSeqRef.current;
-    if (!sessionId) {
-      clearStreamState();
-      setState(emptySessionDataState(false));
-      return;
+    if (!sessionId) return;
+    // Promote Va only when durable does not already hold this Anthropic message id
+    // (CLI final assistant dump usually lands first — re-promoting duplicated the whole turn).
+    const live = streamSnapshotRef.current;
+    if (markSessionSettled && live && live.blocks.length > 0) {
+      const alreadyDurable = store.getState().buckets[sessionId]?.messages.some((message) => {
+        if (message.role !== "assistant") return false;
+        const raw = asRecord(message.raw);
+        const nested = asRecord(raw.message);
+        const anthropicId = stringValue(nested.id) ?? stringValue(raw.message_id) ?? message.id;
+        return anthropicId === live.messageId;
+      });
+      if (!alreadyDurable) {
+        const content = live.blocks.flatMap((block) => {
+          if (block.kind === "text" && block.text) return [{ type: "text", text: block.text }];
+          if (block.kind === "thinking" && block.text) return [{ type: "thinking", thinking: block.text }];
+          if (block.kind === "tool") {
+            return [{
+              type: "tool_use",
+              id: block.id,
+              name: block.name,
+              input: (() => {
+                try { return JSON.parse(block.partialJson || "{}"); } catch { return {}; }
+              })(),
+            }];
+          }
+          return [];
+        });
+        if (content.length > 0) {
+          const text = content
+            .map((block) => ("text" in block ? String(block.text ?? "") : ""))
+            .filter(Boolean)
+            .join("");
+          const createdAt = new Date().toISOString();
+          store.getState().mergeMessage(sessionId, {
+            id: live.messageId,
+            role: "assistant",
+            text,
+            createdAt,
+            raw: {
+              type: "assistant",
+              uuid: live.messageId,
+              timestamp: createdAt,
+              message: {
+                id: live.messageId,
+                role: "assistant",
+                content,
+              },
+            },
+          });
+        }
+      }
     }
-    setState((current) => ({
-      ...current,
-      error: null,
-      isLoading: current.session === null && current.messages.length === 0 && current.streamSnapshot === null,
-    }));
+    officialStreamClear(sessionId);
+    if (markSessionSettled) officialClearTurnStarted(sessionId);
+    setStreamSnapshot(null);
+    setStreamingMessageId(null);
+    setStreamActivityMode(idleStreamActivityMode);
+    streamMessageIdRef.current = null;
+    streamSnapshotRef.current = null;
+    streamActivityModeRef.current = idleStreamActivityMode;
+    store.getState().clearStream(sessionId, markSessionSettled);
+  }, [sessionId, store]);
+
+  const reload = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    if (!sessionId) return;
+    const generation = store.getState().markLoading(sessionId, silent);
     try {
       const next = await loadEpitaxySession(sessionId);
-      if (loadSeqRef.current !== loadSeq) return;
-      const nextSession = next?.session ?? null;
-      const sessionSettled = nextSession ? nextSession.isRunning !== true : false;
-      if (sessionSettled) smootherRef.current.clear();
-      setState((current) => ({
-        error: null,
-        isLoading: false,
-        isSessionNotFound: !next,
-        messages: next?.messages ?? [],
-        pendingTurnStartedAt: sessionSettled ? null : current.pendingTurnStartedAt,
-        session: nextSession,
-        streamActivityMode: sessionSettled ? idleStreamActivityMode : current.streamActivityMode,
-        streamingMessageId: sessionSettled ? null : current.streamingMessageId,
-        streamSnapshot: sessionSettled ? null : current.streamSnapshot,
-      }));
+      store.getState().applyLoad(sessionId, generation, next);
     } catch (caught) {
-      if (loadSeqRef.current !== loadSeq) return;
-      setState((current) => ({
-        ...current,
-        error: caught instanceof Error ? caught : new Error(String(caught)),
-        isLoading: false,
-      }));
+      store.getState().applyLoadError(
+        sessionId,
+        generation,
+        caught instanceof Error ? caught : new Error(String(caught)),
+      );
     }
-  }, [clearStreamState, sessionId]);
+  }, [sessionId, store]);
+
+  const beginLocalUserTurn = useCallback((text: string) => {
+    if (!sessionId) return;
+    // Official beginPendingTurn + je turn-start stamp (stable for Gv elapsed).
+    officialMarkTurnStarted(sessionId);
+    store.getState().beginPendingTurn(sessionId, makeOptimisticUserChatMessage(text));
+    setStreamActivityMode("requesting");
+  }, [sessionId, store]);
 
   useEffect(() => {
     let alive = true;
-    void reload().finally(() => {
+    if (!sessionId) return () => { alive = false; };
+    const existing = store.getState().buckets[sessionId];
+    const silent = Boolean(existing && (existing.messages.length > 0 || existing.session));
+    void reload({ silent }).finally(() => {
       if (!alive) return;
     });
     return () => { alive = false; };
-  }, [reload]);
-
-  useEffect(() => {
-    if (!sessionId) return;
-    if (state.error || state.isSessionNotFound) return;
-    if (!state.session && state.messages.length === 0) return;
-    officialSessionDataCache.set(sessionId, state);
-  }, [sessionId, state]);
+  }, [reload, sessionId, store]);
 
   useEffect(() => {
     if (!sessionId) return undefined;
@@ -6073,24 +7981,39 @@ function useEpitaxySessionData(sessionId?: string) {
       if (!isSessionEventForId(event, sessionId)) return;
       const streamMessage = streamEventMessageFromBridgeEvent(event);
       if (streamMessage) {
-        const isStart = isOfficialStreamMessageStart(streamMessage);
-        const streamMessageId = isStart ? officialStreamMessageId(streamMessage) : null;
+        // Official index feed: Pke.feed(sessionId, stream_event.event, parent_tool_use_id)
+        const parentToolUseId = streamMessage.parent_tool_use_id ?? streamMessage.parentToolUseId;
+        const innerEvent = asRecord(streamMessage.event);
+        const isStart = stringValue(innerEvent.type) === "message_start";
+        const streamMessageId = isStart
+          ? (stringValue(asRecord(innerEvent.message).id) ?? stringValue(streamMessage.uuid) ?? null)
+          : null;
         if (isStart) {
           streamGenerationRef.current += 1;
           finalizeStreamGenerationRef.current = null;
+          officialMarkTurnStarted(sessionId);
+          if (streamMessageId) setStreamingMessageId(streamMessageId);
+          store.getState().setStreamActivity(sessionId, {
+            pendingTurnStartedAt: officialGetTurnStartedAt(sessionId) ?? Date.now(),
+            streamActivityMode: "requesting",
+            streamingMessageId: streamMessageId,
+            isRunning: true,
+          });
+        } else if (store.getState().buckets[sessionId]?.session?.isRunning !== true) {
+          store.getState().setStreamActivity(sessionId, { isRunning: true });
         }
-        setState((current) => ({
-          ...current,
-          pendingTurnStartedAt: isStart || current.pendingTurnStartedAt === null ? Date.now() : current.pendingTurnStartedAt,
-          streamActivityMode: streamActivityModeFromStreamEvent(streamMessage, current.streamActivityMode),
-          streamingMessageId: streamMessageId ?? current.streamingMessageId,
-        }));
-        smootherRef.current.feed(streamMessage);
+        // Activity mode from inner event (official stream_event.event).
+        setStreamActivityMode((current) => streamActivityModeFromInnerEvent(innerEvent, current));
+        // Official Pe.feed(sessionId, event, parent) — typewriter via zE smoother.
+        officialStreamFeed(sessionId, streamMessage, parentToolUseId);
         return;
       }
       const transcriptMessage = chatMessageFromBridgeMessageEvent(event);
       if (transcriptMessage) {
-        setState((current) => mergeTranscriptMessageIntoState(current, transcriptMessage));
+        // Official: durable messages stay in the array in CLI order (assistant tool_use
+        // before user tool_result). eke/Xwe suppress *rendering* of the live Anthropic
+        // message.id while Va owns the typewriter — do NOT drop merge here or rke order breaks.
+        store.getState().mergeMessage(sessionId, transcriptMessage);
         return;
       }
       if (shouldReloadTranscriptForEvent(event)) {
@@ -6100,20 +8023,25 @@ function useEpitaxySessionData(sessionId?: string) {
             if (streamGenerationRef.current !== streamGeneration) return;
             finalizeStreamGenerationRef.current = null;
             clearStreamState(true);
-            // Official: after turn settle, promote placeholder titles (desktop summarizeSession / refreshTitleFromMessages).
+            const cached = store.getState().buckets[sessionId];
+            const mayNeedToolResults = (cached?.messages ?? []).some((message) => {
+              const raw = asRecord(message.raw);
+              if (stringValue(raw.type) !== "assistant") return false;
+              const content = asRecord(raw.message).content;
+              if (!Array.isArray(content)) return false;
+              return content.some((block) => stringValue(asRecord(block).type) === "tool_use");
+            });
+            if (mayNeedToolResults) void reload({ silent: true });
             void refreshSessionTitleAfterSettle(sessionId).then((nextSession) => {
               if (!nextSession) return;
               if (streamGenerationRef.current !== streamGeneration) return;
-              setState((current) => ({
-                ...current,
-                session: normalizeSessionSummaryPatch(current.session, nextSession) ?? current.session,
-              }));
+              store.getState().patchSession(sessionId, nextSession);
             });
           };
           if (shouldSettleOfficialStreamForEvent(event)) {
             if (finalizeStreamGenerationRef.current === streamGeneration) return;
             finalizeStreamGenerationRef.current = streamGeneration;
-            void smootherRef.current.settleAfterReveal().finally(() => {
+            void officialStreamSettleAfterReveal(sessionId).finally(() => {
               if (streamGenerationRef.current !== streamGeneration) return;
               finalize();
             });
@@ -6123,30 +8051,82 @@ function useEpitaxySessionData(sessionId?: string) {
         } else if (stringValue(asRecord(event).type) === "session_updated") {
           const nextSession = asRecord(event).session ?? asRecord(asRecord(event).payload).session;
           if (nextSession) {
-            setState((current) => ({
-              ...current,
-              session: normalizeSessionSummaryPatch(current.session, nextSession) ?? current.session,
-            }));
+            // Full session from desktop includes pendingToolPermissions after control_request.
+            const patched = normalizeSessionSummaryPatch(store.getState().buckets[sessionId]?.session ?? null, nextSession);
+            if (patched) store.getState().patchSession(sessionId, patched);
           } else {
-            void reload();
+            void reload({ silent: true });
           }
         } else {
-          void reload();
+          void reload({ silent: true });
         }
+      } else if (
+        stringValue(asRecord(event).type) === "tool_permission_request"
+        || stringValue(asRecord(event).type) === "tool_permission_resolved"
+        || stringValue(asRecord(event).type) === "tool_permission_response_failed"
+      ) {
+        // Outside shouldReload: keep pendingToolPermissions on the code session for hydrate / isAwaitingReply.
+        void bridgeGetSessionPending(sessionId).then((pending) => {
+          const current = store.getState().buckets[sessionId]?.session ?? null;
+          if (!current) return;
+          store.getState().patchSession(sessionId, {
+            ...current,
+            pendingToolPermissions: pending,
+          });
+        });
       }
     };
     const offCode = desktopBridge.LocalSessions.onEvent?.(handleEvent);
     return () => {
       offCode?.();
     };
-  }, [clearStreamState, reload, sessionId]);
+  }, [clearStreamState, reload, sessionId, store]);
 
-  const activeStreamingMessageId = state.streamingMessageId ?? state.streamSnapshot?.messageId ?? null;
-  const parsedEntries = useMemo(() => parseOfficialTranscriptEntries(state.messages, activeStreamingMessageId), [activeStreamingMessageId, state.messages]);
-  const entries = useMemo(() => mergeOfficialStreamSnapshot(parsedEntries, state.streamSnapshot), [parsedEntries, state.streamSnapshot]);
-  const streamTokenEstimate = useMemo(() => estimateOfficialStreamSnapshotTokens(state.streamSnapshot), [state.streamSnapshot]);
-  const isResponding = state.streamActivityMode !== idleStreamActivityMode || state.streamSnapshot !== null || state.streamingMessageId !== null || state.session?.isRunning === true;
-  return { ...state, entries, isResponding, reload, streamTokenEstimate };
+  // Official Ja
+  const isLoading = Boolean(sessionId) && (bucket.isTranscriptPending || bucket.isMetaPending);
+  const activeStreamingMessageId = streamingMessageId ?? streamSnapshot?.messageId ?? null;
+  // Official Xa = eke/Xwe(messages, streamingMessageId); Ya = Kwe(Xa, Va) only.
+  const parsedEntries = useMemo(
+    () => parseOfficialTranscriptEntries(bucket.messages, activeStreamingMessageId),
+    [activeStreamingMessageId, bucket.messages],
+  );
+  const isResponding =
+    streamActivityMode !== idleStreamActivityMode
+    || streamSnapshot !== null
+    || streamingMessageId !== null
+    || bucket.session?.isRunning === true;
+  // Official Ya = Kwe(Xa, Va). Tool settle is eke/rke object-ref mutation — no settleOrphan invent.
+  const entries = useMemo(
+    () => mergeOfficialStreamSnapshot(parsedEntries, streamSnapshot),
+    [parsedEntries, streamSnapshot],
+  );
+  const streamTokenEstimate = sessionId
+    ? officialGetStreamTokenEstimate(sessionId) || estimateOfficialStreamSnapshotTokens(streamSnapshot)
+    : estimateOfficialStreamSnapshotTokens(streamSnapshot);
+  const pendingTurnStartedAt = sessionId
+    ? (officialGetTurnStartedAt(sessionId) ?? bucket.pendingTurnStartedAt)
+    : bucket.pendingTurnStartedAt;
+
+  const stopLiveTurn = useCallback(async () => {
+    // Official wt(): clear local Va/stream flags immediately so the stop button
+    // and loader drop without waiting for CLI process exit / reload.
+    clearStreamState(true);
+  }, [clearStreamState]);
+
+  return {
+    beginLocalUserTurn,
+    entries,
+    error: bucket.error,
+    isLoading,
+    isResponding,
+    isSessionNotFound: bucket.isSessionNotFound,
+    messages: bucket.messages,
+    pendingTurnStartedAt,
+    reload,
+    session: bucket.session,
+    stopLiveTurn,
+    streamTokenEstimate,
+  };
 }
 
 async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMessage[]; session: SessionSummary } | null> {
@@ -6154,9 +8134,40 @@ async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMe
   const session = await bridge.getSession(sessionId).catch(() => null);
   if (!session) return null;
   const transcript = await bridge.getTranscript?.(sessionId).catch(() => undefined);
-  const rawMessages = transcript?.length ? transcript : session.messages ?? [];
-  const messages = rawMessages.filter((message) => stringValue(asRecord(message.raw).type) !== "stream_event");
-  return { messages, session: { ...session, messages: rawMessages } };
+  const sessionMessages = session.messages ?? [];
+  const transcriptMessages = transcript?.length ? transcript : [];
+  // Assistant identity = Anthropic message.id (one turn → one durable row).
+  // Outer CLI uuid is per NDJSON event; using it as the only key duplicated the same turn.
+  // User identity stays outer uuid/id (each user event is unique).
+  const identityOf = (message: ChatMessage) => {
+    const raw = asRecord(message.raw);
+    const nested = asRecord(raw.message);
+    if (message.role === "assistant" || stringValue(raw.type) === "assistant") {
+      return stringValue(nested.id) ?? stringValue(raw.message_id) ?? stringValue(raw.uuid) ?? stringValue(raw.id) ?? message.id;
+    }
+    return stringValue(raw.uuid) ?? stringValue(raw.id) ?? message.id;
+  };
+  const isStreamEvent = (message: ChatMessage) => stringValue(asRecord(message.raw).type) === "stream_event";
+  const byId = new Map<string, ChatMessage>();
+  const order: string[] = [];
+  const put = (message: ChatMessage) => {
+    if (isStreamEvent(message)) return;
+    const key = identityOf(message);
+    const existing = byId.get(key);
+    if (!existing) {
+      byId.set(key, message);
+      order.push(key);
+      return;
+    }
+    if ((message.text?.length ?? 0) >= (existing.text?.length ?? 0)) {
+      byId.set(key, message);
+    }
+  };
+  // Preserve transcript order first, then append durable-only rows (optimistic user etc.).
+  for (const message of transcriptMessages) put(message);
+  for (const message of sessionMessages) put(message);
+  const messages = order.map((key) => byId.get(key)!).filter(Boolean);
+  return { messages, session: { ...session, messages } };
 }
 
 async function sendMessageToSession(sessionId: string, text: string, input?: SendMessageInput) {
@@ -6166,6 +8177,27 @@ async function sendMessageToSession(sessionId: string, text: string, input?: Sen
     return;
   }
   await desktopBridge.LocalSessions.sendMessage?.(sessionId, text, input);
+}
+
+/** Optimistic user transcript row so send does not wait on getTranscript (official seedTranscript path). */
+function makeOptimisticUserChatMessage(text: string): ChatMessage {
+  const createdAt = new Date().toISOString();
+  const id = `local-user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return {
+    id,
+    role: "user",
+    text,
+    createdAt,
+    raw: {
+      type: "user",
+      uuid: id,
+      timestamp: createdAt,
+      message: {
+        role: "user",
+        content: [{ type: "text", text }],
+      },
+    },
+  };
 }
 
 function inferSessionType(sessionId?: string, session?: SessionSummary): EpitaxySessionType {
@@ -6202,6 +8234,7 @@ function shouldReloadTranscriptForEvent(event: unknown) {
     return messageType === "result" || messageType === "error" || messageType === "completed";
   }
   // session_updated carries title promotion from desktop summarize/setRunning.
+  // Do NOT reload transcript for tool_permission_* — that would thrash the stream/approval card.
   return type === "transcript_loaded"
     || type === "result"
     || type === "completed"
@@ -6211,6 +8244,15 @@ function shouldReloadTranscriptForEvent(event: unknown) {
     || type === "stopped"
     || type === "permission_mode_changed"
     || type === "session_updated";
+}
+
+async function bridgeGetSessionPending(sessionId: string): Promise<SessionSummary["pendingToolPermissions"]> {
+  try {
+    const session = await desktopBridge.LocalSessions.getSession(sessionId);
+    return session?.pendingToolPermissions ?? [];
+  } catch {
+    return [];
+  }
 }
 
 function isPlaceholderCodingTitle(title?: string | null) {
@@ -6234,14 +8276,12 @@ async function refreshSessionTitleAfterSettle(sessionId: string): Promise<Sessio
     const title = typeof result.title === "string" ? result.title : null;
     const sessionPatch = result.session ?? (title ? { id: sessionId, title } : null);
     if (!sessionPatch && !title) return null;
-    const cache = officialSessionDataCache.get(sessionId);
+    const current = officialCodeSessionStore.getState().buckets[sessionId]?.session ?? null;
     const nextSession = normalizeSessionSummaryPatch(
-      cache?.session ?? null,
+      current,
       sessionPatch ?? { id: sessionId, title },
     );
-    if (nextSession && cache) {
-      officialSessionDataCache.set(sessionId, { ...cache, session: nextSession });
-    }
+    if (nextSession) officialCodeSessionStore.getState().patchSession(sessionId, nextSession);
     return nextSession;
   } catch {
     // Title refresh is best-effort.
@@ -6252,14 +8292,23 @@ async function refreshSessionTitleAfterSettle(sessionId: string): Promise<Sessio
 function normalizeSessionSummaryPatch(current: SessionSummary | null, patch: unknown): SessionSummary | null {
   if (!patch || typeof patch !== "object") return current;
   const raw = asRecord(patch);
-  const id = stringValue(raw.id) ?? current?.id;
+  const id = stringValue(raw.id) ?? stringValue(raw.sessionId) ?? current?.id;
   if (!id) return current;
   const title = stringValue(raw.title);
   const updatedAtMs = typeof raw.updatedAtMs === "number"
     ? raw.updatedAtMs
     : typeof raw.updatedAt === "string"
       ? Date.parse(raw.updatedAt) || current?.updatedAtMs
-      : current?.updatedAtMs;
+      : typeof raw.lastActivityAt === "string"
+        ? Date.parse(raw.lastActivityAt) || current?.updatedAtMs
+        : current?.updatedAtMs;
+  // Keep approval queue on session_updated. Dropping pendingToolPermissions here made
+  // isAwaitingReply / hydrate think there was nothing to approve after permission request.
+  const pendingToolPermissions = Array.isArray(raw.pendingToolPermissions)
+    ? (raw.pendingToolPermissions as NonNullable<SessionSummary["pendingToolPermissions"]>)
+    : current?.pendingToolPermissions;
+  const permissionMode = stringValue(raw.permissionMode) ?? current?.permissionMode;
+  const model = stringValue(raw.model) ?? current?.model;
   if (!current) {
     return {
       id,
@@ -6269,6 +8318,9 @@ function normalizeSessionSummaryPatch(current: SessionSummary | null, patch: unk
       isRunning: raw.isRunning === true,
       isArchived: raw.isArchived === true,
       isUnread: raw.isUnread === true,
+      pendingToolPermissions,
+      permissionMode,
+      model,
     } as SessionSummary;
   }
   return {
@@ -6281,6 +8333,9 @@ function normalizeSessionSummaryPatch(current: SessionSummary | null, patch: unk
     isAgentCompleted: typeof raw.isAgentCompleted === "boolean" ? raw.isAgentCompleted : current.isAgentCompleted,
     hasCompleted: typeof raw.hasCompleted === "boolean" ? raw.hasCompleted : current.hasCompleted,
     error: stringValue(raw.error) ?? current.error,
+    pendingToolPermissions,
+    permissionMode,
+    model,
   };
 }
 
@@ -6295,7 +8350,14 @@ function chatMessageFromBridgeMessageEvent(event: unknown): ChatMessage | null {
   const raw = asRecord(event);
   if (raw.type !== "message") return null;
   const message = asRecord(raw.message);
-  if (message.type === "stream_event" || message.type === "result" || message.type === "error") return null;
+  if (message.type === "stream_event") return null;
+  // Official eke keeps result / system task events in the transcript stream so
+  // turn_error + task_event items can render without waiting for full reload.
+  if (message.type === "result") {
+    if (message.is_error !== true && message.isError !== true) return null;
+    return chatMessageFromRawTranscriptEvent(message);
+  }
+  if (message.type === "error") return null;
   const type = stringValue(message.type);
   if (type !== "assistant" && type !== "user" && type !== "system") return null;
   return chatMessageFromRawTranscriptEvent(message);
@@ -6344,27 +8406,6 @@ function rawTranscriptEventText(rawEvent: Record<string, unknown>) {
   }).join("");
 }
 
-function mergeTranscriptMessageIntoState(current: SessionDataState, nextMessage: ChatMessage): SessionDataState {
-  const rawMessages = current.session?.messages ?? current.messages;
-  const nextRawMessages = upsertTranscriptMessage(rawMessages, nextMessage);
-  if (nextRawMessages === rawMessages) return current;
-  return {
-    ...current,
-    messages: nextRawMessages.filter((message) => stringValue(asRecord(message.raw).type) !== "stream_event"),
-    session: current.session ? { ...current.session, messages: nextRawMessages } : current.session,
-  };
-}
-
-function upsertTranscriptMessage(messages: ChatMessage[], nextMessage: ChatMessage) {
-  const nextIdentity = officialMessageIdentity(nextMessage);
-  const existingIndex = messages.findIndex((message) => officialMessageIdentity(message) === nextIdentity);
-  if (existingIndex < 0) return [...messages, nextMessage];
-  if (messages[existingIndex] === nextMessage) return messages;
-  const nextMessages = messages.slice();
-  nextMessages[existingIndex] = nextMessage;
-  return nextMessages;
-}
-
 function isOfficialStreamMessageStart(streamMessage: Record<string, unknown>) {
   return stringValue(asRecord(streamMessage.event).type) === "message_start";
 }
@@ -6373,6 +8414,26 @@ function officialStreamMessageId(streamMessage: Record<string, unknown>) {
   const event = asRecord(streamMessage.event);
   const message = asRecord(event.message);
   return stringValue(message.id) ?? stringValue(streamMessage.uuid) ?? null;
+}
+
+/** Activity mode from official inner stream event (`content_block_delta` etc.). */
+function streamActivityModeFromInnerEvent(event: Record<string, unknown>, currentMode: StreamActivityMode): StreamActivityMode {
+  const eventType = stringValue(event.type);
+  if (eventType === "message_start") return "requesting";
+  if (eventType === "message_stop") return currentMode;
+  if (eventType === "content_block_start") {
+    const contentBlock = asRecord(event.content_block);
+    const blockType = stringValue(contentBlock.type);
+    if (blockType === "thinking") return "thinking";
+    if (blockType === "tool_use") return "tool-use";
+  }
+  if (eventType === "content_block_delta") {
+    const delta = asRecord(event.delta);
+    const deltaType = stringValue(delta.type);
+    if (deltaType === "thinking_delta") return "thinking";
+    if (deltaType === "text_delta" || deltaType === "connector_text_delta") return "responding";
+  }
+  return currentMode;
 }
 
 function shouldClearOfficialStreamForEvent(event: unknown) {
@@ -6433,6 +8494,44 @@ function parseJsonObject(value: string): Record<string, unknown> | null {
 function officialMessageIdentity(message: ChatMessage) {
   const raw = asRecord(message.raw);
   return stringValue(raw.uuid) ?? stringValue(raw.id) ?? message.id;
+}
+
+function inlinePermissionFromPending(item: NonNullable<SessionSummary["pendingToolPermissions"]>[number]): InlineToolPermissionRequest {
+  return {
+    alwaysAllowScope: item.alwaysAllowScope,
+    decisionReason: item.decisionReason,
+    description: item.description,
+    hasAlwaysAllow: item.hasAlwaysAllow,
+    input: asRecord(item.input),
+    requestId: item.requestId,
+    sessionId: item.sessionId,
+    toolName: item.toolName,
+    toolUseId: item.toolUseId,
+  };
+}
+
+function mergeInlinePermissionRequests(
+  current: InlineToolPermissionRequest[],
+  incoming: InlineToolPermissionRequest[],
+) {
+  if (incoming.length === 0) return current;
+  if (current.length === 0) return incoming;
+  const byId = new Map(current.map((item) => [item.requestId, item]));
+  for (const item of incoming) byId.set(item.requestId, item);
+  // Preserve arrival order of existing requests, then append new ids.
+  const ordered: InlineToolPermissionRequest[] = [];
+  const seen = new Set<string>();
+  for (const item of current) {
+    const next = byId.get(item.requestId);
+    if (next) {
+      ordered.push(next);
+      seen.add(item.requestId);
+    }
+  }
+  for (const item of incoming) {
+    if (!seen.has(item.requestId)) ordered.push(item);
+  }
+  return ordered;
 }
 
 function normalizeToolPermissionRequest(event: unknown, activeSessionId: string): InlineToolPermissionRequest | null {

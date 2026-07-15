@@ -79,6 +79,31 @@ const checks = [
       && /raw\?\.submitTranscriptFeedback/.test(source.bridgeAdapter),
   },
   {
+    group: "对话流",
+    name: "code transcript supports attach-as-context into session composer",
+    test: () => /attachAsContext/.test(source.tile)
+      && /Attach message as context|Attach selection as context/.test(source.tile)
+      && /attachRef/.test(source.tile)
+      && /tiptapDocFromPlainText/.test(source.tile),
+  },
+  {
+    group: "对话流",
+    name: "code API error card can reset rate limits via org API",
+    test: () => /postOrganizationResetRateLimits/.test(source.tile)
+      && /Reset limits/.test(source.tile)
+      && /canResetRateLimitsFromBootstrap/.test(source.tile)
+      && /reset_rate_limits/.test(fs.readFileSync(path.join(root, "src/features/settings/accountSettingsApi.ts"), "utf8")),
+  },
+  {
+    group: "对话流",
+    name: "code transcript parses result turn_error and local_command context/stats",
+    test: () => /kind: "turn_error"/.test(source.tile)
+      && /parseOfficialContextUsageMarkdown/.test(source.tile)
+      && /parseOfficialCodeStatsXml/.test(source.tile)
+      && /CodeTurnErrorBlock/.test(source.tile)
+      && /CodeTaskEventChip/.test(source.tile),
+  },
+  {
     group: "底部输入框",
     name: "composer uses TipTap and supports send, stop, Enter submit, Shift+Enter newline, bash escape",
     test: () => /function ExistingSessionComposer/.test(source.tile)

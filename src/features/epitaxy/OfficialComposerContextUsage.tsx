@@ -65,7 +65,8 @@ type OfficialContextUsageModel = {
   totalTokens: number;
 };
 
-function OfficialContextWindowUsage({ className = "p-[12px] rounded-r6 bg-t1 max-w-[520px]", compact = false, defaultExpanded = false, usage }: { className?: string; compact?: boolean; defaultExpanded?: boolean; usage: ContextUsage }) {
+/** Official Ku transcript/composer context card (c119 / index dCe usage shape). */
+export function OfficialContextWindowUsage({ className = "p-[12px] rounded-r6 bg-t1 max-w-[520px]", compact = false, defaultExpanded = false, usage }: { className?: string; compact?: boolean; defaultExpanded?: boolean; usage: ContextUsage }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const actualExpanded = compact ? defaultExpanded : expanded;
   const model = useMemo(() => normalizeOfficialContextUsageModel(usage), [usage]);

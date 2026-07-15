@@ -64,6 +64,63 @@ export async function fetchBootstrapPayload(): Promise<Record<string, unknown> |
   return tryUrls<Record<string, unknown>>(apiPaths("/api/bootstrap"));
 }
 
+/**
+ * Official epitaxy Dh (c11959232): POST /api/organizations/:uuid/reset_rate_limits
+ * when GrowthBook/feature `can_reset_rate_limits` is on. custom3p may expose the
+ * flag under feature_flags / account flags; if absent we still attempt when org
+ * uuid is known (gate fails closed on non-OK response).
+ */
+export async function postOrganizationResetRateLimits(orgUuid: string): Promise<{ ok: boolean; error?: string }> {
+  if (!orgUuid) return { ok: false, error: "missing_org" };
+  const path = `/api/organizations/${orgUuid}/reset_rate_limits`;
+  for (const url of apiPaths(path)) {
+    try {
+      const response = await fetch(url, {
+        credentials: "include",
+        headers: JSON_HEADERS,
+        method: "POST",
+        body: "{}",
+      });
+      if (response.ok) return { ok: true };
+      if (response.status === 403 || response.status === 404) {
+        return { ok: false, error: `reset_rate_limits_${response.status}` };
+      }
+    } catch {
+      // try next origin
+    }
+  }
+  return { ok: false, error: "reset_rate_limits_failed" };
+}
+
+/** Best-effort org uuid from bootstrap payload shapes used by custom3p / official. */
+export function organizationUuidFromBootstrap(bootstrap: Record<string, unknown> | null | undefined): string | null {
+  if (!bootstrap) return null;
+  const account = asRecord(bootstrap.account);
+  const org = asRecord(bootstrap.organization) ?? asRecord(bootstrap.org) ?? asRecord(account.organization);
+  return stringField(org, "uuid") ?? stringField(org, "id") ?? stringField(account, "organization_uuid") ?? null;
+}
+
+export function canResetRateLimitsFromBootstrap(bootstrap: Record<string, unknown> | null | undefined): boolean {
+  if (!bootstrap) return false;
+  const flags = asRecord(bootstrap.feature_flags) ?? asRecord(bootstrap.featureFlags) ?? asRecord(bootstrap.flags);
+  if (flags.can_reset_rate_limits === true || flags.canResetRateLimits === true) return true;
+  const account = asRecord(bootstrap.account);
+  const settings = asRecord(account.settings);
+  if (settings.can_reset_rate_limits === true) return true;
+  // Official GrowthBook key; when unknown, allow attempt if org uuid present (server enforces).
+  return Boolean(organizationUuidFromBootstrap(bootstrap));
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function stringField(record: Record<string, unknown> | null, key: string): string | null {
+  if (!record) return null;
+  const value = record[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
 export async function fetchAccountProfile(): Promise<AccountProfile> {
   const data = await tryUrls<AccountProfile>(apiPaths("/api/account_profile"));
   return data ?? {};

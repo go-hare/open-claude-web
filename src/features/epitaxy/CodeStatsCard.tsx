@@ -12,30 +12,34 @@ import {
   type ModelUsageDisplay,
 } from "./codeStatsDisplay";
 
-export function CodeStatsCard() {
-  const [stats, setStats] = useState<CodeStats | null>(null);
-  const [isLoading, setLoading] = useState(true);
+/** Official $x: stats data → qx card; null/loading → Hx skeleton. Optional `stats` for transcript-embedded local_command output. */
+export function CodeStatsCard({ stats: statsProp }: { stats?: CodeStats | null } = {}) {
+  const [fetchedStats, setFetchedStats] = useState<CodeStats | null>(null);
+  const [isLoading, setLoading] = useState(statsProp === undefined);
   const [view, setView] = useState<"overview" | "models">("overview");
   const [range, setRange] = useState<CodeStatsRange>("all");
+  const useProp = statsProp !== undefined;
+  const stats = useProp ? statsProp : fetchedStats;
 
   useEffect(() => {
+    if (useProp) return undefined;
     let alive = true;
     setLoading(true);
     void desktopBridge.LocalSessions.getCodeStats?.().then((nextStats) => {
-      if (alive) setStats(nextStats);
+      if (alive) setFetchedStats(nextStats);
     }).finally(() => {
       if (alive) setLoading(false);
     });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [useProp]);
 
   const display = useMemo(() => buildCodeStatsDisplay(stats, range), [range, stats]);
   if (isLoading || !stats) return <CodeStatsSkeletonCard />;
 
   return (
-    <div className="flex flex-col gap-[20px] p-[12px] pt-[8px] rounded-r6 bg-t1 max-w-[480px]">
+    <div className="flex flex-col gap-[20px] p-[12px] pt-[8px] rounded-r6 bg-t1 max-w-[480px]" data-official-source="c11959232-h_zsw3wI.js:$x/qx">
       <div className="flex items-center gap-g4 min-w-0">
         <SegmentedTabs items={[{ label: "概览", value: "overview" }, { label: "模型", value: "models" }]} onValueChange={(value) => setView(value === "models" ? "models" : "overview")} value={view} />
         <span className="flex-1" />

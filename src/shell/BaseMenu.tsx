@@ -50,6 +50,19 @@ export function BaseMenuItem({ children, checked, checkedRole = "checkbox", clas
   );
 }
 
+/** Official Cd.Item path for ContextMenu (not Menu.Item). */
+export function BaseContextMenuItem({ children, className, onClick }: { children: ReactNode; className?: string; onClick?: () => void }) {
+  return (
+    <ContextMenu.Item className={`${itemClassName} ${className ?? ""}`} onClick={onClick}>
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+    </ContextMenu.Item>
+  );
+}
+
+export function BaseContextMenuSeparator() {
+  return <ContextMenu.Separator className={separatorClassName} />;
+}
+
 export function BaseMenuSeparator() {
   return <Menu.Separator className={separatorClassName} />;
 }

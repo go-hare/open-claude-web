@@ -14,6 +14,7 @@ import { SessionRowActions, useSessionRowActions } from "./SessionRowActions";
 import { SessionRowMenuContent, type RowAction } from "./SessionRowMenus";
 import { SidebarSectionHeader } from "./SidebarSectionHeader";
 import { canOpenSessionInSplit, selectedSessionIdFromPath, sessionPath } from "./sessionPaths";
+import { officialCodeSessionStore } from "../features/epitaxy/session/officialCodeSessionStore";
 
 type RecentsSectionProps = {
   frame: FrameStore;
@@ -30,15 +31,35 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary | null>(null);
   const openSessionId = selectedSessionIdFromPath(window.location.pathname);
 
+  const [isLoadingLocal, setIsLoadingLocal] = useState(true);
+
   useEffect(() => {
     let mounted = true;
     const source = desktopBridge.LocalSessions;
-    const loadSessions = () => source.list().then((items) => {
-      if (mounted) setSessions([...items].sort(byNewest));
-    });
+    // Official Pw: isLoadingLocal | isLoadingRemote — we only have LocalSessions list today.
+    const loadSessions = (opts?: { silent?: boolean }) => {
+      if (!opts?.silent && mounted) setIsLoadingLocal(true);
+      return source.list().then((items) => {
+        if (!mounted) return;
+        const sorted = [...items].sort(byNewest);
+        setSessions(sorted);
+        setIsLoadingLocal(false);
+        // Official: session meta is shared with chat buckets — seed openSession meta so
+        // selecting a recent can paint title/cwd immediately from the same store as tm.
+        const store = officialCodeSessionStore.getState();
+        for (const session of sorted) {
+          const existing = store.buckets[session.id];
+          if (existing?.session && existing.messages.length > 0) continue;
+          store.openSession(session.id, session);
+        }
+      }).catch(() => {
+        if (mounted) setIsLoadingLocal(false);
+      });
+    };
     void loadSessions();
     const unsubscribe = source.onEvent?.(() => {
-      void loadSessions();
+      // Event-driven refresh stays silent so the list does not flash loading chrome.
+      void loadSessions({ silent: true });
     });
     return () => {
       mounted = false;
@@ -62,7 +83,8 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
   const groups = useMemo(() => filter.groupBy === "custom"
     ? buildCustomGroups(recentsSessions, filter, frame, text)
     : buildRecentsGroups(recentsSessions, filter, text), [filter, frame, recentsSessions, text]);
-  const rows = useMemo(() => groups.flatMap((group) => group.sessions).slice(0, 20), [groups]);
+  // Official recents sidebar is not hard-capped at 20; keep full filtered/grouped list (scroll in section).
+  const rows = useMemo(() => groups.flatMap((group) => group.sessions), [groups]);
   const rawActions = useSessionRowActions(frame, setSessions);
   const actions = useCallback((session: SessionSummary, action: RowAction) => {
     if (action === "rename") {
@@ -115,7 +137,15 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
       <section data-kind="code" className="flex min-h-0 flex-1 flex-col gap-px">
         <div className="flex-1 min-h-[120px] overflow-hidden">
           <SidebarSectionHeader collapsed={recentsCollapsed} onToggle={() => frame.toggleGroupCollapsed("recents")} trailing={<RecentsControls mode="code" sessions={sessions} value={filter} onChange={updateFilter} />}>{text.recent}</SidebarSectionHeader>
-          {!recentsCollapsed && (rows.length > 0 ? <RecentRows filter={filter} frame={frame} groups={groups} onAction={actions} renderActions={renderActions} selectedSessionId={openSessionId} onNavigate={onNavigate} rows={rows} /> : sessions.length > 0 ? <div className="px-[var(--df-row-px)] py-1 text-xs text-text-500">{text.noFilteredSessions}</div> : null)}
+          {!recentsCollapsed && (
+            isLoadingLocal && sessions.length === 0
+              ? <div className="px-[var(--df-row-px)] py-2 text-xs text-text-500" role="status">Loading…</div>
+              : rows.length > 0
+                ? <RecentRows filter={filter} frame={frame} groups={groups} onAction={actions} renderActions={renderActions} selectedSessionId={openSessionId} onNavigate={onNavigate} rows={rows} />
+                : sessions.length > 0
+                  ? <div className="px-[var(--df-row-px)] py-1 text-xs text-text-500">{text.noFilteredSessions}</div>
+                  : null
+          )}
         </div>
       </section>
       <ConfirmDialog

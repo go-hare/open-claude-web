@@ -67,6 +67,7 @@ class OfficialCompletionSmoother<TBlock> {
   blocksList: TBlock[] = [];
   blocksMutatedSinceLastDelivery = false;
   cachedVisibility = true;
+  // Official zE default ceil_reveal=false; chat FE may flip via growthbook. Code path keeps default.
   ceilReveal = false;
   checkVisibility?: () => boolean;
   dontSmooth = false;
@@ -165,9 +166,11 @@ class OfficialCompletionSmoother<TBlock> {
   }
 
   async task(deliver: (blocks: TBlock[]) => void, signal: AbortSignal) {
+    // Official zE.task (index-BELzQL5P): 60fps reveal loop; document.hidden short-circuits;
+    // no extra full deliver after the loop — flush/settle drives the final paint.
     const generation = this.generation;
     while (this.generation === generation && !this.smootherDone && !signal.aborted) {
-      if (this.respectDocumentVisibility && document.hidden) {
+      if (document.hidden) {
         if (this.modelDone) {
           this.x = this.totalCompletionLength;
           this.blocksMutatedSinceLastDelivery = false;
@@ -199,11 +202,6 @@ class OfficialCompletionSmoother<TBlock> {
       }
       await delay(isVisible ? officialFrameMs : 100);
     }
-    if (this.generation === generation && !signal.aborted && this.blocksList.length > 0) {
-      this.x = this.totalCompletionLength;
-      this.blocksMutatedSinceLastDelivery = false;
-      deliver(sliceBlocks(this.blockOperations, this.blocksList, this.totalCompletionLength));
-    }
   }
 
   private getAdjustedIndex(index: number) {
@@ -223,16 +221,28 @@ class OfficialCompletionSmoother<TBlock> {
       return sliceBlocks(this.blockOperations, this.blocksList, this.totalCompletionLength);
     }
 
+    // Official zE._get_smoothed_completion (index-BELzQL5P) — no local step caps.
     const elapsed = (Date.now() - this.start) / 1000;
     const maxChars = this.arrivals[this.arrivals.length - 1][1] + (this.modelDone || this.forceSmootherDone ? 100 : 0);
     const targetTime = 0.9 * elapsed - 0.3;
     const arrivalsBeforeDeadline = this.arrivals.filter((arrival) => arrival[0] < targetTime).map((arrival) => arrival[1]);
-    const minChars = arrivalsBeforeDeadline[arrivalsBeforeDeadline.length - 1];
-    const nextX = bisectLower((candidate) => {
-      const velocity = (candidate - this.x) / (elapsed - this.t);
-      const invDt = 1 / (elapsed - this.t);
-      return 2 * (this.forceSmootherDone ? 0.01 * this.gamma : this.gamma) * invDt * (velocity - this.v) - 1 / (candidate - minChars) + 1 / (maxChars - candidate);
-    }, minChars, maxChars);
+    const minChars = arrivalsBeforeDeadline[arrivalsBeforeDeadline.length - 1] ?? 0;
+    if (!(maxChars > minChars) || !(elapsed > this.t) || minChars === undefined) {
+      // Official throws on bad window; keep last x to avoid killing the 60fps task.
+      this.smoothedCompletionIsUnchanged = true;
+      return sliceBlocks(this.blockOperations, this.blocksList, this.ceilReveal ? Math.ceil(this.x) : this.x);
+    }
+    let nextX = minChars;
+    try {
+      nextX = bisectLower((candidate) => {
+        const velocity = (candidate - this.x) / (elapsed - this.t);
+        const invDt = 1 / (elapsed - this.t);
+        return 2 * (this.forceSmootherDone ? 0.01 * this.gamma : this.gamma) * invDt * (velocity - this.v) - 1 / (candidate - minChars) + 1 / (maxChars - candidate);
+      }, minChars, maxChars);
+    } catch {
+      this.smoothedCompletionIsUnchanged = true;
+      return sliceBlocks(this.blockOperations, this.blocksList, this.ceilReveal ? Math.ceil(this.x) : this.x);
+    }
     const velocity = (nextX - this.x) / (elapsed - this.t);
     this.v = this.alpha * this.v + (1 - this.alpha) * velocity;
     this.smoothedCompletionIsUnchanged = this.x >= this.totalCompletionLength;
@@ -306,24 +316,34 @@ export class OfficialSessionStreamSmoother {
     this.notifySettled();
   }
 
+  /** Official Pke.setVisibility → smoother.checkVisibility */
+  setVisibility(check: () => boolean) {
+    this.smoother.checkVisibility = check;
+  }
+
   feed(streamMessage: Record<string, unknown>) {
+    // Official Pke.feed(sessionId, event, parent): if (null !== parent) return;
     if (streamMessage.parent_tool_use_id !== undefined && streamMessage.parent_tool_use_id !== null) return;
     const event = asRecord(streamMessage.event);
     const eventType = stringValue(event.type);
     if (eventType === "message_start") {
+      // Official: messageId = event.message.id; cleared=false; restart; dont_smooth=false; on_completion=undefined; task(...)
+      // generation++ on restart is what stops the prior loop (Pke does not AbortController.abort).
       const message = asRecord(event.message);
       this.messageId = stringValue(message.id) ?? stringValue(streamMessage.uuid) ?? `stream_${Date.now()}`;
       this.cleared = false;
-      this.abort.abort();
-      this.abort = new AbortController();
       this.smoother.restart();
       this.smoother.dontSmooth = false;
       this.smoother.onCompletion = undefined;
+      // Recreate signal without aborting mid-frame of the previous generation when possible.
+      if (this.abort.signal.aborted) this.abort = new AbortController();
       const messageId = this.messageId;
       const generation = this.smoother.generation;
+      const signal = this.abort.signal;
       void this.smoother.task((blocks) => {
+        // Official Oke: only emit when blocks.length !== 0
         if (blocks.length > 0) this.emit({ blocks, messageId: this.messageId });
-      }, this.abort.signal).finally(() => {
+      }, signal).finally(() => {
         if (!this.cleared && this.messageId === messageId && this.smoother.generation === generation) this.notifySettled();
       });
       return;
