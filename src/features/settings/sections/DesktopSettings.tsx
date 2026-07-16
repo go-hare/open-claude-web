@@ -5,6 +5,7 @@ import { useDesktopNativeSettings, useDesktopPreferences } from "../useDesktopPr
 /**
  * Official Desktop General bs (c71860c77-B8t_5Z9x):
  * General desktop settings; Run on startup; Quick Entry; Menu bar (mac) / System tray (win); Keep computer awake.
+ * Browser Use ts: allowAllBrowserActions via AppPreferences (same preferences store).
  */
 export function DesktopSettings() {
   const [preferences, setPreference] = useDesktopPreferences();
@@ -20,6 +21,18 @@ export function DesktopSettings() {
         <SettingsRow description={trayDescription} label={trayLabel} control={<Switch checked={nativeSettings.menuBarEnabled} disabled={nativeSettings.isLoading} onCheckedChange={nativeActions.setMenuBarEnabled} />} />
         <SettingsRow description="当 Claude 打开时，防止电脑因空闲而休眠，以便定时任务继续运行。显示器仍可关闭，合上笔记本盖后仍会进入睡眠。" label="保持电脑唤醒" control={<Switch checked={!!preferences.keepAwakeEnabled} onCheckedChange={(checked) => setPreference("keepAwakeEnabled", checked)} />} />
         {nativeSettings.error ? <p className="py-sm text-footnote text-danger-000" role="status">{nativeSettings.error}</p> : null}
+      </SettingsSection>
+      <SettingsSection title="Browser Use">
+        <SettingsRow
+          description="Claude will browse and interact with any website in Chrome without asking. Applies to new sessions. This setting can put your data at risk."
+          label="Allow all browser actions"
+          control={
+            <Switch
+              checked={!!preferences.allowAllBrowserActions}
+              onCheckedChange={(checked) => setPreference("allowAllBrowserActions", checked)}
+            />
+          }
+        />
       </SettingsSection>
     </main>
   );

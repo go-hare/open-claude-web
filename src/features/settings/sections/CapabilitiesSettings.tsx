@@ -1,14 +1,21 @@
-import { useState } from "react";
 import { SettingsRow, SettingsSection, Switch } from "../SettingsShell";
+import { useSettingsBootstrap } from "../useSettingsBootstrap";
 
 /**
  * Official Capabilities Fe (c71860c77-CQj8rzol):
- * <main><Te Memory /><Ce General /><_e Visuals /><Me null /><_Component15 /><Ee Skills /></main>
- * Memory/General tool arms need account GrowthBook + API; ship Visuals Artifacts + Skills migration shell.
- * Do not invent gated Memory/tool-search UI without arms — leave section slots empty rather than fake rows.
+ * <main className="flex flex-col pb-10">
+ *   Te Memory · Ce General · _e Visuals · Me (null) · ee · Ee Skills
+ * Visuals Artifacts: account.settings.preview_feature_uses_artifacts ?? true via mutate m()
+ *   (same account/settings PATCH as Claude Code ccr_* keys).
+ * AI-powered artifacts / Inline visualizations / Memory / CSV suggestions need GrowthBook arms —
+ * leave those out rather than invent rows. Skills migration shell matches Ee when skills flag on.
  */
 export function CapabilitiesSettings() {
-  const [artifacts, setArtifacts] = useState(true);
+  const { bootstrap, updateAccountSetting } = useSettingsBootstrap();
+  const settings = bootstrap.account?.settings ?? {};
+  // Official: b = l?.settings.preview_feature_uses_artifacts ?? !0
+  const artifactsEnabled = settings.preview_feature_uses_artifacts !== false;
+
   return (
     <main className="flex flex-col pb-10">
       {/* Official Te Memory / Ce General: omitted until entitlement arms exist */}
@@ -16,7 +23,14 @@ export function CapabilitiesSettings() {
         <SettingsRow
           description="在对话旁边的独立窗口中生成代码、文档和设计内容。"
           label="Artifacts"
-          control={<Switch checked={artifacts} onCheckedChange={setArtifacts} />}
+          control={
+            <Switch
+              checked={artifactsEnabled}
+              onCheckedChange={(checked) => {
+                void updateAccountSetting("preview_feature_uses_artifacts", checked);
+              }}
+            />
+          }
         />
       </SettingsSection>
       <SettingsSection title="Skills">

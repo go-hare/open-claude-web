@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { desktopBridge, type DesktopPreferences } from "../../adapters/desktopBridge";
 
 export const defaultDesktopPreferences: DesktopPreferences = {
+  allowAllBrowserActions: false,
   autoCreatePullRequests: false,
   autoUpdateExtensions: true,
   bypassPermissionsModeEnabled: false,

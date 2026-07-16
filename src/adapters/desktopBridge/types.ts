@@ -173,6 +173,7 @@ export type CreateScheduledTaskInput = {
 
 
 export type DesktopPreferences = {
+  allowAllBrowserActions?: boolean;
   autoCreatePullRequests?: boolean;
   autoUpdateExtensions?: boolean;
   bypassPermissionsModeEnabled?: boolean;

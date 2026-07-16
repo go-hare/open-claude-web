@@ -328,6 +328,7 @@ const preferencesListeners = new Set<(preferences: DesktopPreferences) => void>(
 const fakeConnectedOfficeFileListeners = new Set<(files: ConnectedOfficeFile[]) => void>();
 
 let preferences: DesktopPreferences = {
+  allowAllBrowserActions: false,
   autoCreatePullRequests: false,
   autoUpdateExtensions: true,
   bypassPermissionsModeEnabled: false,
