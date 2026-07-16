@@ -95,13 +95,59 @@ type OfficialCodeSessionActions = {
 
 export type OfficialCodeSessionStore = OfficialCodeSessionState & OfficialCodeSessionActions;
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+/**
+ * Prefer content-block structure (tools/thinking/text) over plain text.length.
+ * Official durable assistant rows carry full message.content arrays; collapsing by
+ * text.length alone wiped tool_use envelopes and looked like "history overwrite".
+ */
+function chatMessageRichness(message: ChatMessage): number {
+  const raw = asRecord(message.raw);
+  const nested = asRecord(raw.message);
+  const content = nested.content ?? raw.content;
+  if (Array.isArray(content)) {
+    let score = content.length * 1000;
+    for (const block of content) {
+      const record = asRecord(block);
+      const type = typeof record.type === "string" ? record.type : "";
+      if (type === "tool_use") score += 500;
+      if (type === "tool_result") score += 400;
+      if (type === "text" && typeof record.text === "string") score += record.text.length;
+      if (type === "thinking" && typeof record.thinking === "string") score += record.thinking.length;
+    }
+    return score;
+  }
+  if (typeof content === "string") return content.length;
+  return message.text?.length ?? 0;
+}
+
+function preferRicherChatMessage(prev: ChatMessage, next: ChatMessage): ChatMessage {
+  return chatMessageRichness(next) >= chatMessageRichness(prev) ? next : prev;
+}
+
 function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[] {
   const identity = messageIdentity(next);
   const index = messages.findIndex((message) => messageIdentity(message) === identity);
   if (index >= 0) {
-    if (messages[index] === next) return messages;
+    const existing = messages[index]!;
+    if (existing === next) return messages;
+    // Official live path (index-BELzQL5P message handler): same-uuid assistant replaces in place.
+    // When comparing structural richness, never let a poorer text-only row wipe tools.
+    const chosen = preferRicherChatMessage(existing, next);
+    if (chosen === existing) {
+      // Still allow pure text growth on the same envelope when structure is equal-or-better next.
+      if (chatMessageRichness(next) === chatMessageRichness(existing) && (next.text?.length ?? 0) > (existing.text?.length ?? 0)) {
+        const copy = messages.slice();
+        copy[index] = next;
+        return copy;
+      }
+      return messages;
+    }
     const copy = messages.slice();
-    copy[index] = next;
+    copy[index] = chosen;
     return copy;
   }
   if (next.role === "user" && !isOptimisticLocalUser(next)) {
@@ -118,15 +164,27 @@ function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[
   return [...messages, next];
 }
 
+/**
+ * Official zke-style durable row identity (index-BELzQL5P live message handler):
+ * outer CLI `uuid` is per NDJSON event. Multi-emit assistant partials APPEND as separate
+ * rows; eke suppresses paint while message.id === streamingMessageId, then f() merges
+ * consecutive assistants. Collapsing by Anthropic message.id at upsert time forced
+ * in-place replace → full eke thrash every partial (stutter) and text-length wipe risk.
+ *
+ * Anthropic message.id collapse belongs in load/getTranscript richer-merge, not live upsert.
+ */
 function messageIdentity(message: ChatMessage) {
   const raw = (message.raw && typeof message.raw === "object" ? message.raw : {}) as Record<string, unknown>;
-  const nested = (raw.message && typeof raw.message === "object" ? raw.message : {}) as Record<string, unknown>;
-  // Assistant: Anthropic message.id first so stream promote + CLI partials + final dump collapse to one row.
-  // Outer CLI uuid is per NDJSON event and must not create duplicate durable assistants.
-  if (message.role === "assistant" || raw.type === "assistant") {
-    return String(nested.id ?? raw.message_id ?? raw.uuid ?? raw.id ?? message.id);
-  }
   return String(raw.uuid ?? raw.id ?? message.id);
+}
+
+/** Anthropic message.id for assistants — used by load collapse / eke suppress only. */
+export function anthropicAssistantMessageId(message: ChatMessage): string | undefined {
+  const raw = asRecord(message.raw);
+  const nested = asRecord(raw.message);
+  if (message.role !== "assistant" && raw.type !== "assistant") return undefined;
+  const id = nested.id ?? raw.message_id;
+  return typeof id === "string" && id.length > 0 ? id : undefined;
 }
 
 function isOptimisticLocalUser(message: ChatMessage) {
@@ -136,7 +194,7 @@ function isOptimisticLocalUser(message: ChatMessage) {
 /**
  * Union-merge transcripts by identity. NEVER drops a previous row.
  * - Walk prev order first (stable history)
- * - Prefer richer text when the same identity appears in next
+ * - Prefer richer content-block envelopes when the same identity appears in next
  * - Append identities that only exist in next
  *
  * Replacing prev wholesale with next was the "stream wipes old messages" bug:
@@ -157,10 +215,7 @@ function mergeTranscriptUnion(prev: ChatMessage[], next: ChatMessage[]) {
       out.push(message);
       continue;
     }
-    // Prefer longer text / richer raw content when identities collide.
-    const prevLen = message.text?.length ?? 0;
-    const nextLen = incoming.text?.length ?? 0;
-    out.push(nextLen >= prevLen ? incoming : message);
+    out.push(preferRicherChatMessage(message, incoming));
   }
   for (const message of next) {
     const id = messageIdentity(message);

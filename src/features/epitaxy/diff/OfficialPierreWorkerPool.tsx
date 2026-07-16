@@ -21,10 +21,18 @@ import {
  * Session-root Pierre worker pool for Code Diff (`@pierre/diffs` only).
  * - host + worker from the same npm package (no ion `DlxMyTNL` mix)
  * - poolSize: clamp(hardwareConcurrency/2, 2, 6)
- * - highlighterOptions: `{ theme, lineDiffType: "word-alt" }`
+ * - highlighterOptions: `{ theme, lineDiffType: "word-alt", preferredHighlighter: "shiki-js" }`
  * - Provider value stays undefined until initialize() resolves
+ *
+ * Worker entry is package `worker.js` (imports `shiki/core` etc.), bundled by Vite
+ * via `?worker&url`. Official ion uses a self-contained portable blob
+ * (`worker-portable-DlxMyTNL.js` via createObjectURL); the npm `worker.js` +
+ * Vite transform is the same host/worker package path without mixing ion chunks.
+ *
+ * Note: FileRenderer.hydrate marks `highlighted:true` before worker tokens land;
+ * consumers must pass `onPostRender: pierreTokenPaintOnPostRender` or tokens never paint.
  */
-import pierreWorkerPortableUrl from "@pierre/diffs/worker/worker-portable.js?url";
+import pierreWorkerUrl from "@pierre/diffs/worker/worker.js?worker&url";
 
 const POOL_SIZE = Math.max(
   2,
@@ -57,20 +65,22 @@ let customThemesRegistered = false;
 function ensureOfficialClaudeThemesRegistered() {
   if (customThemesRegistered) return;
   customThemesRegistered = true;
-  // Drop any prior singleton that may have been created with pierre-light defaults.
-  terminateWorkerPoolSingleton();
   // Official SharedHighlight.registerCustomTheme (cb4f243f3 `a(c|p|d, …)`).
+  // Must run before WorkerPoolManager.initialize resolves themes for host + workers.
   registerCustomTheme(OFFICIAL_CLAUDE_THEME_NAMES.light, () => Promise.resolve(OFFICIAL_CLAUDE_LIGHT_THEME));
   registerCustomTheme(OFFICIAL_CLAUDE_THEME_NAMES.dark, () => Promise.resolve(OFFICIAL_CLAUDE_DARK_THEME));
   registerCustomTheme(OFFICIAL_CLAUDE_THEME_NAMES.darker, () => Promise.resolve(OFFICIAL_CLAUDE_DARKER_THEME));
 }
 
+// Register at module evaluate so themeResolver has claude-* before any pool/File mounts.
+ensureOfficialClaudeThemesRegistered();
+
 /**
- * Package worker-portable uses relative dynamic imports — serve via Vite URL
- * (not blob:) so `./wasm-*` / `./core.js` resolve next to the worker module.
+ * Vite `?worker&url` emits a module worker URL with shiki deps resolved.
+ * Absolute-ize against the page origin for Electron http://127.0.0.1:5176.
  */
 function resolvePackageWorkerUrl(): string {
-  return new URL(pierreWorkerPortableUrl, window.location.href).href;
+  return new URL(pierreWorkerUrl, window.location.href).href;
 }
 
 function readStoredThemeName(key: string, fallback: string) {
@@ -133,12 +143,23 @@ export function OfficialPierreWorkerPool({ children }: { children: ReactNode }) 
         const highlighterOptions: WorkerInitializationRenderOptions = {
           theme: OFFICIAL_PIERRE_THEME,
           lineDiffType: "word-alt",
+          preferredHighlighter: "shiki-js",
         };
         const workerUrl = resolvePackageWorkerUrl();
+        // Always drop any prior singleton (wrong worker entry / stale HMR pool).
+        // getOrCreateWorkerPoolSingleton only constructs once per process lifetime.
+        terminateWorkerPoolSingleton();
         const manager = getOrCreateWorkerPoolSingleton({
           poolOptions: {
             poolSize: POOL_SIZE,
-            workerFactory: () => new Worker(workerUrl, { type: "module" }),
+            // Official: new Worker(blobUrl, { type: "module" }); Vite emits module worker URL.
+            workerFactory: () => {
+              const worker = new Worker(workerUrl, { type: "module" });
+              worker.addEventListener("error", (event) => {
+                console.error("[OfficialPierreWorkerPool] worker error", event.message, event.filename, event.lineno);
+              });
+              return worker;
+            },
           },
           highlighterOptions,
         });
@@ -152,6 +173,10 @@ export function OfficialPierreWorkerPool({ children }: { children: ReactNode }) 
         if (timedOut) {
           if (providerMountCount === 0) terminateWorkerPoolSingleton();
           throw new Error("pierre-worker init timeout");
+        }
+        if (import.meta.env.DEV) {
+          const stats = manager.getStats?.();
+          console.info("[OfficialPierreWorkerPool] ready", stats ?? { poolSize: POOL_SIZE, workerUrl });
         }
         setPool(manager);
       } catch (error) {

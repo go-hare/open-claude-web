@@ -11,6 +11,7 @@ import type { OfficialDiffFileEntry } from "./diffFileTypes";
 // Registers official `diffs-container` CE + core Pierre CSS (c9a932a07 Zd host).
 import "./ensurePierreDiffsContainer";
 import { officialPierreLangFromPath } from "./officialPierreLang";
+import { pierreTokenPaintOnPostRender } from "./pierreTokenPaint";
 
 /**
  * Code file row (Fc-shaped shell + npm `@pierre/diffs` FileDiff):
@@ -148,8 +149,7 @@ export function OfficialDiffFileRow({
   );
 
   // Package FileDiffOptions (API names from `@pierre/diffs`, not ion aliases).
-  // onPostRender: package hydrate can mark highlighted=true before the worker lands;
-  // without a re-apply, token spans never paint. This stays on package APIs only.
+  // onPostRender: package hydrate marks highlighted before worker tokens land.
   const options = useMemo(
     () => ({
       theme,
@@ -161,59 +161,7 @@ export function OfficialDiffFileRow({
       enableGutterUtility: true,
       lineDiffType: "word-alt" as const,
       unsafeCSS: OFFICIAL_FC_UNSAFE_CSS,
-      onPostRender(node: HTMLElement, instance: { rerender: () => void }, phase: string) {
-        const host = node as HTMLElement & {
-          __pierreTokenPaintTimer?: number;
-          __pierreTokenPaintLastRerender?: number;
-        };
-        if (phase === "unmount") {
-          if (host.__pierreTokenPaintTimer != null) {
-            window.clearInterval(host.__pierreTokenPaintTimer);
-            host.__pierreTokenPaintTimer = undefined;
-          }
-          host.__pierreTokenPaintLastRerender = undefined;
-          return;
-        }
-        if (domHasDiffTokens(host) || host.__pierreTokenPaintTimer != null) return;
-        const hunksRenderer = (instance as unknown as {
-          hunksRenderer?: { renderCache?: { result?: unknown; highlighted?: boolean } };
-        }).hunksRenderer;
-        const renderCache = hunksRenderer?.renderCache;
-        if (renderCache?.highlighted && !resultHasDiffTokens(renderCache.result)) {
-          renderCache.highlighted = false;
-        }
-        const started = Date.now();
-        const stop = () => {
-          if (host.__pierreTokenPaintTimer != null) {
-            window.clearInterval(host.__pierreTokenPaintTimer);
-            host.__pierreTokenPaintTimer = undefined;
-          }
-        };
-        const tick = () => {
-          if (domHasDiffTokens(host)) {
-            stop();
-            return;
-          }
-          const cache = hunksRenderer?.renderCache;
-          if (resultHasDiffTokens(cache?.result)) {
-            const now = Date.now();
-            if (
-              host.__pierreTokenPaintLastRerender == null ||
-              now - host.__pierreTokenPaintLastRerender > 80
-            ) {
-              host.__pierreTokenPaintLastRerender = now;
-              instance.rerender();
-            }
-            return;
-          }
-          if (cache?.highlighted && !resultHasDiffTokens(cache.result)) {
-            cache.highlighted = false;
-          }
-          if (Date.now() - started > 3000) stop();
-        };
-        host.__pierreTokenPaintTimer = window.setInterval(tick, 50);
-        tick();
-      },
+      onPostRender: pierreTokenPaintOnPostRender,
     }),
     [theme],
   );
@@ -337,21 +285,6 @@ function hasValidTrailingContext(fileDiff: FileDiffMetadata) {
   const addTail = fileDiff.additionLines.length - (last.additionLineIndex + last.additionCount);
   const delTail = fileDiff.deletionLines.length - (last.deletionLineIndex + last.deletionCount);
   return addTail === delTail && addTail >= 0;
-}
-
-function resultHasDiffTokens(result: unknown): boolean {
-  if (result == null) return false;
-  try {
-    return JSON.stringify(result).includes("--diffs-token");
-  } catch {
-    return false;
-  }
-}
-
-function domHasDiffTokens(host: HTMLElement): boolean {
-  return (host.shadowRoot?.querySelector("[data-code]")?.innerHTML ?? "").includes(
-    "--diffs-token",
-  );
 }
 
 /** Path display split (dir prefix / basename, mid-path bias). */

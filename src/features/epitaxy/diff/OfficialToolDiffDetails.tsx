@@ -10,6 +10,7 @@ import { File, FileDiff } from "@pierre/diffs/react";
 import { useMemo, type ReactNode } from "react";
 import { officialPierreLangFromPath } from "./officialPierreLang";
 import { useOfficialPierreTheme, useWorkerPool } from "./OfficialPierreWorkerPool";
+import { pierreTokenPaintOnPostRender } from "./pierreTokenPaint";
 import "./ensurePierreDiffsContainer";
 
 const TOOL_DIFF_GAP_CSS =
@@ -43,6 +44,16 @@ type ToolLike = {
 function ensureTrailingNewline(value: string) {
   // Official vg
   return value === "" || value.endsWith("\n") ? value : `${value}\n`;
+}
+
+/** Official sb FNV-1a 32-bit — File cacheKey for worker highlight LRU. */
+function hashOfficialToolCacheKey(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function basename(path: string) {
@@ -100,8 +111,18 @@ export function buildOfficialToolDiffMeta(tool: ToolLike): OfficialToolDiffMeta 
   if (!oldContents && !newContents) return null;
   oldContents = ensureTrailingNewline(oldContents);
   newContents = ensureTrailingNewline(newContents);
-  const oldFile: FileContents = { name: displayName, contents: oldContents, lang };
-  const newFile: FileContents = { name: displayName, contents: newContents, lang };
+  const oldFile: FileContents = {
+    name: displayName,
+    contents: oldContents,
+    lang,
+    cacheKey: `tool-old:${tool.name}:${displayName}:${lang}:${hashOfficialToolCacheKey(oldContents)}:${oldContents.length}`,
+  };
+  const newFile: FileContents = {
+    name: displayName,
+    contents: newContents,
+    lang,
+    cacheKey: `tool-new:${tool.name}:${displayName}:${lang}:${hashOfficialToolCacheKey(newContents)}:${newContents.length}`,
+  };
   let fileDiff: FileDiffMetadata;
   try {
     fileDiff = parseDiffFromFile(oldFile, newFile);
@@ -109,8 +130,10 @@ export function buildOfficialToolDiffMeta(tool: ToolLike): OfficialToolDiffMeta 
     return null;
   }
   if (!fileDiff.lang) fileDiff.lang = lang;
-  const additions = fileDiff.hunks.reduce((total, hunk) => total + (hunk.additionCount ?? 0), 0);
-  const deletions = fileDiff.hunks.reduce((total, hunk) => total + (hunk.deletionCount ?? 0), 0);
+  // Official Zg counts: sum hunk.additionLines / deletionLines (not additionCount —
+  // additionCount includes context lines from the hunk header).
+  const additions = fileDiff.hunks.reduce((total, hunk) => total + (hunk.additionLines ?? 0), 0);
+  const deletions = fileDiff.hunks.reduce((total, hunk) => total + (hunk.deletionLines ?? 0), 0);
   // Official: pureSide "new"→additions, "deleted"→deletions, else null
   const pureSide =
     fileDiff.type === "new" ? "additions" : fileDiff.type === "deleted" ? "deletions" : null;
@@ -184,7 +207,13 @@ function ToolDiffCopyButton({ text }: { text: string }) {
   );
 }
 
-/** Official sx pureSide branch (rx) — single-side File with tinted line chrome. */
+/**
+ * Official sx pureSide branch (rx) — single-side File with tinted line chrome.
+ *
+ * Official minified string targets `[data-line-number]`. Current `@pierre/diffs`
+ * gutter host is `[data-column-number]` (line text still uses
+ * `[data-line-number-content]`). Match both so green/pink number chrome applies.
+ */
 function OfficialToolPureSideFile({
   baseUnsafeCSS,
   diffMeta,
@@ -204,9 +233,15 @@ function OfficialToolPureSideFile({
       theme,
       disableFileHeader: true,
       overflow: "wrap" as const,
+      // Same chrome as c119 `rx`; column-number is package 1.2 gutter attr.
       unsafeCSS:
         baseUnsafeCSS +
-        `[data-line]{background:${lineBg};}[data-line-number]{background:${lineBg};color:${numberColor};}[data-line-number-content]::before{content:"${marker} ";display:inline-block;min-width:1ch;color:${numberColor};}`,
+        `[data-line]{background:${lineBg};}` +
+        `[data-column-number],[data-line-number]{background:${lineBg};color:${numberColor};}` +
+        `[data-line-number-content]{color:${numberColor};}` +
+        `[data-line-number-content]::before{content:"${marker} ";display:inline-block;min-width:1ch;color:${numberColor};}`,
+      // Package hydrate marks highlighted before worker tokens land — force re-paint.
+      onPostRender: pierreTokenPaintOnPostRender,
     }),
     [baseUnsafeCSS, lineBg, marker, numberColor, theme],
   );
@@ -234,6 +269,7 @@ function OfficialToolUnifiedFileDiff({
       overflow: "wrap" as const,
       lineDiffType: "word-alt" as const,
       unsafeCSS: baseUnsafeCSS,
+      onPostRender: pierreTokenPaintOnPostRender,
     }),
     [baseUnsafeCSS, theme],
   );
@@ -296,17 +332,24 @@ export function OfficialToolReadFileDetails({
   const theme = useOfficialPierreTheme();
   const workerPool = useWorkerPool();
   const displayName = basename(path);
-  const file = useMemo<FileContents>(() => ({
-    name: displayName,
-    contents: ensureTrailingNewline(contents),
-    lang: officialPierreLangFromPath(displayName) as FileContents["lang"],
-  }), [contents, displayName]);
+  const lang = officialPierreLangFromPath(displayName) as FileContents["lang"];
+  // cacheKey enables worker LRU + stable highlight key (package getFileHighlightKey).
+  const file = useMemo<FileContents>(() => {
+    const body = ensureTrailingNewline(contents);
+    return {
+      name: displayName,
+      contents: body,
+      lang,
+      cacheKey: `read:${displayName}:${lang}:${hashOfficialToolCacheKey(body)}:${body.length}`,
+    };
+  }, [contents, displayName, lang]);
   const options = useMemo(
     () => ({
       theme,
       disableFileHeader: true,
       overflow: "wrap" as const,
       unsafeCSS: TOOL_DIFF_GAP_CSS,
+      onPostRender: pierreTokenPaintOnPostRender,
     }),
     [theme],
   );

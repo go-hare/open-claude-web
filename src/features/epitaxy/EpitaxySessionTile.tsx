@@ -29,13 +29,22 @@ import {
   OfficialButton,
   OfficialChatTileShell,
   OfficialDropdownButton,
+  OfficialMessageActions,
   OfficialSessionHeader,
   OfficialSessionSource,
-  OfficialUserMessage,
+  officialUserMessageClass,
   type OfficialDropdownItem,
   type OfficialTranscriptMode,
   type OfficialViewPane,
 } from "./OfficialEpitaxyComponents";
+import {
+  OFFICIAL_DURABLE_UUID_RE,
+  OfficialUserBashCommand,
+  OfficialUserCodeAttachment,
+  parseOfficialUserTextSegments,
+  renderOfficialUserInlineText,
+} from "./OfficialUserHbParts";
+import { MarkdownContent, OfficialCodeMarkdown } from "./OfficialCodeMarkdown";
 import { OfficialEpitaxyBranchRows } from "./OfficialEpitaxyBranchRows";
 import { OfficialDiffPane, type OfficialDiffCompareMeta } from "./OfficialDiffPane";
 import { OfficialPierreWorkerPool } from "./diff/OfficialPierreWorkerPool";
@@ -63,6 +72,7 @@ import {
   officialGetTurnStartedAt,
   officialMarkTurnStarted,
   officialSetStreamCharBudget,
+  officialStreamActiveMessageId,
   officialStreamClear,
   officialStreamFeed,
   officialStreamHasListeners,
@@ -362,6 +372,36 @@ function EpitaxyChatPanel({
   }, []);
 
   useEpitaxyViewShortcuts(selectView);
+  // Bridge OfficialCodeMarkdown / Hb inline path clicks (ob/db/Db) → file pane.
+  useEffect(() => {
+    const onOpenFile = (event: Event) => {
+      const path = (event as CustomEvent<{ path?: string }>).detail?.path;
+      if (!path) return;
+      openFile({ path });
+    };
+    window.addEventListener("epitaxy-open-file", onOpenFile as EventListener);
+    return () => window.removeEventListener("epitaxy-open-file", onOpenFile as EventListener);
+  }, [openFile]);
+  // Official ab Play: open terminal pane and write command into default shell PTY.
+  useEffect(() => {
+    const onRunInline = (event: Event) => {
+      const command = (event as CustomEvent<{ command?: string }>).detail?.command;
+      if (!command || !initialSessionId) return;
+      setActiveView("terminal");
+      const ptyKey = terminalPtyKey(initialSessionId, defaultTerminalTabId);
+      void (async () => {
+        try {
+          // Ensure PTY exists; OfficialShellPtyPane will also start/fit when mounted.
+          await bridge.startShellPty?.(ptyKey);
+          await bridge.writeShellPty?.(ptyKey, `${command}\n`);
+        } catch {
+          // Ignore run failures; user can retry from terminal.
+        }
+      })();
+    };
+    window.addEventListener("epitaxy-run-inline", onRunInline as EventListener);
+    return () => window.removeEventListener("epitaxy-run-inline", onRunInline as EventListener);
+  }, [bridge, initialSessionId]);
   useEffect(() => {
     setFileView(null);
     setPreviewTarget(null);
@@ -3100,6 +3140,96 @@ type TranscriptToolUse = {
 };
 
 /**
+ * Official Xwe cache (index-BELzQL5P): incremental eke when the durable message array only
+ * grew by appending and streamingMessageId is unchanged. Full reparse every partial was the
+ * stutter source when multi-emit assistants landed.
+ */
+type OfficialEkeCache = {
+  entries: TranscriptEntry[];
+  firstMsg: ChatMessage | undefined;
+  inputLen: number;
+  lastMsg: ChatMessage | undefined;
+  streamingMessageId: string | null | undefined;
+};
+const officialEkeCacheBySession = new Map<string, OfficialEkeCache>();
+
+function clearOfficialEkeCache(sessionId?: string) {
+  if (!sessionId) {
+    officialEkeCacheBySession.clear();
+    return;
+  }
+  officialEkeCacheBySession.delete(sessionId);
+}
+
+/**
+ * Official Xwe(sessionId, messages, streamingMessageId) → eke with prefix cache.
+ * When messages[0..inputLen) are the same object refs and streamingMessageId matches,
+ * only parse the new tail. If length is unchanged, return a shallow copy of cached entries.
+ */
+function assistantAnthropicIdFromChat(message: ChatMessage): string | undefined {
+  if (message.role !== "assistant") return undefined;
+  const raw = asRecord(message.raw);
+  if (stringValue(raw.type) && stringValue(raw.type) !== "assistant") return undefined;
+  const nested = asRecord(raw.message);
+  return stringValue(nested.id) ?? stringValue(raw.message_id);
+}
+
+function parseOfficialTranscriptEntriesCached(
+  sessionId: string | undefined,
+  messages: ChatMessage[],
+  streamingMessageId?: string | null,
+): TranscriptEntry[] {
+  if (!sessionId) return parseOfficialTranscriptEntries(messages, streamingMessageId);
+  const cached = officialEkeCacheBySession.get(sessionId);
+  if (
+    cached
+    && cached.inputLen > 0
+    && messages.length >= cached.inputLen
+    && messages[0] === cached.firstMsg
+    && messages[cached.inputLen - 1] === cached.lastMsg
+    && streamingMessageId === cached.streamingMessageId
+  ) {
+    if (messages.length === cached.inputLen) {
+      return cached.entries.slice();
+    }
+    // Official eke: if (t && e === t) continue — live Anthropic message.id is not painted.
+    // Multi-emit text partials only grow durable T while Va owns typewriter; Xa is unchanged.
+    // Skip full reparse for pure live-suppressed tails (this was the stutter).
+    if (streamingMessageId) {
+      const tail = messages.slice(cached.inputLen);
+      // Text-only live partials are suppressed by eke (Va paints). tool_use / user / system
+      // tails still need ake/rke so pendingTools object refs stay correct.
+      const onlyTextLiveSuppressed = tail.every((message) => {
+        const anthropicId = assistantAnthropicIdFromChat(message);
+        if (!anthropicId || anthropicId !== streamingMessageId) return false;
+        const raw = asRecord(message.raw);
+        const nested = asRecord(raw.message);
+        const content = nested.content ?? raw.content;
+        if (!Array.isArray(content)) return true;
+        return !content.some((block) => stringValue(asRecord(block).type) === "tool_use");
+      });
+      if (onlyTextLiveSuppressed) {
+        officialEkeCacheBySession.set(sessionId, {
+          ...cached,
+          inputLen: messages.length,
+          lastMsg: messages[messages.length - 1],
+        });
+        return cached.entries.slice();
+      }
+    }
+  }
+  const entries = parseOfficialTranscriptEntries(messages, streamingMessageId);
+  officialEkeCacheBySession.set(sessionId, {
+    entries,
+    firstMsg: messages[0],
+    inputLen: messages.length,
+    lastMsg: messages[messages.length - 1],
+    streamingMessageId,
+  });
+  return entries.slice();
+}
+
+/**
  * Official eke (index-BELzQL5P) → durable transcript entries.
  * Critical control flow (must not invent):
  * 1. ake(content, messageId, pendingTools) ALWAYS runs for assistant — registers tool
@@ -3109,6 +3239,8 @@ type TranscriptToolUse = {
  * 3. user messages: rke(content, pendingTools, toolUseResult) mutates tool.status/output
  *    by reference, then optionally push user text/bash via Ike-shaped parse.
  * 4. parent_tool_use_id: uke(subagent activity) only — do not push as main transcript.
+ * 5. Official f() merges consecutive assistant rows — multi-emit same Anthropic id becomes
+ *    one bubble after stream ends (no first-wins permanent skip).
  */
 function parseOfficialTranscriptEntries(messages: ChatMessage[], streamingMessageId?: string | null): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
@@ -3138,6 +3270,29 @@ function parseOfficialTranscriptEntries(messages: ChatMessage[], streamingMessag
             firstTool.precedingThinking = [thinkingText, ...(firstTool.precedingThinking ?? [])];
           }
           lastItem = previous.items[previous.items.length - 1];
+        }
+      }
+      // Official f() merges consecutive assistants. Same Anthropic message.id multi-emit
+      // after stream ends lands as consecutive rows — fold items, do not first-wins drop.
+      // Deduplicate pure-text re-emits of the same full paragraph on the same entryId.
+      if (previous.id === entryId && nextItems.every((item) => item.kind === "text")) {
+        const existingText = previous.items
+          .filter((item): item is Extract<TranscriptEntryItem, { kind: "text" }> => item.kind === "text")
+          .map((item) => item.text)
+          .join("");
+        const incomingText = nextItems
+          .filter((item): item is Extract<TranscriptEntryItem, { kind: "text" }> => item.kind === "text")
+          .map((item) => item.text)
+          .join("");
+        if (incomingText && existingText.includes(incomingText)) {
+          if (lastTimestamp) previous.timestamp = lastTimestamp;
+          return;
+        }
+        if (existingText && incomingText.startsWith(existingText)) {
+          // Growing partial of the same turn: replace text items with the longer prefix.
+          previous.items = previous.items.filter((item) => item.kind !== "text").concat(nextItems);
+          if (lastTimestamp) previous.timestamp = lastTimestamp;
+          return;
         }
       }
       const lastItem = previous.items[previous.items.length - 1];
@@ -3276,6 +3431,7 @@ function parseOfficialTranscriptEntries(messages: ChatMessage[], streamingMessag
       }
 
       // Official ake FIRST — registers tool refs into pendingTools even when entry is skipped.
+      // Official e = s.message?.id; entry id for ake items = e ?? uuid.
       const anthropicMessageId = stringValue(nestedMessage.id) ?? stringValue(raw.message_id);
       const entryId = anthropicMessageId
         ?? stringValue(raw.uuid)
@@ -3283,8 +3439,15 @@ function parseOfficialTranscriptEntries(messages: ChatMessage[], streamingMessag
         ?? message.id;
       const items = parseAssistantTranscriptItems(content, pendingTools, entryId, message.text);
 
-      // Official: if (t && e === t) { mark deferred hoist tool ids; continue } — Va owns the row.
+      // Official eke: if (t && e === t) { mark deferred hoist tool ids; continue }
+      // Va/Pke owns typewriter for this Anthropic message.id — durable must not paint.
+      // Critical: without this skip, Kwe/Gwe sees id-overlap and returns durable whole text
+      // (looks like a single dump, not a typewriter).
       if (streamingMessageId && anthropicMessageId && anthropicMessageId === streamingMessageId) {
+        return;
+      }
+      // Defense when nested message.id missing but entryId already is the live stream id.
+      if (streamingMessageId && entryId === streamingMessageId) {
         return;
       }
 
@@ -4028,6 +4191,7 @@ function mergeAdjacentAssistantItems(items: TranscriptEntryItem[]) {
   return merged;
 }
 
+
 /**
  * Official Kwe / lo(Xa, Va) from index-BELzQL5P — pure control flow only:
  *   if (!Va) return Xa
@@ -4162,7 +4326,12 @@ function estimateOfficialStreamSnapshotTokens(snapshot: OfficialStreamSnapshot) 
  * filters file/image/text/event/bash/peer, then branch layouts
  * (bash-only / peer-only / event-only / default bubble).
  */
-function CodeUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
+/**
+ * Official Hb (c11959232):
+ * branches — bash-only → code-attachment (Ob) → peer-only → event-only → default bubble.
+ * Text segments via Eb/Pb/Tb; inline via zb; durable Ub gates fork/rewind.
+ */
+function CodeUserEntryMessage({ entry, isQueued = false }: { entry: TranscriptEntry; isQueued?: boolean }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
   const textItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "text" }> => item.kind === "text");
   const bashItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "bash" }> => item.kind === "bash");
@@ -4171,7 +4340,8 @@ function CodeUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
   const imageItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "image" }> => item.kind === "image");
   const fileItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "file" }> => item.kind === "file");
   const uploadedItems = entry.items.filter((item): item is Extract<TranscriptEntryItem, { kind: "uploaded-file" }> => item.kind === "uploaded-file");
-  const copyText = textItems.map((item) => item.text).join("\n\n") || undefined;
+  const copyText = textItems.map((item) => item.text).join("\n\n");
+  const durableId = !isQueued && OFFICIAL_DURABLE_UUID_RE.test(entry.id);
   const forkFromHere = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.forkSession) return;
     const forked = await actions.bridge.forkSession(actions.sessionId, entry.id);
@@ -4182,10 +4352,23 @@ function CodeUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
     await actions.bridge.rewind(actions.sessionId, entry.id);
     await actions.reload({ silent: true });
   }, [actions, entry.id]);
-  const onFork = actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
-  const onRewind = actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
+  // Official: n && y ? () => n(t.id, b) : void 0 — only durable UUIDs enable fork/rewind.
+  const onFork = durableId && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
+  const onRewind = durableId && actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
+  const onAttachAsContext = actions?.attachAsContext;
+  const openPath = useCallback((path: string) => {
+    actions?.openFile({ path });
+  }, [actions]);
+  const textSegments = useMemo(
+    () => textItems.flatMap((item) => parseOfficialUserTextSegments(item.text, item.id)),
+    [textItems],
+  );
+  // Official M: any code segment with filePath → code-attachment layout.
+  const hasCodeAttachment = textSegments.some((segment) => segment.kind === "code" && Boolean(segment.filePath));
   const [expandedLongText, setExpandedLongText] = useState(false);
-  const isLongText = (copyText?.length ?? 0) > 1200;
+  const textLength = useMemo(() => textItems.reduce((sum, item) => sum + item.text.length, 0), [textItems]);
+  // Official R = !M && N > 1200
+  const isLongText = !hasCodeAttachment && textLength > 1200;
   const attachmentStrip = (
     <OfficialUserAttachments
       files={fileItems}
@@ -4194,8 +4377,8 @@ function CodeUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
     />
   );
 
-  // Official Hb: bash-only branch (no images/text/events).
-  if (bashItems.length > 0 && imageItems.length === 0 && textItems.length === 0 && eventItems.length === 0 && peerItems.length === 0) {
+  // Official Hb bash-only: m.length > 0 && u/f/p empty (images/text/events).
+  if (bashItems.length > 0 && imageItems.length === 0 && textItems.length === 0 && eventItems.length === 0) {
     return (
       <div className="flex flex-col gap-g6 w-full" data-official-source="c11959232-h_zsw3wI.js:Hb bash-only">
         {attachmentStrip}
@@ -4204,7 +4387,54 @@ function CodeUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
     );
   }
 
-  // Official Hb: peer-only branch.
+  // Official Hb code-attachment (M && no images): Ob cards + per-segment text bubbles.
+  if (hasCodeAttachment && imageItems.length === 0) {
+    return (
+      <div className="group/msg flex flex-col items-start gap-g6 w-full" data-official-source="c11959232-h_zsw3wI.js:Hb code-attachment">
+        {attachmentStrip}
+        {textSegments.map((segment) => {
+          if (segment.kind === "code") {
+            return (
+              <OfficialUserCodeAttachment
+                filePath={segment.filePath}
+                key={segment.key}
+                lang={segment.lang}
+                onOpenPath={openPath}
+                startLine={segment.startLine}
+                suggestion={segment.suggestion}
+                text={segment.text}
+              />
+            );
+          }
+          return (
+            <CodeTranscriptItemMenu
+              key={segment.key}
+              onAttachAsContext={onAttachAsContext}
+              onFork={onFork}
+              onRewind={onRewind}
+              text={segment.text}
+            >
+              <div className={`${officialUserMessageClass} max-w-[75%]`}>
+                <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty m-0">
+                  {renderOfficialUserInlineText(segment.text, false, openPath)}
+                </p>
+              </div>
+            </CodeTranscriptItemMenu>
+          );
+        })}
+        <OfficialMessageActions
+          buttonVariant="link"
+          className="-mt-[8px]"
+          copyText={copyText || undefined}
+          onFork={onFork}
+          onRewind={onRewind}
+          timestamp={entry.timestamp}
+        />
+      </div>
+    );
+  }
+
+  // Official Hb peer-only.
   if (peerItems.length > 0 && imageItems.length === 0 && textItems.length === 0) {
     return (
       <div className="flex flex-col gap-g3 w-full" data-official-source="c11959232-h_zsw3wI.js:Hb peer-only">
@@ -4214,7 +4444,7 @@ function CodeUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
     );
   }
 
-  // Official Hb: event-only branch.
+  // Official Hb event-only.
   if (eventItems.length > 0 && imageItems.length === 0 && textItems.length === 0) {
     return (
       <div className="flex flex-col gap-g3 w-full" data-official-source="c11959232-h_zsw3wI.js:Hb event-only">
@@ -4224,35 +4454,75 @@ function CodeUserEntryMessage({ entry }: { entry: TranscriptEntry }) {
     );
   }
 
-  const messageBody = (
-    <>
-      {attachmentStrip}
-      <div className={isLongText && !expandedLongText ? "flex flex-col gap-g4 max-h-[16rem] overflow-clip [mask-image:linear-gradient(to_bottom,black_calc(100%_-_3rem),transparent)]" : "flex flex-col gap-g4"}>
-        {textItems.map((item) => (
-          <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty" key={item.id}>
-            {renderInlineMarkdown(item.text, item.id)}
-          </p>
-        ))}
-        {bashItems.map((item) => <UserBashBlock item={item} key={item.id} />)}
-        {eventItems.map((item) => <OfficialUserEventCard item={item} key={item.id} />)}
-        {peerItems.map((item) => <OfficialUserPeerCard item={item} key={item.id} />)}
+  // Official Hb default bubble (max-w-[75%], Uv, zb/Ob segments, show more, Vv).
+  const bubbleBody = textItems.length > 0 ? (
+    <CodeTranscriptItemMenu
+      onAttachAsContext={onAttachAsContext}
+      onFork={onFork}
+      onRewind={onRewind}
+      text={copyText}
+    >
+      <div className={`${officialUserMessageClass} max-w-full`}>
+        <div className={isLongText && !expandedLongText
+          ? "flex flex-col gap-g4 max-h-[16rem] overflow-clip [mask-image:linear-gradient(to_bottom,black_calc(100%_-_3rem),transparent)]"
+          : "flex flex-col gap-g4"}
+        >
+          {textSegments.map((segment) => (
+            segment.kind === "code" ? (
+              <OfficialUserCodeAttachment
+                key={segment.key}
+                lang={segment.lang}
+                text={segment.text}
+              />
+            ) : (
+              <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty m-0" key={segment.key}>
+                {renderOfficialUserInlineText(segment.text, isLongText && !expandedLongText, openPath)}
+              </p>
+            )
+          ))}
+        </div>
+        {isLongText ? (
+          <OfficialButton
+            ariaLabel={expandedLongText ? "Show less" : "Show more"}
+            className="self-start"
+            onClick={() => setExpandedLongText((value) => !value)}
+            size="small"
+            variant="uncontained"
+          >
+            {expandedLongText ? "Show less" : "Show more"}
+          </OfficialButton>
+        ) : null}
       </div>
-      {isLongText ? (
-        <OfficialButton className="self-start" onClick={() => setExpandedLongText((value) => !value)} size="small" variant="uncontained">
-          {expandedLongText ? "Show less" : "Show more"}
-        </OfficialButton>
-      ) : null}
-    </>
-  );
+    </CodeTranscriptItemMenu>
+  ) : null;
 
   return (
-    <OfficialUserMessage copyText={copyText} createdAt={entry.timestamp} onFork={onFork} onRewind={onRewind}>
-      {messageBody}
-    </OfficialUserMessage>
+    <div
+      className={`group/msg flex justify-start items-start gap-g3 w-full transition-opacity duration-200 ${isQueued ? "opacity-50 hover:opacity-80" : ""}`}
+      data-official-source="c11959232-h_zsw3wI.js:Hb default"
+    >
+      {isQueued ? (
+        <span className="sr-only">Queued. Claude will read this after the current turn.</span>
+      ) : null}
+      <div className="flex flex-col items-start gap-g6 max-w-[75%] min-w-0">
+        {attachmentStrip}
+        {bubbleBody}
+        {textItems.length > 0 && !isQueued ? (
+          <OfficialMessageActions
+            buttonVariant="link"
+            className="-mt-[8px]"
+            copyText={copyText || undefined}
+            onFork={onFork}
+            onRewind={onRewind}
+            timestamp={entry.timestamp}
+          />
+        ) : null}
+      </div>
+    </div>
   );
 }
 
-/** Official Sv attachment strip: images (data URLs) + file chips. */
+/** Official Sv attachment strip: file chips + image thumbs (c11959232). */
 function OfficialUserAttachments({
   files,
   images,
@@ -4263,38 +4533,63 @@ function OfficialUserAttachments({
   uploaded: Array<Extract<TranscriptEntryItem, { kind: "uploaded-file" }>>;
 }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
-  if (files.length === 0 && images.length === 0 && uploaded.length === 0) return null;
+  const fileChips = [
+    ...files.map((file) => ({ id: file.id, fileName: file.fileName, path: undefined as string | undefined })),
+    ...uploaded.map((item) => ({ id: item.id, fileName: item.file.fileName, path: item.file.path })),
+  ];
+  if (fileChips.length === 0 && images.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-g2" data-official-source="c11959232-h_zsw3wI.js:Sv">
-      {images.map((image) => (
-        <img
-          alt=""
-          className="max-h-[180px] max-w-[240px] rounded-r4 border border-border-300 object-contain"
-          key={image.id}
-          src={`data:${image.mimeType};base64,${image.data}`}
-        />
-      ))}
-      {files.map((file) => (
-        <span
-          className="inline-flex max-w-full items-center gap-g2 rounded-r4 bg-fill-contained-default px-p4 py-p2 text-footnote text-t8 effect-contained-default"
-          key={file.id}
+    <>
+      {fileChips.length > 0 ? (
+        <ul
+          aria-label="Attached files"
+          className="flex flex-wrap items-end gap-g4 max-w-full"
+          data-official-source="c11959232-h_zsw3wI.js:Sv files"
+          role="list"
         >
-          <Icon name="Document" size="xs" />
-          <span className="max-w-[220px] truncate">{file.fileName}</span>
-        </span>
-      ))}
-      {uploaded.map((item) => (
-        <button
-          className="inline-flex max-w-full items-center gap-g2 rounded-r4 bg-fill-contained-default px-p4 py-p2 text-footnote text-t8 effect-contained-default border-0 cursor-default outline-none hide-focus-ring ring-focus"
-          key={item.id}
-          onClick={() => actions?.openFile({ path: item.file.path })}
-          type="button"
-        >
-          <Icon name="Document" size="xs" />
-          <span className="max-w-[220px] truncate">{item.file.fileName}</span>
-        </button>
-      ))}
-    </div>
+          {fileChips.map((file) => {
+            const chip = (
+              <>
+                <span aria-hidden="true" className="shrink-0 inline-flex items-center justify-center w-[24px] h-[24px] rounded-r3 bg-t2">
+                  <Icon name="Document" size="xs" />
+                </span>
+                <span className="truncate">{file.fileName}</span>
+              </>
+            );
+            return (
+              <li
+                className="flex items-center gap-g4 max-w-full h-[32px] pl-p3 pr-p5 rounded-r5 bg-fill-contained-default effect-contained-default text-contained-default text-body select-text"
+                key={file.id}
+                role="listitem"
+                title={file.fileName}
+              >
+                {file.path ? (
+                  <button
+                    className="flex items-center gap-g4 max-w-full min-w-0 border-0 bg-transparent p-0 m-0 cursor-default outline-none hide-focus-ring ring-focus text-inherit"
+                    onClick={() => actions?.openFile({ path: file.path! })}
+                    type="button"
+                  >
+                    {chip}
+                  </button>
+                ) : chip}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+      {images.length > 0 ? (
+        <div className="flex flex-wrap items-end gap-g6 max-w-full p-[1px]" data-official-source="c11959232-h_zsw3wI.js:Sv images">
+          {images.map((image) => (
+            <img
+              alt=""
+              className="block max-w-[120px] max-h-[120px] rounded-r3 effect-contrast-stroke"
+              key={image.id}
+              src={`data:${image.mimeType};base64,${image.data}`}
+            />
+          ))}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -4316,21 +4611,45 @@ function OfficialUserPeerCard({ item }: { item: Extract<TranscriptEntryItem, { k
   })();
   return (
     <div className="flex w-full flex-col gap-g3 rounded-r6 border border-t3 bg-t1 p-p5" data-official-source="c11959232-h_zsw3wI.js:Ib">
-      <div className="flex items-center gap-g3 text-body text-t6">
+      <div className="flex items-center gap-g3 text-body text-assistant-secondary">
         <Icon name="ChatBubble" size="xs" />
-        <span className="font-medium text-t7">{title}</span>
+        <span className="truncate">{title}</span>
       </div>
-      <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty m-0">{item.content}</p>
+      <p className="text-body text-assistant-primary whitespace-pre-wrap [overflow-wrap:anywhere] select-text m-0">
+        {renderOfficialUserInlineText(item.content)}
+      </p>
     </div>
   );
 }
 
-/** Official Rb event card (c11959232). */
+/** Official Nb event type labels (c11959232). */
+const OFFICIAL_USER_EVENT_LABELS: Record<string, string> = {
+  github: "GitHub event received",
+  ci: "CI event",
+  hook: "Hook re-prompted Claude",
+};
+
+/** Official Rb event card (c11959232) — collapsible tool-style row. */
 function OfficialUserEventCard({ item }: { item: Extract<TranscriptEntryItem, { kind: "event" }> }) {
+  const [expanded, setExpanded] = useState(false);
+  const rawType = item.eventType ? String(item.eventType) : "event";
+  const label = OFFICIAL_USER_EVENT_LABELS[rawType] ?? rawType;
   return (
-    <div className="flex w-full flex-col gap-g2 rounded-r6 border border-border-300 bg-bg-100 p-p4" data-official-source="c11959232-h_zsw3wI.js:Rb">
-      <div className="text-footnote font-mono text-t5">{item.eventType ? `${item.eventType} event` : "event"}</div>
-      <pre className="m-0 whitespace-pre-wrap break-words text-code text-t7">{item.content}</pre>
+    <div className="flex flex-col w-full" data-official-source="c11959232-h_zsw3wI.js:Rb">
+      <button
+        aria-expanded={expanded}
+        className="relative group/tool flex self-start max-w-full items-center py-0 gap-g3 text-left outline-none hide-focus-ring focus:ring-focus rounded-r3 border-0 bg-transparent p-0 m-0 cursor-default"
+        onClick={() => setExpanded((value) => !value)}
+        type="button"
+      >
+        <span className="text-body text-assistant-primary">{label}</span>
+        <Icon name={expanded ? "ChevronDownSmall" : "ChevronRightMedium"} size="xs" />
+      </button>
+      {expanded ? (
+        <div className="pl-p6 pt-p3 text-code text-assistant-secondary whitespace-pre-wrap break-all select-text">
+          {item.content}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -4390,6 +4709,7 @@ function CodeAssistantEntryMessage({
     await actions.bridge.rewind(actions.sessionId, entry.id);
     await actions.reload({ silent: true });
   }, [actions, entry.id]);
+  // Official Kb: fork/rewind only on Uv (item context menu), not on Vv hover action bar.
   const onFork = !isStreaming && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
   const onRewind = !isStreaming && actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
   const onRetry = !isStreaming && actions?.bridge.rewind ? () => { void retryLastTurn(); } : undefined;
@@ -4405,16 +4725,14 @@ function CodeAssistantEntryMessage({
     : undefined;
   if (visibleItems.length === 0) return null;
 
-  // Official Kb (c11959232): shell + per-item Uv context menu on text/tools + Vv message actions.
+  // Official Kb (c11959232): shell + per-item Uv + Vv (text/timestamp/rate/pin only).
   return (
     <OfficialAssistantMessage
       copyText={copyText}
       createdAt={isStreaming ? undefined : entry.timestamp}
       isPinned={Boolean(firstPin.isPinned)}
-      onFork={onFork}
       onPinChapter={firstPin.onPinChapter}
       onRateMessage={onRateMessage}
-      onRewind={onRewind}
       rateMessageUuid={entry.id}
       showAwaitingDot={showAwaitingDot}
     >
@@ -4709,7 +5027,7 @@ function CodeTurnErrorBlock({
               onClick={() => setDetailsOpen((value) => !value)}
               type="button"
             >
-              <Icon name={detailsOpen ? "ChevronDownSmall" : "ChevronRightSmall"} size="xs" />
+              <Icon name={detailsOpen ? "ChevronDownSmall" : "ChevronRightMedium"} size="xs" />
               Details
             </button>
           ) : null}
@@ -5889,11 +6207,25 @@ function capitalize(value: string) {
   return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
 }
 
+/** Official ib bash card (c11959232): command snippet + output panel. */
 function UserBashBlock({ item }: { item: Extract<TranscriptEntryItem, { kind: "bash" }> }) {
+  const command = item.command;
   return (
-    <div className="rounded-r4 bg-t1 px-p6 py-p4 text-code text-t8 whitespace-pre-wrap break-all">
-      {item.command ? <pre className="m-0">{item.command}</pre> : null}
-      {item.output || item.error ? <pre className={`m-0 ${item.command ? "mt-p4" : ""} ${item.error ? "text-destructive-default" : "text-assistant-secondary"}`}>{item.error ?? item.output}</pre> : null}
+    <div className="relative max-w-full w-full select-text" data-official-source="c11959232-h_zsw3wI.js:ib">
+      {command ? <OfficialUserBashCommand command={command} /> : null}
+      <div
+        className={`${command ? "mt-[var(--p4)]" : ""} rounded-r6 bg-t1 overflow-clip font-mono text-code max-h-[160px] overflow-y-auto px-[var(--p6)] py-[var(--p4)]`}
+      >
+        <pre className="m-0 text-assistant-secondary whitespace-pre-wrap break-all">
+          {item.error ? (
+            <span className="text-destructive-default">{item.error}</span>
+          ) : item.output !== undefined ? (
+            item.output || "(no output)"
+          ) : (
+            <span className="text-assistant-secondary">Running…</span>
+          )}
+        </pre>
+      </div>
     </div>
   );
 }
@@ -5941,335 +6273,6 @@ function isVisibleAssistantEntryItem(
     && item.kind !== "file"
     && item.kind !== "image"
     && item.kind !== "peer";
-}
-
-type MarkdownBlock =
-  | { kind: "blockquote"; key: string; lines: string[] }
-  | { kind: "code"; key: string; language?: string; text: string }
-  | { kind: "heading"; key: string; level: 1 | 2 | 3 | 4 | 5 | 6; text: string }
-  | { kind: "hr"; key: string }
-  | { kind: "list"; items: string[]; key: string; ordered: boolean }
-  | { kind: "paragraph"; key: string; lines: string[] }
-  | { headers: string[]; kind: "table"; key: string; rows: string[][] };
-
-function OfficialCodeMarkdown({ isStreaming = false, text }: { isStreaming?: boolean; text: string }) {
-  const normalized = useMemo(() => preprocessOfficialCodeMarkdown(text), [text]);
-  const chunks = useOfficialCodeMarkdownChunks(normalized, isStreaming);
-  const renderedChunks = useMemo(() => {
-    const completed = chunks.completedChunks.map((chunk, index) => index > 0 ? `\n\n${chunk}` : chunk);
-    const streaming = chunks.streamingChunk || (chunks.completedChunks.length === 0 ? normalized : "");
-    if (streaming) completed.push(chunks.completedChunks.length > 0 ? `\n\n${streaming}` : streaming);
-    return completed;
-  }, [chunks.completedChunks, chunks.streamingChunk, normalized]);
-  return (
-    <div className="epitaxy-markdown" data-official-source="c11959232-h_zsw3wI.js:kb + c93fb40ec-C-L_NkHO.js:Oe">
-      {renderedChunks.map((chunk, index) => (
-        <OfficialCodeMarkdownChunk chunk={chunk} key={index} scope={`code-${index}`} />
-      ))}
-    </div>
-  );
-}
-
-const OfficialCodeMarkdownChunk = memo(function OfficialCodeMarkdownChunk({ chunk, scope }: { chunk: string; scope: string }) {
-  return <>{parseMarkdownBlocks(chunk).map((block) => renderMarkdownBlock(block, scope))}</>;
-}, (previous, next) => previous.chunk === next.chunk && previous.scope === next.scope);
-
-function useOfficialCodeMarkdownChunks(text: string, isStreaming: boolean) {
-  const stableChunks = useMemo(() => ({ completedChunks: text ? [text] : [], streamingChunk: "" }), [text]);
-  const [chunks, setChunks] = useState<{ completedChunks: string[]; streamingChunk: string }>({ completedChunks: [], streamingChunk: "" });
-  const trackerRef = useRef<OfficialMarkdownStructureTracker | null>(null);
-
-  useEffect(() => {
-    if (!isStreaming) return undefined;
-    if (!text) {
-      setChunks({ completedChunks: [], streamingChunk: "" });
-      return undefined;
-    }
-    trackerRef.current ??= new OfficialMarkdownStructureTracker();
-    const lines = text.split("\n");
-    const completedChunks: string[] = [];
-    let pendingLines: string[] = [];
-    let completedThrough = -1;
-    trackerRef.current.reset();
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index];
-      const { insideStructure, previousLineWasEmpty, structureJustClosed } = trackerRef.current.processLine(line);
-      pendingLines.push(line);
-      if (structureJustClosed || (!insideStructure && line.trim() === "" && pendingLines.length > 1 && !previousLineWasEmpty)) {
-        while (pendingLines.length > 0 && pendingLines[pendingLines.length - 1].trim() === "") pendingLines.pop();
-        if (pendingLines.length > 0) {
-          completedChunks.push(pendingLines.join("\n"));
-          completedThrough = index;
-          pendingLines = [];
-        }
-      }
-    }
-    setChunks({
-      completedChunks,
-      streamingChunk: lines.slice(completedThrough + 1).join("\n"),
-    });
-    return undefined;
-  }, [isStreaming, text]);
-
-  return isStreaming ? chunks : stableChunks;
-}
-
-class OfficialMarkdownStructureTracker {
-  private codeBlockDelimiter = "";
-  private inBlockquote = false;
-  private inCodeBlock = false;
-  private inList = false;
-  private inMathBlock = false;
-  private inTable = false;
-  private lastLineWasEmpty = true;
-
-  reset() {
-    this.inBlockquote = false;
-    this.inCodeBlock = false;
-    this.codeBlockDelimiter = "";
-    this.inList = false;
-    this.inMathBlock = false;
-    this.inTable = false;
-    this.lastLineWasEmpty = true;
-  }
-
-  processLine(line: string) {
-    const trimmed = line.trim();
-    const wasInsideStructure = this.isInsideStructure();
-    if ((trimmed.startsWith("```") || trimmed.startsWith("~~~")) && !this.inMathBlock) {
-      if (this.inCodeBlock) {
-        if (trimmed.startsWith(this.codeBlockDelimiter)) {
-          this.inCodeBlock = false;
-          this.codeBlockDelimiter = "";
-        }
-      } else {
-        this.inCodeBlock = true;
-        this.codeBlockDelimiter = trimmed.substring(0, 3);
-      }
-    }
-    if (trimmed === "$$" && !this.inCodeBlock) this.inMathBlock = !this.inMathBlock;
-    const inCodeOrMath = this.inCodeBlock || this.inMathBlock;
-    if (/^[-*+]|\d+\./.test(trimmed) && !inCodeOrMath) this.inList = true;
-    else if (this.inList && trimmed === "") this.inList = false;
-    if (line.includes("|") && !inCodeOrMath) this.inTable = true;
-    else if (this.inTable && trimmed === "") this.inTable = false;
-    const isBlockquoteLine = trimmed.startsWith(">");
-    if (isBlockquoteLine && !inCodeOrMath) this.inBlockquote = true;
-    else if (this.inBlockquote && trimmed === "" && !isBlockquoteLine) this.inBlockquote = false;
-    const previousLineWasEmpty = this.lastLineWasEmpty;
-    this.lastLineWasEmpty = trimmed === "";
-    return {
-      insideStructure: this.isInsideStructure(),
-      previousLineWasEmpty,
-      structureJustClosed: wasInsideStructure && !this.isInsideStructure(),
-    };
-  }
-
-  private isInsideStructure() {
-    return this.inBlockquote || this.inCodeBlock || this.inList || this.inMathBlock || this.inTable;
-  }
-}
-
-const officialSearchTreeBlockPattern = /<search_tree>([\s\S]*?)<\/search_tree>/g;
-
-function preprocessOfficialCodeMarkdown(text: string) {
-  return text.includes("<search_tree>")
-    ? text.replace(officialSearchTreeBlockPattern, (_match, body: string) => `\n\n\`\`\`search_tree\n${body.trim()}\n\`\`\`\n\n`)
-    : text;
-}
-
-function MarkdownContent({ isStreaming = false, text }: { isStreaming?: boolean; text: string }) {
-  const chunks = useMemo(() => splitStreamingMarkdown(text, isStreaming), [isStreaming, text]);
-  const committedBlocks = useMemo(() => parseMarkdownBlocks(chunks.committed), [chunks.committed]);
-  const frontierBlocks = useMemo(() => parseMarkdownBlocks(chunks.frontier), [chunks.frontier]);
-  return (
-    <>
-      {committedBlocks.map((block) => renderMarkdownBlock(block, "committed"))}
-      {frontierBlocks.map((block) => renderMarkdownBlock(block, "frontier"))}
-    </>
-  );
-}
-
-function splitStreamingMarkdown(text: string, isStreaming: boolean) {
-  if (!isStreaming) return { committed: text, frontier: "" };
-  const normalized = text.replace(/\r\n?/g, "\n");
-  const boundary = lastStableMarkdownBoundary(normalized);
-  if (boundary <= 0) return { committed: "", frontier: normalized };
-  return {
-    committed: normalized.slice(0, boundary).trimEnd(),
-    frontier: normalized.slice(boundary).replace(/^\n+/, ""),
-  };
-}
-
-function lastStableMarkdownBoundary(text: string) {
-  let inFence = false;
-  let lastBoundary = -1;
-  let offset = 0;
-  for (const line of text.split("\n")) {
-    if (/^```/.test(line)) inFence = !inFence;
-    offset += line.length + 1;
-    if (!inFence && line.trim() === "") lastBoundary = offset;
-  }
-  return lastBoundary;
-}
-
-function parseMarkdownBlocks(source: string): MarkdownBlock[] {
-  const lines = source.replace(/\r\n?/g, "\n").split("\n");
-  const blocks: MarkdownBlock[] = [];
-  let paragraph: string[] = [];
-  const flushParagraph = () => {
-    if (paragraph.length === 0) return;
-    blocks.push({ kind: "paragraph", key: `p-${blocks.length}`, lines: paragraph });
-    paragraph = [];
-  };
-
-  for (let index = 0; index < lines.length;) {
-    const line = lines[index];
-    if (line.trim() === "") { flushParagraph(); index += 1; continue; }
-    const fenced = line.match(/^```(.*)$/);
-    if (fenced) { flushParagraph(); index = pushCodeBlock(lines, index, fenced[1], blocks); continue; }
-    const heading = line.match(/^(#{1,6})\s+(.+)$/);
-    if (heading) { flushParagraph(); blocks.push({ kind: "heading", key: `h-${blocks.length}`, level: heading[1].length as MarkdownBlockHeadingLevel, text: heading[2].trim() }); index += 1; continue; }
-    if (/^ {0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line)) { flushParagraph(); blocks.push({ kind: "hr", key: `hr-${blocks.length}` }); index += 1; continue; }
-    if (isTableStart(lines, index)) { flushParagraph(); index = pushTableBlock(lines, index, blocks); continue; }
-    const listMatch = parseListItem(line);
-    if (listMatch) { flushParagraph(); index = pushListBlock(lines, index, listMatch.ordered, blocks); continue; }
-    const quote = line.match(/^>\s?(.*)$/);
-    if (quote) { flushParagraph(); index = pushQuoteBlock(lines, index, blocks); continue; }
-    paragraph.push(line);
-    index += 1;
-  }
-  flushParagraph();
-  return blocks;
-}
-
-type MarkdownBlockHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
-
-function pushCodeBlock(lines: string[], start: number, rawLanguage: string, blocks: MarkdownBlock[]) {
-  const code: string[] = [];
-  let index = start + 1;
-  while (index < lines.length && !lines[index].startsWith("```")) {
-    code.push(lines[index]);
-    index += 1;
-  }
-  blocks.push({ kind: "code", key: `code-${blocks.length}`, language: rawLanguage.trim() || undefined, text: code.join("\n") });
-  return index < lines.length ? index + 1 : index;
-}
-
-function pushListBlock(lines: string[], start: number, ordered: boolean, blocks: MarkdownBlock[]) {
-  const items: string[] = [];
-  let index = start;
-  while (index < lines.length) {
-    if (lines[index].trim() === "" && parseListItem(lines[index + 1] ?? "")?.ordered === ordered) {
-      index += 1;
-      continue;
-    }
-    const item = parseListItem(lines[index]);
-    if (!item || item.ordered !== ordered) break;
-    items.push(item.text);
-    index += 1;
-  }
-  blocks.push({ kind: "list", items, key: `list-${blocks.length}`, ordered });
-  return index;
-}
-
-function isTableStart(lines: string[], index: number) {
-  return lines[index]?.includes("|") && /^(\s*\|)?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[index + 1] ?? "");
-}
-
-function pushTableBlock(lines: string[], start: number, blocks: MarkdownBlock[]) {
-  const headers = splitTableRow(lines[start]);
-  const rows: string[][] = [];
-  let index = start + 2;
-  while (index < lines.length && lines[index].includes("|") && lines[index].trim() !== "") {
-    rows.push(splitTableRow(lines[index]));
-    index += 1;
-  }
-  blocks.push({ headers, kind: "table", key: `table-${blocks.length}`, rows });
-  return index;
-}
-
-function splitTableRow(line: string) {
-  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
-}
-
-function pushQuoteBlock(lines: string[], start: number, blocks: MarkdownBlock[]) {
-  const quoteLines: string[] = [];
-  let index = start;
-  while (index < lines.length) {
-    const quote = lines[index].match(/^>\s?(.*)$/);
-    if (!quote) break;
-    quoteLines.push(quote[1]);
-    index += 1;
-  }
-  blocks.push({ kind: "blockquote", key: `quote-${blocks.length}`, lines: quoteLines });
-  return index;
-}
-
-function parseListItem(line: string) {
-  const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
-  if (bullet) return { ordered: false, text: bullet[1] };
-  const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
-  if (ordered) return { ordered: true, text: ordered[1] };
-  return null;
-}
-
-function renderMarkdownBlock(block: MarkdownBlock, keyScope = "block") {
-  const blockKey = `${keyScope}-${block.key}`;
-  if (block.kind === "heading") return createElement(`h${block.level}`, { key: blockKey }, renderInlineMarkdown(block.text, blockKey));
-  if (block.kind === "code") {
-    // Official hit (index-BELzQL5P): language-mermaid → eit; language-search_tree → ait SearchTree.
-    if (isOfficialMermaidMarkdownLanguage(block.language)) {
-      return <OfficialMermaidDiagramCard key={blockKey} source={block.text} />;
-    }
-    if ((block.language?.trim() ?? "") === officialSearchTreeLanguage) {
-      return <OfficialSearchTree content={block.text} key={blockKey} />;
-    }
-    return <pre key={blockKey}><code className={block.language ? `language-${block.language}` : undefined}>{block.text}</code></pre>;
-  }
-  if (block.kind === "list") return createElement(block.ordered ? "ol" : "ul", { key: blockKey }, block.items.map((item, index) => <li key={index}>{renderInlineMarkdown(item, `${blockKey}-${index}`)}</li>));
-  if (block.kind === "blockquote") return <blockquote key={blockKey}>{block.lines.map((line, index) => <p key={index}>{renderInlineMarkdown(line, `${blockKey}-${index}`)}</p>)}</blockquote>;
-  if (block.kind === "table") return <MarkdownTable block={block} key={blockKey} keyPrefix={blockKey} />;
-  if (block.kind === "hr") return <hr key={blockKey} />;
-  return <p key={blockKey}>{renderInlineMarkdown(block.lines.join("\n"), blockKey)}</p>;
-}
-
-function MarkdownTable({ block, keyPrefix = block.key }: { block: Extract<MarkdownBlock, { kind: "table" }>; keyPrefix?: string }) {
-  return (
-    <table>
-      <thead>
-        <tr>{block.headers.map((cell, index) => <th key={index}>{renderInlineMarkdown(cell, `${keyPrefix}-h${index}`)}</th>)}</tr>
-      </thead>
-      <tbody>
-        {block.rows.map((row, rowIndex) => (
-          <tr key={rowIndex}>{block.headers.map((_header, cellIndex) => <td key={cellIndex}>{renderInlineMarkdown(row[cellIndex] ?? "", `${keyPrefix}-${rowIndex}-${cellIndex}`)}</td>)}</tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  const tokenPattern = /(`[^`]+`|\*\*[^*]+?\*\*|__[^_]+?__|\*[^*\s][^*]*?\*|_[^_\s][^_]*?_|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g;
-  let lastIndex = 0;
-  for (const match of text.matchAll(tokenPattern)) {
-    if (match.index === undefined) continue;
-    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
-    nodes.push(renderInlineToken(match[0], `${keyPrefix}-i${nodes.length}`));
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
-  return nodes;
-}
-
-function renderInlineToken(token: string, key: string) {
-  if (token.startsWith("`")) return <code key={key}>{token.slice(1, -1)}</code>;
-  if (token.startsWith("**") || token.startsWith("__")) return <strong key={key}>{renderInlineMarkdown(token.slice(2, -2), key)}</strong>;
-  if (token.startsWith("*") || token.startsWith("_")) return <em key={key}>{renderInlineMarkdown(token.slice(1, -1), key)}</em>;
-  const link = token.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/);
-  if (link) return <a key={key} href={link[2]} rel="noreferrer" target="_blank">{link[1]}</a>;
-  return token;
 }
 
 function ThinkingActivity() {
@@ -7869,6 +7872,7 @@ function useEpitaxySessionData(sessionId?: string) {
     finalizeStreamGenerationRef.current = null;
     if (!sessionId) return;
     officialStreamClear(sessionId);
+    clearOfficialEkeCache(sessionId);
     setStreamSnapshot(null);
     setStreamingMessageId(null);
     setStreamActivityMode(idleStreamActivityMode);
@@ -7930,6 +7934,8 @@ function useEpitaxySessionData(sessionId?: string) {
       }
     }
     officialStreamClear(sessionId);
+    // Official Jwe(sessionId) drops Xwe cache when stream settles / clears.
+    clearOfficialEkeCache(sessionId);
     if (markSessionSettled) officialClearTurnStarted(sessionId);
     setStreamSnapshot(null);
     setStreamingMessageId(null);
@@ -7992,7 +7998,12 @@ function useEpitaxySessionData(sessionId?: string) {
           streamGenerationRef.current += 1;
           finalizeStreamGenerationRef.current = null;
           officialMarkTurnStarted(sessionId);
-          if (streamMessageId) setStreamingMessageId(streamMessageId);
+          // Stamp live id on the ref immediately so eke suppress cannot race
+          // the first durable assistant merge before React commits setState.
+          if (streamMessageId) {
+            streamMessageIdRef.current = streamMessageId;
+            setStreamingMessageId(streamMessageId);
+          }
           store.getState().setStreamActivity(sessionId, {
             pendingTurnStartedAt: officialGetTurnStartedAt(sessionId) ?? Date.now(),
             streamActivityMode: "requesting",
@@ -8004,7 +8015,7 @@ function useEpitaxySessionData(sessionId?: string) {
         }
         // Activity mode from inner event (official stream_event.event).
         setStreamActivityMode((current) => streamActivityModeFromInnerEvent(innerEvent, current));
-        // Official Pe.feed(sessionId, event, parent) — typewriter via zE smoother.
+        // Official Pke.feed(sessionId, stream_event.event, parent) — typewriter via zE.
         officialStreamFeed(sessionId, streamMessage, parentToolUseId);
         return;
       }
@@ -8023,15 +8034,8 @@ function useEpitaxySessionData(sessionId?: string) {
             if (streamGenerationRef.current !== streamGeneration) return;
             finalizeStreamGenerationRef.current = null;
             clearStreamState(true);
-            const cached = store.getState().buckets[sessionId];
-            const mayNeedToolResults = (cached?.messages ?? []).some((message) => {
-              const raw = asRecord(message.raw);
-              if (stringValue(raw.type) !== "assistant") return false;
-              const content = asRecord(raw.message).content;
-              if (!Array.isArray(content)) return false;
-              return content.some((block) => stringValue(asRecord(block).type) === "tool_use");
-            });
-            if (mayNeedToolResults) void reload({ silent: true });
+            // Official does not full-reload transcript on every result; mergeMessage already
+            // holds durable rows. Avoid silent reload thrash that "refreshes old messages".
             void refreshSessionTitleAfterSettle(sessionId).then((nextSession) => {
               if (!nextSession) return;
               if (streamGenerationRef.current !== streamGeneration) return;
@@ -8049,16 +8053,20 @@ function useEpitaxySessionData(sessionId?: string) {
             finalize();
           }
         } else if (stringValue(asRecord(event).type) === "session_updated") {
+          // Official session_updated: metadata only (title/folders/permissions) — never
+          // getTranscript/reload the conversation body mid-turn.
           const nextSession = asRecord(event).session ?? asRecord(asRecord(event).payload).session;
           if (nextSession) {
-            // Full session from desktop includes pendingToolPermissions after control_request.
             const patched = normalizeSessionSummaryPatch(store.getState().buckets[sessionId]?.session ?? null, nextSession);
             if (patched) store.getState().patchSession(sessionId, patched);
-          } else {
-            void reload({ silent: true });
           }
         } else {
-          void reload({ silent: true });
+          // Non-stream lifecycle events (stopped/error/cleared): metadata reload only when
+          // no live typewriter is active.
+          const liveId = streamMessageIdRef.current
+            ?? streamingMessageId
+            ?? officialStreamActiveMessageId(sessionId);
+          if (!liveId) void reload({ silent: true });
         }
       } else if (
         stringValue(asRecord(event).type) === "tool_permission_request"
@@ -8084,11 +8092,17 @@ function useEpitaxySessionData(sessionId?: string) {
 
   // Official Ja
   const isLoading = Boolean(sessionId) && (bucket.isTranscriptPending || bucket.isMetaPending);
-  const activeStreamingMessageId = streamingMessageId ?? streamSnapshot?.messageId ?? null;
-  // Official Xa = eke/Xwe(messages, streamingMessageId); Ya = Kwe(Xa, Va) only.
+  // Official streamingMessageId (Qa): prefer live stream manager, then local Va, then React state.
+  // streamMessageIdRef is stamped on message_start before setState commits — critical for eke skip.
+  const activeStreamingMessageId =
+    streamingMessageId
+    ?? streamSnapshot?.messageId
+    ?? streamMessageIdRef.current
+    ?? (sessionId ? officialStreamActiveMessageId(sessionId) : null);
+  // Official Xa = Xwe/eke(sessionId, messages, streamingMessageId); Ya = Kwe(Xa, Va) only.
   const parsedEntries = useMemo(
-    () => parseOfficialTranscriptEntries(bucket.messages, activeStreamingMessageId),
-    [activeStreamingMessageId, bucket.messages],
+    () => parseOfficialTranscriptEntriesCached(sessionId, bucket.messages, activeStreamingMessageId),
+    [activeStreamingMessageId, bucket.messages, sessionId],
   );
   const isResponding =
     streamActivityMode !== idleStreamActivityMode
@@ -8129,6 +8143,26 @@ function useEpitaxySessionData(sessionId?: string) {
   };
 }
 
+function chatMessageContentRichness(message: ChatMessage): number {
+  const raw = asRecord(message.raw);
+  const nested = asRecord(raw.message);
+  const content = nested.content ?? raw.content;
+  if (Array.isArray(content)) {
+    let score = content.length * 1000;
+    for (const block of content) {
+      const record = asRecord(block);
+      const type = stringValue(record.type) ?? "";
+      if (type === "tool_use") score += 500;
+      if (type === "tool_result") score += 400;
+      if (type === "text") score += (stringValue(record.text) ?? "").length;
+      if (type === "thinking") score += (stringValue(record.thinking) ?? "").length;
+    }
+    return score;
+  }
+  if (typeof content === "string") return content.length;
+  return message.text?.length ?? 0;
+}
+
 async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMessage[]; session: SessionSummary } | null> {
   const bridge = desktopBridge.LocalSessions;
   const session = await bridge.getSession(sessionId).catch(() => null);
@@ -8136,9 +8170,10 @@ async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMe
   const transcript = await bridge.getTranscript?.(sessionId).catch(() => undefined);
   const sessionMessages = session.messages ?? [];
   const transcriptMessages = transcript?.length ? transcript : [];
-  // Assistant identity = Anthropic message.id (one turn → one durable row).
-  // Outer CLI uuid is per NDJSON event; using it as the only key duplicated the same turn.
-  // User identity stays outer uuid/id (each user event is unique).
+  // Load-time collapse (not live upsert):
+  // - Assistant → Anthropic message.id (one turn one history row; multi-emit partials collapse)
+  // - Prefer content-block richness over text.length so tools/thinking are not wiped
+  // - User → outer uuid/id
   const identityOf = (message: ChatMessage) => {
     const raw = asRecord(message.raw);
     const nested = asRecord(raw.message);
@@ -8159,7 +8194,7 @@ async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMe
       order.push(key);
       return;
     }
-    if ((message.text?.length ?? 0) >= (existing.text?.length ?? 0)) {
+    if (chatMessageContentRichness(message) >= chatMessageContentRichness(existing)) {
       byId.set(key, message);
     }
   };
@@ -8226,15 +8261,25 @@ function rawMessageContentContainsToolResult(raw: Record<string, unknown>) {
   });
 }
 
+/**
+ * Events that may need stream settle / session metadata handling.
+ * Name is historical — do NOT full-reload transcript body for these unless
+ * handleEvent's branch explicitly reloads when idle.
+ *
+ * Official local agent (index-BELzQL5P):
+ * - stream_event → Pke.feed only
+ * - durable message → append to T (mergeMessage)
+ * - session_updated → metadata (title/folders/permissions) only
+ * - result → settle stream, no getTranscript thrash
+ */
 function shouldReloadTranscriptForEvent(event: unknown) {
   const raw = asRecord(event);
   const type = stringValue(raw.type);
   if (type === "message") {
     const messageType = stringValue(asRecord(raw.message).type);
+    // Keep result so shouldClearOfficialStreamForEvent can settle Va → durable.
     return messageType === "result" || messageType === "error" || messageType === "completed";
   }
-  // session_updated carries title promotion from desktop summarize/setRunning.
-  // Do NOT reload transcript for tool_permission_* — that would thrash the stream/approval card.
   return type === "transcript_loaded"
     || type === "result"
     || type === "completed"

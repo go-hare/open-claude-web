@@ -236,7 +236,9 @@ const officialSessionIconMap = {
   bridge: "SystemComputerLaptopMacbook",
 } as const;
 type OfficialSessionSourceKind = keyof typeof officialSessionIconMap;
-const userMessageClass = "relative flex flex-col gap-g4 py-p6 px-p8 rounded-r7 bg-[var(--ui-user-message-background)] text-[var(--ui-user-message-primary-text)] select-text";
+/** Official c11959232 `$b` user bubble chrome. */
+export const officialUserMessageClass = "relative flex flex-col gap-g4 py-p6 px-p8 rounded-r7 bg-[var(--ui-user-message-background)] text-[var(--ui-user-message-primary-text)] select-text";
+const userMessageClass = officialUserMessageClass;
 const officialMenuPopupClass = "epitaxy-popup relative isolate min-w-[130px] max-w-[320px] max-h-[var(--available-height)] flex flex-col py-p5 rounded-r6 outline-none";
 const officialMenuScrollClass = "flex-1 min-h-0 flex flex-col overflow-y-auto";
 const officialMenuItemBaseClass = "relative isolate flex items-center min-h-[var(--h4)] shrink-0 px-p8 text-body select-none cursor-default outline-none hide-focus-ring before:content-[''] before:absolute before:-z-[1] before:inset-y-0 before:left-[6px] before:right-[6px] before:rounded-r5 data-[disabled]:opacity-50 data-[disabled]:pointer-events-none text-[var(--menu-item-color,var(--t8))] data-[highlighted]:before:bg-fill-uncontained-hover hover:before:bg-fill-uncontained-hover focus-visible:before:bg-fill-uncontained-hover";
@@ -709,7 +711,8 @@ export function OfficialUserMessage({
 
 type OfficialMessageRating = "negative" | "positive";
 
-function OfficialMessageActions({
+/** Official Vv (c11959232): hover message action row under user/assistant bubbles. */
+export function OfficialMessageActions({
   buttonVariant = "muted",
   className = "",
   copyText,
