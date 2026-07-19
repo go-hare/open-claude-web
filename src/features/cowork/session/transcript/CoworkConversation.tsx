@@ -67,6 +67,10 @@ export function CoworkConversation({
       .filter((message): message is CoworkChatMessage => message !== undefined),
     streamingMessageId,
   ), [messageUuids, streamingMessageId]);
+  // Official paint ownership is streamingMessageId / Va (eke suppress + progressive), not
+  // Qke isResponding. end_turn flips endTurnSeen → isResponding false while Pke/zE is still
+  // revealing — progressive must stay on until streamingMessageId clears on settle.
+  const conversationIsStreaming = Boolean(streamingMessageId) || isResponding;
   const messagePositions = useMemo(() => buildMessagePositions(chains), [chains]);
   const messageContext = useMemo(() => ({ onRetry: onTryAgain, onToolDecision, toolPermissionRequests: permissionRequests }), [onToolDecision, onTryAgain, permissionRequests]);
   // Official IYe pin controller. Conversation shell omits pinToBottomConfig (initial false);
@@ -99,7 +103,7 @@ export function CoworkConversation({
                     {chains.map((chain, index) => (
                       <CoworkMessageCell
                         chain={chain}
-                        conversationIsStreaming={isResponding}
+                        conversationIsStreaming={conversationIsStreaming}
                         isLastHumanMessage={messagePositions[index]?.isLastHumanMessage ?? false}
                         isLastMessage={messagePositions[index]?.isLastMessage ?? false}
                         key={chain.firstMessageUuid}

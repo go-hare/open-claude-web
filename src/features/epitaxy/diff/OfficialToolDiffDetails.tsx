@@ -7,7 +7,8 @@
  */
 import { parseDiffFromFile, type FileContents, type FileDiffMetadata } from "@pierre/diffs";
 import { File, FileDiff } from "@pierre/diffs/react";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { OfficialButton } from "../OfficialEpitaxyComponents";
 import { officialPierreLangFromPath } from "./officialPierreLang";
 import { useOfficialPierreTheme, useWorkerPool } from "./OfficialPierreWorkerPool";
 import { pierreTokenPaintOnPostRender } from "./pierreTokenPaint";
@@ -188,22 +189,29 @@ function ToolDiffPathButton({ onOpen, path }: { onOpen?: (path: string) => void;
   );
 }
 
+/**
+ * Official c11959232 `xx` — tool body copy control.
+ * opacity-0 until group/body hover|focus; yd uncontained small;
+ * icon CheckSelection | CopySquareBehind; 1200ms copied flash.
+ */
 function ToolDiffCopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!text) return null;
   return (
-    <button
-      aria-label="Copy"
-      className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-uncontained-default hover:text-uncontained-hover ring-focus h-small text-footnote rounded-small justify-center aspect-square px-p3 shrink-0"
-      onClick={(event) => {
-        event.stopPropagation();
-        void navigator.clipboard?.writeText(text);
-      }}
-      type="button"
-    >
-      <span className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)] group-hover/btn:bg-[var(--fill-uncontained-hover)]" />
-      <span className="relative text-[12px]" aria-hidden>
-        ⎘
-      </span>
-    </button>
+    <div className="opacity-0 group-hover/body:opacity-100 focus-within:opacity-100 [transition:opacity_150ms_cubic-bezier(0.215,0.61,0.355,1)] motion-reduce:transition-none">
+      <OfficialButton
+        ariaLabel={copied ? "Copied" : "Copy"}
+        icon={copied ? "CheckSelection" : "CopySquareBehind"}
+        onClick={() => {
+          // Official xx: writeText + 1200ms CheckSelection flash (c11959232).
+          void navigator.clipboard?.writeText(text).catch(() => {});
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1200);
+        }}
+        size="small"
+        variant="uncontained"
+      />
+    </div>
   );
 }
 

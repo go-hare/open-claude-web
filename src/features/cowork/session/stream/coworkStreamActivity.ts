@@ -8,8 +8,36 @@ export function coworkAgentActivityFromStream(
   previous: CoworkAgentActivity | null,
   receivedAt: number,
 ): CoworkAgentActivity | null {
-  if (!snapshot) return null;
   const event = asRecord(streamMessage.event);
+  // Official: message_start before first content_block — no Va blocks yet (Pke emits only when length>0).
+  if (!snapshot) {
+    const eventType = stringValue(event.type);
+    if (eventType === "message_start") {
+      return { activity: "thinking", contentLength: 0, lastActivityTime: receivedAt };
+    }
+    if (eventType === "content_block_start") {
+      const blockType = stringValue(asRecord(event.content_block).type);
+      if (blockType === "tool_use") {
+        return {
+          activity: "tool_use",
+          contentLength: 0,
+          lastActivityTime: receivedAt,
+          toolName: stringValue(asRecord(event.content_block).name),
+        };
+      }
+      if (blockType === "thinking") return { activity: "thinking", contentLength: 0, lastActivityTime: receivedAt };
+    }
+    if (eventType === "content_block_delta") {
+      const deltaType = stringValue(asRecord(event.delta).type);
+      if (deltaType === "text_delta" || deltaType === "connector_text_delta") {
+        return { activity: "writing", contentLength: previous?.contentLength ?? 0, lastActivityTime: receivedAt };
+      }
+      if (deltaType === "thinking_delta") {
+        return { activity: "thinking", contentLength: previous?.contentLength ?? 0, lastActivityTime: previous?.lastActivityTime ?? receivedAt };
+      }
+    }
+    return previous;
+  }
   const activity = nextActivity(snapshot, event, previous);
   const lastActivityTime = shouldResetActivityTime(event, previous, activity)
     ? receivedAt

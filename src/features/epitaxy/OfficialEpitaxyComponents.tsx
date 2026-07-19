@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
 import { OfficialTooltip } from "../shared/OfficialTooltip";
+import { copyOfficialMessageRich } from "./session/officialMessageClipboard";
 
 export type OfficialSessionRef = {
   id: string;
@@ -72,6 +73,11 @@ type OfficialDropdownButtonProps = {
   side?: "top" | "right" | "bottom" | "left";
   sideOffset?: number;
   size?: "small" | "base" | "large";
+  /**
+   * Official Ce/Ou (c3d5d2a6f): icon mode uses `tooltip ?? aria-label`; text mode only explicit tooltip.
+   * Wrap trigger when `tooltip !== null` and resolved label is truthy. Pass `null` to disable.
+   */
+  tooltip?: ReactNode | null;
   triggerKey?: ReactNode | string | string[];
   variant?: "uncontained" | "contained" | "muted";
 };
@@ -86,6 +92,9 @@ type OfficialSplitDropdownButtonProps = {
   label: ReactNode;
   menuLabel?: string;
   onIconClick?: () => void;
+  /** Controlled open (Wk Escape closes menu before revise). */
+  onOpenChange?: (open: boolean) => void;
+  open?: boolean;
   side?: "top" | "right" | "bottom" | "left";
   size?: "small" | "base" | "large";
   variant?: "uncontained" | "contained" | "primary";
@@ -132,6 +141,12 @@ type OfficialSearchSelectProps<T> = {
 
 type OfficialSessionHeaderProps = {
   activeView?: OfficialViewPane;
+  /** Official VC — show Files (browser) Views item when bridge supports list+mentions. */
+  canOpenBrowser?: boolean;
+  /** Official YR Screen — framebufferPreview supported + sources/open. */
+  canOpenFramebuffer?: boolean;
+  /** Official ES — show Runs when session is a scheduled run. */
+  canOpenRuns?: boolean;
   dragHandle?: ReactNode;
   hasRunningTasks?: boolean;
   hideViews?: boolean;
@@ -141,6 +156,8 @@ type OfficialSessionHeaderProps = {
   onSessionRemoved?: () => void;
   onTranscriptModeChange?: (mode: OfficialTranscriptMode) => void;
   onViewSelect?: (view: OfficialViewPane) => void;
+  /** Official gc(tileLayout) membership — multi-tile side stack (tasks + subagent). */
+  openViews?: readonly OfficialViewPane[];
   paneIndex?: number;
   session: SessionSummary | null;
   sessionRef: OfficialSessionRef | null;
@@ -148,7 +165,19 @@ type OfficialSessionHeaderProps = {
   transcriptMode?: OfficialTranscriptMode;
 };
 
-export type OfficialViewPane = "preview" | "diff" | "terminal" | "tasks" | "plan" | "file" | "subagent";
+/** Official QR side kinds (c11959232): includes browser (Files) + runs + framebuffer (Screen). */
+export type OfficialViewPane =
+  | "preview"
+  | "diff"
+  | "terminal"
+  | "browser"
+  | "tasks"
+  | "plan"
+  | "file"
+  | "subagent"
+  | "runs"
+  /** Official YR "framebuffer" pane — UI label Screen. */
+  | "framebuffer";
 export type OfficialTranscriptMode = "normal" | "thinking" | "verbose" | "summary";
 
 type OfficialTranscriptProps = {
@@ -453,11 +482,19 @@ export function OfficialSplitDropdownButton({
   label,
   menuLabel = "More options",
   onIconClick,
+  onOpenChange,
+  open,
   side = "top",
   size = "base",
   variant = "contained",
 }: OfficialSplitDropdownButtonProps) {
+  // Official Kw: open/onOpenChange controlled with internal fallback.
   const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = open ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const shellClass = [
     "relative inline-flex w-fit items-center border-0 cursor-default select-none outline-none",
     size === "small" ? "h-small rounded-small" : size === "large" ? "h-large rounded-large" : "h-base rounded-base",
@@ -474,12 +511,25 @@ export function OfficialSplitDropdownButton({
       : variant === "contained"
         ? "hover:bg-fill-contained-hover hover:text-contained-hover"
         : "hover:bg-fill-uncontained-hover hover:text-uncontained-hover";
-  const primaryClass = `h-full inline-flex items-center justify-center bg-transparent border-0 cursor-default outline-none hide-focus-ring ring-focus rounded-l-[inherit] px-p5 gap-g4 text-body border-r border-transparent ${sideHover}`;
+  const primaryClass = `h-full inline-flex items-center justify-center bg-transparent border-0 cursor-default outline-none hide-focus-ring ring-focus rounded-l-[inherit] px-p5 gap-g4 text-body ${sideHover}`;
+  // Official Kw text mode: chevron uses size "s" (not xs).
   const chevronClass = `h-full inline-flex items-center justify-center bg-transparent border-0 cursor-default outline-none hide-focus-ring ring-focus rounded-r-[inherit] min-w-[16px] shrink-0 ${sideHover}`;
+  // Official Kw divider between primary + chevron (primary: z0/20%; else t2).
+  const dividerClass =
+    variant === "primary"
+      ? "w-px self-stretch bg-[var(--z0)] opacity-20 my-[4px]"
+      : variant === "contained"
+        ? "w-px self-stretch bg-t2 my-px"
+        : "w-px self-stretch bg-t2 my-[4px]";
 
   return (
-    <Menu.Root open={internalOpen} onOpenChange={setInternalOpen}>
-      <div className={shellClass} data-disabled={disabled || busy || undefined} data-popup-open={internalOpen ? "" : undefined}>
+    <Menu.Root
+      open={isOpen}
+      onOpenChange={(next) => {
+        setOpen(next);
+      }}
+    >
+      <div className={shellClass} data-disabled={disabled || busy || undefined} data-popup-open={isOpen ? "" : undefined}>
         <button
           aria-busy={busy || undefined}
           aria-label={ariaLabel}
@@ -496,8 +546,9 @@ export function OfficialSplitDropdownButton({
           ) : null}
           <span className="truncate">{label}</span>
         </button>
+        <span aria-hidden="true" className={dividerClass} />
         <Menu.Trigger aria-label={menuLabel} className={chevronClass} disabled={disabled || busy}>
-          <Icon name="ChevronDownSmall" size="xs" />
+          <Icon name="ChevronDownSmall" size="s" />
         </Menu.Trigger>
       </div>
       {items.length > 0 ? (
@@ -538,6 +589,7 @@ export function OfficialDropdownButton({
   side = "bottom",
   sideOffset,
   size = "base",
+  tooltip,
   triggerKey,
   variant = "uncontained",
 }: OfficialDropdownButtonProps) {
@@ -545,6 +597,8 @@ export function OfficialDropdownButton({
   const hasPopup = items.length > 0 || Boolean(extraSections?.some((section) => section.items.length > 0));
   const resolvedAlignOffset = alignOffset ?? (align === "end" ? 0 : actualMode === "text" ? -6 : -8);
   const resolvedSideOffset = sideOffset ?? 8;
+  // Official Ce: M = text mode ? tooltip : (tooltip ?? aria-label); wrap when tooltip !== null && M
+  const tooltipLabel = actualMode === "text" ? tooltip : (tooltip ?? ariaLabel);
   const trigger = (
     <Menu.Trigger
       aria-label={ariaLabel}
@@ -567,10 +621,18 @@ export function OfficialDropdownButton({
       {revealChevron !== "never" ? <Icon name="ChevronDownSmall" size="xs" className={revealChevron === "hover" ? "shrink-0 opacity-0 group-hover/dd:opacity-100 group-focus-visible/dd:opacity-100 group-aria-[expanded=true]/dd:opacity-100" : "shrink-0"} /> : null}
     </Menu.Trigger>
   );
+  const triggerWithTooltip =
+    tooltip !== null && tooltipLabel != null && tooltipLabel !== false && tooltipLabel !== "" ? (
+      <OfficialTooltip delayDuration={400} side="top" tooltipContent={tooltipLabel}>
+        {trigger}
+      </OfficialTooltip>
+    ) : (
+      trigger
+    );
 
   return (
     <Menu.Root open={open} onOpenChange={onOpenChange}>
-      {trigger}
+      {triggerWithTooltip}
       {hasPopup ? (
         <Menu.Portal>
           <Menu.Positioner align={align} alignOffset={resolvedAlignOffset} className="epitaxy-root z-[60]" side={side} sideOffset={resolvedSideOffset}>
@@ -601,6 +663,9 @@ export function OfficialDropdownButton({
 
 export function OfficialSessionHeader({
   activeView,
+  canOpenBrowser = false,
+  canOpenFramebuffer = false,
+  canOpenRuns = false,
   dragHandle,
   hasRunningTasks = false,
   hideViews = false,
@@ -610,6 +675,7 @@ export function OfficialSessionHeader({
   onSessionRemoved,
   onTranscriptModeChange,
   onViewSelect,
+  openViews,
   paneIndex = 0,
   session,
   sessionRef,
@@ -632,7 +698,17 @@ export function OfficialSessionHeader({
       <div className="relative z-[1] ml-auto flex items-center gap-g3 shrink-0 draggable-none">
         {sessionRef ? <OfficialTranscriptViewButton hideSummary={hideSummary} mode={transcriptMode} onModeChange={onTranscriptModeChange} /> : null}
         {sessionRef?.type !== "local" ? <OfficialButton ariaLabel="Share" icon="ShareArrowOutOfBox" /> : null}
-        {sessionRef && !hideViews ? <OfficialViewsButton activeView={activeView} hasRunningTasks={hasRunningTasks} onViewSelect={onViewSelect} /> : null}
+        {sessionRef && !hideViews ? (
+          <OfficialViewsButton
+            activeView={activeView}
+            canOpenBrowser={canOpenBrowser}
+            canOpenFramebuffer={canOpenFramebuffer}
+            canOpenRuns={canOpenRuns}
+            hasRunningTasks={hasRunningTasks}
+            onViewSelect={onViewSelect}
+            openViews={openViews}
+          />
+        ) : null}
         {onSessionRemoved ? <OfficialButton ariaLabel="Close pane" icon="XCrossCloseMedium" onClick={onSessionRemoved} /> : null}
       </div>
     </div>
@@ -744,9 +820,10 @@ export function OfficialMessageActions({
   const [copied, setCopied] = useState(false);
   const [localRating, setLocalRating] = useState<OfficialMessageRating | undefined>(rating);
   const currentRating = rating ?? localRating;
+  // Official Vv → $v(text, ml().copyToClipboard) (c11959232).
   const copyMessage = () => {
     if (copyText === undefined) return;
-    void navigator.clipboard?.writeText(copyText).then(() => {
+    void copyOfficialMessageRich(copyText).then(() => {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1200);
     });
@@ -1202,13 +1279,60 @@ function OfficialTranscriptViewButton({ hideSummary, mode, onModeChange }: { hid
   return <OfficialDropdownButton ariaLabel="Transcript view mode" header="Transcript view" icon="NoteSquareLines" items={items} revealChevron="never" />;
 }
 
-function OfficialViewsButton({ activeView, hasRunningTasks = false, onViewSelect }: { activeView?: OfficialViewPane; hasRunningTasks?: boolean; onViewSelect?: (view: OfficialViewPane) => void }) {
+function OfficialViewsButton({
+  activeView,
+  canOpenBrowser = false,
+  canOpenFramebuffer = false,
+  canOpenRuns = false,
+  hasRunningTasks = false,
+  onViewSelect,
+  openViews,
+}: {
+  activeView?: OfficialViewPane;
+  /** Official VC() — Files (browser) gated on listSessionDirectory + fetchMentionOptions. */
+  canOpenBrowser?: boolean;
+  /** Official YR Screen — T && (sources || already open framebuffer). */
+  canOpenFramebuffer?: boolean;
+  /** Official ES — Runs gated on scheduledTaskId / remote trigger. */
+  canOpenRuns?: boolean;
+  hasRunningTasks?: boolean;
+  onViewSelect?: (view: OfficialViewPane) => void;
+  openViews?: readonly OfficialViewPane[];
+}) {
+  // Official toggleSidePane membership via ir(tileLayout).has — multi-tile stack keeps tasks open under subagent.
+  const isOpen = (view: OfficialViewPane) => openViews ? openViews.includes(view) : activeView === view;
+  // Official YR item order: Preview?, Diff, Terminal?, Files?, Tasks, Plan, Runs?, Screen?
   const items: OfficialDropdownItem[] = [
-    { icon: "Play", label: "预览", checked: activeView === "preview", shortcut: "⇧⌘P", onSelect: () => onViewSelect?.("preview") },
-    { icon: "ChangesDiffPlusMinusBox", label: "Diff", checked: activeView === "diff", shortcut: "⇧⌘D", onSelect: () => onViewSelect?.("diff") },
-    { icon: "TerminalOpenCommandLine", label: "Terminal", checked: activeView === "terminal", shortcut: "⌃`", onSelect: () => onViewSelect?.("terminal") },
-    { icon: "Blocks", label: "任务", checked: activeView === "tasks", status: hasRunningTasks && activeView !== "tasks", onSelect: () => onViewSelect?.("tasks") },
-    { icon: "CheckList", label: "Plan", checked: activeView === "plan", onSelect: () => onViewSelect?.("plan") },
+    { icon: "Play", label: "预览", checked: isOpen("preview"), shortcut: "⇧⌘P", onSelect: () => onViewSelect?.("preview") },
+    { icon: "ChangesDiffPlusMinusBox", label: "Diff", checked: isOpen("diff"), shortcut: "⇧⌘D", onSelect: () => onViewSelect?.("diff") },
+    { icon: "TerminalOpenCommandLine", label: "Terminal", checked: isOpen("terminal"), shortcut: "⌃`", onSelect: () => onViewSelect?.("terminal") },
+    ...(canOpenBrowser
+      ? [{
+          icon: "Folder1",
+          label: "Files",
+          checked: isOpen("browser"),
+          shortcut: "⇧⌘F",
+          onSelect: () => onViewSelect?.("browser"),
+        } satisfies OfficialDropdownItem]
+      : []),
+    { icon: "Blocks", label: "任务", checked: isOpen("tasks"), status: hasRunningTasks && !isOpen("tasks"), onSelect: () => onViewSelect?.("tasks") },
+    { icon: "CheckList", label: "Plan", checked: isOpen("plan"), onSelect: () => onViewSelect?.("plan") },
+    ...(canOpenRuns
+      ? [{
+          icon: "ClockTimeslot",
+          label: "Runs",
+          checked: isOpen("runs"),
+          onSelect: () => onViewSelect?.("runs"),
+        } satisfies OfficialDropdownItem]
+      : []),
+    ...(canOpenFramebuffer
+      ? [{
+          icon: "SystemComputerLaptopMacbook",
+          label: "Screen",
+          checked: isOpen("framebuffer"),
+          onSelect: () => onViewSelect?.("framebuffer"),
+        } satisfies OfficialDropdownItem]
+      : []),
   ];
   return <OfficialDropdownButton ariaLabel="Views" icon="SidebarSimpleRightSquare" items={items} />;
 }

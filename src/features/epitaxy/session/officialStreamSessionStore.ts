@@ -8,7 +8,8 @@
  *   clear / flush / setVisibility / hasListeners
  *
  * Stream snapshots stay OUT of the durable session message bucket — UI holds them
- * in local React state (Va) and applies startTransition for same-message ticks.
+ * as Va via useSyncExternalStore(getSnapshot). (Official c119 uses startTransition for
+ * same-message ticks; Electron concurrent scheduling coalesces those and dumps paragraphs.)
  */
 import {
   createOfficialSessionStreamSmoother,
@@ -20,6 +21,8 @@ type StreamSessionEntry = {
   smoother: OfficialSessionStreamSmoother;
   messageId: string;
   cleared: boolean;
+  /** Last Oke/Va snapshot — required for useSyncExternalStore getSnapshot. */
+  lastSnapshot: OfficialStreamSnapshot;
   listeners: Set<(snapshot: OfficialStreamSnapshot) => void>;
   unsubscribeSmoother: () => void;
 };
@@ -27,6 +30,8 @@ type StreamSessionEntry = {
 const sessions = new Map<string, StreamSessionEntry>();
 
 function emit(entry: StreamSessionEntry, snapshot: OfficialStreamSnapshot) {
+  entry.lastSnapshot = snapshot;
+  if (snapshot) entry.messageId = snapshot.messageId;
   for (const listener of entry.listeners) listener(snapshot);
 }
 
@@ -38,11 +43,11 @@ function ensureSession(sessionId: string): StreamSessionEntry {
     smoother,
     messageId: "",
     cleared: true,
+    lastSnapshot: null,
     listeners: new Set(),
     unsubscribeSmoother: () => undefined,
   };
   created.unsubscribeSmoother = smoother.subscribe((snapshot) => {
-    if (snapshot) created.messageId = snapshot.messageId;
     emit(created, snapshot);
   });
   sessions.set(sessionId, created);
@@ -91,13 +96,13 @@ export function officialStreamFeed(
     : { type: "stream_event", event, parent_tool_use_id: parent ?? null };
   entry.smoother.feed(feedPayload);
   if (stringValue(event.type) === "message_start") {
-    entry.cleared = false;
+    // Official: messageId = event.message.id only (never outer uuid).
     const message = asRecord(event.message);
-    entry.messageId =
-      stringValue(message.id)
-      ?? stringValue(streamMessageOrEvent.uuid)
-      ?? stringValue(event.uuid)
-      ?? entry.messageId;
+    const apiMessageId = stringValue(message.id);
+    if (apiMessageId) {
+      entry.cleared = false;
+      entry.messageId = apiMessageId;
+    }
   }
 }
 
@@ -113,8 +118,22 @@ export function officialStreamClear(sessionId: string) {
   const entry = sessions.get(sessionId);
   if (!entry) return;
   entry.cleared = true;
+  entry.messageId = "";
   entry.smoother.clear();
   emit(entry, null);
+}
+
+/**
+ * Latest Oke snapshot for a session (null when cleared / idle).
+ * Official c119 holds Va in useState via Pe.subscribe; React 19 concurrent
+ * startTransition on every 60fps tick can drop intermediate lengths in Electron
+ * and paint as paragraph dumps. Prefer useSyncExternalStore(getSnapshot).
+ */
+export function officialStreamGetSnapshot(sessionId: string | undefined): OfficialStreamSnapshot {
+  if (!sessionId) return null;
+  const entry = sessions.get(sessionId);
+  if (!entry || entry.cleared) return null;
+  return entry.lastSnapshot;
 }
 
 export function officialStreamFlush(sessionId: string) {
@@ -147,6 +166,19 @@ export function officialStreamSubscribe(
   return () => {
     entry.listeners.delete(listener);
   };
+}
+
+/**
+ * useSyncExternalStore-compatible subscribe. Notifies on every Oke emit
+ * (including null clear) without startTransition coalescing.
+ */
+export function officialStreamSubscribeStore(
+  sessionId: string,
+  onStoreChange: () => void,
+) {
+  return officialStreamSubscribe(sessionId, () => {
+    onStoreChange();
+  });
 }
 
 export function officialStreamSetVisibility(sessionId: string, check: () => boolean) {

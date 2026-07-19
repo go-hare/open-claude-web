@@ -24,6 +24,11 @@ const viewportStyle: CSSProperties = {
   overflow: "clip",
 };
 
+// Official nE (c119): { gap:12, padding:8, minTilePx:100, dragLift:24 }
+// KI applies padding on the tile container so Nn sidebar effect-primary-elevated
+// 1px outer ring is not clipped by the viewport's overflow:clip.
+// Official iE only zeroes paddingRight when chat is the rightmost tile (rd/E).
+// Our chat is left / side right → keep full 8px padding including right.
 const tileContainerStyle: CSSProperties = {
   width: "100%",
   height: "100%",
@@ -33,7 +38,7 @@ const tileContainerStyle: CSSProperties = {
   flexDirection: "column",
   position: "relative",
   alignItems: "stretch",
-  padding: "8px 0px 8px 8px",
+  padding: 8,
   transformStyle: "preserve-3d",
 };
 

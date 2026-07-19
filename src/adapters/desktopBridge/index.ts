@@ -34,6 +34,7 @@ export const desktopBridge: DesktopBridge = window.claudeDesktopBridge
 
 export type {
   BrowserUseBridge,
+  ChatMessage,
   CodeStats,
   ConnectedBrowser,
   ConnectedOfficeFile,
@@ -50,6 +51,7 @@ export type {
   FileSystemBridge,
   LocalEnvironmentVariables,
   LocalSessionEnvironmentBridge,
+  LocalSessionsBridge,
   PermissionMode,
   ScheduledTaskSummary,
   SendMessageInput,

@@ -16,7 +16,7 @@ after(async () => {
   await vite.close();
 });
 
-test("uses the outer SDK uuid while preserving the API message id separately", () => {
+test("uses Anthropic API message.id as streamingMessageId (official Pke)", () => {
   const snapshot = reduceCoworkStreamEvent(null, {
     event: {
       message: {
@@ -28,7 +28,8 @@ test("uses the outer SDK uuid while preserving the API message id separately", (
     },
     uuid: "sdk-message-uuid",
   });
-  assert.equal(snapshot.messageId, "sdk-message-uuid");
+  // Official: Pke.messageId = event.message.id; outer uuid is per-NDJSON identity only.
+  assert.equal(snapshot.messageId, "api-message-id");
   assert.equal(snapshot.apiMessageId, "api-message-id");
   assert.equal(snapshot.model, "claude-opus-4");
   assert.deepEqual(snapshot.usage, {
@@ -123,4 +124,22 @@ test("updates streamed usage from message_delta", () => {
     input_tokens: 13,
     output_tokens: 17,
   });
+});
+
+test("message_stop does not clear Va snapshot (official: only Pke.clear on result)", () => {
+  let snapshot = reduceCoworkStreamEvent(null, {
+    event: { message: { id: "api-message-id" }, type: "message_start" },
+    uuid: "sdk-message-uuid",
+  });
+  snapshot = reduceCoworkStreamEvent(snapshot, {
+    event: { content_block: { type: "text", text: "" }, index: 0, type: "content_block_start" },
+  });
+  snapshot = reduceCoworkStreamEvent(snapshot, {
+    event: { delta: { text: "Hi", type: "text_delta" }, index: 0, type: "content_block_delta" },
+  });
+  const afterStop = reduceCoworkStreamEvent(snapshot, {
+    event: { type: "message_stop" },
+  });
+  assert.notEqual(afterStop, null);
+  assert.equal(afterStop.blocks[0].text, "Hi");
 });

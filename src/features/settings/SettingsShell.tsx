@@ -276,9 +276,25 @@ export function Switch({ checked = false, disabled = false, onCheckedChange }: {
 }
 
 
-export function CdsButton({ children, onClick, primary = false }: { children: ReactNode; onClick?: () => void; primary?: boolean }) {
+export function CdsButton({
+  children,
+  disabled = false,
+  onClick,
+  primary = false,
+}: {
+  children: ReactNode;
+  disabled?: boolean;
+  onClick?: () => void;
+  primary?: boolean;
+}) {
   return (
-    <button className={primary ? primaryButtonClass : secondaryButtonClass} data-cds="Button" onClick={onClick} type="button">
+    <button
+      className={primary ? primaryButtonClass : secondaryButtonClass}
+      data-cds="Button"
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
       <span className={`absolute inset-0 -z-[1] rounded-[inherit] transition-colors duration-fast group-focus-visible/btn:shadow-[inset_0_0_0_1px_var(--cds-page-bg)] ${primary ? "bg-fill-primary group-hover/btn:bg-fill-primary-hover" : "bg-fill-secondary group-hover/btn:bg-fill-secondary-hover group-aria-pressed/btn:bg-accent group-hover/btn:group-aria-pressed/btn:bg-accent cds-btn-squish shadow-field"}`} />
       <span className="inline-flex items-center gap-1 ">{children}</span>
     </button>

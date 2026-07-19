@@ -13,10 +13,11 @@ export function reduceCoworkStreamEvent(
   const eventType = stringValue(event.type);
   if (eventType === "message_start") {
     const message = record(event.message);
-    const messageId = stringValue(streamMessage.uuid) ?? stringValue(message.id);
+    // Official Pke.messageId = event.message.id (Anthropic). Outer uuid is NDJSON identity only.
     const apiMessageId = stringValue(message.id);
+    const messageId = apiMessageId ?? stringValue(streamMessage.uuid);
     return messageId ? {
-      apiMessageId,
+      apiMessageId: apiMessageId ?? messageId,
       // Official: no synthetic empty text block — blocks arrive via content_block_start.
       blocks: [],
       messageId,
@@ -24,7 +25,9 @@ export function reduceCoworkStreamEvent(
       usage: streamUsage(message.usage),
     } : current;
   }
-  if (eventType === "message_stop") return null;
+  // Official: message_stop sets model_done on zE only — does NOT clear Va / Pke.
+  // Clear happens on result/done/error via Pke.clear. Keep snapshot for settle reveal.
+  if (eventType === "message_stop") return current;
   if (!current) return current;
   if (eventType === "message_delta") return { ...current, usage: streamUsage(event.usage) ?? current.usage };
   if (eventType === "content_block_start") return startContentBlock(current, event);

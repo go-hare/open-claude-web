@@ -9,6 +9,7 @@ import type { CoworkUploadedFile } from "../newTask/coworkUploadedFiles";
 import { bindCoworkChatInputTopMeasure } from "../session/transcript/coworkChatLayoutStore";
 import { CoworkDropdownButton } from "../ui/CoworkDropdownButton";
 import type { CoworkDropdownItem } from "../ui/CoworkMenuTypes";
+import { CoworkArrowDownGlyph } from "../ui/CoworkOfficialGlyphs";
 import { CoworkComposerButton } from "./CoworkComposerPrimitives";
 
 type CoworkSessionComposerSurfaceProps = {
@@ -18,6 +19,8 @@ type CoworkSessionComposerSurfaceProps = {
   containerRef?: RefObject<HTMLDivElement | null>;
   disabled: boolean;
   editor: Editor | null;
+  /** Official t$t `isStreaming` — brand border + Ace glow while responding. */
+  isStreaming?: boolean;
   isSubmitting: boolean;
   modelItems: CoworkDropdownItem[];
   modelLabel: ReactNode;
@@ -44,7 +47,7 @@ export function CoworkSessionComposerSurface(props: CoworkSessionComposerSurface
   );
   return (
     <div className="sticky bottom-0 mx-auto w-full pt-6 z-[5]" data-chat-input-container ref={props.containerRef}>
-      <ScrollToBottomButton onScroll={props.onScrollToBottom} visible={props.showScrollButton} />
+      <ScrollToBottomButton isStreaming={Boolean(props.isStreaming)} onScroll={props.onScrollToBottom} visible={props.showScrollButton} />
       {props.childrenAbove}
       <div onKeyDownCapture={props.onKeyDownCapture}>
         <fieldset className="flex w-full min-w-0 flex-col">
@@ -119,6 +122,46 @@ function ComposerActions({ canStop, disabled, isSubmitting, onStop, onSubmit }: 
   );
 }
 
-function ScrollToBottomButton({ onScroll, visible }: { onScroll: () => void; visible: boolean }) {
-  return <button aria-hidden={!visible} aria-label="Scroll to bottom" className={`inline-flex items-center h-[24px] px-p3 rounded-r5 bg-fill-contained-default text-contained-default absolute -top-[32px] left-1/2 -translate-x-1/2 z-[1] transition-opacity ${visible ? "opacity-100" : "opacity-0 pointer-events-none"}`} onClick={onScroll} tabIndex={visible ? 0 : -1} type="button"><Icon name="ChevronDownSmall" size="s" /></button>;
+/**
+ * Official index-BELzQL5P `t$t` scroll-to-bottom control (cowork / chat path).
+ * Circular size-9 + full ArrowDown `ly` — NOT the code-path (c119) contained pill + ChevronDownSmall.
+ */
+function ScrollToBottomButton({
+  isStreaming,
+  onScroll,
+  visible,
+}: {
+  isStreaming: boolean;
+  onScroll: () => void;
+  visible: boolean;
+}) {
+  return (
+    <button
+      aria-hidden={!visible}
+      aria-label="Scroll to bottom"
+      className={[
+        "z-[1] size-9 inline-flex items-center justify-center",
+        "absolute -top-8 left-1/2 -translate-x-1/2",
+        "border-0.5 overflow-hidden !rounded-full p-1",
+        "shadow-md hover:shadow-lg",
+        "bg-bg-000/80 hover:bg-bg-000",
+        "backdrop-blur transition-opacity duration-200",
+        isStreaming ? "border-accent-brand/30" : "border-border-300",
+        visible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
+      ].join(" ")}
+      // Official: inert when hidden
+      {...(!visible ? { inert: true as const } : {})}
+      onClick={onScroll}
+      type="button"
+    >
+      {/* Official Ace blur while streaming; static state is opacity-0 so omitted here. */}
+      {isStreaming ? (
+        <span
+          aria-hidden
+          className="absolute pointer-events-none size-8 rounded-full bg-accent-brand/50 blur-md transition duration-300 opacity-50"
+        />
+      ) : null}
+      <CoworkArrowDownGlyph className="mix-blend-luminosity" size={20} vectorSizeOverride={20} />
+    </button>
+  );
 }

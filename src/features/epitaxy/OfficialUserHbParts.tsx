@@ -6,7 +6,8 @@
  */
 import type { FileContents } from "@pierre/diffs";
 import { File, PatchDiff } from "@pierre/diffs/react";
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
+import { OfficialButton } from "./OfficialEpitaxyComponents";
 import { officialPierreLangFromPath } from "./diff/officialPierreLang";
 import { useOfficialPierreTheme, useWorkerPool } from "./diff/OfficialPierreWorkerPool";
 import { pierreTokenPaintOnPostRender } from "./diff/pierreTokenPaint";
@@ -275,6 +276,31 @@ export const OfficialUserBashCommand = memo(function OfficialUserBashCommand({
 });
 
 /**
+ * Official c11959232 `xx` — body copy control (shared with tool-row file/diff).
+ * opacity-0 until group/body hover|focus; yd uncontained small;
+ * icon CheckSelection | CopySquareBehind.
+ */
+function OfficialUserBodyCopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!text) return null;
+  return (
+    <div className="opacity-0 group-hover/body:opacity-100 focus-within:opacity-100 [transition:opacity_150ms_cubic-bezier(0.215,0.61,0.355,1)] motion-reduce:transition-none">
+      <OfficialButton
+        ariaLabel={copied ? "Copied" : "Copy"}
+        icon={copied ? "CheckSelection" : "CopySquareBehind"}
+        onClick={() => {
+          void navigator.clipboard?.writeText(text).catch(() => {});
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1200);
+        }}
+        size="small"
+        variant="uncontained"
+      />
+    </div>
+  );
+}
+
+/**
  * Official Ob (c11959232):
  * - filePath + startLine → Pierre PatchDiff (`lu`) from hunk patch with real line numbers
  * - else → Pierre File snippet (`iu`, no line numbers / no header)
@@ -347,15 +373,7 @@ export const OfficialUserCodeAttachment = memo(function OfficialUserCodeAttachme
           ) : (
             <span className="flex flex-1 min-w-0 text-body text-assistant-secondary truncate">{filePath}</span>
           )}
-          <button
-            aria-label="Copy"
-            className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-uncontained-default hover:text-uncontained-hover ring-focus h-small text-footnote rounded-small justify-center aspect-square px-p3 shrink-0"
-            onClick={() => { void navigator.clipboard?.writeText(text); }}
-            type="button"
-          >
-            <span className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)] group-hover/btn:bg-[var(--fill-uncontained-hover)]" />
-            <span className="relative text-[12px]" aria-hidden>⎘</span>
-          </button>
+          <OfficialUserBodyCopyButton text={text} />
         </div>
         <div className="epitaxy-diff">
           {workerPool ? (

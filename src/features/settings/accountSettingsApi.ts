@@ -96,17 +96,23 @@ export async function postOrganizationResetRateLimits(orgUuid: string): Promise<
 export function organizationUuidFromBootstrap(bootstrap: Record<string, unknown> | null | undefined): string | null {
   if (!bootstrap) return null;
   const account = asRecord(bootstrap.account);
-  const org = asRecord(bootstrap.organization) ?? asRecord(bootstrap.org) ?? asRecord(account.organization);
-  return stringField(org, "uuid") ?? stringField(org, "id") ?? stringField(account, "organization_uuid") ?? null;
+  const org =
+    asRecord(bootstrap.organization)
+    ?? asRecord(bootstrap.org)
+    ?? (account ? asRecord(account.organization) : null);
+  return stringField(org, "uuid")
+    ?? stringField(org, "id")
+    ?? (account ? stringField(account, "organization_uuid") : null)
+    ?? null;
 }
 
 export function canResetRateLimitsFromBootstrap(bootstrap: Record<string, unknown> | null | undefined): boolean {
   if (!bootstrap) return false;
   const flags = asRecord(bootstrap.feature_flags) ?? asRecord(bootstrap.featureFlags) ?? asRecord(bootstrap.flags);
-  if (flags.can_reset_rate_limits === true || flags.canResetRateLimits === true) return true;
+  if (flags?.can_reset_rate_limits === true || flags?.canResetRateLimits === true) return true;
   const account = asRecord(bootstrap.account);
-  const settings = asRecord(account.settings);
-  if (settings.can_reset_rate_limits === true) return true;
+  const settings = account ? asRecord(account.settings) : null;
+  if (settings?.can_reset_rate_limits === true) return true;
   // Official GrowthBook key; when unknown, allow attempt if org uuid present (server enforces).
   return Boolean(organizationUuidFromBootstrap(bootstrap));
 }

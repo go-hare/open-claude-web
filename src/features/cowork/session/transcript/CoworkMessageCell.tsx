@@ -20,10 +20,16 @@ export function CoworkMessageCell({ chain, conversationIsStreaming, isLastHumanM
     .map((messageUuid) => state.messageByUuid[messageUuid])
     .filter((message): message is CoworkChatMessage => message !== undefined)));
   const hydratedChain = useMemo(() => hydrateOfficialCoworkMessageChain(chain, messages), [chain, messages]);
+  // Official live paint: while the conversation is streaming the last assistant chain,
+  // do NOT use displayMessage (merged multi-uuid dump). Prefer the latest partial row
+  // (Pke/zE stream message lands as the tail via mergeCoworkStreamedSdkMessage).
+  // messages[0] froze on the first multi-emit assistant → "one message arrives then dumps".
   const activeChain = conversationIsStreaming && isLastMessage && hydratedChain.displayMessage
     ? { ...hydratedChain, displayMessage: undefined }
     : hydratedChain;
-  const message = activeChain.displayMessage ?? activeChain.messages[0];
+  const message = conversationIsStreaming && isLastMessage
+    ? (activeChain.messages[activeChain.messages.length - 1] ?? activeChain.messages[0])
+    : (activeChain.displayMessage ?? activeChain.messages[0]);
   if (!message) return null;
   return (
     <div

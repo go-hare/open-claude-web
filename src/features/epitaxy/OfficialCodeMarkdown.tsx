@@ -9,10 +9,8 @@ import {
   Children,
   isValidElement,
   memo,
-  useEffect,
   useId,
   useMemo,
-  useRef,
   useState,
   type ComponentPropsWithoutRef,
   type CSSProperties,
@@ -113,6 +111,9 @@ const officialMarkdownComponents = {
   li: OfficialMarkdownListItem,
   input: OfficialMarkdownInput,
 };
+
+/** Exported for official YN plan markdown (JN): spreads mb + mark/pre overrides. */
+export const officialMarkdownComponentsBase = officialMarkdownComponents;
 
 function OfficialMarkdownInlineCode({ children, className, ...rest }: ComponentPropsWithoutRef<"code">) {
   // Fenced blocks: className language-* lives on code inside pre — handled by pre.
@@ -264,7 +265,7 @@ function OfficialMarkdownInput({
 }
 
 /** Official hb urlTransform: allow img src, sanitize others. */
-function officialMarkdownUrlTransform(url: string): string {
+export function officialMarkdownUrlTransform(url: string): string {
   if (!url) return url;
   if (/^(https?:|mailto:|data:|blob:|#)/i.test(url)) return url;
   // Allow relative / absolute filesystem-looking paths for db file bridge.
@@ -402,41 +403,31 @@ function preprocessOfficialCodeMarkdown(text: string) {
 }
 
 /**
- * Official xd-like structure tracker streaming chunks.
+ * Official xd / Oe structure-tracker streaming chunks (c93fb40ec Oe + c119 kb).
  * Completes a chunk when a structure closes or a blank line ends a paragraph.
+ *
+ * CRITICAL: compute synchronously on text change (useMemo), not via useEffect.
+ * useEffect lagged one paint behind zE 60fps ticks → frontier jumped in chunks
+ * (looked like whole-message dump even when smoother was gradual).
  */
 function useOfficialCodeMarkdownChunks(text: string, isStreaming: boolean) {
-  const stableChunks = useMemo(
-    () => ({ completedChunks: text ? [text] : [], streamingChunk: "" }),
-    [text],
-  );
-  const [chunks, setChunks] = useState<{ completedChunks: string[]; streamingChunk: string }>({
-    completedChunks: [],
-    streamingChunk: "",
-  });
-  const trackerRef = useRef<OfficialMarkdownStructureTracker | null>(null);
-
-  useEffect(() => {
-    if (!isStreaming) return undefined;
-    if (!text) {
-      setChunks({ completedChunks: [], streamingChunk: "" });
-      return undefined;
-    }
-    trackerRef.current ??= new OfficialMarkdownStructureTracker();
+  return useMemo(() => {
+    if (!isStreaming) return { completedChunks: text ? [text] : [], streamingChunk: "" };
+    if (!text) return { completedChunks: [], streamingChunk: "" };
+    const tracker = new OfficialMarkdownStructureTracker();
     const lines = text.split("\n");
     const completedChunks: string[] = [];
     let pendingLines: string[] = [];
     let completedThrough = -1;
-    trackerRef.current.reset();
     for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index];
-      const { insideStructure, previousLineWasEmpty, structureJustClosed } = trackerRef.current.processLine(line);
+      const line = lines[index] ?? "";
+      const { insideStructure, previousLineWasEmpty, structureJustClosed } = tracker.processLine(line);
       pendingLines.push(line);
       if (
         structureJustClosed
         || (!insideStructure && line.trim() === "" && pendingLines.length > 1 && !previousLineWasEmpty)
       ) {
-        while (pendingLines.length > 0 && pendingLines[pendingLines.length - 1].trim() === "") {
+        while (pendingLines.length > 0 && (pendingLines[pendingLines.length - 1] ?? "").trim() === "") {
           pendingLines.pop();
         }
         if (pendingLines.length > 0) {
@@ -446,14 +437,11 @@ function useOfficialCodeMarkdownChunks(text: string, isStreaming: boolean) {
         }
       }
     }
-    setChunks({
+    return {
       completedChunks,
       streamingChunk: lines.slice(completedThrough + 1).join("\n"),
-    });
-    return undefined;
+    };
   }, [isStreaming, text]);
-
-  return isStreaming ? chunks : stableChunks;
 }
 
 /** Official structure tracker used by xd chunking. */

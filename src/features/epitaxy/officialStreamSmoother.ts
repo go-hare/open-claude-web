@@ -12,6 +12,11 @@ type OfficialSmootherBlockOps<TBlock> = {
   applyDeltaEvent: (event: Record<string, unknown>, block: TBlock) => TBlock;
   blockSize: (block: TBlock) => number;
   createBlockFromStartEvent: (event: Record<string, unknown>) => TBlock | null;
+  /**
+   * Official zE deadline: targetTime = 0.9*elapsed - (getBlockDeadlineOffset?.() ?? 0.3).
+   * Chat FE supplies 3 while thinking / 1 for text; code Lke omits it (defaults 0.3).
+   */
+  getBlockDeadlineOffset?: () => number;
   sliceBlock: (block: TBlock, size: number) => TBlock;
   stopBlockEvent: (event: Record<string, unknown>, block: TBlock) => TBlock;
 };
@@ -19,7 +24,33 @@ type OfficialSmootherBlockOps<TBlock> = {
 const officialFrameMs = 1000 / 60;
 
 function delay(ms: number) {
-  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+  // Prefer global setTimeout so node tests / non-window hosts still run the 60fps task.
+  const schedule = typeof globalThis.setTimeout === "function"
+    ? globalThis.setTimeout.bind(globalThis)
+    : window.setTimeout.bind(window);
+  return new Promise<void>((resolve) => schedule(resolve, ms));
+}
+
+/**
+ * Official zE.task waits `PE` (1000/60) via setTimeout when visible.
+ * In Electron / Chromium, short setTimeouts are often clamped to ~1s when the
+ * renderer is backgrounded, occluded, or timer-throttled — that collapses the
+ * 60fps reveal into a handful of paints (paragraph-sized jumps: 33→88→114).
+ * When visible, prefer rAF (fires with the paint cycle, not clamped like timers).
+ */
+function delayRevealTick(isVisible: boolean) {
+  if (!isVisible) return delay(100);
+  const raf = typeof globalThis.requestAnimationFrame === "function"
+    ? globalThis.requestAnimationFrame.bind(globalThis)
+    : typeof requestAnimationFrame === "function"
+      ? requestAnimationFrame
+      : null;
+  if (raf) {
+    return new Promise<void>((resolve) => {
+      raf(() => resolve());
+    });
+  }
+  return delay(officialFrameMs);
 }
 
 function sliceBlocks<TBlock>(ops: OfficialSmootherBlockOps<TBlock>, blocks: TBlock[], size: number) {
@@ -158,10 +189,21 @@ class OfficialCompletionSmoother<TBlock> {
         break;
     }
 
-    if (this.start === 0) this.start = Date.now();
     const totalLength = this.blocksList.reduce((sum, block) => sum + this.blockOperations.blockSize(block), 0);
-    this.totalCompletionLength = totalLength;
-    this.arrivals.push([(Date.now() - this.start) / 1000, totalLength]);
+    // Official Lke: thinking blockSize = 0 (code path does not typewriter thinking).
+    // Official zE still stamps start on the first onMessage, including size-0 thinking.
+    // That leaves t stuck at 0 while the task spins, so after a long thinking wait the first
+    // text burst + message_stop lands with large dt and model_done+100 — bisect dumps full
+    // length in one paint (live "一卡一卡 / 整段吐出").
+    // Only start the reveal clock once there is smoothable content (totalLength > 0), matching
+    // Lke's size-0 semantics without changing the 0.9*elapsed deadline math.
+    if (totalLength > 0) {
+      if (this.start === 0) this.start = Date.now();
+      this.totalCompletionLength = totalLength;
+      this.arrivals.push([(Date.now() - this.start) / 1000, totalLength]);
+    } else {
+      this.totalCompletionLength = 0;
+    }
     if (this.dontSmooth && this.onCompletion) this.onCompletion(structuredClone(this.blocksList));
   }
 
@@ -170,7 +212,8 @@ class OfficialCompletionSmoother<TBlock> {
     // no extra full deliver after the loop — flush/settle drives the final paint.
     const generation = this.generation;
     while (this.generation === generation && !this.smootherDone && !signal.aborted) {
-      if (document.hidden) {
+      // Guard for non-browser (tests); official always has document in desktop FE.
+      if (typeof document !== "undefined" && document.hidden) {
         if (this.modelDone) {
           this.x = this.totalCompletionLength;
           this.blocksMutatedSinceLastDelivery = false;
@@ -200,7 +243,8 @@ class OfficialCompletionSmoother<TBlock> {
         }
         isVisible = this.cachedVisibility;
       }
-      await delay(isVisible ? officialFrameMs : 100);
+      // Visible: rAF (not setTimeout) so Electron timer clamping cannot collapse typewriter.
+      await delayRevealTick(isVisible);
     }
   }
 
@@ -224,7 +268,9 @@ class OfficialCompletionSmoother<TBlock> {
     // Official zE._get_smoothed_completion (index-BELzQL5P) — no local step caps.
     const elapsed = (Date.now() - this.start) / 1000;
     const maxChars = this.arrivals[this.arrivals.length - 1][1] + (this.modelDone || this.forceSmootherDone ? 100 : 0);
-    const targetTime = 0.9 * elapsed - 0.3;
+    // Official: .9*e - (blockOperations.getBlockDeadlineOffset?.() ?? .3)
+    const deadlineOffset = this.blockOperations.getBlockDeadlineOffset?.() ?? 0.3;
+    const targetTime = 0.9 * elapsed - deadlineOffset;
     const arrivalsBeforeDeadline = this.arrivals.filter((arrival) => arrival[0] < targetTime).map((arrival) => arrival[1]);
     const minChars = arrivalsBeforeDeadline[arrivalsBeforeDeadline.length - 1] ?? 0;
     if (!(maxChars > minChars) || !(elapsed > this.t) || minChars === undefined) {
@@ -327,10 +373,13 @@ export class OfficialSessionStreamSmoother {
     const event = asRecord(streamMessage.event);
     const eventType = stringValue(event.type);
     if (eventType === "message_start") {
-      // Official: messageId = event.message.id; cleared=false; restart; dont_smooth=false; on_completion=undefined; task(...)
-      // generation++ on restart is what stops the prior loop (Pke does not AbortController.abort).
+      // Official Pke (index-BELzQL5P): n.messageId = t.message.id ONLY.
+      // Outer stream_event.uuid is per-NDJSON identity — never use it as streamingMessageId
+      // or eke suppress / Kwe ownership miss the Anthropic message.id and paint durable dumps.
       const message = asRecord(event.message);
-      this.messageId = stringValue(message.id) ?? stringValue(streamMessage.uuid) ?? `stream_${Date.now()}`;
+      const apiMessageId = stringValue(message.id);
+      if (!apiMessageId) return;
+      this.messageId = apiMessageId;
       this.cleared = false;
       this.smoother.restart();
       this.smoother.dontSmooth = false;
@@ -371,15 +420,21 @@ export class OfficialSessionStreamSmoother {
     }
     return new Promise<boolean>((resolve) => {
       let done = false;
+      const schedule = typeof globalThis.setTimeout === "function"
+        ? globalThis.setTimeout.bind(globalThis)
+        : window.setTimeout.bind(window);
+      const clear = typeof globalThis.clearTimeout === "function"
+        ? globalThis.clearTimeout.bind(globalThis)
+        : window.clearTimeout.bind(window);
       const finish = (revealed: boolean) => {
         if (done) return;
         done = true;
         this.settleCallbacks.delete(onSettled);
-        window.clearTimeout(timeout);
+        clear(timeout);
         resolve(revealed);
       };
       const onSettled = () => finish(true);
-      const timeout = window.setTimeout(() => finish(false), maxWaitMs);
+      const timeout = schedule(() => finish(false), maxWaitMs);
       this.settleCallbacks.add(onSettled);
     });
   }

@@ -67,6 +67,8 @@ export type SessionSummary = {
   hostLoopMode?: boolean;
   initialMessage?: string;
   initializationStatus?: unknown;
+  /** Official O.tags — e.g. ultrareview session marker. */
+  tags?: string[];
   mcqAnswers?: unknown;
   mountedProjects?: CoworkMountedProject[];
   model?: string;
@@ -309,6 +311,17 @@ export type DiffFileContentResult = {
   newText: string | null;
 } | null;
 
+/**
+ * Official LocalSessions.writeSessionFile result (c119 vN / UI enum):
+ * `ok` | `conflict` | `denied` (lowercase string status).
+ */
+export type WriteSessionFileResult = {
+  status: "ok" | "conflict" | "denied";
+  hash?: string;
+  currentHash?: string;
+  absPath?: string;
+};
+
 /** Official H$A / a2A LocalSessions.getGitDiff comparison (not GitCommandResult). */
 export type OfficialGitDiffFile = {
   filename: string;
@@ -422,6 +435,31 @@ export type LocalSessionsBridge = {
   readSessionImageAsDataUrl?: (id: string, filePath: string) => Promise<string | null>;
   pickSessionFile?: (id: string) => Promise<string | null>;
   pickFileAtCwd?: (idOrCwd: string) => Promise<string | null>;
+  /**
+   * Official fe.listSessionDirectory(sessionId, absOrRel) → tree entries for XC Files browser.
+   * Desktop returns `{ name, path, isFile, isDirectory, size?, modifiedAt? }[]`.
+   */
+  listSessionDirectory?: (
+    id: string,
+    relative?: string,
+  ) => Promise<Array<{
+    isDirectory?: boolean;
+    isFile?: boolean;
+    modifiedAt?: string;
+    name: string;
+    path: string;
+    size?: number;
+  }>>;
+  /**
+   * Official fe.writeSessionFile(sessionId, absPath|rel, contents, expectedHash?)
+   * → `{ status: "ok"|"conflict"|"denied", hash?, currentHash? }` (c119 vN).
+   */
+  writeSessionFile?: (
+    id: string,
+    filePath: string,
+    contents: string,
+    expectedHash?: string,
+  ) => Promise<WriteSessionFileResult | null>;
   setEffort?: (id: string, effort: EffortLevel | string) => Promise<SessionSummary | null>;
   setMcpServers?: (id: string, mcpServers: unknown) => Promise<SessionSummary | null>;
   setModel?: (id: string, model: string) => Promise<SessionSummary | null>;
@@ -445,6 +483,11 @@ export type LocalSessionsBridge = {
   onShellPtyEvent?: (listener: (event: ShellPtyEvent) => void) => () => void;
   start: (input: StartSessionInput) => Promise<SessionSummary>;
   sendMessage?: (id: string, text: string, input?: SendMessageInput) => Promise<SessionSummary | null>;
+  /**
+   * Official cancelQueued / Yr mutation — drop a mid-turn queued user uuid.
+   * Desktop currently no-ops success (returns true); UI still drops local queuedMessages.
+   */
+  cancelQueuedMessage?: (id: string, uuid: string) => Promise<boolean>;
   forkSession?: (id: string, messageId?: string) => Promise<SessionSummary | null>;
   rewind?: (id: string, messageId?: string) => Promise<unknown>;
   create: (kind: SessionSummary["kind"]) => Promise<SessionSummary>;
@@ -499,6 +542,13 @@ export type CoworkSessionsBridge = {
   readSessionImageAsDataUrl?: (id: string, filePath: string) => Promise<string | null>;
   pickSessionFile?: (id: string) => Promise<string | null>;
   pickFileAtCwd?: (idOrCwd: string) => Promise<string | null>;
+  /** Official fe.writeSessionFile — see LocalSessionsBridge.writeSessionFile. */
+  writeSessionFile?: (
+    id: string,
+    filePath: string,
+    contents: string,
+    expectedHash?: string,
+  ) => Promise<WriteSessionFileResult | null>;
   setEffort?: (id: string, effort: EffortLevel | string) => Promise<SessionSummary | null>;
   setMcpServers?: (id: string, mcpServers: unknown) => Promise<SessionSummary | null>;
   setModel?: (id: string, model: string) => Promise<SessionSummary | null>;
@@ -577,9 +627,16 @@ export type LocalFileEntry = {
 };
 
 export type LocalFileReadResult = {
+  /** Official Gzt / local_session utf8 branch may use content; epitaxy-file also accepts contents. */
+  absPath?: string;
   content?: string;
+  contents?: string;
   /** Official Gzt base64 branch: encoding === "base64". */
   encoding?: "base64" | "utf8";
+  error?: string;
+  /** sha256 hex of utf8 contents — c119 vN F (Edit) gate. */
+  hash?: string;
+  isDirectory?: boolean;
   mimeType?: string;
   name?: string;
   path?: string;
@@ -633,6 +690,49 @@ export type WindowBridge = {
   onZoomFactorChanged?: (listener: (zoomFactor: number) => void) => () => void;
 };
 
+/** Official claude.web.Resources (Le) — mention / content search for XC Files browser. */
+export type ResourcesBridge = {
+  fetchMentionOptions?: (query: string, kind?: string) => Promise<Array<{
+    id?: string;
+    label?: string;
+    metadata?: string;
+  }>>;
+  listProjectFiles?: (query?: string) => Promise<unknown[]>;
+  searchFileContents?: (query: string, limit?: number) => Promise<Array<{
+    absPath?: string;
+    line?: number;
+    preview?: string;
+    relativePath?: string;
+  }>>;
+  setFocusedCwd?: (cwd: string | null) => Promise<unknown>;
+};
+
+/**
+ * Official claude.web.FramebufferPreview (lr) — YR Screen / AN framebuffer pane.
+ * Methods: listSources, attach, detach, requestFramePort, sendKey/Pointer/Scroll, setStreamHints.
+ */
+export type FramebufferPreviewBridge = {
+  attach?: (cwd: string, sessionName?: string) => Promise<{
+    height?: number;
+    name?: string;
+    sessionId?: string;
+    width?: number;
+  } | null>;
+  detach?: (sessionId: string) => Promise<unknown>;
+  listSources?: (cwd: string) => Promise<Array<{
+    name: string;
+    origin?: string;
+    id?: string;
+  }>>;
+  onSessionFatal?: (listener: (sessionId: string, message: string) => void) => () => void;
+  onSessionResized?: (listener: (sessionId: string, width: number, height: number) => void) => () => void;
+  requestFramePort?: (sessionId: string) => Promise<unknown>;
+  sendKey?: (...args: unknown[]) => Promise<unknown>;
+  sendPointer?: (...args: unknown[]) => Promise<unknown>;
+  sendScroll?: (...args: unknown[]) => Promise<unknown>;
+  setStreamHints?: (sessionId: string, hints: { backgrounded?: boolean }) => Promise<unknown>;
+};
+
 export type DesktopBridge = {
   LocalSessions: LocalSessionsBridge;
   LocalAgentModeSessions: CoworkSessionsBridge;
@@ -643,7 +743,11 @@ export type DesktopBridge = {
   CoworkSpaces: CoworkSpacesBridge;
   CoworkFilePreview: CoworkFilePreviewBridge;
   FileSystem: FileSystemBridge;
+  /** Official claude.web.FramebufferPreview (lr). */
+  FramebufferPreview?: FramebufferPreviewBridge;
   OfficeAddinFiles: ConnectedOfficeFilesBridge;
   Preferences: PreferencesBridge;
+  /** Official claude.web.Resources (Le). */
+  Resources?: ResourcesBridge;
   Window: WindowBridge;
 };

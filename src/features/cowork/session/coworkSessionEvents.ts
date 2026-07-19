@@ -61,9 +61,20 @@ export function isCoworkStreamStart(streamMessage: Record<string, unknown>) {
   return stringValue(asRecord(streamMessage.event).type) === "message_start";
 }
 
+/**
+ * Official streamingMessageId / Pke.messageId = event.message.id (Anthropic API id).
+ * Outer stream_event.uuid is per NDJSON line identity only — must NOT drive eke suppress
+ * (durable assistant uses nested message.id; mismatch paints full durable dumps).
+ */
 export function coworkStreamMessageId(streamMessage: Record<string, unknown>) {
   const event = asRecord(streamMessage.event);
-  return stringValue(streamMessage.uuid) ?? stringValue(asRecord(event.message).id) ?? null;
+  const message = asRecord(event.message);
+  return stringValue(message.id) ?? stringValue(streamMessage.uuid) ?? null;
+}
+
+/** Outer stream_event.uuid for SDK row identity when distinct from API message.id. */
+export function coworkStreamOuterUuid(streamMessage: Record<string, unknown>) {
+  return stringValue(streamMessage.uuid) ?? coworkStreamMessageId(streamMessage);
 }
 
 export function coworkStreamActivity(streamMessage: Record<string, unknown>, current: CoworkStreamActivity) {

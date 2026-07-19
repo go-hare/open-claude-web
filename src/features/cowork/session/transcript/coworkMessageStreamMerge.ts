@@ -22,10 +22,16 @@ export function mergeCoworkStreamedSdkMessage(
   snapshot: NonNullable<CoworkStreamSnapshot>,
 ) {
   const streamed = sdkMessageFromStream(snapshot);
-  const match = (message: Record<string, unknown>) =>
-    snapshot.apiMessageId
-      ? message.type === "assistant" && apiMessageId(message) === snapshot.apiMessageId
-      : messageUuid(message, "") === snapshot.messageId;
+  // Official: while Va/Pke owns this Anthropic message.id, durable multi-emit assistants
+  // for the same id must not sit beside the stream row (whole-message dump vs typewriter).
+  const liveApiId = snapshot.apiMessageId ?? snapshot.messageId;
+  const match = (message: Record<string, unknown>) => {
+    if (message.type !== "assistant") return false;
+    const apiId = apiMessageId(message);
+    if (liveApiId && apiId && apiId === liveApiId) return true;
+    const uuid = messageUuid(message, "");
+    return uuid === snapshot.messageId || (liveApiId ? uuid === liveApiId : false);
+  };
   const index = messages.findIndex(match);
   if (index < 0) return [...messages, streamed];
   return [

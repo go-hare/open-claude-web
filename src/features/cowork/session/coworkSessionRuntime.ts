@@ -1,5 +1,11 @@
 import { createMessageUuid } from "../../../adapters/desktopBridge/messageUuid";
 import type { CoworkSessionsBridge, SendMessageInput } from "../../../adapters/desktopBridge/types";
+import {
+  officialStreamClear,
+  officialStreamFeed,
+  officialStreamSubscribe,
+} from "../../epitaxy/session/officialStreamSessionStore";
+import type { OfficialStreamSnapshot } from "../../epitaxy/officialStreamSmoother";
 import { createPendingCoworkUserMessage } from "./coworkPendingMessages";
 import {
   coworkPermissionResolvedId,
@@ -20,6 +26,7 @@ import { buildCoworkChatMessages } from "./transcript/coworkMessageModel";
 import { coworkMessagePathStore, type CoworkMessagePathStore } from "./transcript/coworkMessagePathStore";
 import { estimateCoworkStreamTokens } from "./transcript/coworkStreamTranscript";
 import { asRecord, stringValue } from "./recordUtils";
+import type { CoworkStreamSnapshot } from "./stream/coworkStreamTypes";
 import type { CoworkRawMessage } from "./types";
 
 type RuntimeOptions = { bridge: CoworkSessionsBridge; messageStore?: CoworkMessagePathStore; sessionId: string; store: CoworkSessionStore };
@@ -30,6 +37,7 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
   let hydrating = true;
   let reloadPromise: Promise<void> | null = null;
   let removeEventListener: (() => void) | undefined;
+  let removeStreamSubscribe: (() => void) | undefined;
   const bufferedEvents: unknown[] = [];
   const seenMessageUuids = new Set<string>();
 
@@ -56,6 +64,25 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
     if (disposed) return;
     data = reduceCoworkSessionState(data, action);
     publish();
+  };
+
+  /** Official Oke → Va: map zE blocks into CoworkStreamSnapshot shape. */
+  const onOfficialStreamSnapshot = (snapshot: OfficialStreamSnapshot) => {
+    if (disposed) return;
+    if (snapshot === null) {
+      dispatch({ snapshot: null, type: "stream-snapshot" });
+      return;
+    }
+    const mapped: NonNullable<CoworkStreamSnapshot> = {
+      apiMessageId: snapshot.messageId,
+      blocks: snapshot.blocks.map((block) => {
+        if (block.kind === "tool") return { id: block.id, kind: "tool" as const, name: block.name, partialJson: block.partialJson };
+        if (block.kind === "thinking") return { kind: "thinking" as const, text: block.text };
+        return { kind: "text" as const, text: block.text };
+      }),
+      messageId: snapshot.messageId,
+    };
+    dispatch({ snapshot: mapped, type: "stream-snapshot" });
   };
 
   async function reload() {
@@ -122,6 +149,7 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
     const raw = asRecord(event);
     const type = stringValue(raw.type);
     if (type === "cleared") {
+      officialStreamClear(sessionId);
       void reload();
       return;
     }
@@ -150,6 +178,10 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
   function applyMessageEvent(event: unknown) {
     const streamMessage = coworkStreamMessage(event);
     if (streamMessage) {
+      // Official Pke.feed(sessionId, event, parent_tool_use_id) — zE owns typewriter.
+      const parentToolUseId = streamMessage.parent_tool_use_id ?? streamMessage.parentToolUseId;
+      officialStreamFeed(sessionId, streamMessage, parentToolUseId);
+      // Activity / streamingMessageId only — blocks come from stream-snapshot (Oke).
       dispatch({ message: streamMessage, startedAt: Date.now(), type: "stream-event" });
       return;
     }
@@ -168,10 +200,13 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
   function applyErrorEvent(raw: Record<string, unknown>) {
     const message = stringValue(raw.error) ?? stringValue(raw.message) ?? "Cowork session failed";
     const errorCategory = stringValue(raw.errorCategory) ?? stringValue(raw.error_category);
+    officialStreamClear(sessionId);
     dispatch({ error: new Error(message), errorCategory, type: "runtime-error" });
   }
 
   function settleSession(raw: Record<string, unknown>) {
+    // Official result/done/error → Pke.clear (null Va); not message_stop.
+    officialStreamClear(sessionId);
     dispatch({ disconnected: raw.code === 1, type: "settled" });
   }
 
@@ -205,12 +240,16 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
   }
   function start() {
     publish();
+    // Official Pe.subscribe(sessionId, Oke) → local Va (stream-snapshot).
+    removeStreamSubscribe = officialStreamSubscribe(sessionId, onOfficialStreamSnapshot);
     removeEventListener = bridge.onEvent?.(onBridgeEvent);
     void reload();
   }
   function dispose() {
     disposed = true;
     removeEventListener?.();
+    removeStreamSubscribe?.();
+    officialStreamClear(sessionId);
   }
 
   return { dispose, reload, start, submitMessage };

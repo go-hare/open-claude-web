@@ -1,17 +1,32 @@
 import type { CoworkChatMessage, CoworkMessageChain } from "./coworkMessageTypes";
 
-export function buildOfficialCoworkMessageChains(messages: CoworkChatMessage[], streamingMessageId?: string | null) {
+export function buildOfficialCoworkMessageChains(
+  messages: CoworkChatMessage[],
+  streamingMessageId?: string | null,
+): CoworkMessageChain[] {
   const messageByUuid = Object.fromEntries(messages.map((message) => [message.uuid, message]));
   const chains = groupMessageUuids(messages.map((message) => message.uuid), messageByUuid);
-  return chains.map((chain) => {
+  const liveId = streamingMessageId ?? "";
+  return chains.map((chain): CoworkMessageChain => {
     const first = messageByUuid[chain.firstMessageUuid];
     const last = messageByUuid[chain.lastMessageUuid];
+    // Official streamingMessageId is Anthropic message.id (Pke.messageId), not always the
+    // outer SDK uuid. Match uuid OR apiMessageIds so isStreaming / progressive markdown arm.
+    const isStreaming = Boolean(
+      liveId
+      && (
+        chain.messageUuids.includes(liveId)
+        || chain.messages.some((message) => message.uuid === liveId || Boolean(message.apiMessageIds?.includes(liveId)))
+        || Boolean(first?.apiMessageIds?.includes(liveId))
+        || Boolean(last?.apiMessageIds?.includes(liveId))
+      ),
+    );
     return {
       ...chain,
       displayMessage: chain.isChain && first && last
         ? { ...first, content: chain.mergedContent, stop_reason: last.stop_reason, updated_at: last.updated_at }
         : undefined,
-      isStreaming: chain.messageUuids.includes(streamingMessageId ?? ""),
+      isStreaming,
     };
   });
 }

@@ -17,7 +17,9 @@ import {
   permissionModeOptions,
 } from "./options";
 import { numberComposerMenuItems } from "./composerMenuItems";
+import { EpitaxyPermissionModeModal } from "./EpitaxyPermissionModeModal";
 import { OfficialWorkspaceControls } from "./OfficialWorkspaceControls";
+import { usePermissionModeConfirm } from "./usePermissionModeConfirm";
 
 type OfficialCodeComposerProps = {
   busy: boolean;
@@ -69,10 +71,16 @@ export function OfficialCodeComposer({
   submitStateRef.current = { busy, ensureTrusted, hasPrompt, onSubmit, workspaceCwd: workspace.cwd };
   promptSetterRef.current = setPrompt;
 
+  // Official Sm + EpitaxyPermissionModeModal for first bypass/auto selection.
+  const permissionModeConfirm = usePermissionModeConfirm(
+    workspace.cwd,
+    (mode) => onPermissionModeChange(mode as PermissionMode),
+  );
+
   const permissionItems: OfficialDropdownItem[] = permissionModeOptions.map((option) => ({
     checked: option.value === permissionMode,
     label: option.label,
-    onSelect: () => onPermissionModeChange(option.value),
+    onSelect: () => permissionModeConfirm.select(option.value),
   }));
   const modelItems: OfficialDropdownItem[] = codeModelOptions.map((option) => ({
     checked: option.value === model,
@@ -288,6 +296,12 @@ export function OfficialCodeComposer({
         </div>
       </div>
       {modal}
+      <EpitaxyPermissionModeModal
+        mode={permissionModeConfirm.confirming}
+        onCancel={permissionModeConfirm.cancel}
+        onConfirm={permissionModeConfirm.confirm}
+        workspace={permissionModeConfirm.workspace}
+      />
     </div>
   );
 }

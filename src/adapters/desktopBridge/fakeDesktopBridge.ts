@@ -514,6 +514,25 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   ],
   getWorkingTreeStatus: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
   readFileAtCwd: async () => ({ ok: true, success: true, stdout: "", stderr: "" }),
+  // Official fe.listSessionDirectory — XC Files browser tree.
+  listSessionDirectory: async (id, relative = ".") => {
+    const session = sessions.find((item) => item.id === id && item.kind === targetKind);
+    // WorkspaceContext uses cwd (not rootPath); avoid Node process in browser tsconfig.
+    const root = session?.cwd ?? workspace.cwd ?? "/tmp";
+    const abs = relative === "." || !relative
+      ? root
+      : (relative.startsWith("/") ? relative : `${root.replace(/\/+$/, "")}/${relative.replace(/^\.\//, "")}`);
+    const base = abs.replace(/\/+$/, "") || root;
+    return [
+      { name: "src", path: `${base}/src`, isDirectory: true, isFile: false },
+      { name: "README.md", path: `${base}/README.md`, isDirectory: false, isFile: true },
+      { name: "package.json", path: `${base}/package.json`, isDirectory: false, isFile: true },
+    ];
+  },
+  // Official getSessionsForScheduledTask — QS/DS Runs pane.
+  getSessionsForScheduledTask: async (taskId) => sessions.filter(
+    (session) => session.kind === targetKind && session.scheduledTaskId === taskId,
+  ),
   readSessionFile: async (_id, filePath) => `Preview for ${filePath}\n\nThis is fake desktop bridge content.`,
   readSessionImageAsDataUrl: async () => null,
   pickSessionFile: async () => "/tmp/preview.txt",
@@ -795,6 +814,12 @@ export const fakeDesktopBridge: DesktopBridge = {
       fakeLocalSessionEnvironment = { ...env };
       return true;
     },
+  },
+  Resources: {
+    fetchMentionOptions: async () => [],
+    searchFileContents: async () => [],
+    listProjectFiles: async () => [],
+    setFocusedCwd: async () => true,
   },
   BrowserUse: {
     listConnectedBrowsers: async () => fakeConnectedBrowsers.map((browser) => ({ ...browser })),

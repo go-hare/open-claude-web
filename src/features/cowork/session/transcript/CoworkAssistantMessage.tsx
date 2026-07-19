@@ -6,10 +6,16 @@ import { coworkMessageSummary } from "./coworkMessageSummary";
 import { useRegisterCoworkAskUserQuestion } from "../../composer/CoworkAskUserQuestionContext";
 
 export function CoworkAssistantMessage({ chain, conversationIsStreaming, isLastMessage }: { chain: CoworkMessageChain; conversationIsStreaming: boolean; isLastMessage: boolean }) {
-  const message = chain.displayMessage ?? chain.messages[0];
+  // Official live ownership: chain.isStreaming is streamingMessageId match (api id / uuid).
+  // Prefer stream tail over displayMessage merge while this chain or conversation is live.
+  const livePaint = chain.isStreaming || (conversationIsStreaming && isLastMessage);
+  const message = livePaint
+    ? (chain.messages[chain.messages.length - 1] ?? chain.displayMessage ?? chain.messages[0])
+    : (chain.displayMessage ?? chain.messages[0]);
+  if (!message) return null;
   const blocks = message.content;
   useRegisterCoworkAskUserQuestion(blocks, isLastMessage);
-  const isThisMessageStreaming = isLastMessage && conversationIsStreaming;
+  const isThisMessageStreaming = chain.isStreaming || (isLastMessage && conversationIsStreaming);
   if (!blocks[0]) return null;
   const copyText = blocks.flatMap(blockText).join("\n");
   const summary = isThisMessageStreaming ? "" : coworkMessageSummary(blocks);

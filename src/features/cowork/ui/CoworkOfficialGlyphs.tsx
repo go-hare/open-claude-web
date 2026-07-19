@@ -32,6 +32,8 @@ const chevronRightPath = "M6.134 3.16a.5.5 0 0 1 .626-.088l.08.062 7 6.5a.5.5 0 
 const chevronRightSmallPath = "M7.128 5.165a.5.5 0 0 1 .625-.097l.082.06 5 4.5a.5.5 0 0 1 .07.666l-.07.078-5 4.5a.501.501 0 0 1-.67-.744L11.752 10 7.165 5.872l-.068-.075a.5.5 0 0 1 .03-.632";
 const chevronLeftSmallPath = "M12.247 5.068a.501.501 0 0 1 .655.729l-.067.075L8.248 10l4.587 4.128a.501.501 0 0 1-.67.744l-5-4.5-.07-.078a.5.5 0 0 1 .07-.666l5-4.5z";
 const arrowRightPath = "M11.147 4.646a.5.5 0 0 1 .707 0l5 5 .062.077a.5.5 0 0 1-.062.63l-5 5a.5.5 0 0 1-.707-.707l4.146-4.146H3.5a.5.5 0 0 1 0-1h11.793l-4.146-4.146a.5.5 0 0 1 0-.708";
+// Official index-BELzQL5P `ly` (scroll-to-bottom t$t child). Full arrow-down, 20×20 viewBox.
+const arrowDownPath = "M10 3a.5.5 0 0 1 .5.5v11.793l4.147-4.146a.5.5 0 0 1 .707.707l-5 5a.5.5 0 0 1-.631.062l-.076-.062-5-5a.5.5 0 0 1 .707-.707L9.5 15.293V3.5A.5.5 0 0 1 10 3";
 const arrowUpPath = "M10 3a.5.5 0 0 1 .354.146l5 5a.5.5 0 0 1-.707.708L10.5 4.707V16.5a.5.5 0 0 1-1 0V4.707L5.354 8.854a.5.5 0 0 1-.708-.708l5-5 .077-.062A.5.5 0 0 1 10 3";
 const collapsePath = "M9.647 12.147a.5.5 0 0 1 .628-.065l.079.064 4 4a.5.5 0 1 1-.707.708L10 13.207l-3.646 3.647a.5.5 0 0 1-.707-.707zm4-9a.5.5 0 1 1 .707.707l-4 4-.079.064a.5.5 0 0 1-.628-.064l-4-4a.5.5 0 1 1 .707-.707L10 6.793z";
 const expandPath = "M13.647 12.646a.5.5 0 0 1 .707.707l-4 4-.079.065a.5.5 0 0 1-.628-.065l-4-4a.5.5 0 0 1 .707-.707L10 16.293zm-4-10a.5.5 0 0 1 .628-.064l.079.064 4 4a.5.5 0 0 1-.707.707L10 3.707 6.354 7.353a.5.5 0 1 1-.707-.707z";
@@ -89,6 +91,11 @@ export function CoworkChevronLeftSmallGlyph(props: CoworkOfficialGlyphProps) {
 
 export function CoworkArrowRightGlyph(props: CoworkOfficialGlyphProps) {
   return <CoworkOfficialGlyph {...props} path={arrowRightPath} />;
+}
+
+/** Official index-BELzQL5P `ly` used by scroll-to-bottom `t$t`. */
+export function CoworkArrowDownGlyph(props: CoworkOfficialGlyphProps) {
+  return <CoworkOfficialGlyph {...props} path={arrowDownPath} />;
 }
 
 export function CoworkArrowUpGlyph(props: CoworkOfficialGlyphProps) {

@@ -27,6 +27,7 @@ import type {
   StartSessionInput,
   WorkspaceTrustResult,
   WorkspaceContext,
+  WriteSessionFileResult,
 } from "./types";
 import { buildOfficialCoworkSendMessageArgs } from "./coworkSendMessageContract";
 import { createMessageUuid } from "./messageUuid";
@@ -75,6 +76,8 @@ type RawLocalSessionsBridge = {
   readSessionImageAsDataUrl?: (id: string, filePath: string) => Promise<unknown>;
   pickSessionFile?: (id: string) => Promise<unknown>;
   pickFileAtCwd?: (idOrCwd: string) => Promise<unknown>;
+  listSessionDirectory?: (id: string, relative?: string) => Promise<unknown>;
+  writeSessionFile?: (id: string, filePath: string, contents: string, expectedHash?: string) => Promise<unknown>;
   respondToToolPermission?: (requestId: string, decision: "always" | "deny" | "once", updatedInput?: unknown) => Promise<unknown>;
   setEffort?: (id: string, effort: string) => Promise<unknown>;
   setMcpServers?: (id: string, mcpServers: unknown) => Promise<unknown>;
@@ -91,6 +94,7 @@ type RawLocalSessionsBridge = {
   getTranscriptFeedback?: (id: string) => Promise<unknown>;
   start?: (input?: Record<string, unknown>) => Promise<unknown>;
   sendMessage?: (...args: unknown[]) => Promise<unknown>;
+  cancelQueuedMessage?: (id: string, uuid: string) => Promise<unknown>;
   forkSession?: (id: string, messageId?: string) => Promise<unknown>;
   rewind?: (id: string, messageId?: string) => Promise<unknown>;
   setFocusedSession?: (id: string | null) => Promise<unknown>;
@@ -115,7 +119,7 @@ type CoworkQueryBridge = Pick<CoworkSessionsBridge,
 >;
 type CoworkFileBridge = Pick<CoworkSessionsBridge,
   | "clearSession" | "launchUltrareview" | "readFileAtCwd" | "readSessionFile"
-  | "readSessionImageAsDataUrl" | "pickSessionFile" | "pickFileAtCwd"
+  | "readSessionImageAsDataUrl" | "pickSessionFile" | "pickFileAtCwd" | "writeSessionFile"
 >;
 type CoworkMutationBridge = Pick<CoworkSessionsBridge,
   | "addFolderToSession" | "respondToToolPermission" | "setEffort" | "setMcpServers"
@@ -218,6 +222,28 @@ export type RawClaudeWebBridge = {
   CoworkFilePreview?: RawCoworkFilePreviewBridge;
   FileSystem?: RawFileSystemBridge;
   OpenDocuments?: RawOpenDocumentsBridge;
+  /** Official Le — mention / content search for Files (browser) pane XC. */
+  Resources?: {
+    fetchMentionOptions?: (query: string, kind?: string) => Promise<unknown>;
+    listProjectFiles?: (query?: string) => Promise<unknown>;
+    searchFileContents?: (query: string, limit?: number) => Promise<unknown>;
+    setFocusedCwd?: (cwd: string | null) => Promise<unknown>;
+  };
+  /** Official lr — FramebufferPreview for YR Screen / AN pane. */
+  FramebufferPreview?: {
+    attach?: (...args: unknown[]) => Promise<unknown>;
+    detach?: (...args: unknown[]) => Promise<unknown>;
+    listSources?: (...args: unknown[]) => Promise<unknown>;
+    onSessionFatal?: (listener: (...args: unknown[]) => void) => () => void;
+    onSessionResized?: (listener: (...args: unknown[]) => void) => () => void;
+    sessionFatal?: (listener: (...args: unknown[]) => void) => () => void;
+    sessionResized?: (listener: (...args: unknown[]) => void) => () => void;
+    requestFramePort?: (...args: unknown[]) => Promise<unknown>;
+    sendKey?: (...args: unknown[]) => Promise<unknown>;
+    sendPointer?: (...args: unknown[]) => Promise<unknown>;
+    sendScroll?: (...args: unknown[]) => Promise<unknown>;
+    setStreamHints?: (...args: unknown[]) => Promise<unknown>;
+  };
   WindowControl?: {
     close?: () => Promise<unknown>;
   };
@@ -294,6 +320,8 @@ export function createDesktopBridgeFromOfficialNamespaces(
     CCDScheduledTasks: createScheduledTasksBridge(web.CCDScheduledTasks),
     CoworkScheduledTasks: createScheduledTasksBridge(web.CoworkScheduledTasks),
     CoworkSpaces: createCoworkSpacesBridge(web.CoworkSpaces),
+    Resources: createResourcesBridge(web.Resources),
+    FramebufferPreview: createFramebufferPreviewBridge(web.FramebufferPreview),
     CoworkFilePreview: createCoworkFilePreviewBridge(web.CoworkFilePreview),
     FileSystem: {
       browseFiles: async (options) => normalizeStringArray(await web.FileSystem?.browseFiles?.(options).catch(() => [])),
@@ -406,6 +434,122 @@ function createLocalSessionEnvironmentBridge(raw: RawLocalSessionEnvironmentBrid
   };
 }
 
+/** Official claude.web.Resources (Le) for XC Files browser. */
+function createResourcesBridge(raw: RawClaudeWebBridge["Resources"] | undefined): DesktopBridge["Resources"] {
+  if (!raw) return undefined;
+  return {
+    fetchMentionOptions: async (query, kind) => {
+      const result = await raw.fetchMentionOptions?.(query, kind).catch(() => []);
+      if (!Array.isArray(result)) return [];
+      return result.flatMap((entry) => {
+        const item = asRecord(entry);
+        const rawId = stringValue(item.id);
+        if (!rawId) return [];
+        // Official QC requires id "file-${absPath}"; desktop may emit bare abs paths.
+        const id = rawId.startsWith("file-")
+          ? rawId
+          : (rawId.startsWith("/") ? `file-${rawId}` : rawId);
+        const metaRecord = asRecord(item.metadata);
+        let metadata: string | undefined;
+        if (typeof item.metadata === "string") {
+          metadata = item.metadata;
+        } else if (item.metadata != null) {
+          // Prefer relative path when desktop only provides abs path.
+          const metaPath = stringValue(metaRecord.path);
+          metadata = JSON.stringify({
+            ...metaRecord,
+            path: metaPath,
+            isDirectory: typeof metaRecord.isDirectory === "boolean" ? metaRecord.isDirectory : undefined,
+            positions: Array.isArray(metaRecord.positions) ? metaRecord.positions : undefined,
+          });
+        }
+        return [{
+          id,
+          label: stringValue(item.label) ?? stringValue(item.name) ?? id,
+          metadata,
+        }];
+      });
+    },
+    listProjectFiles: async (query) => {
+      const result = await raw.listProjectFiles?.(query).catch(() => []);
+      return Array.isArray(result) ? result : [];
+    },
+    searchFileContents: async (query, limit) => {
+      const result = await raw.searchFileContents?.(query, limit).catch(() => []);
+      if (!Array.isArray(result)) return [];
+      return result.flatMap((entry) => {
+        const item = asRecord(entry);
+        return [{
+          absPath: stringValue(item.absPath) ?? stringValue(item.path),
+          relativePath: stringValue(item.relativePath) ?? stringValue(item.path),
+          line: typeof item.line === "number" ? item.line : undefined,
+          preview: stringValue(item.preview) ?? stringValue(item.snippet) ?? stringValue(item.content),
+        }];
+      });
+    },
+    setFocusedCwd: async (cwd) => raw.setFocusedCwd?.(cwd),
+  };
+}
+
+/** Official claude.web.FramebufferPreview (lr) for YR Screen / AN pane. */
+function createFramebufferPreviewBridge(
+  raw: RawClaudeWebBridge["FramebufferPreview"] | undefined,
+): DesktopBridge["FramebufferPreview"] {
+  if (!raw) return undefined;
+  return {
+    attach: async (cwd, sessionName) => {
+      const result = await raw.attach?.(cwd, sessionName).catch(() => null);
+      const item = asRecord(result);
+      if (!item) return null;
+      const source = asRecord(item.source);
+      const sessionId = stringValue(item.sessionId)
+        ?? stringValue(source.id)
+        ?? (booleanValue(item.attached) ? `${cwd}::${sessionName ?? ""}` : undefined);
+      if (!sessionId) return null;
+      return {
+        sessionId,
+        name: stringValue(item.name) ?? stringValue(source.name),
+        width: numberOrUndefined(item.width ?? source.width) ?? 0,
+        height: numberOrUndefined(item.height ?? source.height) ?? 0,
+      };
+    },
+    detach: async (sessionId) => raw.detach?.(sessionId),
+    listSources: async (cwd) => {
+      const result = await raw.listSources?.(cwd).catch(() => []);
+      if (!Array.isArray(result)) return [];
+      return result.flatMap((entry) => {
+        const item = asRecord(entry);
+        const name = stringValue(item.name);
+        if (!name) return [];
+        return [{
+          id: stringValue(item.id),
+          name,
+          origin: stringValue(item.origin) ?? stringValue(item.displayId),
+        }];
+      });
+    },
+    onSessionFatal: (listener) => {
+      const sub = raw.onSessionFatal ?? raw.sessionFatal;
+      if (!sub) return () => {};
+      return sub((sessionId, message) => {
+        listener(String(sessionId ?? ""), String(message ?? ""));
+      });
+    },
+    onSessionResized: (listener) => {
+      const sub = raw.onSessionResized ?? raw.sessionResized;
+      if (!sub) return () => {};
+      return sub((sessionId, width, height) => {
+        listener(String(sessionId ?? ""), Number(width) || 0, Number(height) || 0);
+      });
+    },
+    requestFramePort: async (sessionId) => raw.requestFramePort?.(sessionId),
+    sendKey: async (...args) => raw.sendKey?.(...args),
+    sendPointer: async (...args) => raw.sendPointer?.(...args),
+    sendScroll: async (...args) => raw.sendScroll?.(...args),
+    setStreamHints: async (sessionId, hints) => raw.setStreamHints?.(sessionId, hints),
+  };
+}
+
 const chromeMcpServerName = "Claude in Chrome";
 
 function createBrowserUseBridge(
@@ -500,12 +644,19 @@ function normalizeLocalFileReadResult(value: unknown): LocalFileReadResult {
   if (value === null || value === undefined) return null;
   if (typeof value === "string") return { content: value };
   const raw = asRecord(value);
+  // Keep hash/contents/absPath for c119 vN F (Edit) — do not strip to bare Gzt content shape.
+  const content = stringValue(raw.content) ?? stringValue(raw.contents);
   return {
-    content: stringValue(raw.content),
+    absPath: stringValue(raw.absPath) ?? stringValue(raw.path),
+    content: content ?? undefined,
+    contents: stringValue(raw.contents) ?? content ?? undefined,
     encoding: stringValue(raw.encoding) as "base64" | "utf8" | undefined,
+    error: stringValue(raw.error),
+    hash: stringValue(raw.hash),
+    isDirectory: booleanValue(raw.isDirectory),
     mimeType: stringValue(raw.mimeType),
     name: stringValue(raw.name),
-    path: stringValue(raw.path),
+    path: stringValue(raw.path) ?? stringValue(raw.absPath),
     size: numberValue(raw.size),
     tooLarge: booleanValue(raw.tooLarge),
   };
@@ -690,6 +841,26 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       const result = await raw?.pickFileAtCwd?.(idOrCwd);
       return typeof result === "string" ? result : null;
     },
+    listSessionDirectory: async (id, relative = ".") => {
+      const rawEntries = await raw?.listSessionDirectory?.(id, relative).catch(() => []);
+      if (!Array.isArray(rawEntries)) return [];
+      return rawEntries.flatMap((entry) => {
+        const item = asRecord(entry);
+        const name = stringValue(item.name);
+        const path = stringValue(item.path) ?? stringValue(item.absPath);
+        if (!name || !path) return [];
+        return [{
+          name,
+          path,
+          isDirectory: Boolean(item.isDirectory),
+          isFile: item.isFile === undefined ? !item.isDirectory : Boolean(item.isFile),
+          size: typeof item.size === "number" ? item.size : undefined,
+          modifiedAt: stringValue(item.modifiedAt),
+        }];
+      });
+    },
+    writeSessionFile: async (id, filePath, contents, expectedHash) =>
+      normalizeWriteSessionFileResult(await raw?.writeSessionFile?.(id, filePath, contents, expectedHash)),
     respondToToolPermission: async (requestId, decision, updatedInput) => raw?.respondToToolPermission?.(requestId, decision, updatedInput),
     setEffort: async (id, effort) => {
       const item = await raw?.setEffort?.(id, effort);
@@ -750,6 +921,11 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
         userSelectedFiles: input?.userSelectedFiles?.length ? input.userSelectedFiles : undefined,
       });
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
+    },
+    // Official Yr → transport.cancelQueued(sessionId, uuid). Desktop IPC is currently a no-op true.
+    cancelQueuedMessage: async (id, uuid) => {
+      const result = await raw?.cancelQueuedMessage?.(id, uuid);
+      return result !== false;
     },
     forkSession: async (id, messageId) => {
       const item = await raw?.forkSession?.(id, messageId);
@@ -861,6 +1037,10 @@ function createCoworkFileBridge(raw: RawLocalSessionsBridge | undefined): Cowork
     pickFileAtCwd: async (idOrCwd) => {
       const result = await raw?.pickFileAtCwd?.(idOrCwd);
       return typeof result === "string" ? result : null;
+    },
+    writeSessionFile: async (id, filePath, contents, expectedHash) => {
+      if (!raw?.writeSessionFile) return null;
+      return normalizeWriteSessionFileResult(await raw.writeSessionFile(id, filePath, contents, expectedHash));
     },
   };
 }
@@ -1094,6 +1274,7 @@ function normalizeSession(
     hostLoopMode: booleanValue(raw.hostLoopMode) ?? booleanValue(original.hostLoopMode),
     initialMessage: stringValue(raw.initialMessage) ?? stringValue(original.initialMessage),
     initializationStatus: raw.initializationStatus ?? original.initializationStatus,
+    tags: normalizeStringArray(raw.tags ?? original.tags),
     mcqAnswers: raw.mcqAnswers ?? original.mcqAnswers,
     userSelectedFolders: normalizeStringArray(raw.userSelectedFolders ?? original.userSelectedFolders),
     mountedProjects: normalizeCoworkMountedProjects(raw.mountedProjects ?? original.mountedProjects),
@@ -1422,6 +1603,30 @@ function normalizeGitCommandResult(value: unknown): GitCommandResult {
     stderr: stringValue(raw.stderr) ?? "",
     error: stringValue(raw.error),
     code: raw.code,
+  };
+}
+
+/** Official UI enum: Ok="ok", Conflict="conflict", Denied="denied". */
+function normalizeWriteSessionFileResult(value: unknown): WriteSessionFileResult | null {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    // Legacy desktop returned written path string — treat as ok without hash.
+    return value.length > 0 ? { status: "ok", absPath: value } : null;
+  }
+  if (typeof value !== "object") return null;
+  const raw = asRecord(value);
+  const statusRaw = stringValue(raw.status)?.toLowerCase();
+  const status: WriteSessionFileResult["status"] =
+    statusRaw === "conflict" || statusRaw === "denied" || statusRaw === "ok"
+      ? statusRaw
+      : stringValue(raw.hash) || stringValue(raw.absPath)
+        ? "ok"
+        : "denied";
+  return {
+    status,
+    hash: stringValue(raw.hash),
+    currentHash: stringValue(raw.currentHash),
+    absPath: stringValue(raw.absPath) ?? stringValue(raw.path),
   };
 }
 

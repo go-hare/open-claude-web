@@ -497,7 +497,18 @@ const checks = [
     name: "web keeps failed permission responses visible",
     test: () => /toolPermissionResponseFailed/.test(source.tile)
       && /setResolveError/.test(source.tile)
-      && /respondToToolPermission\(request\.requestId, decision, request\.input\)/.test(source.tile),
+      && /respondToToolPermission\(requestId, decision, \{/.test(source.tile)
+      && /Permission response failed/.test(source.tile),
+  },
+  {
+    group: "权限审批",
+    name: "web treats store pending as authoritative and optimistically resolves",
+    test: () => /suppressedRequestIdsRef/.test(source.tile)
+      && /syncRequestsFromStorePending/.test(source.tile)
+      && /Empty incoming is authoritative clear/.test(source.tile)
+      && /if \(incoming\.length === 0\) return \[\];/.test(source.tile)
+      && /storePending === undefined/.test(source.tile)
+      && /optimistic/.test(source.tile),
   },
   {
     group: "对话流渲染",

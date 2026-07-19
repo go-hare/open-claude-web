@@ -3,6 +3,7 @@ import type { Editor } from "@tiptap/core";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Icon } from "../../../shell/icons";
+import { CoworkArrowDownGlyph } from "../../cowork/ui/CoworkOfficialGlyphs";
 import { OfficialButton, OfficialDropdownButton, type OfficialDropdownItem } from "../OfficialEpitaxyComponents";
 import { CoworkSelectedFiles } from "./CoworkSelectedFiles";
 import type { CoworkUploadedFile } from "./coworkUploadedFiles";
@@ -143,6 +144,7 @@ export function OfficialCoworkComposer({
   childrenAbove,
   disabled,
   editor,
+  isStreaming = false,
   isSubmitting,
   modelItems,
   modelLabel,
@@ -164,6 +166,8 @@ export function OfficialCoworkComposer({
   childrenAbove?: ReactNode;
   disabled: boolean;
   editor: Editor | null;
+  /** Official t$t `isStreaming` — brand border while responding. */
+  isStreaming?: boolean;
   isSubmitting: boolean;
   modelItems: OfficialDropdownItem[];
   modelLabel: ReactNode;
@@ -189,15 +193,31 @@ export function OfficialCoworkComposer({
       data-official-source="index-BELzQL5P.js:CAt Cowork composer"
       style={{ maxWidth: "58rem", paddingInline: "clamp(24px, 4%, 48px)" }}
     >
+      {/* Official t$t: circular size-9 + ly ArrowDown (not code-path c119 pill). */}
       <button
         aria-hidden={!showScrollButton}
         aria-label="Scroll to bottom"
-        className={`inline-flex items-center h-[24px] px-p3 rounded-r5 bg-fill-contained-default text-contained-default effect-contained-default hover:bg-fill-contained-hover hover:text-contained-hover cursor-default border-0 outline-none hide-focus-ring ring-focus absolute -top-[32px] left-1/2 -translate-x-1/2 z-[1] transition-opacity duration-150 ${showScrollButton ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        className={[
+          "z-[1] size-9 inline-flex items-center justify-center",
+          "absolute -top-8 left-1/2 -translate-x-1/2",
+          "border-0.5 overflow-hidden !rounded-full p-1",
+          "shadow-md hover:shadow-lg",
+          "bg-bg-000/80 hover:bg-bg-000",
+          "backdrop-blur transition-opacity duration-200",
+          isStreaming ? "border-accent-brand/30" : "border-border-300",
+          showScrollButton ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
+        ].join(" ")}
+        {...(!showScrollButton ? { inert: true as const } : {})}
         onClick={onScrollToBottom}
-        tabIndex={showScrollButton ? 0 : -1}
         type="button"
       >
-        <Icon name="ChevronDownSmall" size="s" />
+        {isStreaming ? (
+          <span
+            aria-hidden
+            className="absolute pointer-events-none size-8 rounded-full bg-accent-brand/50 blur-md transition duration-300 opacity-50"
+          />
+        ) : null}
+        <CoworkArrowDownGlyph className="mix-blend-luminosity" size={20} vectorSizeOverride={20} />
       </button>
       {childrenAbove}
       <div

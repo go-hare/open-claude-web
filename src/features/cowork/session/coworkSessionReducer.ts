@@ -14,8 +14,8 @@ import {
   normalizeCoworkTranscript,
 } from "./coworkSessionHydration";
 import { asRecord } from "./recordUtils";
-import { reduceCoworkStreamEvent } from "./stream/coworkStreamingState";
 import { coworkAgentActivityFromStream } from "./stream/coworkStreamActivity";
+import type { CoworkStreamSnapshot } from "./stream/coworkStreamTypes";
 import type { CoworkInitializationStatus, CoworkRawMessage, CoworkSessionDataState } from "./types";
 
 export type CoworkSessionAction =
@@ -27,7 +27,10 @@ export type CoworkSessionAction =
   | { requests: CoworkPermissionRequest[]; type: "permissions-replaced" }
   | { request: CoworkPermissionRequest; type: "permission-upserted" }
   | { requestId: string; type: "permission-resolved" }
+  /** Official: stream_event only updates activity / streamingMessageId — Va/Pke owns blocks. */
   | { message: Record<string, unknown>; startedAt: number; type: "stream-event" }
+  /** Official Oke → Va: smoothed snapshot from Pke/zE (not reduceCoworkStreamEvent dump). */
+  | { snapshot: CoworkStreamSnapshot; type: "stream-snapshot" }
   | { message: CoworkRawMessage; receivedAt: number; type: "transcript-message" }
   | { disconnected: boolean; type: "settled" }
   | { error: Error; errorCategory?: string; type: "runtime-error" }
@@ -65,6 +68,8 @@ export function reduceCoworkSessionState(
       return { ...state, toolPermissionRequests: state.toolPermissionRequests.filter((request) => request.requestId !== action.requestId) };
     case "stream-event":
       return reduceStreamEvent(state, action.message, action.startedAt);
+    case "stream-snapshot":
+      return reduceStreamSnapshot(state, action.snapshot);
     case "transcript-message":
       return reduceTranscriptMessage(state, action.message, action.receivedAt);
     case "settled":
@@ -96,24 +101,52 @@ function applyInitializationStatus(state: CoworkSessionDataState, status: Cowork
   };
 }
 
+/**
+ * Official stream_event handler (index Pke path): feed smoother elsewhere; here only
+ * activity / pendingTurn / streamingMessageId. Do NOT accumulate full text into
+ * streamSnapshot — that was the whole-message dump (no zE typewriter).
+ * message_stop does NOT clear Va; result/close/settled clears via Pke.clear.
+ */
 function reduceStreamEvent(
   state: CoworkSessionDataState,
   message: Record<string, unknown>,
   startedAt: number,
 ) {
   const isStart = isCoworkStreamStart(message);
-  const streamSnapshot = reduceCoworkStreamEvent(state.streamSnapshot, message);
+  const liveSnapshot = state.streamSnapshot;
+  const nextStreamingId = isStart
+    ? coworkStreamMessageId(message)
+    : (state.streamingMessageId ?? liveSnapshot?.messageId ?? null);
   return {
     ...state,
-    agentActivity: coworkAgentActivityFromStream(streamSnapshot, message, state.agentActivity, startedAt),
+    agentActivity: coworkAgentActivityFromStream(liveSnapshot, message, state.agentActivity, startedAt),
     connectionState: "connected" as const,
     error: null,
     errorCategory: null,
     pendingTurn: state.pendingTurn ?? { endTurnSeen: false, startTime: startedAt },
     session: isStart && state.session ? { ...state.session, isRunning: true } : state.session,
-    streamActivity: streamSnapshot ? coworkStreamActivity(message, state.streamActivity) : "idle" as const,
-    streamingMessageId: isStart ? coworkStreamMessageId(message) : streamSnapshot ? state.streamingMessageId : null,
-    streamSnapshot,
+    streamActivity: nextStreamingId ? coworkStreamActivity(message, state.streamActivity) : state.streamActivity,
+    streamingMessageId: nextStreamingId,
+    // Snapshot blocks only from stream-snapshot (Pke/zE). Keep existing while live.
+    streamSnapshot: liveSnapshot,
+  };
+}
+
+function reduceStreamSnapshot(
+  state: CoworkSessionDataState,
+  snapshot: CoworkStreamSnapshot,
+): CoworkSessionDataState {
+  if (snapshot === null) {
+    return {
+      ...state,
+      streamSnapshot: null,
+      // Keep streamingMessageId until settle so eke suppress still works while durable lands.
+    };
+  }
+  return {
+    ...state,
+    streamSnapshot: snapshot,
+    streamingMessageId: snapshot.messageId || state.streamingMessageId,
   };
 }
 
@@ -124,6 +157,9 @@ function reduceTranscriptMessage(
 ) {
   const received = { ...message, raw: { ...asRecord(message.raw), receivedStreamAt: receivedAt } };
   const merged = mergeCoworkTranscriptMessage(state, received);
+  // Official: end_turn only marks pendingTurn.endTurnSeen — does NOT Pke.clear / drop Va.
+  // streamingMessageId stays so eke suppress keeps durable full text out while typewriter finishes.
+  // Clear is result/close/error → settleSession → officialStreamClear + settled.
   const endTurnSeen = isTopLevelAssistantEndTurn(message);
   return {
     ...merged,
@@ -136,8 +172,8 @@ function reduceTranscriptMessage(
       ? { ...merged.pendingTurn, endTurnSeen: true }
       : merged.pendingTurn,
     streamActivity: endTurnSeen ? "idle" : merged.streamActivity,
-    streamingMessageId: endTurnSeen ? null : merged.streamingMessageId,
-    streamSnapshot: endTurnSeen ? null : merged.streamSnapshot,
+    streamingMessageId: merged.streamingMessageId,
+    streamSnapshot: merged.streamSnapshot,
   };
 }
 
