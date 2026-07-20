@@ -108,6 +108,58 @@ function sidePaneWidthToAriaValue(width: number | undefined, containerWidth?: nu
 }
 
 /** Official ca0135 ur column under chat row: outer width shared; tiles stack vertically. */
+/** Official c119 $I — YI tile enter/exit tween. */
+const officialTileEnterTransition = {
+  type: "tween" as const,
+  duration: 0.32,
+  ease: [0.32, 0.72, 0, 1] as [number, number, number, number],
+};
+
+/**
+ * Official qI enteringIds residual (c11959232): newly added tile ids animate YI enter for 320ms.
+ * Critical: compute during render (official if idsKey changed → setState in render), not useEffect —
+ * otherwise the new tile mounts with isEntering=false and misses YI initial flexGrow:0.
+ * First open (empty→single) is row with chat — not stack enter. Stack open (plan→file) marks file.
+ */
+function useOfficialSideTileEnteringIds(sideTiles: readonly OfficialViewPane[]) {
+  const reduceMotion = useReducedMotion();
+  const idsKey = sideTiles.join("\0");
+  const [state, setState] = useState(() => ({
+    idsKey,
+    ids: new Set(sideTiles),
+    entering: new Set<OfficialViewPane>() as ReadonlySet<OfficialViewPane>,
+  }));
+
+  // Official qI: sync derived entering when membership key changes (render-phase update).
+  if (idsKey !== state.idsKey) {
+    const next = new Set(sideTiles);
+    const added = new Set<OfficialViewPane>();
+    for (const id of next) {
+      if (!state.ids.has(id)) added.add(id);
+    }
+    // empty prev → first side open: no stack enter (matches product first-open row with chat).
+    const entering =
+      reduceMotion || state.ids.size === 0 || added.size === 0
+        ? (new Set<OfficialViewPane>() as ReadonlySet<OfficialViewPane>)
+        : added;
+    setState({ idsKey, ids: next, entering });
+  }
+
+  useEffect(() => {
+    if (state.entering.size === 0) return;
+    const timer = window.setTimeout(() => {
+      setState((current) =>
+        current.entering.size === 0
+          ? current
+          : { ...current, entering: new Set<OfficialViewPane>() },
+      );
+    }, reduceMotion ? 0 : officialTileEnterTransition.duration * 1000);
+    return () => window.clearTimeout(timer);
+  }, [reduceMotion, state.entering]);
+
+  return state.entering;
+}
+
 export function EpitaxySidePaneColumn({
   fileView,
   isTopLeft,
@@ -140,6 +192,7 @@ export function EpitaxySidePaneColumn({
   const columnRef = useRef<HTMLDivElement | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const [isResizingSidePane, setIsResizingSidePane] = useState(false);
+  const enteringIds = useOfficialSideTileEnteringIds(sideTiles);
   const ariaValueNow = sidePaneWidthToAriaValue(sidePaneWidth);
   // Official YI tile wrap: flexGrow / flexShrink:1 / flexBasis:0 until user resizes to a fixed width.
   // Column of FI tiles: official stack gap=12 between tasks/subagent (nE.gap).
@@ -261,6 +314,7 @@ export function EpitaxySidePaneColumn({
           key={tile}
           activeView={tile}
           fileView={fileView}
+          isEntering={enteringIds.has(tile)}
           isTopLeft={isTopLeft && index === 0}
           messages={messages}
           onClose={() => (sideTiles.length === 1 ? onCloseAll() : onCloseTile(tile))}
@@ -278,10 +332,13 @@ export function EpitaxySidePaneColumn({
 /**
  * Official rE single side tile (header + QR body).
  * When stacked under tasks via ur column, each tile keeps its own chrome (title + close).
+ * Official YI enter (c119): isEntering → flexGrow 0→1 ($I), shell absolute during enter so the
+ * existing side tile (e.g. plan) keeps full column share while the new tile grows from below.
  */
 function EpitaxySidePaneTile({
   activeView,
   fileView,
+  isEntering = false,
   isTopLeft,
   messages,
   onClose,
@@ -293,6 +350,8 @@ function EpitaxySidePaneTile({
 }: {
   activeView: OfficialViewPane;
   fileView: OfficialFileViewTarget | null;
+  /** Official qI enteringIds.has(tileId) — stack open under existing side tile. */
+  isEntering?: boolean;
   isTopLeft?: boolean;
   /** Official oe(sessionId) — full hydrated transcript, not sparse session.messages. */
   messages: ChatMessage[];
@@ -303,7 +362,7 @@ function EpitaxySidePaneTile({
   sessionRef: EpitaxySessionRef | null;
   subagentView: OfficialSubagentTarget | null;
 }) {
-  const codeSurface = activeView === "terminal" || activeView === "diff";
+  const codeSurface = activeView === "terminal" || activeView === "diff" || activeView === "file";
   const bridge = desktopBridge.LocalSessions;
   // Official Lr (ca0135bc5): diffShowTree:!1 — tree off until user clicks Show files.
   const [diffShowTree, setDiffShowTree] = useState(false);
@@ -318,7 +377,7 @@ function EpitaxySidePaneTile({
     () => (activeView === "plan" ? parseOfficialPlan(planMessages) : { content: undefined, path: undefined }),
     [activeView, planMessages],
   );
-  // Official YI enter: flexGrow 0→1 via motion ($I 0.32s ease [.32,.72,0,1]). Use motion flexGrow so we never clobber CSS flex shorthand.
+  // Official YI enter: flexGrow 0→1 via motion ($I 0.32s ease [.32,.72,0,1]). Never use flex shorthand here.
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
@@ -364,6 +423,32 @@ function EpitaxySidePaneTile({
 
   const activeTerminalTab = terminalTabs.tabs.find((tab) => tab.id === terminalTabs.activeId) ?? terminalTabs.tabs[0];
 
+  // Official YI tileWrap: flexGrow motion / flexShrink:1 / flexBasis:0 / minSize; N=enter|exit → min 0.
+  // isEntering: flexGrow animates 0→1 ($I); shell absolute so plan keeps column share while file grows below.
+  // flexGrow lives only on motion animate (not style) so initial 0 is not clobbered by style.flexGrow:1.
+  const tileWrapStyle = useMemo<CSSProperties>(() => ({
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: isEntering ? 0 : sidePaneMinWidth,
+    minHeight: isEntering ? 0 : sidePaneMinWidth,
+    position: "relative",
+    overflow: "visible",
+  }), [isEntering]);
+
+  // Official YI shell while entering/exiting: absolute fill of the growing wrap (data-entering).
+  // Official: top/bottom/left + translateZ(2) zIndex 2 (right open so width follows wrap growth).
+  const tileShellStyle = useMemo<CSSProperties | undefined>(() => {
+    if (!isEntering) return undefined;
+    return {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      left: 0,
+      transform: "translateZ(2px)",
+      zIndex: 2,
+    };
+  }, [isEntering]);
+
   // Official split (c119):
   // - YI tile wrap: flexGrow/Shrink/Basis (column stack sizing) — may animate enter
   // - iE shell: h-full w-full min-w-0 relative isolate rounded-r6
@@ -374,17 +459,18 @@ function EpitaxySidePaneTile({
   return (
     <motion.div
       className="min-w-0 min-h-0 relative"
-      initial={reduceMotion ? false : { opacity: 0.01, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={reduceMotion ? { duration: 0 } : { type: "tween", duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
-      style={{
-        flex: "1 1 0",
-        minHeight: sidePaneMinWidth,
-        minWidth: 0,
-      }}
+      data-entering={isEntering || undefined}
+      initial={reduceMotion || !isEntering ? false : { flexGrow: 0 }}
+      animate={{ flexGrow: 1 }}
+      transition={reduceMotion ? { duration: 0 } : officialTileEnterTransition}
+      style={tileWrapStyle}
     >
-      {/* Official iE renderTile shell around rE/FI */}
-      <div className="h-full w-full min-w-0 relative isolate rounded-r6">
+      {/* Official iE renderTile shell around rE/FI — absolute while YI entering. */}
+      <div
+        className="tiles-shell h-full w-full min-w-0 relative isolate rounded-r6"
+        data-entering={isEntering || undefined}
+        style={tileShellStyle}
+      >
         {/* Official FI / DI + Nn sidebar elevation */}
         <div
           className={`min-w-0 shrink-0 relative isolate flex flex-col rounded-r6 h-full${codeSurface ? " epitaxy-code-surface" : ""}`}

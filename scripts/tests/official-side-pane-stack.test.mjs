@@ -60,3 +60,39 @@ test("toggleSidePane removes when present else inserts", () => {
   tiles = toggleSidePane(tiles, "subagent");
   assert.deepEqual(tiles, ["tasks"]);
 });
+
+test("plan then file stacks both tiles (ur column from below)", () => {
+  let tiles = [];
+  tiles = openSidePane(tiles, "plan");
+  assert.deepEqual(tiles, ["plan"]);
+  tiles = openSidePane(tiles, "file");
+  assert.deepEqual(tiles, ["plan", "file"]);
+});
+
+test("openFile again does not replace plan (setSidePane focus-only)", () => {
+  let tiles = openSidePane(["plan", "file"], "file");
+  assert.deepEqual(tiles, ["plan", "file"]);
+});
+
+/**
+ * Official qI residual: only newly added ids while a side tile already exists are "entering".
+ * First open (empty → plan) is row with chat — not stack enter. Second open (plan → file) enters.
+ */
+function enteringIdsForTransition(prevTiles, nextTiles) {
+  const prev = new Set(prevTiles);
+  const next = new Set(nextTiles);
+  if (prev.size === 0) return [];
+  const added = [];
+  for (const id of next) {
+    if (!prev.has(id)) added.push(id);
+  }
+  return added;
+}
+
+test("qI enteringIds: plan→file marks only file as entering", () => {
+  assert.deepEqual(enteringIdsForTransition(["plan"], ["plan", "file"]), ["file"]);
+});
+
+test("qI enteringIds: empty→plan is first open (no stack enter)", () => {
+  assert.deepEqual(enteringIdsForTransition([], ["plan"]), []);
+});
