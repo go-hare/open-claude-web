@@ -1,4 +1,4 @@
-import type { CoworkSessionSnapshot } from "../../../adapters/desktopBridge/types";
+import type { CoworkDetectedFile, CoworkSessionSnapshot } from "../../../adapters/desktopBridge/types";
 import type { CoworkPermissionRequest } from "./coworkPermissionTypes";
 import { upsertCoworkPermission } from "./coworkPermissionEvents";
 import {
@@ -8,6 +8,7 @@ import {
   mergeCoworkTranscriptMessage,
 } from "./coworkSessionEvents";
 import {
+  coworkFsDetectedMapFromSession,
   hydrateCoworkSessionState,
   mergeTranscriptMessages,
   messageIdentity,
@@ -37,7 +38,13 @@ export type CoworkSessionAction =
   | { receivedAt: number; status: CoworkInitializationStatus; type: "initialization-status" }
   | { suggestion: string | null; type: "prompt-suggestion" }
   | { session: CoworkSessionSnapshot; type: "metadata-refreshed" }
-  | { transcript: readonly unknown[]; type: "transcript-refreshed" };
+  | { transcript: readonly unknown[]; type: "transcript-refreshed" }
+  /** Official D1e archived (~39125 / ~65678): mark session archived, settle running UI. */
+  | { type: "session-archived" }
+  /** Official D1e fs_file_created|modified (~113624). */
+  | { file: CoworkDetectedFile; type: "fs-file-upserted" }
+  /** Official D1e fs_file_deleted (~113657). */
+  | { hostPath: string; type: "fs-file-deleted" };
 
 export function reduceCoworkSessionState(
   state: CoworkSessionDataState,
@@ -84,6 +91,29 @@ export function reduceCoworkSessionState(
       return refreshMetadata(state, action.session);
     case "transcript-refreshed":
       return refreshTranscript(state, action.transcript);
+    case "session-archived":
+      return {
+        ...state,
+        agentActivity: null,
+        pendingTurn: null,
+        session: state.session
+          ? { ...state.session, isArchived: true, isRunning: false }
+          : state.session,
+        streamActivity: "idle",
+        streamingMessageId: null,
+        streamSnapshot: null,
+      };
+    case "fs-file-upserted": {
+      const next = new Map(state.fsDetectedFiles);
+      next.set(action.file.hostPath, action.file);
+      return { ...state, fsDetectedFiles: next };
+    }
+    case "fs-file-deleted": {
+      if (!state.fsDetectedFiles.has(action.hostPath)) return state;
+      const next = new Map(state.fsDetectedFiles);
+      next.delete(action.hostPath);
+      return { ...state, fsDetectedFiles: next };
+    }
   }
 }
 
@@ -221,6 +251,7 @@ function refreshMetadata(
     ...state,
     error: session.error ? new Error(session.error) : null,
     errorCategory: session.error ? state.errorCategory : null,
+    fsDetectedFiles: coworkFsDetectedMapFromSession(session, state.fsDetectedFiles),
     initializationStatus: session.initializationStatus ?? state.initializationStatus,
     pendingTurn,
     promptSuggestion: session.promptSuggestion ?? state.promptSuggestion,

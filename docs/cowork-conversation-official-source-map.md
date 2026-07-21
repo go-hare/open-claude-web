@@ -65,6 +65,52 @@
 - 运行样本：`local_7102676c-…` AskUser；`local_9cecfcbb-…` Glob/Read；`local_724bccd9-…` Write deny。
 - 自动验证（历史水位，改后须重跑）：Web typecheck/build + settle 相关 tests；Desktop vitest host-loop/manager。全量 Desktop `tsc` 仍可能被非 Cowork 文件阻塞。**packaged `.vite/build/index.js` 在 rebuild 前可能仍含旧 hard-true**。
 
+### Activity folders / Browse files（2026-07-19）
+
+- 官方 `xQt`（pretty ~248884）Working folder / Browse files **只**以 `userSelectedFolders` 为 host 根；`listFilesInFolder(sessionId, folderPath)` 的第二参是真实 host path。
+- LocalAgentMode `getSession`：`cwd` 常为虚拟 `/sessions/<uuid>`，**无** `folders` 字段时仍有 `userSelectedFolders`。
+- **已修**：`coworkSessionFolders`（`session/activity/coworkResourceActivity.ts`）优先 `userSelectedFolders` → `folders` → 非 `/sessions/` host `cwd`；单目录 section title 用 basename（对齐 `Y8`）。composer `browseFiles` defaultPath 同规则。
+- 桌面 CDP：`local_724bccd9-…` Browse files 列出 AppAgent 内容；活动栏标题为 `AppAgent` 而非 session id。
+
+### D1e archived + fsDetectedFiles（2026-07-19 续）
+
+- 官方 D1e `fs_file_created|modified|deleted`（pretty ~113624–113662）：`Me` Map upsert/delete；hydrate `n.fsDetectedFiles` → `Me`（~114116）。
+- 官方 activity 合并（~60258）：tool resources 之后追加 `operation:"fs_detected"`，跳过已 write/edit/create 覆盖的 hostPath。
+- 官方 list/scheduled：`archived` → `isArchived:true`（~39125 / ~65678）；scheduled-task detail reload `session_updated || archived`（~250355）。
+- 官方 main `FileSystemWatcher`（app.asar `_v`/`ANA`）：非递归 `fs.watch`；EAA 过滤点文件/`~$`/`~*.tmp`/DS_Store；create 立即、modify 150ms debounce、create-echo 300ms grace；`startFileWatching(sessionId, userSelectedFolders)` 否则 `getOutputsDir`；`fsEvent` → session Map + `emit({type, sessionId, fsFile})`。
+- **已落地**：
+  - Desktop `CoworkFileSystemWatcher` + manager start/stop/addFolder/resume 接线；`toRendererSession` 暴露非空 `fsDetectedFiles`。
+  - Web state Map + runtime `archived` / `fs_file_*`；`mergeCoworkFsDetectedActivity`；scheduled runs 过滤。
+  - Unit：watcher + manager fsWatch + web merge/hydrate/runtime。
+- **诚实 residual**：需**重启 desktop** 才加载 watcher；host-loop VM 输出路径 / path staging 与官方 full dual-exec 仍非 1:1。
+
+### D1e reverse-RPC + rate_limit + Tke.scanTranscript（2026-07-21）
+
+官方 anchors（pretty `index-BELzQL5P`）：
+- D1e ~113478 `rate_limit_event` → `jue` map → `xI(orgUuid)` messageLimits
+- Tke ~71033–71058 `emit` / `scanTranscript`（newest→oldest；`within_limit` 或过期 `resetsAt` → 不应用）
+- seedTranscript / reseed / appendTail / transcript case 均 `Tke.scanTranscript(messages, sessionId)`
+- directory_servers_* ~113664 → `respondDirectoryServers`
+- slash_menu_skills_resolve / addable_skills_search ~113738 → `respondSlashMenuSkills`
+- plugins_search ~113756 → `respondPluginSearch`
+- NVe ~96524 usage banner 依赖完整 account `hc()` / react-query messageLimits + EVe/IVe/AVe — **不发明 banner UI**
+
+**Web 已落地（WIP until 提交）：**
+- `rateLimit/coworkRateLimitMap.ts`：`mapCoworkRateLimitInfo` (jue) + `extractRateLimitInfoFromMessageEvent` + `scanCoworkTranscriptRateLimit` (Tke)
+- `rateLimit/coworkRateLimitStore.ts`：local `messageLimits[orgUuid]`（非 full account bootstrap）
+- runtime live `rate_limit_event` → store；hydrate 后 `scanCoworkTranscriptRateLimit(transcript)` → store（seedTranscript 等价）
+- directory / slash skills / plugins reverse-RPC helpers + runtime respond paths
+- Tests：`cowork-d1e-reverse-rpc.test.mjs` + runtime reverse-RPC/rate_limit/hydrate-scan；typecheck clean
+
+- `cu_lock_released` (~114004)：session match → rAF `[data-autoscroll-container].scrollTop = scrollHeight`（`applyCoworkCuLockReleasedScroll`；不发明 CU lock 产品状态）
+
+**诚实 residual：**
+- Full account messageLimits react-query + NVe usage banner UI（EVe/IVe/AVe）未接
+- plugins catalog 无 org 时 empty（honest）
+- live CDP agent turn smoke for directory/skills/plugins/rate_limit 未跑
+- `local_mcp_servers` / `sdk_mcp_status` 依赖 full mcpCoordinator / a1 remote store — **不发明**
+- dual-exec VM / Settings Th / Artifacts yn / full mcpCoordinator **不发明**
+
 ## 端到端证据矩阵
 
 > **读法**：先读上一节「当前实现」；矩阵「当前对应」列以 **2026-07-12 重写** 为准。历史“必须新建 manager / 禁止现有路径”等措辞已过时处已改为 **审计/收口现有 Cowork 路径**。
@@ -87,7 +133,7 @@
 | VM/host-loop | gate cluster；host branch；`UXe`；VM factory | 新会话 policy；resume inherit；双执行面 | **P0：决策层去硬 true**（policy 模块 + resume inherit + full-VM reject）。默认 feature false；org full-VM source stub false；host process/tool policy 有骨架。**双执行面与 VM Swift 路径未 1:1**。 | 先接 GB/org 真源，再补执行面；禁止再 hard-wire true |
 | Upload/path translation | main `Rwe/Mwe`… | staging、host/VM 双向 path | 仍明显弱于官方；workspace handlers 局部存在 | 继续按官方建/补 Cowork path 模块 |
 | Web session bootstrap | pretty `O3t/D3t/…`；`O0t` | per-session store provider + hydrate + onEvent | `CoworkSessionController/runtime` 已独立；per-pane provider 隔离与官方 `Ete()` 仍可能不等价 | 收口 lifecycle，不混 Code store |
-| Web event reducer | pretty `D1e` / `S3t` | 全量 event switch | runtime 覆盖 message/result/error/close/stopped 等主干；**completed 已忽略（P0）**；rate limit/fs/directory/slash/MCP/CU 等仍缺 | 按官方 switch 扩面，不造 completed |
+| Web event reducer | pretty `D1e` / `S3t` | 全量 event switch | runtime：message/result/error/close/stopped/**completed ignored**；`rate_limit` live+Tke scan；`fs_file_*`/`archived`；directory/slash/plugins reverse-RPC respond。缺：usage banner UI、CU/full MCP coordinator、VM path | 继续扩面；不造 banner/account bootstrap |
 | Message normalization | pretty `bfe` | 全部分支 | 主体已迁独立模块；边角 metadata/MCP 等继续对照 | 继续 diff `bfe`，禁止回退旧 parser 为入口 |
 | Message store/index | pretty `Zle` | path/chain index | 独立 message path store 存在；多 conversation 隔离需再审 | 按官方 selector 职责修 |
 | Assistant chain | pretty `GLt` / `v$t` | parent/path chain | 活跃链有 timeline/content 分段；规则完整度仍差 | 迁移官方 grouping |

@@ -11,7 +11,12 @@ const vite = await createServer({
 const { createCoworkMcpRegistryStore } = await vite.ssrLoadModule(
   "/src/features/cowork/session/mcp/coworkMcpRegistryStore.ts",
 );
-const { parseCoworkResourceActivity } = await vite.ssrLoadModule(
+const {
+  coworkFolderSectionTitle,
+  coworkSessionFolders,
+  mergeCoworkFsDetectedActivity,
+  parseCoworkResourceActivity,
+} = await vite.ssrLoadModule(
   "/src/features/cowork/session/activity/coworkResourceActivity.ts",
 );
 
@@ -78,4 +83,59 @@ test("ports official resource activity order, result association, and MCP regist
   assert.equal(mcp?.mcpServer?.name, "Linear");
   assert.equal(mcp?.mcpToolDisplayName, "Create issue");
   assert.deepEqual(mcp?.mcpToolResult, { content: [{ text: "created", type: "text" }], isError: false });
+});
+
+test("coworkSessionFolders prefers userSelectedFolders and ignores virtual /sessions cwd", () => {
+  assert.deepEqual(
+    coworkSessionFolders({
+      cwd: "/sessions/724bccd9-7917-44fc-b49c-6d345996d494",
+      userSelectedFolders: ["/Users/apple/work-py/AppAgent"],
+    }),
+    ["/Users/apple/work-py/AppAgent"],
+  );
+  assert.deepEqual(
+    coworkSessionFolders({
+      cwd: "/sessions/abc",
+      folders: ["/tmp/workspace"],
+    }),
+    ["/tmp/workspace"],
+  );
+  assert.deepEqual(
+    coworkSessionFolders({
+      cwd: "/Users/apple/real-host-path",
+    }),
+    ["/Users/apple/real-host-path"],
+  );
+  assert.deepEqual(
+    coworkSessionFolders({
+      cwd: "/sessions/only-virtual",
+    }),
+    [],
+  );
+  assert.deepEqual(coworkSessionFolders(null), []);
+  assert.equal(coworkFolderSectionTitle(["/Users/apple/work-py/AppAgent"]), "AppAgent");
+  assert.equal(coworkFolderSectionTitle(["/a", "/b"]), "工作文件夹");
+  assert.equal(coworkFolderSectionTitle([]), "工作文件夹");
+});
+
+test("mergeCoworkFsDetectedActivity skips paths already write/edit/create covered", () => {
+  const fromTools = parseCoworkResourceActivity([
+    chat("assistant-w", "assistant", {
+      message: {
+        content: [{ id: "w1", input: { file_path: "/tmp/covered.txt" }, name: "Write", type: "tool_use" }],
+      },
+      receivedStreamAt: 5,
+      type: "assistant",
+      uuid: "assistant-w",
+    }),
+  ]);
+  const merged = mergeCoworkFsDetectedActivity(fromTools, [
+    { fileName: "covered.txt", hostPath: "/tmp/covered.txt", timestamp: 50 },
+    { fileName: "extra.txt", hostPath: "/tmp/extra.txt", timestamp: 40 },
+  ]);
+  assert.equal(merged.some((item) => item.operation === "fs_detected" && item.filePath === "/tmp/covered.txt"), false);
+  const extra = merged.find((item) => item.operation === "fs_detected" && item.filePath === "/tmp/extra.txt");
+  assert.equal(extra?.fileName, "extra.txt");
+  assert.equal(extra?.timestamp, 40);
+  assert.ok(merged.every((item, index, list) => index === 0 || list[index - 1].timestamp <= item.timestamp));
 });

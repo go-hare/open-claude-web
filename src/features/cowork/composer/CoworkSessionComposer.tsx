@@ -142,7 +142,12 @@ function useComposerConfiguration(input: { model: string; props: CoworkSessionCo
     } finally { input.setConfigBusy(false); }
   };
   const addFiles = async () => {
-    const paths = await desktopBridge.FileSystem.browseFiles?.({ defaultPath: input.props.session?.cwd ?? input.props.session?.folders?.[0], title: "Add files or photos" });
+    // Official host browse roots use userSelectedFolders; virtual cwd `/sessions/<id>` is not a host path.
+    const hostFolder =
+      input.props.session?.userSelectedFolders?.find(Boolean) ??
+      input.props.session?.folders?.find(Boolean) ??
+      (input.props.session?.cwd && !/^\/sessions\//i.test(input.props.session.cwd) ? input.props.session.cwd : undefined);
+    const paths = await desktopBridge.FileSystem.browseFiles?.({ defaultPath: hostFolder, title: "Add files or photos" });
     if (paths?.length) input.setSelectedFiles((current) => mergeCoworkUploadedFiles(current, paths));
   };
   const stop = async () => { await stopCoworkSession(coworkSessionsBridge, input.props.sessionId); };

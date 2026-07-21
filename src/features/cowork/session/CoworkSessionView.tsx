@@ -174,6 +174,7 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
             !data.isSessionNotFound ? (
               <CoworkSessionActivityPanel
                 bridge={coworkSessionsBridge}
+                fsDetectedFiles={data.fsDetectedFiles}
                 messages={data.messages}
                 onNavigate={onNavigate}
                 onOpenFile={openFile}

@@ -19,7 +19,12 @@ export function useCoworkScheduledRuns(bridge: CoworkSessionsBridge, scheduledTa
     };
 
     void loadRuns();
-    const unsubscribe = bridge.onEvent?.(() => void loadRuns());
+    // Official scheduled detail / list refresh: session_updated | archived (not every event).
+    const unsubscribe = bridge.onEvent?.((event) => {
+      const raw = event && typeof event === "object" ? event as Record<string, unknown> : null;
+      const type = raw && typeof raw.type === "string" ? raw.type : "";
+      if (type === "session_updated" || type === "archived") void loadRuns();
+    });
     return () => {
       alive = false;
       unsubscribe?.();

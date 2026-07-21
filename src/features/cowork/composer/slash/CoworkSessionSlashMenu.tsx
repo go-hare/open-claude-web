@@ -19,12 +19,12 @@ export const CoworkSessionSlashMenu = memo(function CoworkSessionSlashMenu({ bri
   const rangeRef = useRef(range);
   rangeRef.current = range;
   useEffect(() => { editor.view.dom.focus(); }, [editor]);
-  useCoworkSupportedCommands(bridge, session, sessionId, setCommands, setLoading);
+  useCoworkSupportedCommands(bridge, sessionId, setCommands, setLoading);
   const items = useCoworkSlashItems({ bridge, commands, editor, isLoading, onClose, rangeRef, sessionId });
   return <CoworkSlashMenuSurface clientRect={clientRect} editor={editor} items={items} onClose={onClose} query={query} />;
 });
 
-function useCoworkSupportedCommands(bridge: CoworkSlashBridge, session: SessionSummary | null, sessionId: string | undefined, setCommands: (items: SlashCommand[]) => void, setLoading: (value: boolean) => void) {
+function useCoworkSupportedCommands(bridge: CoworkSlashBridge, sessionId: string | undefined, setCommands: (items: SlashCommand[]) => void, setLoading: (value: boolean) => void) {
   useEffect(() => {
     let alive = true;
     if (!bridge.getSupportedCommands) {
@@ -33,7 +33,9 @@ function useCoworkSupportedCommands(bridge: CoworkSlashBridge, session: SessionS
       return;
     }
     setLoading(true);
-    void bridge.getSupportedCommands({ cwd: session?.cwd, sessionId }).then((items) => {
+    // Official aRe (index-BELzQL5P ~84153): hT.getSupportedCommands() then filter scope=cowork.
+    // Desktop getCoworkSupportedCommands(sessionId) is session-scoped skills; virtual cwd is unused.
+    void bridge.getSupportedCommands(sessionId ? { sessionId } : undefined).then((items) => {
       if (alive) setCommands(Array.isArray(items) ? items : []);
     }).catch(() => {
       if (alive) setCommands([]);
@@ -41,7 +43,7 @@ function useCoworkSupportedCommands(bridge: CoworkSlashBridge, session: SessionS
       if (alive) setLoading(false);
     });
     return () => { alive = false; };
-  }, [bridge, session?.cwd, sessionId, setCommands, setLoading]);
+  }, [bridge, sessionId, setCommands, setLoading]);
 }
 
 type SlashItemsInput = {

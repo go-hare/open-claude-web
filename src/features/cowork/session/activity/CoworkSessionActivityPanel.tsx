@@ -23,14 +23,17 @@ import { CoworkBrowseFilesButton, CoworkFileExplorerModal } from "./CoworkFileEx
 import { CoworkProgressSection } from "./CoworkProgressSection";
 import { CoworkScheduledRunsSection, useCoworkScheduledRuns } from "./CoworkScheduledRunsSection";
 import type { CoworkBackgroundTask, CoworkOpenFileTarget, CoworkTodoItem } from "./coworkActivityTypes";
-import { coworkFolderSectionTitle, coworkSessionFolders, parseCoworkResourceActivity, splitCoworkResourceSections, type CoworkResourceSections } from "./coworkResourceActivity";
+import { coworkFolderSectionTitle, coworkSessionFolders, mergeCoworkFsDetectedActivity, parseCoworkResourceActivity, splitCoworkResourceSections, type CoworkResourceSections } from "./coworkResourceActivity";
 import { parseCoworkTodos } from "./coworkTodoActivity";
+import type { CoworkDetectedFile } from "../../../../adapters/desktopBridge/types";
 import type { CoworkRawMessage } from "../types";
 
 export type { CoworkBackgroundTask } from "./coworkActivityTypes";
 
-export function CoworkSessionActivityPanel({ bridge, messages, onNavigate, onOpenFile, session, sessionId, tasks }: {
+export function CoworkSessionActivityPanel({ bridge, fsDetectedFiles, messages, onNavigate, onOpenFile, session, sessionId, tasks }: {
   bridge: CoworkSessionsBridge;
+  /** Official Me Map / array — merged into resourceActivity as fs_detected. */
+  fsDetectedFiles?: CoworkDetectedFile[] | Map<string, CoworkDetectedFile> | null;
   messages: CoworkRawMessage[];
   onNavigate: (path: string) => void;
   onOpenFile: (target: CoworkOpenFileTarget) => void;
@@ -39,7 +42,12 @@ export function CoworkSessionActivityPanel({ bridge, messages, onNavigate, onOpe
   tasks: CoworkBackgroundTask[];
 }) {
   const todos = useMemo(() => parseCoworkTodos(messages), [messages]);
-  const resources = useMemo(() => parseCoworkResourceActivity(messages), [messages]);
+  const toolResources = useMemo(() => parseCoworkResourceActivity(messages), [messages]);
+  // Official ~60258: merge fsDetectedFiles after tool resources, skip paths already write/edit/create.
+  const resources = useMemo(
+    () => mergeCoworkFsDetectedActivity(toolResources, fsDetectedFiles ?? session?.fsDetectedFiles),
+    [fsDetectedFiles, session?.fsDetectedFiles, toolResources],
+  );
   const folders = useMemo(() => coworkSessionFolders(session), [session]);
   const resourceSections = useMemo(() => splitCoworkResourceSections(resources, folders), [resources, folders]);
   const { connectedFiles: connectedOfficeFiles } = useCoworkConnectedOfficeFiles(sessionId);

@@ -1,4 +1,4 @@
-import type { CoworkMessageEnvelope, CoworkSessionSnapshot } from "../../../adapters/desktopBridge/types";
+import type { CoworkDetectedFile, CoworkMessageEnvelope, CoworkSessionSnapshot } from "../../../adapters/desktopBridge/types";
 import type { CoworkUploadedFile } from "../newTask/coworkUploadedFiles";
 import type { CoworkPermissionRequest } from "./coworkPermissionTypes";
 import type { CoworkStreamSnapshot } from "./stream/coworkStreamTypes";
@@ -57,6 +57,8 @@ export type CoworkSessionDataState = {
   connectionState: CoworkConnectionState;
   error: Error | null;
   errorCategory: string | null;
+  /** Official D1e Me: Map hostPath → detected file for activity fs_detected merge. */
+  fsDetectedFiles: Map<string, CoworkDetectedFile>;
   initializationStatus: CoworkInitializationStatus | null;
   isLoading: boolean;
   isSessionNotFound: boolean;

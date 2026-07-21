@@ -160,10 +160,19 @@ function useScheduledRuns(taskId: string) {
     }
   }, [taskId]);
 
-  useEffect(() => {
+useEffect(() => {
     void loadRuns();
+    // Official scheduled-task detail (~250349): reload on session_updated | archived only.
+    const unsubscribe = desktopBridge.LocalAgentModeSessions.onEvent?.((event) => {
+      const raw = event && typeof event === "object" ? event as Record<string, unknown> : null;
+      const type = raw && typeof raw.type === "string" ? raw.type : "";
+      if (type === "session_updated" || type === "archived") void loadRuns();
+    });
     window.addEventListener("focus", loadRuns);
-    return () => window.removeEventListener("focus", loadRuns);
+    return () => {
+      unsubscribe?.();
+      window.removeEventListener("focus", loadRuns);
+    };
   }, [loadRuns]);
 
   return { loadRuns, runs, runsLoading };

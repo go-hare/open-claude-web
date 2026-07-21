@@ -83,3 +83,37 @@ export function scrollCoworkSessionOpenToBottom(
   container.scrollTop = container.scrollHeight;
   return true;
 }
+
+/**
+ * Official D1e `cu_lock_released` (index-BELzQL5P ~114004–114009):
+ * if event.sessionId === current session, rAF:
+ *   document.querySelector("[data-autoscroll-container]").scrollTop = scrollHeight
+ * Pure body shared with z3t; schedule helper for runtime/browser.
+ */
+export function applyCoworkCuLockReleasedScroll(options: {
+  container?: Pick<HTMLElement, "scrollHeight" | "scrollTop"> | null;
+  document?: { querySelector: (sel: string) => Element | null };
+  eventSessionId: string | null | undefined;
+  sessionId: string;
+  schedule?: (cb: () => void) => void;
+}): boolean {
+  if (!options.eventSessionId || options.eventSessionId !== options.sessionId) {
+    return false;
+  }
+  const schedule = options.schedule ?? ((cb) => {
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(cb);
+    else cb();
+  });
+  const resolveContainer = (): Pick<HTMLElement, "scrollHeight" | "scrollTop"> | null => {
+    if (options.container) return options.container;
+    const doc = options.document
+      ?? (typeof document !== "undefined" ? document : null);
+    if (!doc) return null;
+    const el = doc.querySelector("[data-autoscroll-container]");
+    return el as Pick<HTMLElement, "scrollHeight" | "scrollTop"> | null;
+  };
+  schedule(() => {
+    scrollCoworkSessionOpenToBottom(resolveContainer());
+  });
+  return true;
+}

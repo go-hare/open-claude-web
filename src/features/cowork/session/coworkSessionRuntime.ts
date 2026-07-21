@@ -6,11 +6,38 @@ import {
   officialStreamSubscribe,
 } from "../../epitaxy/session/officialStreamSessionStore";
 import type { OfficialStreamSnapshot } from "../../epitaxy/officialStreamSmoother";
+import {
+  organizationUuidFromBootstrap,
+} from "../../settings/accountSettingsApi";
 import { createPendingCoworkUserMessage } from "./coworkPendingMessages";
 import {
   coworkPermissionResolvedId,
   normalizeCoworkPermissionRequest,
 } from "./coworkPermissionEvents";
+import {
+  listInstalledCoworkDirectoryServers,
+  lookupCoworkDirectoryServers,
+  parseDirectoryEventData,
+  searchCoworkDirectoryServers,
+} from "./mcp/coworkDirectoryServers";
+import {
+  parsePluginsEventData,
+  searchCoworkPluginsResponse,
+  setCoworkPluginOrgUuid,
+} from "./mcp/coworkPluginSearch";
+import {
+  parseSkillsEventData,
+  resolveCoworkSlashMenuSkills,
+  searchCoworkAddableSkills,
+  setCoworkInstalledSlashSkills,
+  slashCommandsToSkills,
+} from "./mcp/coworkSlashSkills";
+import {
+  extractRateLimitInfoFromMessageEvent,
+  mapCoworkRateLimitInfo,
+  scanCoworkTranscriptRateLimit,
+} from "./rateLimit/coworkRateLimitMap";
+import { applyCoworkRateLimitToStore } from "./rateLimit/coworkRateLimitStore";
 import {
   coworkStreamMessage,
   coworkTranscriptMessage,
@@ -24,6 +51,7 @@ import { reduceCoworkSessionState, type CoworkSessionAction } from "./coworkSess
 import type { CoworkSessionStore } from "./coworkSessionStore";
 import { buildCoworkChatMessages } from "./transcript/coworkMessageModel";
 import { coworkMessagePathStore, type CoworkMessagePathStore } from "./transcript/coworkMessagePathStore";
+import { applyCoworkCuLockReleasedScroll } from "./transcript/coworkAutoscroll";
 import { estimateCoworkStreamTokens } from "./transcript/coworkStreamTranscript";
 import { asRecord, stringValue } from "./recordUtils";
 import type { CoworkStreamSnapshot } from "./stream/coworkStreamTypes";
@@ -103,6 +131,8 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
       if (disposed) return;
       dispatch({ session, transcript, type: "hydration-succeeded" });
       resetSeenMessages(data.messages);
+      // Official seedTranscript / Tke.scanTranscript (~71625).
+      applyScannedTranscriptRateLimit(transcript);
     } catch (caught) {
       dispatch({ error: caught instanceof Error ? caught : new Error(String(caught)), type: "hydration-failed" });
     } finally {
@@ -146,6 +176,8 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
 
   function applyEvent(event: unknown) {
     if (applyPermissionEvent(event)) return;
+    // Official D1e ~113478: nested rate_limit_event in message envelope OR top-level.
+    if (applyRateLimitEvent(event)) return;
     const raw = asRecord(event);
     const type = stringValue(raw.type);
     if (type === "cleared") {
@@ -159,8 +191,172 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
     else if (type === "close" || type === "stopped") settleSession(raw);
     else if (type === "pty_close") void refreshTranscript();
     else if (type === "session_updated" || type === "permission_mode_changed") void refreshSessionMetadata();
+    // Official D1e / list stores: archived marks isArchived (not full hydrate).
+    else if (type === "archived") {
+      officialStreamClear(sessionId);
+      dispatch({ type: "session-archived" });
+    }
+    // Official D1e ~113624–113662: Me Map upsert/delete for activity fs_detected merge.
+    else if (type === "fs_file_created" || type === "fs_file_modified") applyFsFileUpsert(raw);
+    else if (type === "fs_file_deleted") applyFsFileDeleted(raw);
+    // Official D1e ~113664: directory_servers_* reverse-RPC → respondDirectoryServers.
+    else if (
+      type === "directory_servers_search" ||
+      type === "directory_servers_lookup" ||
+      type === "directory_servers_list_installed"
+    ) {
+      void applyDirectoryServersEvent(type, raw);
+    }
+    // Official D1e ~113738: addable_skills_search / slash_menu_skills_resolve → respondSlashMenuSkills.
+    else if (
+      type === "addable_skills_search" ||
+      type === "slash_menu_skills_resolve"
+    ) {
+      void applySlashSkillsEvent(type, raw);
+    }
+    // Official D1e ~113756: plugins_search → respondPluginSearch.
+    else if (type === "plugins_search") {
+      void applyPluginsSearchEvent(raw);
+    }
     else if (type === "initialization_status") applyInitializationStatus(raw);
     else if (type === "prompt_suggestion") dispatch({ suggestion: stringValue(raw.data) ?? null, type: "prompt-suggestion" });
+    // Official D1e ~114004: cu_lock_released → rAF scroll [data-autoscroll-container] to bottom.
+    else if (type === "cu_lock_released") {
+      applyCoworkCuLockReleasedScroll({
+        eventSessionId: stringValue(raw.sessionId),
+        sessionId,
+      });
+    }
+  }
+
+  function applyRateLimitEvent(event: unknown): boolean {
+    const info = extractRateLimitInfoFromMessageEvent(event);
+    if (!info) return false;
+    const mapped = mapCoworkRateLimitInfo(info);
+    const orgUuid = resolveCoworkOrgUuid();
+    applyCoworkRateLimitToStore(mapped, { orgUuid, sessionId });
+    return true;
+  }
+
+  function resolveCoworkOrgUuid(): string | null {
+    try {
+      const w = window as unknown as {
+        __CLAUDE_BOOTSTRAP__?: Record<string, unknown>;
+        __bootstrap?: Record<string, unknown>;
+      };
+      return (
+        organizationUuidFromBootstrap(w.__CLAUDE_BOOTSTRAP__) ??
+        organizationUuidFromBootstrap(w.__bootstrap) ??
+        null
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  async function applyDirectoryServersEvent(
+    type:
+      | "directory_servers_search"
+      | "directory_servers_lookup"
+      | "directory_servers_list_installed",
+    raw: Record<string, unknown>,
+  ) {
+    const respond = bridge.respondDirectoryServers;
+    if (!respond) return;
+    const { requestId, keywords, uuids } = parseDirectoryEventData(raw.data);
+    if (!requestId) return;
+    try {
+      let servers: unknown[] = [];
+      if (type === "directory_servers_search") {
+        servers = await searchCoworkDirectoryServers(keywords);
+      } else if (type === "directory_servers_lookup") {
+        servers = await lookupCoworkDirectoryServers(uuids);
+      } else {
+        servers = listInstalledCoworkDirectoryServers(keywords);
+      }
+      await respond(requestId, servers);
+    } catch {
+      await respond(requestId, []).catch(() => undefined);
+    }
+  }
+
+  async function hydrateInstalledSlashSkillsIfNeeded() {
+    if (!bridge.getSupportedCommands) return;
+    try {
+      const commands = await bridge.getSupportedCommands({ sessionId });
+      if (Array.isArray(commands) && commands.length > 0) {
+        setCoworkInstalledSlashSkills(slashCommandsToSkills(commands));
+      }
+    } catch {
+      /* keep existing catalog */
+    }
+  }
+
+  async function applySlashSkillsEvent(
+    type: "addable_skills_search" | "slash_menu_skills_resolve",
+    raw: Record<string, unknown>,
+  ) {
+    const respond = bridge.respondSlashMenuSkills;
+    if (!respond) return;
+    const { requestId, keywords, skillNames } = parseSkillsEventData(raw.data);
+    if (!requestId) return;
+    try {
+      if (type === "slash_menu_skills_resolve") {
+        await hydrateInstalledSlashSkillsIfNeeded();
+      }
+      const skills =
+        type === "addable_skills_search"
+          ? searchCoworkAddableSkills(keywords)
+          : resolveCoworkSlashMenuSkills(skillNames, keywords);
+      await respond(requestId, JSON.stringify(skills));
+    } catch {
+      await respond(requestId, "[]").catch(() => undefined);
+    }
+  }
+
+  async function applyPluginsSearchEvent(raw: Record<string, unknown>) {
+    const respond = bridge.respondPluginSearch;
+    if (!respond) return;
+    const {
+      requestId,
+      keywords,
+      userIntent,
+      includeInstalled,
+      listInstalledOnly,
+    } = parsePluginsEventData(raw.data);
+    if (!requestId) return;
+    try {
+      setCoworkPluginOrgUuid(resolveCoworkOrgUuid());
+      const payload = searchCoworkPluginsResponse({
+        keywords,
+        userIntent,
+        includeInstalled,
+        listInstalledOnly,
+      });
+      await respond(requestId, payload);
+    } catch {
+      await respond(requestId, JSON.stringify({ results: [] })).catch(
+        () => undefined,
+      );
+    }
+  }
+
+  function applyFsFileUpsert(raw: Record<string, unknown>) {
+    const fsFile = asRecord(raw.fsFile);
+    const hostPath = stringValue(fsFile.hostPath);
+    const fileName = stringValue(fsFile.fileName);
+    const timestamp = typeof fsFile.timestamp === "number" ? fsFile.timestamp : Date.now();
+    if (!hostPath || !fileName) return;
+    dispatch({
+      file: { fileName, hostPath, timestamp },
+      type: "fs-file-upserted",
+    });
+  }
+
+  function applyFsFileDeleted(raw: Record<string, unknown>) {
+    const hostPath = stringValue(asRecord(raw.fsFile).hostPath);
+    if (!hostPath) return;
+    dispatch({ hostPath, type: "fs-file-deleted" });
   }
 
   function applyPermissionEvent(event: unknown) {
@@ -232,6 +428,20 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
     if (!transcript || disposed) return;
     dispatch({ transcript, type: "transcript-refreshed" });
     resetSeenMessages(data.messages);
+    // Official reseedTranscript / appendTail also call Tke.scanTranscript (~71652/71715).
+    applyScannedTranscriptRateLimit(transcript);
+  }
+
+  /** Official Tke.scanTranscript → xI(org) when non-within with future resetsAt. */
+  function applyScannedTranscriptRateLimit(transcript: unknown) {
+    const scanned = scanCoworkTranscriptRateLimit(
+      Array.isArray(transcript) ? transcript : [],
+    );
+    if (!scanned) return;
+    applyCoworkRateLimitToStore(scanned, {
+      orgUuid: resolveCoworkOrgUuid(),
+      sessionId,
+    });
   }
 
   function resetSeenMessages(messages: CoworkRawMessage[]) {

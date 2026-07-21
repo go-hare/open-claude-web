@@ -67,6 +67,28 @@ test("preserves receivedStreamAt and messages not present in a refreshed transcr
   assert.deepEqual(merged.map((item) => item.id), ["assistant-1", "live-only"]);
 });
 
+test("hydrates fsDetectedFiles into Me map and preserves previous when empty", () => {
+  const previous = new Map([["/old", { fileName: "old", hostPath: "/old", timestamp: 1 }]]);
+  const state = {
+    ...createInitialCoworkSessionState("session-1"),
+    fsDetectedFiles: previous,
+  };
+  const withFiles = hydrateCoworkSessionState(
+    state,
+    session({
+      fsDetectedFiles: [
+        { fileName: "a.txt", hostPath: "/tmp/a.txt", timestamp: 9 },
+      ],
+    }),
+    [],
+  );
+  assert.equal(withFiles.fsDetectedFiles.get("/tmp/a.txt")?.fileName, "a.txt");
+  assert.equal(withFiles.fsDetectedFiles.has("/old"), false);
+
+  const withoutFiles = hydrateCoworkSessionState(withFiles, session({ isRunning: false }), []);
+  assert.equal(withoutFiles.fsDetectedFiles.get("/tmp/a.txt")?.fileName, "a.txt");
+});
+
 test("removes hydrated optimistic messages and settles a stopped session", () => {
   const pending = message("user-1", "user");
   const state = {

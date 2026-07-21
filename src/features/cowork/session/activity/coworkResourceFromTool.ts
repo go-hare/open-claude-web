@@ -174,7 +174,7 @@ function presentFilesActivities(tool: CoworkTranscriptToolUse, timestamp: number
   });
 }
 
-function createCoworkResourceActivity(input: ResourceActivityInput): CoworkResourceActivity {
+export function createCoworkResourceActivity(input: ResourceActivityInput): CoworkResourceActivity {
   const normalizedPath = normalizeCoworkPath(input.filePath);
   const fileName = input.fileName ?? basename(normalizedPath) ?? normalizedPath;
   const categoryKey = coworkResourceCategory(normalizedPath, input.operation);

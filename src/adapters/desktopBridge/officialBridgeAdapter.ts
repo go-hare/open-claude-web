@@ -5,6 +5,7 @@ import type {
   ConnectedBrowser,
   ConnectedOfficeFile,
   ContextUsage,
+  CoworkDetectedFile,
   CoworkMountedProject,
   CoworkMessageEnvelope,
   CoworkSessionSnapshot,
@@ -79,6 +80,12 @@ type RawLocalSessionsBridge = {
   listSessionDirectory?: (id: string, relative?: string) => Promise<unknown>;
   writeSessionFile?: (id: string, filePath: string, contents: string, expectedHash?: string) => Promise<unknown>;
   respondToToolPermission?: (requestId: string, decision: "always" | "deny" | "once", updatedInput?: unknown) => Promise<unknown>;
+  /** Official Yxi: directory_servers_* reverse-RPC reply. */
+  respondDirectoryServers?: (requestId: string, servers: unknown[]) => Promise<unknown>;
+  /** Official Jxi: slash_menu / addable_skills reverse-RPC reply. */
+  respondSlashMenuSkills?: (requestId: string, skillsJson: string) => Promise<unknown>;
+  /** Official jxi: plugins_search reverse-RPC reply. */
+  respondPluginSearch?: (requestId: string, resultsJson: string) => Promise<unknown>;
   setEffort?: (id: string, effort: string) => Promise<unknown>;
   setMcpServers?: (id: string, mcpServers: unknown) => Promise<unknown>;
   setModel?: (id: string, model: string) => Promise<unknown>;
@@ -122,7 +129,9 @@ type CoworkFileBridge = Pick<CoworkSessionsBridge,
   | "readSessionImageAsDataUrl" | "pickSessionFile" | "pickFileAtCwd" | "writeSessionFile"
 >;
 type CoworkMutationBridge = Pick<CoworkSessionsBridge,
-  | "addFolderToSession" | "respondToToolPermission" | "setEffort" | "setMcpServers"
+  | "addFolderToSession" | "respondToToolPermission" | "respondDirectoryServers"
+  | "respondSlashMenuSkills" | "respondPluginSearch"
+  | "setEffort" | "setMcpServers"
   | "setModel" | "setPermissionMode" | "updateSession" | "startShellPty" | "stop"
   | "stopShellPty" | "stopTask" | "writeShellPty" | "resizeShellPty" | "getShellPtyBuffer"
 >;
@@ -1049,6 +1058,12 @@ function createCoworkMutationBridge(raw: RawLocalSessionsBridge | undefined): Co
   return {
     addFolderToSession: async (id, folder) => normalizeCoworkAddFolderResult(await raw?.addFolderToSession?.(id, folder)),
     respondToToolPermission: async (requestId, decision, updatedInput) => raw?.respondToToolPermission?.(requestId, decision, updatedInput),
+    respondDirectoryServers: async (requestId, servers) =>
+      raw?.respondDirectoryServers?.(requestId, servers),
+    respondSlashMenuSkills: async (requestId, skillsJson) =>
+      raw?.respondSlashMenuSkills?.(requestId, skillsJson),
+    respondPluginSearch: async (requestId, resultsJson) =>
+      raw?.respondPluginSearch?.(requestId, resultsJson),
     setEffort: async (id, effort) => normalizeCoworkResult(await raw?.setEffort?.(id, effort)),
     setMcpServers: async (id, mcpServers) => normalizeCoworkResult(await raw?.setMcpServers?.(id, mcpServers)),
     setModel: async (id, model) => normalizeCoworkResult(await raw?.setModel?.(id, model)),
@@ -1277,6 +1292,7 @@ function normalizeSession(
     tags: normalizeStringArray(raw.tags ?? original.tags),
     mcqAnswers: raw.mcqAnswers ?? original.mcqAnswers,
     userSelectedFolders: normalizeStringArray(raw.userSelectedFolders ?? original.userSelectedFolders),
+    fsDetectedFiles: normalizeCoworkDetectedFiles(raw.fsDetectedFiles ?? original.fsDetectedFiles),
     mountedProjects: normalizeCoworkMountedProjects(raw.mountedProjects ?? original.mountedProjects),
     model: stringValue(raw.model) ?? stringValue(original.model),
     permissionMode: stringValue(raw.permissionMode) ?? stringValue(original.permissionMode),
@@ -1392,6 +1408,22 @@ function normalizeCoworkMountedProjects(value: unknown): CoworkMountedProject[] 
     })
     .filter((project): project is CoworkMountedProject => Boolean(project));
   return projects.length > 0 ? projects : undefined;
+}
+
+/** Official Me hydrate: n.fsDetectedFiles array → activity merge (index-BELzQL5P ~114116). */
+function normalizeCoworkDetectedFiles(value: unknown): CoworkDetectedFile[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const files = value
+    .map((item) => {
+      const raw = asRecord(item);
+      const hostPath = stringValue(raw.hostPath) ?? stringValue(raw.host_path);
+      const fileName = stringValue(raw.fileName) ?? stringValue(raw.file_name);
+      const timestamp = numberOrUndefined(raw.timestamp);
+      if (!hostPath || !fileName || timestamp === undefined) return null;
+      return { fileName, hostPath, timestamp };
+    })
+    .filter((file): file is CoworkDetectedFile => Boolean(file));
+  return files.length > 0 ? files : undefined;
 }
 
 async function enrichSessionWithGitInfo(session: SessionSummary, raw?: RawLocalSessionsBridge): Promise<SessionSummary> {

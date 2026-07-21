@@ -772,6 +772,11 @@ function createCoworkSessionBridge(): CoworkSessionsBridge {
       };
     },
     getRawTranscript: async (id) => await bridge.getTranscript?.(id) ?? [],
+    // Official Yxi: directory reverse-RPC no-op success in fake Cowork bridge.
+    respondDirectoryServers: async (_requestId, _servers) => true,
+    // Official Jxi / jxi: skills + plugins reverse-RPC no-op success.
+    respondSlashMenuSkills: async (_requestId, _skillsJson) => true,
+    respondPluginSearch: async (_requestId, _resultsJson) => true,
   };
 }
 

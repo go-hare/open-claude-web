@@ -46,6 +46,13 @@ export type ConnectedBrowser = {
   osPlatform?: string;
 };
 
+/** Official local_agent_mode session.fsDetectedFiles entry (D1e Me / activity merge). */
+export type CoworkDetectedFile = {
+  fileName: string;
+  hostPath: string;
+  timestamp: number;
+};
+
 export type SessionSummary = {
   bufferedMessages?: ChatMessage[];
   chromePermissionMode?: string;
@@ -60,6 +67,8 @@ export type SessionSummary = {
   cwd?: string;
   effort?: string;
   folders?: string[];
+  /** Official getSession → activity Me hydrate (array of hostPath entries). */
+  fsDetectedFiles?: CoworkDetectedFile[];
   userSelectedFiles?: string[];
   userSelectedFolders?: string[];
   folderExists?: boolean;
@@ -559,6 +568,21 @@ export type CoworkSessionsBridge = {
   checkTrust?: (folder: string) => Promise<WorkspaceTrustResult>;
   isFolderTrusted?: (folder: string) => Promise<boolean>;
   respondToToolPermission?: (requestId: string, decision: "always" | "deny" | "once", updatedInput?: unknown) => Promise<unknown>;
+  /**
+   * Official Yxi / D1e directory reverse-RPC respond:
+   * respondDirectoryServers(requestId, servers[]).
+   */
+  respondDirectoryServers?: (requestId: string, servers: unknown[]) => Promise<unknown>;
+  /**
+   * Official Jxi / D1e skills reverse-RPC respond:
+   * respondSlashMenuSkills(requestId, JSON.stringify(skills[])).
+   */
+  respondSlashMenuSkills?: (requestId: string, skillsJson: string) => Promise<unknown>;
+  /**
+   * Official jxi / D1e plugins_search reverse-RPC respond:
+   * respondPluginSearch(requestId, JSON.stringify({ results })).
+   */
+  respondPluginSearch?: (requestId: string, resultsJson: string) => Promise<unknown>;
   saveTrust?: (folder: string) => Promise<unknown>;
   addTrustedFolder?: (folder: string) => Promise<unknown>;
   startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<ShellPtyStartResult>;

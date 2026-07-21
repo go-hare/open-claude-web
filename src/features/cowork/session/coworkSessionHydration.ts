@@ -1,4 +1,4 @@
-import type { CoworkSessionSnapshot } from "../../../adapters/desktopBridge/types";
+import type { CoworkDetectedFile, CoworkSessionSnapshot } from "../../../adapters/desktopBridge/types";
 import type { CoworkPermissionRequest } from "./coworkPermissionTypes";
 import { chatMessageFromCoworkEvent } from "./coworkSessionEvents";
 import type { CoworkInitializationStatus, CoworkRawMessage, CoworkSessionDataState } from "./types";
@@ -9,6 +9,7 @@ export function createInitialCoworkSessionState(sessionId: string): CoworkSessio
     connectionState: "connecting",
     error: null,
     errorCategory: null,
+    fsDetectedFiles: new Map(),
     initializationStatus: null,
     isLoading: true,
     isSessionNotFound: false,
@@ -57,6 +58,8 @@ export function hydrateCoworkSessionState(
     connectionState: "connected",
     error: session.error ? new Error(session.error) : null,
     errorCategory: null,
+    // Official D1e hydrate ~114116: n.fsDetectedFiles → Me Map.
+    fsDetectedFiles: coworkFsDetectedMapFromSession(session, current.fsDetectedFiles),
     initializationStatus: normalizeInitializationStatus(session.initializationStatus),
     isLoading: false,
     isSessionNotFound: false,
@@ -70,6 +73,16 @@ export function hydrateCoworkSessionState(
     streamSnapshot: pendingTurn && !pendingTurn.endTurnSeen ? current.streamSnapshot : null,
     toolPermissionRequests: normalizePendingPermissions(session),
   };
+}
+
+/** Official: only replace Me when getSession returns a non-empty fsDetectedFiles array. */
+export function coworkFsDetectedMapFromSession(
+  session: CoworkSessionSnapshot | null | undefined,
+  previous: Map<string, CoworkDetectedFile>,
+) {
+  const files = session?.fsDetectedFiles;
+  if (!files?.length) return previous;
+  return new Map(files.map((file) => [file.hostPath, file]));
 }
 
 function normalizeInitializationStatus(value: unknown): CoworkInitializationStatus | null {

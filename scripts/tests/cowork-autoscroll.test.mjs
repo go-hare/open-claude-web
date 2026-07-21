@@ -9,6 +9,7 @@ const vite = await createServer({
   server: { middlewareMode: true },
 });
 const {
+  applyCoworkCuLockReleasedScroll,
   COWORK_AUTOSCROLL_NEAR_BOTTOM_PX,
   isCoworkNearBottom,
   resolveCoworkScrollBehavior,
@@ -121,4 +122,51 @@ test("z3t rAF body assigns scrollTop = scrollHeight", () => {
   assert.equal(scrollCoworkSessionOpenToBottom(container), true);
   assert.equal(container.scrollTop, 2400);
   assert.equal(scrollCoworkSessionOpenToBottom(null), false);
+});
+
+test("cu_lock_released schedules scroll only when sessionId matches", () => {
+  const container = { scrollHeight: 900, scrollTop: 0 };
+  const scheduled = [];
+  assert.equal(
+    applyCoworkCuLockReleasedScroll({
+      container,
+      eventSessionId: "s1",
+      sessionId: "s1",
+      schedule: (cb) => scheduled.push(cb),
+    }),
+    true,
+  );
+  assert.equal(container.scrollTop, 0);
+  assert.equal(scheduled.length, 1);
+  scheduled[0]();
+  assert.equal(container.scrollTop, 900);
+
+  assert.equal(
+    applyCoworkCuLockReleasedScroll({
+      container,
+      eventSessionId: "other",
+      sessionId: "s1",
+      schedule: (cb) => scheduled.push(cb),
+    }),
+    false,
+  );
+  assert.equal(scheduled.length, 1);
+
+  // querySelector path when no explicit container.
+  const fakeDoc = {
+    querySelector: (sel) => {
+      assert.equal(sel, "[data-autoscroll-container]");
+      return container;
+    },
+  };
+  container.scrollTop = 10;
+  const more = [];
+  applyCoworkCuLockReleasedScroll({
+    document: fakeDoc,
+    eventSessionId: "s1",
+    sessionId: "s1",
+    schedule: (cb) => more.push(cb),
+  });
+  more[0]();
+  assert.equal(container.scrollTop, 900);
 });
