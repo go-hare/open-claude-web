@@ -16,9 +16,105 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   launchEnabled: false,
   launchPreviewPersistSession: false,
   menuBarEnabled: true,
-  quickEntryShortcut: "",
+  quickEntryDictationShortcut: "off",
+  quickEntryShortcut: "double-tap-option",
   useBuiltInNodeForMcp: true,
 };
+
+export type SupportedFeatureStatus = "supported" | "unavailable" | "unknown";
+
+export type DesktopSupportedFeatures = Record<string, { status?: string } | boolean | undefined>;
+
+/** Official pe(features, key).status residual. */
+export function featureStatus(
+  features: DesktopSupportedFeatures | null,
+  key: string,
+): SupportedFeatureStatus {
+  if (!features) return "unknown";
+  const entry = features[key];
+  if (entry === true) return "supported";
+  if (entry === false) return "unavailable";
+  if (entry && typeof entry === "object" && typeof entry.status === "string") {
+    if (entry.status === "supported") return "supported";
+    if (entry.status === "unavailable") return "unavailable";
+    return entry.status as SupportedFeatureStatus;
+  }
+  return "unavailable";
+}
+
+/**
+ * Official le.getSupportedFeatures (c71860c77 ms).
+ * Without bridge → nativeQuickEntry/quickEntryDictation unavailable (never invent supported).
+ */
+export function useDesktopSupportedFeatures() {
+  const [features, setFeatures] = useState<DesktopSupportedFeatures | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const raw =
+          (await desktopBridge.Preferences.getSupportedFeatures?.())
+          ?? null;
+        if (!alive) return;
+        if (raw && typeof raw === "object") {
+          setFeatures(normalizeSupportedFeatures(raw as Record<string, unknown>));
+        } else {
+          setFeatures({
+            nativeQuickEntry: { status: "unavailable" },
+            quickEntryDictation: { status: "unavailable" },
+            customQuickEntryDictationShortcut: { status: "unavailable" },
+            wakeScheduler: { status: "unavailable" },
+          });
+        }
+      } catch {
+        if (!alive) return;
+        setFeatures({
+          nativeQuickEntry: { status: "unavailable" },
+          quickEntryDictation: { status: "unavailable" },
+          customQuickEntryDictationShortcut: { status: "unavailable" },
+          wakeScheduler: { status: "unavailable" },
+        });
+      }
+    };
+    void load();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return features;
+}
+
+/**
+ * Official YK residual: features[key] || { status: "unavailable" }.
+ * Accepts official `{ status }` entries and legacy flat booleans from older shells.
+ */
+function normalizeSupportedFeatures(raw: Record<string, unknown>): DesktopSupportedFeatures {
+  const out: DesktopSupportedFeatures = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "boolean") {
+      out[key] = { status: value ? "supported" : "unavailable" };
+      continue;
+    }
+    if (value && typeof value === "object" && "status" in value) {
+      const status = String((value as { status?: unknown }).status ?? "unavailable");
+      out[key] = { status };
+      continue;
+    }
+    out[key] = { status: value ? "supported" : "unavailable" };
+  }
+  // Official default when missing: unavailable (do not invent supported).
+  for (const key of [
+    "nativeQuickEntry",
+    "quickEntryDictation",
+    "customQuickEntryDictationShortcut",
+    "wakeScheduler",
+  ]) {
+    if (!(key in out)) out[key] = { status: "unavailable" };
+  }
+  return out;
+}
 
 export function useDesktopPreferences() {
   const [preferences, setPreferences] = useState<DesktopPreferences>(defaultDesktopPreferences);
@@ -87,8 +183,17 @@ export function useDesktopNativeSettings() {
           isLoading: false,
         }));
       });
+
+    const unsubscribe = desktopBridge.Preferences.onGlobalShortcutChanged?.((accelerator) => {
+      setState((current) => ({
+        ...current,
+        globalShortcut: typeof accelerator === "string" ? accelerator : "",
+      }));
+    });
+
     return () => {
       alive = false;
+      unsubscribe?.();
     };
   }, []);
 
@@ -123,24 +228,35 @@ export function useDesktopNativeSettings() {
   }, []);
 
   const setGlobalShortcut = useCallback((accelerator: string) => {
+    void setGlobalShortcutAsync(accelerator);
+  }, []);
+
+  const setGlobalShortcutAsync = useCallback(async (accelerator: string) => {
     const next = accelerator.trim();
     let previous = "";
     setState((current) => {
       previous = current.globalShortcut;
       return { ...current, error: "", globalShortcut: next };
     });
-    void desktopBridge.Preferences.setGlobalShortcut?.(next || null)
-      .then((ok) => {
-        if (ok === false) setState((current) => ({ ...current, error: "Invalid shortcut.", globalShortcut: previous }));
-      })
-      .catch((error) => {
-        setState((current) => ({
-          ...current,
-          error: error instanceof Error ? error.message : "Invalid shortcut.",
-          globalShortcut: previous,
-        }));
-      });
+    try {
+      const ok = await desktopBridge.Preferences.setGlobalShortcut?.(next || null);
+      if (ok === false) {
+        setState((current) => ({ ...current, error: "Invalid shortcut.", globalShortcut: previous }));
+        return false;
+      }
+      return true;
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "Invalid shortcut.",
+        globalShortcut: previous,
+      }));
+      return false;
+    }
   }, []);
 
-  return [state, { setGlobalShortcut, setMenuBarEnabled, setStartupOnLogin }] as const;
+  return [
+    state,
+    { setGlobalShortcut, setGlobalShortcutAsync, setMenuBarEnabled, setStartupOnLogin },
+  ] as const;
 }

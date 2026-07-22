@@ -342,7 +342,8 @@ let preferences: DesktopPreferences = {
   launchEnabled: false,
   launchPreviewPersistSession: false,
   menuBarEnabled: true,
-  quickEntryShortcut: "",
+  quickEntryDictationShortcut: "off",
+  quickEntryShortcut: "double-tap-option",
   useBuiltInNodeForMcp: true,
 };
 let fakeGlobalShortcut: string | null = null;
@@ -930,6 +931,17 @@ export const fakeDesktopBridge: DesktopBridge = {
       fakeGlobalShortcut = accelerator && accelerator.length > 0 ? accelerator : null;
       return true;
     },
+    onGlobalShortcutChanged: () => () => undefined,
+    // Official pw()/YK shape: { status }. Never invent nativeQuickEntry/dictation/wake supported.
+    getSupportedFeatures: async () => ({
+      localSessions: { status: "supported" },
+      scheduledTasks: { status: "supported" },
+      desktopNotifications: { status: "supported" },
+      nativeQuickEntry: { status: "unavailable" },
+      quickEntryDictation: { status: "unavailable" },
+      customQuickEntryDictationShortcut: { status: "unavailable" },
+      wakeScheduler: { status: "unavailable" },
+    }),
   },
   Window: {
     close: async () => {},

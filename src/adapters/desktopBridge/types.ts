@@ -198,6 +198,9 @@ export type DesktopPreferences = {
   launchEnabled?: boolean;
   launchPreviewPersistSession?: boolean;
   menuBarEnabled?: boolean;
+  /** Official quickEntryDictationShortcut: "capslock" | "off" | { accelerator } */
+  quickEntryDictationShortcut?: string | { accelerator?: string };
+  /** Official quickEntryShortcut: "double-tap-option" | "off" | { accelerator } */
   quickEntryShortcut?: string | { accelerator?: string };
   useBuiltInNodeForMcp?: boolean;
 };
@@ -639,6 +642,10 @@ export type PreferencesBridge = {
   setMenuBarEnabled?: (enabled: boolean) => Promise<boolean>;
   getGlobalShortcut?: () => Promise<string | null>;
   setGlobalShortcut?: (accelerator: string | null) => Promise<boolean>;
+  /** Official GlobalShortcut change event residual. */
+  onGlobalShortcutChanged?: (listener: (accelerator: string | null) => void) => () => void;
+  /** Official AppFeatures.getSupportedFeatures residual. */
+  getSupportedFeatures?: () => Promise<Record<string, unknown>>;
 };
 
 export type LocalFileEntry = {

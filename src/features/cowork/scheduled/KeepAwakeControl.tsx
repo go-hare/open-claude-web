@@ -17,12 +17,24 @@ const sizeChrome = {
 
 const KEEP_AWAKE_TOOLTIP = "When enabled, Claude will prevent your computer from going to sleep.";
 
+/**
+ * Official hYt (index-BELzQL5P):
+ * - controlOnly: only the switch (Desktop General c71860c77 uses size=md controlOnly)
+ * - otherwise: icon + "Keep awake" label + switch in bottom tooltip
+ */
 export function KeepAwakeControl({
   fullWidth = false,
   size = "sm",
+  controlOnly = false,
+  "aria-labelledby": ariaLabelledby,
+  "aria-describedby": ariaDescribedby,
 }: {
   fullWidth?: boolean;
   size?: "sm" | "md";
+  /** Official hYt controlOnly — settings row supplies label/description. */
+  controlOnly?: boolean;
+  "aria-labelledby"?: string;
+  "aria-describedby"?: string;
 }) {
   const { textClass, iconSize, switchSize } = sizeChrome[size];
   // Official hYt: g = preferences | undefined; render when g?.keepAwakeEnabled !== undefined
@@ -62,6 +74,27 @@ export function KeepAwakeControl({
 
   if (!prefsReady) return null;
 
+  const switchEl = (
+    <OfficialSwitch
+      aria-label={ariaLabelledby ? undefined : "Keep awake"}
+      aria-labelledby={ariaLabelledby}
+      aria-describedby={ariaDescribedby}
+      checked={enabled}
+      dsVariant="dark"
+      onCheckedChange={onCheckedChange}
+      size={switchSize}
+    />
+  );
+
+  // Official: controlOnly → bare switch for settings row
+  if (controlOnly) {
+    return (
+      <span data-official-source="index-BELzQL5P.js:hYt">
+        {switchEl}
+      </span>
+    );
+  }
+
   // Official hYt: pge({ content, side: "bottom", children: <span className={fullWidth ? "block w-full" : undefined}>...</span> })
   return (
     <OfficialTooltip side="bottom" tooltipContent={KEEP_AWAKE_TOOLTIP}>
@@ -79,13 +112,7 @@ export function KeepAwakeControl({
         >
           <Icon name="Sun" size={iconSize} />
           <span className={`${textClass}${fullWidth ? " flex-1" : ""}`}>Keep awake</span>
-          <OfficialSwitch
-            aria-label="Keep awake"
-            checked={enabled}
-            dsVariant="dark"
-            onCheckedChange={onCheckedChange}
-            size={switchSize}
-          />
+          {switchEl}
         </span>
       </span>
     </OfficialTooltip>

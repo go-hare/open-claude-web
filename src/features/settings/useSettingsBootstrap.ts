@@ -35,6 +35,11 @@ export type SettingsAccountSlice = {
 
 export type SettingsBootstrapSlice = {
   account: SettingsAccountSlice | null;
+  /**
+   * Raw /api/bootstrap payload for GrowthBook / feature_flags residual gates
+   * (official aA/bas/VBe/GBe via notificationRowGates).
+   */
+  bootstrapPayload: Record<string, unknown> | null;
   /** Official m()/wk: raven accounts hide personal privacy nav (dn = !raven). */
   isRaven: boolean;
   org: SettingsBootstrapOrg | null;
@@ -47,6 +52,7 @@ export type SettingsBootstrapSlice = {
 
 const empty: SettingsBootstrapSlice = {
   account: null,
+  bootstrapPayload: null,
   isRaven: false,
   org: null,
   profile: {},
@@ -99,6 +105,7 @@ export function parseSettingsBootstrap(payload: unknown): Omit<SettingsBootstrap
           uuid: string(account.uuid),
         }
       : null,
+    bootstrapPayload: root,
     isRaven: account.is_raven === true,
     org: orgName
       ? { capabilities, name: orgName, uuid: string(organization.uuid) }
@@ -130,6 +137,7 @@ async function loadSlice(): Promise<{
     notifications,
     slice: {
       account,
+      bootstrapPayload: base.bootstrapPayload ?? (bootstrap ? record(bootstrap) : null),
       isRaven: base.isRaven,
       org: base.org,
       profile: {

@@ -73,7 +73,12 @@ export function ConnectorsRoute() {
             }}
           />
         ) : null}
-        {directoryOpen ? <ConnectorsDirectoryPanel onClose={() => setDirectoryOpen(false)} /> : null}
+        {directoryOpen ? (
+          <ConnectorsDirectoryPanel
+            connectorTypeFilter={new URLSearchParams(window.location.search).get("connectorTypeFilter")}
+            onClose={() => setDirectoryOpen(false)}
+          />
+        ) : null}
       </>
     );
   }
@@ -117,7 +122,12 @@ export function ConnectorsRoute() {
           }}
         />
       ) : null}
-      {directoryOpen ? <ConnectorsDirectoryPanel onClose={() => setDirectoryOpen(false)} /> : null}
+      {directoryOpen ? (
+          <ConnectorsDirectoryPanel
+            connectorTypeFilter={new URLSearchParams(window.location.search).get("connectorTypeFilter")}
+            onClose={() => setDirectoryOpen(false)}
+          />
+        ) : null}
     </>
   );
 }

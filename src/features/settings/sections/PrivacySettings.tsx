@@ -4,40 +4,67 @@ import {
 } from "../useSettingsBootstrap";
 
 /**
- * Official Privacy personal page (cc989143e):
- * - cn gate: dn() = !raven, else redirect admin privacy /settings
- * - Body _Component18 → _Component16 gateway provider card when org uses external inference
- *   (custom3p / Gateway path). Anthropic-hosted privacy toggles need account GrowthBook arms —
- *   do not invent them here.
+ * Official Privacy personal page (cc989143e cn/rn / _Component16):
+ * - Gate dn() = !raven (nav already); body gateway provider card when org uses external inference.
+ * - Official English copy (tgkg69DKCl / ULnTQCHxiV / MYYAX2WEkL).
+ * Anthropic-hosted privacy toggles need GrowthBook arms — do not invent them here.
  */
 export function PrivacySettings() {
   const { bootstrap } = useSettingsBootstrap();
-  const providerName = providerDisplayName(bootstrap, "Gateway");
+  const providerName = providerDisplayName(bootstrap, "your provider");
 
   return (
     <main className="flex flex-col pb-10">
       <div className="pb-xl">
         <div className="flex flex-col rounded-card bg-surface-1 p-lg shadow-card-ring">
           <p className="pb-md text-footnote">
-            你当前正通过组织自己的推理提供方（{providerName}）使用 Claude。你的对话会发送到该提供方，而不是 Anthropic，并受你组织与该提供方协议的约束。
+            You’re running Claude through your organization’s own inference provider ({providerName}).
+            Your conversations are sent there, not to Anthropic, and are governed by your organization’s
+            agreement with that provider.
           </p>
           <div className="border-t border-alpha-1 pt-sm">
             <div className="flex flex-col gap-md pt-xs">
               <div>
-                <p className="text-body text-primary">Anthropic 看不到的内容</p>
-                <ul className="list-disc pl-6 pt-1 space-y-1">
-                  <li><p className="text-body text-primary">你的提示词、Claude 的回复，以及任何对话内容</p></li>
-                  <li><p className="text-body text-primary">你的文件、代码或工作区内容</p></li>
-                  <li><p className="text-body text-primary">你的身份信息或账户详情</p></li>
+                <p className="text-body text-primary">What Anthropic doesn’t see</p>
+                <ul className="list-disc space-y-1 pl-6 pt-1">
+                  <li>
+                    <p className="text-body text-primary">
+                      Your prompts, Claude’s responses, or any conversation content
+                    </p>
+                  </li>
+                  <li>
+                    <p className="text-body text-primary">Your files, code, or workspace contents</p>
+                  </li>
+                  <li>
+                    <p className="text-body text-primary">Your identity or account details</p>
+                  </li>
                 </ul>
               </div>
               <div>
-                <p className="text-body text-primary">Anthropic 可能会接收到的内容（由你的组织配置）</p>
-                <ul className="list-disc pl-6 pt-1 space-y-1">
-                  <li><p className="text-body text-primary">崩溃报告与错误诊断信息，便于我们修复问题</p></li>
-                  <li><p className="text-body text-primary">匿名使用指标，包括使用次数（不含对话内容）</p></li>
-                  <li><p className="text-body text-primary">更新检查请求，用于让应用保持最新</p></li>
-                  <li><p className="text-body text-primary">诊断报告，但仅在你明确选择“发送给 Anthropic”时才会发送</p></li>
+                <p className="text-body text-primary">
+                  What Anthropic may receive (configured by your organization)
+                </p>
+                <ul className="list-disc space-y-1 pl-6 pt-1">
+                  <li>
+                    <p className="text-body text-primary">
+                      Crash reports and error diagnostics, so we can fix bugs
+                    </p>
+                  </li>
+                  <li>
+                    <p className="text-body text-primary">
+                      Anonymous usage metrics including usage counts (not conversation content)
+                    </p>
+                  </li>
+                  <li>
+                    <p className="text-body text-primary">
+                      Update-check requests, so the app can stay current
+                    </p>
+                  </li>
+                  <li>
+                    <p className="text-body text-primary">
+                      A diagnostic report, only if you explicitly choose “Send to Anthropic”
+                    </p>
+                  </li>
                 </ul>
               </div>
             </div>

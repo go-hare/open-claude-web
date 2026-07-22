@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SettingsRow, SettingsSection, Switch } from "../SettingsShell";
 import { AvatarControl, GhostSelect, SegmentedControl, TextInputControl } from "../SettingsControls";
 import {
@@ -13,12 +13,19 @@ import {
 } from "../appearanceSettings";
 import { WORK_FUNCTION_OPTIONS } from "../accountSettingsApi";
 import { useSettingsBootstrap } from "../useSettingsBootstrap";
+import {
+  ensureDesktopNotificationPermission,
+  readResponseCompletionsEnabled,
+  writeResponseCompletionsEnabled,
+} from "../desktopNotificationPermission";
+import { notificationRowGatesFromBootstrap } from "../notificationRowGates";
 
 /**
  * Official General (c0db37792 H): Profile X + Preferences _Component2 + Notifications _Component3.
  * Appearance mode: zR Kx("userThemeMode"); Chat font: O("customStyles:chatFont") + map K.
  * Profile: PUT /api/account (names) + PUT /api/account_profile (avatar/work_function/conversation_preferences).
- * Notifications: org notification preferences feature_preference (bogosort / code_requires_action / …).
+ * Notifications: Response completions (always); Code rows + Dispatch gated by aA/bas/VBe/GBe residual
+ * from bootstrap feature_flags / org capabilities (see notificationRowGates).
  */
 export function GeneralSettings() {
   const {
@@ -32,7 +39,9 @@ export function GeneralSettings() {
   const [chatFont, setChatFont] = useState<ChatFontSetting>(() => readChatFontSetting());
   const [avatarDraft, setAvatarDraft] = useState<number | undefined>(undefined);
   const [prefsDraft, setPrefsDraft] = useState<string | null>(null);
-  const [responseCompletions, setResponseCompletions] = useState(() => readLocalResponseCompletions());
+  const [responseCompletions, setResponseCompletions] = useState(() => readResponseCompletionsEnabled());
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [notifyError, setNotifyError] = useState("");
   const prefsFocused = useRef(false);
 
   const fullName = bootstrap.account?.full_name ?? "";
@@ -42,8 +51,18 @@ export function GeneralSettings() {
   const avatar = avatarDraft ?? bootstrap.profile.avatar ?? 0;
   const prefsValue = prefsDraft ?? conversationPreferences;
 
+  // Official ie(): e=aA (hL), t=bas (hM), n=VBe (hN); fe uses GBe (hV).
+  const notifyGates = useMemo(
+    () =>
+      notificationRowGatesFromBootstrap(bootstrap.bootstrapPayload, {
+        capabilities: bootstrap.org?.capabilities,
+      }),
+    [bootstrap.bootstrapPayload, bootstrap.org?.capabilities],
+  );
+
   const feature = (notifications.preferences?.feature_preference ?? {}) as Record<string, Record<string, unknown>>;
   const codeNotifications = !!feature.bogosort?.enable_push;
+  const codeEmails = !!feature.bogosort?.enable_email;
   const codePermissionRequests = !!feature.code_requires_action?.enable_push;
   const securityScanEmails = !!feature.code_security_scan?.enable_email;
   const dispatchMessages = !!feature.dispatch?.enable_push;
@@ -75,24 +94,38 @@ export function GeneralSettings() {
     void updateProfile({ avatar: next }).catch(() => setAvatarDraft(undefined));
   };
 
+  const runToggle = async (key: string, work: () => Promise<void>) => {
+    if (pendingKey) return;
+    setPendingKey(key);
+    setNotifyError("");
+    try {
+      await work();
+    } catch (error) {
+      setNotifyError(error instanceof Error ? error.message : "Couldn't update that setting");
+    } finally {
+      setPendingKey(null);
+    }
+  };
+
   return (
     <main className="flex flex-col pb-10">
-      <SettingsSection title="个人资料">
+      <SettingsSection title="Profile">
         <SettingsRow
-          label="头像"
+          label="Avatar"
           control={
             <AvatarControl
               avatar={avatar}
+              displayName={fullName || displayName}
               onRandomize={() => saveAvatar(Math.floor(72 * Math.random()) + 1)}
               onClear={() => saveAvatar(0)}
             />
           }
         />
         <SettingsRow
-          label="全名"
+          label="Full name"
           control={
             <TextInputControl
-              ariaLabel="全名"
+              ariaLabel="Full name"
               value={fullName}
               onSave={(value) => {
                 void updateIdentity({ full_name: value });
@@ -101,10 +134,10 @@ export function GeneralSettings() {
           }
         />
         <SettingsRow
-          label="Claude 应该怎么称呼你？"
+          label="What should Claude call you?"
           control={
             <TextInputControl
-              ariaLabel="显示名称"
+              ariaLabel="Display name"
               value={displayName}
               onSave={(value) => {
                 void updateIdentity({ display_name: value });
@@ -113,11 +146,11 @@ export function GeneralSettings() {
           }
         />
         <SettingsRow
-          label="哪项最符合你的工作？"
+          label="What best describes your work?"
           control={
             <GhostSelect
               align="end"
-              placeholder="选择"
+              placeholder="Select"
               value={workFunction}
               options={WORK_FUNCTION_OPTIONS}
               onChange={(value) => {
@@ -127,14 +160,24 @@ export function GeneralSettings() {
           }
         />
         <div className="flex flex-col gap-sm py-md">
-          <label className="text-body text-primary" htmlFor="conversation-preferences">给 Claude 的说明</label>
+          <label className="text-body text-primary" htmlFor="conversation-preferences">
+            What should Claude know about you?
+          </label>
           <div className="text-footnote text-neutral-500">
-            Claude 会在聊天和协作中参考这些内容，前提是它们符合 Anthropic 的使用准则。了解更多
+            Claude will use these details across chats and Cowork when they align with Anthropic&apos;s usage policies.{" "}
+            <a
+              className="text-accent underline-offset-2 hover:underline"
+              href="https://www.anthropic.com/legal/aup"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Learn more
+            </a>
           </div>
           <textarea
             id="conversation-preferences"
             className="cds-input cds-reset min-h-[5.5rem] max-h-40 w-full resize-y rounded bg-fill-field px-sm py-sm text-body text-primary shadow-field-ring outline-none transition duration-fast placeholder:text-muted focus-visible:bg-surface-popover focus-visible:shadow-focus"
-            placeholder="例如：解释尽量简洁直接"
+            placeholder="e.g. Keep explanations short and direct"
             rows={3}
             value={prefsValue}
             onChange={(event) => setPrefsDraft(event.currentTarget.value)}
@@ -159,24 +202,24 @@ export function GeneralSettings() {
           />
         </div>
       </SettingsSection>
-      <SettingsSection title="偏好设置">
+      <SettingsSection title="Preferences">
         <SettingsRow
-          label="外观"
+          label="Appearance"
           control={
             <SegmentedControl
-              ariaLabel="外观"
+              ariaLabel="Appearance"
               value={appearance}
               options={[
-                { value: "auto", label: "跟随系统", icon: "Computer" },
-                { value: "light", label: "浅色", icon: "Sun" },
-                { value: "dark", label: "深色", icon: "Moon" },
+                { value: "auto", label: "Match system", icon: "Computer" },
+                { value: "light", label: "Light", icon: "Sun" },
+                { value: "dark", label: "Dark", icon: "Moon" },
               ]}
               onChange={(value) => setAppearance(value as ThemeMode)}
             />
           }
         />
         <SettingsRow
-          label="聊天字体"
+          label="Chat font"
           control={
             <GhostSelect
               align="end"
@@ -187,91 +230,125 @@ export function GeneralSettings() {
           }
         />
       </SettingsSection>
-      <SettingsSection title="通知">
+      <SettingsSection title="Notifications">
+        {/* Official ie order: ce, e&&de, e&&fe, e&&ue, t&&ge, n&&pe */}
         <SettingsRow
-          label="回复完成通知"
-          description="当 Claude 完成回复时通知你。适合长时间运行的任务。"
+          label="Response completions"
+          description="Get notified when Claude has finished a response. Useful for long-running tasks."
           control={
             <Switch
               checked={responseCompletions}
+              disabled={pendingKey === "response"}
               onCheckedChange={(checked) => {
-                writeLocalResponseCompletions(checked);
-                setResponseCompletions(checked);
+                void runToggle("response", async () => {
+                  if (checked) {
+                    const granted = await ensureDesktopNotificationPermission();
+                    if (!granted) throw new Error("browser-permission-denied");
+                  }
+                  writeResponseCompletionsEnabled(checked);
+                  setResponseCompletions(checked);
+                });
               }}
             />
           }
         />
-        <SettingsRow
-          label="代码通知"
-          description="Claude 可选择在 Code 会话出现重要更新时通知你。"
-          control={
-            <Switch
-              checked={codeNotifications}
-              onCheckedChange={(checked) => {
-                void updateNotificationFeature("bogosort", { enable_push: checked });
-              }}
-            />
-          }
-        />
-        <SettingsRow
-          label="Code 权限请求"
-          description="当 Claude 在 Code 会话中需要你批准运行命令时，向你发送推送通知。"
-          control={
-            <Switch
-              checked={codePermissionRequests}
-              onCheckedChange={(checked) => {
-                void updateNotificationFeature("code_requires_action", { enable_push: checked });
-              }}
-            />
-          }
-        />
-        <SettingsRow
-          label="安全扫描邮件"
-          description="Claude Code 安全扫描完成后向你发送邮件。"
-          control={
-            <Switch
-              checked={securityScanEmails}
-              onCheckedChange={(checked) => {
-                void updateNotificationFeature("code_security_scan", { enable_email: checked });
-              }}
-            />
-          }
-        />
-        <SettingsRow
-          label="Dispatch 消息"
-          description="当 Claude 在 Dispatch 中给你发消息时，向你的手机发送推送通知。"
-          control={
-            <Switch
-              checked={dispatchMessages}
-              onCheckedChange={(checked) => {
-                void updateNotificationFeature("dispatch", { enable_push: checked });
-              }}
-            />
-          }
-        />
+        {notifyGates.codeSession ? (
+          <SettingsRow
+            label="Code notifications"
+            description="Claude can choose to notify you about important updates from a Code session."
+            control={
+              <Switch
+                checked={codeNotifications}
+                disabled={pendingKey === "bogosort_push"}
+                onCheckedChange={(checked) => {
+                  void runToggle("bogosort_push", async () => {
+                    if (checked) {
+                      const granted = await ensureDesktopNotificationPermission();
+                      if (!granted) throw new Error("browser-permission-denied");
+                    }
+                    await updateNotificationFeature("bogosort", { enable_push: checked });
+                  });
+                }}
+              />
+            }
+          />
+        ) : null}
+        {notifyGates.codePermissionRequests ? (
+          <SettingsRow
+            label="Code permission requests"
+            description="Get a push notification when Claude needs your approval to run a command in a Code session."
+            control={
+              <Switch
+                checked={codePermissionRequests}
+                disabled={pendingKey === "code_requires_action"}
+                onCheckedChange={(checked) => {
+                  void runToggle("code_requires_action", async () => {
+                    await updateNotificationFeature("code_requires_action", { enable_push: checked });
+                  });
+                }}
+              />
+            }
+          />
+        ) : null}
+        {notifyGates.codeSession ? (
+          <SettingsRow
+            label="Code emails"
+            description="Get an email about important updates from a Code session."
+            control={
+              <Switch
+                checked={codeEmails}
+                disabled={pendingKey === "bogosort_email"}
+                onCheckedChange={(checked) => {
+                  void runToggle("bogosort_email", async () => {
+                    await updateNotificationFeature("bogosort", { enable_email: checked });
+                  });
+                }}
+              />
+            }
+          />
+        ) : null}
+        {notifyGates.securityScanEmails ? (
+          <SettingsRow
+            label="Security scan emails"
+            description="Get an email when a Claude Code security scan finishes."
+            control={
+              <Switch
+                checked={securityScanEmails}
+                disabled={pendingKey === "code_security_scan"}
+                onCheckedChange={(checked) => {
+                  void runToggle("code_security_scan", async () => {
+                    await updateNotificationFeature("code_security_scan", { enable_email: checked });
+                  });
+                }}
+              />
+            }
+          />
+        ) : null}
+        {notifyGates.dispatchMessages ? (
+          <SettingsRow
+            label="Dispatch messages"
+            description="Get a push notification on your phone when Claude messages you in Dispatch."
+            control={
+              <Switch
+                checked={dispatchMessages}
+                disabled={pendingKey === "dispatch"}
+                onCheckedChange={(checked) => {
+                  void runToggle("dispatch", async () => {
+                    await updateNotificationFeature("dispatch", { enable_push: checked });
+                  });
+                }}
+              />
+            }
+          />
+        ) : null}
+        {notifyError ? (
+          <p className="py-sm text-footnote text-danger-000" role="status">
+            {notifyError === "browser-permission-denied"
+              ? "Notification permission was denied."
+              : notifyError}
+          </p>
+        ) : null}
       </SettingsSection>
     </main>
   );
-}
-
-/** Official Response completions uses local notification entitlement hook, not org prefs. */
-const RESPONSE_COMPLETIONS_KEY = "settings:responseCompletions";
-
-function readLocalResponseCompletions(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(RESPONSE_COMPLETIONS_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-function writeLocalResponseCompletions(checked: boolean) {
-  try {
-    window.localStorage.setItem(RESPONSE_COMPLETIONS_KEY, checked ? "true" : "false");
-  } catch {
-    // ignore
-  }
-  // force re-render via storage event for same-tab listeners if any
-  window.dispatchEvent(new StorageEvent("storage", { key: RESPONSE_COMPLETIONS_KEY }));
 }

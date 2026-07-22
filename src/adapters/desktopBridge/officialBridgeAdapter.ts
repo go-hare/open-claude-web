@@ -292,6 +292,9 @@ export type RawClaudeSettingsBridge = {
     preferencesChanged?: (listener: (preferences: Record<string, unknown>) => void) => RemoveListener;
     onPreferencesChanged?: (listener: (preferences: Record<string, unknown>) => void) => RemoveListener;
   };
+  AppFeatures?: {
+    getSupportedFeatures?: () => Promise<unknown>;
+  };
   GlobalShortcut?: {
     getGlobalShortcut?: () => Promise<unknown>;
     setGlobalShortcut?: (accelerator: string | null) => Promise<unknown>;
@@ -399,6 +402,18 @@ export function createDesktopBridgeFromOfficialNamespaces(
         return typeof value === "string" && value.length > 0 ? value : null;
       },
       setGlobalShortcut: async (accelerator) => Boolean(await settings?.GlobalShortcut?.setGlobalShortcut?.(accelerator).catch(() => false)),
+      onGlobalShortcutChanged: (listener) => {
+        const subscribe =
+          settings?.GlobalShortcut?.onGlobalShortcutChange
+          ?? settings?.GlobalShortcut?.globalShortcutChange;
+        return subscribe?.((accelerator) => {
+          listener(typeof accelerator === "string" ? accelerator : null);
+        }) ?? (() => {});
+      },
+      getSupportedFeatures: async () => {
+        const raw = await settings?.AppFeatures?.getSupportedFeatures?.().catch(() => null);
+        return raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+      },
     },
     Window: {
       close: async () => {
@@ -2003,6 +2018,8 @@ function normalizePreferences(value: unknown): DesktopPreferences {
   return {
     ...prefs,
     keepAwakeEnabled: prefs.keepAwakeEnabled === true,
+    quickEntryShortcut: prefs.quickEntryShortcut,
+    quickEntryDictationShortcut: prefs.quickEntryDictationShortcut,
   };
 }
 

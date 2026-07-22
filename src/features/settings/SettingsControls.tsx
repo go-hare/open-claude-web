@@ -1,21 +1,40 @@
-import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { desktopBridge, type DesktopPreferences } from "../../adapters/desktopBridge";
 import { BaseMenuItem, BaseMenuPopup, Menu } from "../../shell/BaseMenu";
 import { Icon } from "../../shell/icons";
+import { OfficialAvatarGlyph } from "./officialAvatars/OfficialAvatarGlyph";
 
-export function AvatarControl({ avatar, onClear, onRandomize }: { avatar: number; onClear: () => void; onRandomize: () => void }) {
+/**
+ * Official Profile Avatar control (c0db37792): Tss/Iss glyph when variant>0, else initials JL.
+ * Hover: blur + Shuffle overlay; clear chip when variant !== 0.
+ */
+export function AvatarControl({
+  avatar,
+  displayName = "",
+  onClear,
+  onRandomize,
+}: {
+  avatar: number;
+  displayName?: string;
+  onClear: () => void;
+  onRandomize: () => void;
+}) {
   return (
     <div className="group/avatar relative w-fit">
       <button
         type="button"
         className="relative block overflow-hidden rounded-full outline-none focus-visible:shadow-focus"
-        aria-label="随机头像"
+        aria-label="Randomize avatar"
         onClick={onRandomize}
       >
         <span className="block transition duration-fast group-hover/avatar:opacity-40 group-hover/avatar:blur-[3px] group-hover/avatar:scale-[1.15] group-has-[:focus-visible]/avatar:opacity-40 group-has-[:focus-visible]/avatar:blur-[3px] group-has-[:focus-visible]/avatar:scale-[1.15]">
-          <span className="grid size-10 place-items-center rounded-full bg-bg-300 text-body text-primary">
-            {avatar ? avatar : "C"}
-          </span>
+          {avatar > 0 ? (
+            <OfficialAvatarGlyph size={40} variant={avatar} />
+          ) : (
+            <span className="grid size-10 place-items-center overflow-hidden rounded-full bg-fill-control text-body font-medium leading-none text-primary">
+              {initialsFromName(displayName) || "C"}
+            </span>
+          )}
         </span>
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-full opacity-0 transition-opacity duration-fast group-hover/avatar:opacity-100 group-has-[:focus-visible]/avatar:opacity-100">
           <Icon name="Shuffle" size="md" className="text-secondary" />
@@ -26,7 +45,7 @@ export function AvatarControl({ avatar, onClear, onRandomize }: { avatar: number
           <button
             type="button"
             className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-surface-popover ring-1 ring-alpha-2 outline-none transition-colors duration-fast hover:bg-fill-ghost-hover focus-visible:shadow-focus"
-            aria-label="清除头像"
+            aria-label="Clear avatar"
             onClick={onClear}
           >
             <Icon name="X" customSize={12} />
@@ -35,6 +54,14 @@ export function AvatarControl({ avatar, onClear, onRandomize }: { avatar: number
       ) : null}
     </div>
   );
+}
+
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
+  return (first + last).toLocaleUpperCase();
 }
 
 /** Official General profile $ (c0db37792): controlled text, save on blur/Enter when trimmed value changes. */
@@ -253,26 +280,226 @@ export function BranchInput({ onChange, value }: { onChange: (value: string) => 
   );
 }
 
-export function ShortcutControl({ onChange, value }: { onChange: (value: string) => void; value: string }) {
-  const display = value ? formatAccelerator(value) : "Set shortcut";
+/**
+ * Official us (c71860c77): focusable capture field; onKeyDownCapture builds Cmd/Ctrl/Alt/Shift+Key;
+ * reserved combos blocked; X clears. onShortcutChange may throw → show unsupported message.
+ */
+const RESERVED_SHORTCUTS = new Set([
+  "Cmd+Q",
+  "Cmd+W",
+  "Cmd+H",
+  "Cmd+M",
+  "Cmd+,",
+  "Cmd+N",
+  "Cmd+O",
+  "Cmd+T",
+  "Cmd+S",
+  "Cmd+C",
+  "Cmd+V",
+  "Ctrl+W",
+  "Ctrl+N",
+  "Ctrl+O",
+  "Ctrl+T",
+  "Ctrl+S",
+  "Ctrl+C",
+  "Ctrl+V",
+]);
+
+const MODIFIER_CODES = new Set([
+  "ShiftLeft",
+  "ShiftRight",
+  "ControlLeft",
+  "ControlRight",
+  "AltLeft",
+  "AltRight",
+  "MetaLeft",
+  "MetaRight",
+  "OSLeft",
+  "OSRight",
+]);
+
+export function ShortcutControl({
+  onChange,
+  value,
+}: {
+  onChange: (value: string) => void | Promise<void>;
+  value: string;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const isDarwin =
+    typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+  const display = useMemo(
+    () => (value ? formatAccelerator(value, isDarwin) : ""),
+    [value, isDarwin],
+  );
+
+  const onKeyDownCapture = useCallback(
+    async (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const hasMod = event.altKey || event.ctrlKey || event.metaKey;
+      if (event.key === "Tab" && !hasMod) return;
+      if (event.nativeEvent.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.nativeEvent.stopImmediatePropagation?.();
+      if (MODIFIER_CODES.has(event.code)) return;
+
+      const mods: string[] = [];
+      if (event.shiftKey) mods.push("Shift");
+      if (event.altKey) mods.push("Alt");
+      if (event.ctrlKey) mods.push("Ctrl");
+      if (event.metaKey) mods.push("Cmd");
+
+      let key = "";
+      if (event.code.startsWith("Key")) key = event.code.slice(-1);
+      else if (event.code === "Space") key = "Space";
+      else if (event.key.length === 1) key = event.key.toUpperCase();
+      else key = event.code;
+      if (!key) return;
+
+      const isFunction = key.toUpperCase().startsWith("F") && key.length > 1;
+      if (mods.length === 0 && !isFunction) return;
+
+      const accelerator = [...mods, key].join("+");
+      if (RESERVED_SHORTCUTS.has(accelerator)) {
+        setError("This shortcut is reserved for common actions. Try a different combination.");
+        return;
+      }
+      setError(null);
+      try {
+        await onChange(accelerator);
+      } catch {
+        setError("This shortcut combination isn't supported. Try a different combination.");
+      }
+    },
+    [onChange],
+  );
+
+  const onKeyUpCapture = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.nativeEvent.stopImmediatePropagation?.();
+  }, []);
+
   return (
-    <div className="w-[220px]">
-      <button
+    <div className="w-[220px] flex flex-col gap-1">
+      <div
+        tabIndex={0}
+        onKeyDownCapture={onKeyDownCapture}
+        onKeyUpCapture={onKeyUpCapture}
         className="outline outline-1 outline-border-300/25 bg-bg-200 text-text-100 font-medium text-sm h-7 leading-7 px-2 box-border text-center min-w-[120px] rounded-md select-none relative focus-within:outline-2 focus-within:outline-brand-200 focus-within:shadow-[inset_0_1px_4px_2px_hsl(var(--always-black)/12%)] flex items-center justify-center"
-        onClick={() => onChange(value ? "" : "CommandOrControl+Shift+Space")}
-        type="button"
+        role="textbox"
+        aria-label="Keyboard shortcut"
       >
-        <span className={value ? "text-text-100" : "text-text-500 placeholder"}>{display}</span>
-      </button>
+        <div className={display ? "" : "text-text-500 placeholder"}>{display || "Set shortcut"}</div>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 100 100"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setError(null);
+            void onChange("");
+          }}
+          className={`absolute right-2 top-1.5 h-4 w-4 cursor-pointer ${value ? "block" : "hidden"}`}
+          aria-label="Clear shortcut"
+        >
+          <defs>
+            <mask id="xMaskShortcut">
+              <rect width="100" height="100" fill="white" />
+              <path d="M35 35 L65 65 M65 35 L35 65" stroke="black" strokeWidth="8" strokeLinecap="round" />
+            </mask>
+          </defs>
+          <circle cx="50" cy="50" r="45" fill="currentColor" className="text-text-500" mask="url(#xMaskShortcut)" />
+        </svg>
+      </div>
+      {error ? <p className="text-footnote text-danger-000">{error}</p> : null}
     </div>
   );
 }
 
-function formatAccelerator(value: string) {
-  return value
-    .replace(/CommandOrControl|CmdOrCtrl|Command|Cmd/g, "⌘")
-    .replace(/Control|Ctrl/g, "⌃")
-    .replace(/Alt|Option/g, "⌥")
-    .replace(/Shift/g, "⇧")
-    .replace(/\+/g, "");
+/** Official cs display residual: darwin spaces, else +. */
+export function formatAccelerator(value: string, darwin = true) {
+  if (!value) return "";
+  const sep = darwin ? "" : "+";
+  const parts = value.split("+").filter(Boolean);
+  const mapped = parts.map((part) => {
+    if (/^(CommandOrControl|CmdOrCtrl|Command|Cmd|Meta)$/i.test(part)) return darwin ? "⌘" : "Ctrl";
+    if (/^(Control|Ctrl)$/i.test(part)) return darwin ? "⌃" : "Ctrl";
+    if (/^(Alt|Option)$/i.test(part)) return darwin ? "⌥" : "Alt";
+    if (/^Shift$/i.test(part)) return darwin ? "⇧" : "Shift";
+    if (/^Space$/i.test(part)) return "Space";
+    return part.length === 1 ? part.toUpperCase() : part;
+  });
+  return darwin ? mapped.join(sep) : mapped.join("+");
 }
+
+/** Official xs presets when nativeQuickEntry is supported (c71860c77). */
+export type QuickEntryShortcutValue = "double-tap-option" | "off" | { accelerator: string };
+
+export const QUICK_ENTRY_NATIVE_PRESETS: Array<{
+  id: string;
+  label: string;
+  value: QuickEntryShortcutValue;
+  match: (value: unknown) => boolean;
+}> = [
+  {
+    id: "double-tap-option",
+    label: "Tap Option twice",
+    value: "double-tap-option",
+    match: (value) => value === "double-tap-option",
+  },
+  {
+    id: "option-space",
+    label: "Option+Space",
+    value: { accelerator: "Alt+Space" },
+    match: (value) =>
+      typeof value === "object" && value !== null && (value as { accelerator?: string }).accelerator === "Alt+Space",
+  },
+  {
+    id: "custom",
+    label: "Custom…",
+    value: { accelerator: "Cmd+Shift+Space" },
+    match: (value) =>
+      typeof value === "object"
+      && value !== null
+      && typeof (value as { accelerator?: string }).accelerator === "string"
+      && (value as { accelerator: string }).accelerator !== "Alt+Space",
+  },
+  {
+    id: "off",
+    label: "No shortcut",
+    value: "off",
+    match: (value) => value === "off",
+  },
+];
+
+/** Official gs dictation presets (c71860c77). */
+export type QuickEntryDictationValue = "capslock" | "off" | { accelerator: string };
+
+export const QUICK_ENTRY_DICTATION_PRESETS: Array<{
+  id: string;
+  label: string;
+  value: QuickEntryDictationValue;
+  requiresCustomSupport?: boolean;
+  match: (value: unknown) => boolean;
+}> = [
+  {
+    id: "capslock",
+    label: "Caps Lock",
+    value: "capslock",
+    match: (value) => value === "capslock",
+  },
+  {
+    id: "custom",
+    label: "Custom…",
+    value: { accelerator: "Cmd+Shift+Alt+Space" },
+    requiresCustomSupport: true,
+    match: (value) => typeof value === "object" && value !== null,
+  },
+  {
+    id: "off",
+    label: "No shortcut",
+    value: "off",
+    match: (value) => value === "off",
+  },
+];
