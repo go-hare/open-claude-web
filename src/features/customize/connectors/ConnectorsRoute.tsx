@@ -77,6 +77,7 @@ export function ConnectorsRoute() {
           <ConnectorsDirectoryPanel
             connectorTypeFilter={new URLSearchParams(window.location.search).get("connectorTypeFilter")}
             onClose={() => setDirectoryOpen(false)}
+            onAdded={(item) => setSelectedId(item.id)}
           />
         ) : null}
       </>
@@ -123,11 +124,12 @@ export function ConnectorsRoute() {
         />
       ) : null}
       {directoryOpen ? (
-          <ConnectorsDirectoryPanel
-            connectorTypeFilter={new URLSearchParams(window.location.search).get("connectorTypeFilter")}
-            onClose={() => setDirectoryOpen(false)}
-          />
-        ) : null}
+        <ConnectorsDirectoryPanel
+          connectorTypeFilter={new URLSearchParams(window.location.search).get("connectorTypeFilter")}
+          onClose={() => setDirectoryOpen(false)}
+          onAdded={(item) => setSelectedId(item.id)}
+        />
+      ) : null}
     </>
   );
 }

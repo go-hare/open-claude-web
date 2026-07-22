@@ -223,17 +223,21 @@ export function useSettingsBootstrap() {
     await refresh();
   }, [refresh]);
 
-  const updateAccountSetting = useCallback(async (key: string, value: unknown) => {
-    const ok = await patchAccountSettings({ [key]: value });
+  const updateAccountSettings = useCallback(async (patch: Record<string, unknown>) => {
+    const ok = await patchAccountSettings(patch);
     if (!ok) throw new Error("account settings save failed");
     setSlice((current) => ({
       ...current,
       account: current.account
-        ? { ...current.account, settings: { ...current.account.settings, [key]: value } }
-        : { display_name: "", full_name: "", settings: { [key]: value } },
+        ? { ...current.account, settings: { ...current.account.settings, ...patch } }
+        : { display_name: "", full_name: "", settings: { ...patch } },
     }));
     await refresh();
   }, [refresh]);
+
+  const updateAccountSetting = useCallback(async (key: string, value: unknown) => {
+    await updateAccountSettings({ [key]: value });
+  }, [updateAccountSettings]);
 
   const updateNotificationFeature = useCallback(
     async (featureKey: string, patch: Record<string, unknown>) => {
@@ -263,6 +267,8 @@ export function useSettingsBootstrap() {
     ready,
     refresh,
     updateAccountSetting,
+    /** Batch multiple account.settings keys in one PATCH (avoids concurrent clobber). */
+    updateAccountSettings,
     updateIdentity,
     updateNotificationFeature,
     updateProfile,

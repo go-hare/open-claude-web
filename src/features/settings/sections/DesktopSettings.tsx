@@ -130,7 +130,7 @@ export function DesktopSettings() {
           />
         ) : (
           <SettingsRow
-            description="Quickly open Claude from anywhere"
+            description="Open Quick Entry from anywhere on your desktop (Electron global shortcut). Native Quick Entry engine is unavailable until a host bridge exists."
             label="Quick Entry keyboard shortcut"
             control={
               <ShortcutControl
