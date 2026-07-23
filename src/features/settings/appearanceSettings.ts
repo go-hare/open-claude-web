@@ -22,10 +22,24 @@ const CHAT_FONT_MAP: Record<ChatFontSetting, { user: string; claude: string }> =
   dyslexia: { user: "--font-dyslexia", claude: "--font-dyslexia" },
 };
 
+/**
+ * Official ae + CSS var map (c0db37792 K).
+ * Labels come from i18n in ChatFontSelect (kZqxEvVpFT / 4EAtPWhM42 / +CwN9C/QFk / twBGxrOFSV).
+ */
+export const CHAT_FONT_ORDER: ChatFontSetting[] = ["default", "sans", "system", "dyslexia"];
+
+export const CHAT_FONT_CSS_VAR: Record<ChatFontSetting, string> = {
+  default: "--font-serif",
+  sans: "--font-ui",
+  system: "--font-system",
+  dyslexia: "--font-dyslexia",
+};
+
+/** @deprecated Prefer CHAT_FONT_ORDER + i18n labels in ChatFontSelect. */
 export const CHAT_FONT_OPTIONS: Array<{ value: ChatFontSetting; label: string; fontFamily: string }> = [
   { value: "default", label: "Anthropic Serif", fontFamily: "var(--font-serif)" },
   { value: "sans", label: "Anthropic Sans", fontFamily: "var(--font-ui)" },
-  { value: "system", label: "跟随系统", fontFamily: "var(--font-system)" },
+  { value: "system", label: "System", fontFamily: "var(--font-system)" },
   { value: "dyslexia", label: "Dyslexic friendly", fontFamily: "var(--font-dyslexia)" },
 ];
 

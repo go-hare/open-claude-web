@@ -52,6 +52,15 @@ export type CoworkToolUse = {
   };
 };
 
+/** Official D1e sdk_mcp_status entry (status list stored as Le / sessionContext.sdkMcpStatuses). */
+export type CoworkSdkMcpStatus = {
+  configType?: string;
+  displayName?: string;
+  name: string;
+  status: string;
+  toolCount?: number;
+};
+
 export type CoworkSessionDataState = {
   agentActivity: CoworkAgentActivity | null;
   connectionState: CoworkConnectionState;
@@ -66,6 +75,11 @@ export type CoworkSessionDataState = {
   pendingMessages: CoworkRawMessage[];
   pendingTurn: CoworkPendingTurn | null;
   promptSuggestion: string | null;
+  /**
+   * Official D1e sdk_mcp_status → Re(statuses) exposed on sessionContext.
+   * Residual: no q1(local_mcp_servers) / a1 remote store invent.
+   */
+  sdkMcpStatuses?: CoworkSdkMcpStatus[];
   session: CoworkSessionSnapshot | null;
   sessionId: string;
   streamActivity: CoworkStreamActivity;

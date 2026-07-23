@@ -12,6 +12,7 @@
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { ChatMessage, SessionSummary } from "../../../adapters/desktopBridge/types";
+import { emitResponseCompletion } from "../../settings/responseCompletionNotify";
 import type { OfficialStreamSnapshot } from "../officialStreamSmoother";
 import {
   extractOfficialLiveMeta,
@@ -989,6 +990,7 @@ function createOfficialCodeSessionStore() {
   },
 
   clearStream: (sessionId, markSessionSettled = false) => {
+    let shouldNotifyCompletion = false;
     set((state) => {
       const raw = state.buckets[sessionId];
       if (!raw) return state;
@@ -1006,6 +1008,16 @@ function createOfficialCodeSessionStore() {
         }
         queuedMessages = EMPTY_QUEUED_MESSAGES;
         pendingQueuedSends = 0;
+      }
+      // Only notify when a live turn actually settles (was streaming / running).
+      if (
+        markSessionSettled
+        && (prev.streamActivityMode !== idleStreamActivityMode
+          || prev.streamingMessageId
+          || prev.session?.isRunning === true
+          || prev.pendingTurnStartedAt != null)
+      ) {
+        shouldNotifyCompletion = true;
       }
       return {
         buckets: {
@@ -1030,6 +1042,9 @@ function createOfficialCodeSessionStore() {
         },
       };
     });
+    if (shouldNotifyCompletion) {
+      emitResponseCompletion({ title: "Claude", body: "Response complete" });
+    }
   },
 }));
 }

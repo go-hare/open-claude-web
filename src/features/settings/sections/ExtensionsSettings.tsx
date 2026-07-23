@@ -1,19 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RouteViewProps } from "../../../app/routes";
+import { Icon } from "../../../shell/icons";
 import { CdsButton, SettingsRow, SettingsSection, Switch, sectionBodyClass } from "../SettingsShell";
+import {
+  formatExtensionsTemplate,
+  useExtensionsSettingsText,
+} from "../settingsMessages";
 import { useDesktopPreferences } from "../useDesktopPreferences";
 import {
   extensionsSettingsBridge,
   fileSystemPath,
   type InstalledExtensionState,
 } from "../settingsDesktopBridge";
+import { ExtensionIcon } from "./ExtensionIcon";
+import { ExtensionsEmptyGlyph } from "./ExtensionsEmptyGlyph";
 
 /**
  * Official Extensions overview (c71860c77-CrCPjj7D):
  * header Extensions + Browse; list/empty; Advanced settings; Drag .MCPB or .DXT files here to install.
  * Install/list via claude.settings.Extensions residual.
+ * Copy via EXTENSIONS_SETTINGS_MESSAGES (official message ids).
  */
 export function ExtensionsOverview({ onNavigate }: Pick<RouteViewProps, "onNavigate">) {
+  const text = useExtensionsSettingsText();
   const [extensions, setExtensions] = useState<InstalledExtensionState[]>([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -27,12 +36,12 @@ export function ExtensionsOverview({ onNavigate }: Pick<RouteViewProps, "onNavig
       setExtensions(Array.isArray(list) ? list : []);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error loading extensions");
+      setError(err instanceof Error ? err.message : text.errorLoadingExtensions);
       setExtensions([]);
     } finally {
       setReady(true);
     }
-  }, []);
+  }, [text.errorLoadingExtensions]);
 
   useEffect(() => {
     let alive = true;
@@ -62,11 +71,15 @@ export function ExtensionsOverview({ onNavigate }: Pick<RouteViewProps, "onNavig
         const abs = fileSystemPath(file);
         const lower = file.name.toLowerCase();
         if (!lower.endsWith(".dxt") && !lower.endsWith(".mcpb") && !lower.endsWith(".zip")) {
-          setStatus(`Unsupported file: ${file.name}`);
+          setStatus(
+            formatExtensionsTemplate(text.failedToHandleFile, { error: file.name }),
+          );
           continue;
         }
         if (!abs) {
-          setStatus("Drop install needs a desktop file path (open Install Extension instead).");
+          setStatus(
+            formatExtensionsTemplate(text.failedToHandleFile, { error: file.name }),
+          );
           continue;
         }
         try {
@@ -75,16 +88,17 @@ export function ExtensionsOverview({ onNavigate }: Pick<RouteViewProps, "onNavig
           } else if (bridge?.installDxt) {
             await bridge.installDxt(null, abs);
           } else {
-            setStatus("Install is unavailable (Extensions bridge not connected).");
+            setStatus(text.failedToLoadExtensionSettings);
             return;
           }
         } catch (err) {
-          setStatus(err instanceof Error ? err.message : `Failed to handle file: ${file.name}`);
+          const detail = err instanceof Error ? err.message : file.name;
+          setStatus(formatExtensionsTemplate(text.failedToHandleFile, { error: detail }));
         }
       }
       await reload();
     },
-    [reload],
+    [reload, text.failedToHandleFile, text.failedToLoadExtensionSettings],
   );
 
   const setEnabled = useCallback(
@@ -94,10 +108,10 @@ export function ExtensionsOverview({ onNavigate }: Pick<RouteViewProps, "onNavig
         await bridge?.setExtensionSettings?.(id, { isEnabled: enabled });
         await reload();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : "Failed to update extension");
+        setStatus(err instanceof Error ? err.message : text.failedToLoadExtensionSettings);
       }
     },
-    [reload],
+    [reload, text.failedToLoadExtensionSettings],
   );
 
   const uninstall = useCallback(
@@ -107,10 +121,10 @@ export function ExtensionsOverview({ onNavigate }: Pick<RouteViewProps, "onNavig
         await bridge?.deleteExtension?.(id);
         await reload();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : "Failed to uninstall");
+        setStatus(err instanceof Error ? err.message : text.uninstall);
       }
     },
-    [reload],
+    [reload, text.uninstall],
   );
 
   return (
@@ -120,24 +134,22 @@ export function ExtensionsOverview({ onNavigate }: Pick<RouteViewProps, "onNavig
           <div className="flex items-center justify-between gap-lg py-md  " role="group">
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
               <div className="text-body text-primary">
-                <span className="text-heading-semibold">Extensions</span>
+                <span className="text-heading-semibold">{text.extensions}</span>
               </div>
-              <div className="text-body text-muted">
-                Allow Claude to directly interact with apps, data, and tools on your computer.
-              </div>
+              <div className="text-body text-muted">{text.extensionsDescription}</div>
             </div>
             <div className="flex shrink-0 items-center">
-              <CdsButton onClick={browseExtensions}>Browse extensions</CdsButton>
+              <CdsButton onClick={browseExtensions}>{text.browseExtensions}</CdsButton>
             </div>
           </div>
           <div className="pt-md">
             <div className="extensions-overview flex h-full flex-col overflow-y-auto">
               {!ready ? (
-                <p className="py-8 text-center text-text-400">Loading extensions...</p>
+                <p className="py-8 text-center text-text-400">{text.loadingExtensions}</p>
               ) : error ? (
                 <p className="py-8 text-center text-danger-000">{error}</p>
               ) : extensions.length > 0 ? (
-                <ul className="flex flex-col gap-2 pb-4">
+                <ul className="flex flex-col pb-4">
                   {extensions.map((ext) => {
                     const name =
                       ext.displayName
@@ -153,22 +165,22 @@ export function ExtensionsOverview({ onNavigate }: Pick<RouteViewProps, "onNavig
                       typeof ext.settings?.orgBlockedReason === "string"
                         ? ext.settings.orgBlockedReason
                         : "";
+                    // Official W (c71860c77): flex items-center gap-3 mb-3 min-h-[42px] + LJ size 42
                     return (
                       <li
                         key={ext.id}
-                        className="flex items-center justify-between gap-4 rounded-lg border border-border-300 bg-bg-000 px-4 py-3"
+                        className={`flex items-center gap-3 mb-3 min-h-[42px] ${
+                          blocked ? "opacity-50" : ""
+                        }`}
                       >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-text-100">{name}</p>
+                        <ExtensionIcon extension={ext} size={42} />
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <p className="truncate text-sm text-text-100">{name}</p>
                           {description ? (
                             <p className="truncate text-xs text-text-400">{description}</p>
-                          ) : (
-                            <p className="text-xs text-text-400">Installed on your computer</p>
-                          )}
+                          ) : null}
                           {blocked ? (
-                            <p className="text-xs text-danger-000">
-                              Not allowed in your current organization.
-                            </p>
+                            <p className="text-xs text-danger-000">{text.notAllowedInOrg}</p>
                           ) : null}
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
@@ -184,7 +196,7 @@ export function ExtensionsOverview({ onNavigate }: Pick<RouteViewProps, "onNavig
                               void uninstall(ext.id);
                             }}
                           >
-                            Uninstall
+                            {text.uninstall}
                           </CdsButton>
                         </div>
                       </li>
@@ -193,19 +205,18 @@ export function ExtensionsOverview({ onNavigate }: Pick<RouteViewProps, "onNavig
                 </ul>
               ) : (
                 <div className="flex items-center justify-center py-8">
-                  <div className="h-24" aria-hidden="true" />
+                  {/* Official empty G: e.jsx(R,{}) 96 SVG illustration */}
+                  <ExtensionsEmptyGlyph />
                 </div>
               )}
               <hr className="col-span-2 my-6 border-0 border-b-0.5 border-border-300" />
               <div className="mb-4 flex flex-row gap-2">
                 <CdsButton onClick={() => onNavigate("/settings/desktop/extensions/advanced")}>
-                  Advanced settings
+                  {text.advancedSettings}
                 </CdsButton>
               </div>
               <div
-                className={`rounded-lg border border-dashed px-4 py-6 transition-colors ${
-                  dragOver ? "border-accent bg-bg-100" : "border-border-300"
-                }`}
+                className={dragOver ? "rounded-lg bg-bg-100" : undefined}
                 onDragEnter={(event) => {
                   event.preventDefault();
                   setDragOver(true);
@@ -221,8 +232,10 @@ export function ExtensionsOverview({ onNavigate }: Pick<RouteViewProps, "onNavig
                   void handleDroppedFiles(event.dataTransfer.files);
                 }}
               >
+                {/* Official: LightbulbIcon size 14 + text-text-500 */}
                 <p className="mb-0 mt-0 flex items-center gap-2">
-                  <span className="text-text-500">Drag .MCPB or .DXT files here to install</span>
+                  <Icon name="Lightbulb" customSize={14} className="text-text-500" />
+                  <span className="text-text-500">{text.dragInstallHint}</span>
                 </p>
               </div>
               {status ? (
@@ -239,9 +252,12 @@ export function ExtensionsOverview({ onNavigate }: Pick<RouteViewProps, "onNavig
 }
 
 export function ExtensionsAdvanced({ onNavigate }: Pick<RouteViewProps, "onNavigate">) {
+  const text = useExtensionsSettingsText();
   const [preferences, setPreference] = useDesktopPreferences();
   const [status, setStatus] = useState("");
-  const [runtimes, setRuntimes] = useState<string>("");
+  const [runtimeLines, setRuntimeLines] = useState<
+    Array<{ name: string; versions: string; builtIn?: string }>
+  >([]);
 
   useEffect(() => {
     const bridge = extensionsSettingsBridge();
@@ -251,21 +267,36 @@ export function ExtensionsAdvanced({ onNavigate }: Pick<RouteViewProps, "onNavig
         const raw = await (
           bridge as ExtensionsSettingsBridgeWithRuntimes | undefined
         )?.getAvailableExtensionRuntimes?.();
-        if (Array.isArray(raw)) {
-          setRuntimes(
-            raw
-              .map((item) => {
-                if (!item || typeof item !== "object") return "";
-                const rec = item as { name?: string; builtInVersion?: string | null; versions?: string[] };
-                const ver = rec.builtInVersion || rec.versions?.[0];
-                return ver ? `${rec.name ?? "runtime"} ${ver}` : String(rec.name ?? "");
-              })
-              .filter(Boolean)
-              .join(" · "),
-          );
+        if (!Array.isArray(raw)) {
+          setRuntimeLines([]);
+          return;
         }
+        setRuntimeLines(
+          raw
+            .map((item) => {
+              if (!item || typeof item !== "object") return null;
+              const rec = item as {
+                name?: string;
+                builtInVersion?: string | null;
+                versions?: string[];
+              };
+              const name = typeof rec.name === "string" ? rec.name : "";
+              if (!name) return null;
+              const versions = Array.isArray(rec.versions)
+                ? rec.versions.filter((v): v is string => typeof v === "string")
+                : [];
+              const builtIn =
+                typeof rec.builtInVersion === "string" ? rec.builtInVersion : undefined;
+              return {
+                name,
+                versions: versions.join(", "),
+                builtIn,
+              };
+            })
+            .filter((row): row is { name: string; versions: string; builtIn?: string } => !!row),
+        );
       } catch {
-        setRuntimes("");
+        setRuntimeLines([]);
       }
     })();
   }, []);
@@ -284,19 +315,15 @@ export function ExtensionsAdvanced({ onNavigate }: Pick<RouteViewProps, "onNavig
     <main className="flex flex-col h-full">
       <div className="px-6">
         <div className="extensions-header">
-          <div className="mb-4 flex items-center gap-1">
-            <span aria-hidden="true" className="inline-block w-4" />
-            <BackToExtensions onNavigate={onNavigate} variant="span">
-              All extensions
-            </BackToExtensions>
-          </div>
+          {/* Official fs residual (cf4f70727): icon size 16 + span both onClick → /settings/desktop/extensions */}
+          <BackToExtensions onNavigate={onNavigate}>{text.allExtensions}</BackToExtensions>
         </div>
       </div>
       <div className="flex-1 space-y-6 overflow-auto px-6">
-        <SettingsSection title="Extension Settings">
+        <SettingsSection title={text.extensionSettings}>
           <SettingsRow
-            label="Enable auto-updates for extensions"
-            description="Automatically update extensions when a new version is available. When off, updates must be installed manually."
+            label={text.enableAutoUpdates}
+            description={text.enableAutoUpdatesDescription}
             control={
               <Switch
                 checked={!!preferences.autoUpdateExtensions}
@@ -305,8 +332,8 @@ export function ExtensionsAdvanced({ onNavigate }: Pick<RouteViewProps, "onNavig
             }
           />
           <SettingsRow
-            label="Use Built-in Node.js for MCP"
-            description="If enabled, Claude will never use the system Node.js for extension MCP servers. This happens automatically when system’s Node.js is missing or outdated. "
+            label={text.useBuiltInNode}
+            description={text.useBuiltInNodeDescription}
             control={
               <Switch
                 checked={!!preferences.useBuiltInNodeForMcp}
@@ -314,32 +341,49 @@ export function ExtensionsAdvanced({ onNavigate }: Pick<RouteViewProps, "onNavig
               />
             }
           />
-          <div>
-            <p className="mb-3 text-body text-primary">Detected tools</p>
-            <p className="text-footnote text-secondary">{runtimes || "No tools detected yet."}</p>
+          <div className="py-md">
+            <p className="mb-3 text-body text-primary">{text.detectedTools}</p>
+            {runtimeLines.length > 0 ? (
+              <div>
+                {runtimeLines.map((row) => (
+                  <div key={row.name} className="mb-2">
+                    <span className="text-text-300">{row.name}:</span>{" "}
+                    <span className="text-text-100">
+                      {row.versions || text.notFound}
+                      {row.builtIn ? (
+                        <span className="text-text-200">
+                          {" "}
+                          {formatExtensionsTemplate(text.builtInVersion, {
+                            version: row.builtIn,
+                          })}
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </SettingsSection>
-        <SettingsSection title="Extension developer">
+        <SettingsSection title={text.extensionDeveloper}>
           <div className="flex flex-col gap-6 py-md">
             <div className="w-full rounded-lg border border-danger-300 bg-bg-000 p-4 text-sm text-text-300">
-              <div className="mb-1 font-medium">Developer tools warning</div>
-              These tools are for extension developers only. Incorrect use can break extensions or
-              affect system security.
+              {text.developerToolsWarning}
             </div>
             <div className="flex flex-wrap gap-3">
               <CdsButton
                 primary
                 onClick={() =>
-                  void run("Install Extension", async () => {
+                  void run(text.installExtension, async () => {
                     await extensionsSettingsBridge()?.showInstallDxtDialog?.();
                   })
                 }
               >
-                Install Extension
+                {text.installExtension}
               </CdsButton>
               <CdsButton
                 onClick={() =>
-                  void run("Install Unpacked Extension", async () => {
+                  void run(text.installUnpackedExtension, async () => {
                     // Official installDxtUnpacked needs a folder path from FilePickers.
                     const settings = window as Window & {
                       "claude.settings"?: {
@@ -355,25 +399,25 @@ export function ExtensionsAdvanced({ onNavigate }: Pick<RouteViewProps, "onNavig
                   })
                 }
               >
-                Install Unpacked Extension
+                {text.installUnpackedExtension}
               </CdsButton>
               <CdsButton
                 onClick={() =>
-                  void run("Open extensions folder", async () => {
+                  void run(text.openExtensionsFolder, async () => {
                     await extensionsSettingsBridge()?.openExtensionsFolder?.();
                   })
                 }
               >
-                Open extensions folder
+                {text.openExtensionsFolder}
               </CdsButton>
               <CdsButton
                 onClick={() =>
-                  void run("Open extension settings folder", async () => {
+                  void run(text.openExtensionSettingsFolder, async () => {
                     await extensionsSettingsBridge()?.openExtensionSettingsFolder?.();
                   })
                 }
               >
-                Open extension settings folder
+                {text.openExtensionSettingsFolder}
               </CdsButton>
             </div>
             {status ? (
@@ -393,26 +437,21 @@ type ExtensionsSettingsBridgeWithRuntimes = {
 };
 
 export function ExtensionsDirectory({ onNavigate }: Pick<RouteViewProps, "onNavigate">) {
+  const text = useExtensionsSettingsText();
   const [query, setQuery] = useState("");
   return (
     <main className="flex h-full flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <div className="mb-4 flex items-center gap-1">
-          <span aria-hidden="true" className="inline-block w-4" />
-          <BackToExtensions onNavigate={onNavigate} variant="span">
-            All extensions
-          </BackToExtensions>
-        </div>
-        <h1 className="text-lg font-medium">[ANT ONLY] Manage global extension directory</h1>
-        <p className="text-sm text-text-300">
-          Upload, update, delete, and manage extensions in the directory
-        </p>
+        {/* Official directory residual: icon + BYTC25E9Co both onClick */}
+        <BackToExtensions onNavigate={onNavigate}>{text.allExtensions}</BackToExtensions>
+        <h1 className="text-lg font-medium">{text.manageDirectoryTitle}</h1>
+        <p className="text-sm text-text-300">{text.manageDirectoryDescription}</p>
       </div>
       <div className="flex gap-2">
         <input
           className="flex-1 rounded-lg border border-border-300 bg-bg-000 px-4 py-2 text-text-100 placeholder:text-text-400 focus:border-border-200 focus:outline-none focus:ring-0"
           onChange={(event) => setQuery(event.currentTarget.value)}
-          placeholder="Search extensions..."
+          placeholder={text.searchExtensions}
           value={query}
         />
       </div>
@@ -429,17 +468,15 @@ export function ExtensionsDirectory({ onNavigate }: Pick<RouteViewProps, "onNavi
                   aria-hidden="true"
                 />
                 <div className="font-ui flex min-h-[4rem] grow flex-col justify-center">
-                  <p className="text-sm font-medium text-text-100">Upload new extension</p>
-                  <p className="text-xs text-text-400">Add a new extension to the directory</p>
+                  <p className="text-sm font-medium text-text-100">{text.uploadNewExtension}</p>
+                  <p className="text-xs text-text-400">{text.uploadNewExtensionDescription}</p>
                 </div>
               </div>
             </button>
             <div className="flex flex-1 items-center justify-center">
               <div className="text-center">
-                <p className="mb-2 text-text-300">No extensions found</p>
-                <p className="text-sm text-text-400">
-                  No extensions are available in the directory
-                </p>
+                <p className="mb-2 text-text-300">{text.noExtensionsFound}</p>
+                <p className="text-sm text-text-400">{text.noExtensionsInDirectory}</p>
               </div>
             </div>
           </div>
@@ -450,39 +487,43 @@ export function ExtensionsDirectory({ onNavigate }: Pick<RouteViewProps, "onNavi
 }
 
 export function ExtensionNotFound({ onNavigate }: Pick<RouteViewProps, "onNavigate">) {
+  const text = useExtensionsSettingsText();
   return (
     <main className="flex h-full flex-col">
       <div className="flex flex-col gap-4 p-6">
-        <BackToExtensions onNavigate={onNavigate}>All extensions</BackToExtensions>
-        <p className="text-text-300">Extension not found</p>
+        <BackToExtensions onNavigate={onNavigate}>{text.allExtensions}</BackToExtensions>
+        <p className="text-text-300">{text.extensionNotFound}</p>
       </div>
     </main>
   );
 }
 
+/**
+ * Official advanced/directory back row (cf4f70727):
+ * flex items-center gap-1 mb-4;
+ * Phosphor arrow size 16 onClick + span onClick → r.push("/settings/desktop/extensions").
+ * Both icon and label must navigate (arrow alone was a dead hit target before).
+ */
 function BackToExtensions({
   children,
   onNavigate,
-  variant = "button",
 }: Pick<RouteViewProps, "onNavigate"> & {
   children: string;
-  variant?: "button" | "span";
 }) {
-  if (variant === "span") {
-    return (
-      <span className="cursor-pointer" onClick={() => onNavigate("/settings/desktop/extensions")}>
-        {children}
-      </span>
-    );
-  }
+  const goBack = () => {
+    onNavigate("/settings/desktop/extensions");
+  };
   return (
-    <button
-      aria-label="Back"
-      className="inline-flex w-max items-center gap-1.5 rounded-sm pe-1 text-sm"
-      onClick={() => onNavigate("/settings/desktop/extensions")}
-      type="button"
-    >
-      {children}
-    </button>
+    <div className="mb-4 flex items-center gap-1">
+      <button
+        type="button"
+        aria-label={children}
+        onClick={goBack}
+        className="cds-reset flex cursor-pointer items-center gap-1 rounded-sm text-sm text-primary outline-none focus-visible:shadow-focus"
+      >
+        <Icon name="ArrowLeft" customSize={16} className="text-text-400" />
+        <span>{children}</span>
+      </button>
+    </div>
   );
 }

@@ -4,6 +4,7 @@ import { CoworkClaudeAvatar } from "../transcript/CoworkClaudeAvatar";
 import { useCoworkTimelineStatusVisibility } from "../transcript/CoworkTimelineStatusVisibility";
 import type { CoworkAgentActivity, CoworkInitializationStatus, CoworkRawMessage } from "../types";
 import { coworkToolActivityLabel } from "../transcript/coworkToolActivityLabel";
+import { CoworkRateLimitBanner } from "../rateLimit/CoworkRateLimitBanner";
 import { CoworkSessionErrorBanner } from "./CoworkSessionErrorBanner";
 import {
   COWORK_TOOL_LOADING_FALLBACK,
@@ -96,6 +97,10 @@ export const CoworkConversationStatus = forwardRef<HTMLDivElement, {
   });
   return (
     <div ref={ref}>
+      {/* Official NVe banner sits above status row; local store only (no full account invent). */}
+      <div className="ml-1 mb-1.5 w-full max-w-xl">
+        <CoworkRateLimitBanner />
+      </div>
       <div className={`ml-1 flex items-center transition-transform duration-300 ease-out ${isWorking ? "mt-2 -translate-y-2.5" : "mt-6"}`}>
         {error ? <CoworkSessionErrorBanner errorCategory={errorCategory} errorMessage={error.message} onTryAgain={onTryAgain} /> : <>
           <div className={`p-1 -translate-x-px ${timelineStatusVisible ? "invisible" : ""}`}>

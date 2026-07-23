@@ -442,6 +442,50 @@ test("hydrate scans transcript rate_limit via official Tke.scanTranscript", asyn
   runtime.dispose();
 });
 
+test("sdk_mcp_status updates session sdkMcpStatuses (no q1 invent)", async () => {
+  let emit;
+  let context;
+  const bridge = {
+    getRawSession: async () => session(),
+    getRawTranscript: async () => [],
+    onEvent: (listener) => {
+      emit = listener;
+      return () => {};
+    },
+  };
+  const store = { setState: (next) => { context = next.sessionContext; } };
+  const messageStore = createCoworkMessagePathStore();
+  const runtime = createCoworkSessionRuntime({
+    bridge,
+    messageStore,
+    sessionId: "session-1",
+    store,
+  });
+  runtime.start();
+  await runtime.reload();
+  emit({
+    data: JSON.stringify({
+      statuses: [
+        {
+          name: "plugin:demo@local",
+          status: "connected",
+          configType: "stdio",
+          toolCount: 2,
+          displayName: "Demo",
+        },
+        { name: "http-remote", status: "failed", configType: "http" },
+      ],
+    }),
+    sessionId: "session-1",
+    type: "sdk_mcp_status",
+  });
+  assert.equal(context.sdkMcpStatuses?.length, 2);
+  assert.equal(context.sdkMcpStatuses?.[0]?.name, "plugin:demo@local");
+  assert.equal(context.sdkMcpStatuses?.[0]?.status, "connected");
+  assert.equal(context.sdkMcpStatuses?.[1]?.configType, "http");
+  runtime.dispose();
+});
+
 test("cu_lock_released event is handled without throwing (DOM-less)", async () => {
   let emit;
   const bridge = {

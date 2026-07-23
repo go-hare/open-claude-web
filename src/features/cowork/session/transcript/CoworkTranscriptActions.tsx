@@ -20,6 +20,11 @@ export type CoworkTranscriptActionsValue = {
   bridge: CoworkSessionsBridge;
   onNavigate: (path: string) => void;
   openFile: (target: CoworkFileTarget) => void;
+  /**
+   * Official `onOpenArtifact` residual — only provided when
+   * `preview_feature_uses_artifacts` is enabled (`showArtifacts` gate).
+   */
+  openArtifact?: (artifact: unknown) => void;
   reload: () => Promise<void>;
   sessionId: string;
 };

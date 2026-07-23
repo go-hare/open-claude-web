@@ -266,6 +266,7 @@ function CoworkRenderedMarkdown({
       isStreaming={isStreaming}
       messageUuid={messageUuid}
       onLinkClick={onLinkClick}
+      onOpenArtifact={actions?.openArtifact}
       text={text}
     />
   );

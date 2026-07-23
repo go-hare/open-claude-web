@@ -15,6 +15,10 @@ import {
   useDesktopSupportedFeatures,
   featureStatus,
 } from "../useDesktopPreferences";
+import {
+  renderDesktopBrowserUseDescription,
+  useDesktopSettingsText,
+} from "../settingsMessages";
 
 /**
  * Official Desktop General bs/ms (c71860c77-B8t_5Z9x):
@@ -26,17 +30,19 @@ import {
  * wakeScheduler) stay unavailable until a real native API exists — never invent supported.
  * Without wakeScheduler supported: "Keep computer awake" copy (not "Wake for work").
  * Without nativeQuickEntry: legacy global shortcut row.
+ * Copy uses official /i18n message ids via useDesktopSettingsText.
  */
 export function DesktopSettings() {
   const [preferences, setPreference] = useDesktopPreferences();
   const [nativeSettings, nativeActions] = useDesktopNativeSettings();
   const features = useDesktopSupportedFeatures();
+  const text = useDesktopSettingsText();
   const isWindows =
     typeof navigator !== "undefined" && /Win/i.test(navigator.platform || navigator.userAgent);
-  const trayLabel = isWindows ? "System tray" : "Menu bar";
+  const trayLabel = isWindows ? text.systemTray : text.menuBar;
   const trayDescription = isWindows
-    ? "Keep Claude running in the system tray"
-    : "Show Claude in the menu bar";
+    ? text.keepInSystemTray
+    : text.showInMenuBar;
 
   const nativeQuickEntry = featureStatus(features, "nativeQuickEntry") === "supported";
   const dictationSupported = featureStatus(features, "quickEntryDictation") === "supported";
@@ -79,12 +85,16 @@ export function DesktopSettings() {
 
   const legacyGlobalShortcut = nativeSettings.globalShortcut;
 
+  // Official ms residual: return null until getSupportedFeatures resolves (`c ? … : null`).
+  // Avoid flashing the legacy shortcut row before nativeQuickEntry status is known.
+  if (!features) return null;
+
   return (
     <main className="flex flex-col">
-      <SettingsSection title="General desktop settings">
+      <SettingsSection title={text.generalDesktopSettings}>
         <SettingsRow
-          description="Automatically start Claude when you log in to your computer"
-          label="Run on startup"
+          description={text.runOnStartupDescription}
+          label={text.runOnStartup}
           control={
             <Switch
               checked={nativeSettings.startupOnLogin}
@@ -96,10 +106,11 @@ export function DesktopSettings() {
 
         {nativeQuickEntry ? (
           <SettingsRow
-            description="Message Claude from anywhere on your desktop"
-            label="Quick access shortcut"
+            description={text.quickAccessShortcutDescription}
+            label={text.quickAccessShortcut}
             control={
-              <div className="flex w-[220px] flex-col justify-center gap-4">
+              // Official ms: className="w-[220px] flex gap-4 flex-col justify-center"
+              <div className="w-[220px] flex gap-4 flex-col justify-center">
                 <GhostSelect
                   align="end"
                   value={quickEntryPresetId}
@@ -130,27 +141,32 @@ export function DesktopSettings() {
           />
         ) : (
           <SettingsRow
-            description="Open Quick Entry from anywhere on your desktop (Electron global shortcut). Native Quick Entry engine is unavailable until a host bridge exists."
-            label="Quick Entry keyboard shortcut"
+            // Official ms legacy branch (nativeQuickEntry unsupported): wl6vXYrxQW / kpLUOdAdXq
+            description={text.quickEntryKeyboardShortcutDescription}
+            label={text.quickEntryKeyboardShortcut}
             control={
-              <ShortcutControl
-                value={legacyGlobalShortcut}
-                onChange={async (accelerator) => {
-                  const ok = await nativeActions.setGlobalShortcutAsync(accelerator);
-                  if (!ok) throw new Error("invalid-accelerator");
-                }}
-              />
+              // Official: control: div.w-[220px] > ShortcutControl
+              <div className="w-[220px]">
+                <ShortcutControl
+                  value={legacyGlobalShortcut}
+                  onChange={async (accelerator) => {
+                    const ok = await nativeActions.setGlobalShortcutAsync(accelerator);
+                    if (!ok) throw new Error("invalid-accelerator");
+                  }}
+                />
+              </div>
             }
           />
         )}
 
         {dictationSupported ? (
           <SettingsRow
-            description="Speak to Claude from anywhere on your desktop"
-            label="Voice shortcut"
+            description={text.voiceShortcutDescription}
+            label={text.voiceShortcut}
             control={
-              <div className="flex w-[280px] flex-col gap-2">
-                <div className="flex w-[220px] flex-col justify-center gap-4 self-end">
+              // Official: w-[280px] flex gap-2 flex-col > inner w-[220px] … self-end
+              <div className="w-[280px] flex gap-2 flex-col">
+                <div className="w-[220px] flex gap-4 flex-col justify-center self-end">
                   <GhostSelect
                     align="end"
                     value={dictationPresetId}
@@ -206,13 +222,22 @@ export function DesktopSettings() {
 
         {keepAwakeDefined ? (
           <SettingsRow
+            // Official ms: M&&K label CapHOIPauL / desc NtWJTAiYRo, control xe size md controlOnly
+            // Official lge on /settings → CDS Switch (same family as Run on startup / Menu bar).
             description={
               wakeForWork
                 ? "Claude wakes your Mac briefly to check for work, then lets it sleep again."
-                : "Prevent your computer from idle-sleeping while Claude is open so scheduled tasks can run. Your display can still turn off. Closing the laptop lid will still put it to sleep."
+                : text.keepComputerAwakeDescription
             }
-            label={wakeForWork ? "Wake for work" : "Keep computer awake"}
-            control={<KeepAwakeControl size="md" controlOnly />}
+            label={wakeForWork ? "Wake for work" : text.keepComputerAwake}
+            control={({ labelId, descriptionId }) => (
+              <KeepAwakeControl
+                size="md"
+                controlOnly
+                aria-labelledby={labelId}
+                aria-describedby={descriptionId}
+              />
+            )}
           />
         ) : null}
 
@@ -223,23 +248,11 @@ export function DesktopSettings() {
         ) : null}
       </SettingsSection>
 
-      <SettingsSection title="Browser Use">
+      <SettingsSection title={text.browserUse}>
         <SettingsRow
-          description={
-            <>
-              Claude will browse and interact with any website in Chrome without asking. Applies to
-              new sessions. This setting can put your data at risk.{" "}
-              <a
-                className="text-accent underline-offset-2 hover:underline"
-                href="https://support.claude.com/en/articles/12902428-using-claude-in-chrome-safely"
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                Learn more
-              </a>
-            </>
-          }
-          label="Allow all browser actions"
+          // Official ts (c71860c77): 0Jh6jsTpeC + values.link → chrome safety article
+          description={renderDesktopBrowserUseDescription(text.allowAllBrowserActionsDescription)}
+          label={text.allowAllBrowserActions}
           control={
             <Switch
               checked={!!preferences.allowAllBrowserActions}

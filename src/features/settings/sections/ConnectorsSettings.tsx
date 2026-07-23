@@ -1,7 +1,11 @@
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, type MouseEvent } from "react";
 import { SettingsRow, SettingsSection, Switch, sectionBodyClass } from "../SettingsShell";
 import { useSettingsBootstrap } from "../useSettingsBootstrap";
 import { readBootstrapFeatureFlag } from "../notificationRowGates";
+import {
+  renderMessageWithLink,
+  useConnectorsSettingsText,
+} from "../settingsMessages";
 import {
   getConnectorItems,
   subscribeConnectorItems,
@@ -16,8 +20,15 @@ import {
  * - Bt list residual: org/remote directory + local custom connectors.
  *   Without Anthropic directory feed, show local customize store items when present;
  *   else official empty: "Your organization has not enabled any connectors".
+ * - SPA navigate for Customize / extensions / Configure (ye residual via onNavigate).
  */
-export function ConnectorsSettings() {
+export function ConnectorsSettings({
+  onNavigate,
+}: {
+  /** Official ye() SPA navigate for Customize / extensions residual. */
+  onNavigate?: (href: string) => void;
+} = {}) {
+  const text = useConnectorsSettingsText();
   const { bootstrap, updateAccountSetting } = useSettingsBootstrap();
   const items = useSyncExternalStore(subscribeConnectorItems, getConnectorItems, getConnectorItems);
 
@@ -29,6 +40,15 @@ export function ConnectorsSettings() {
   const showDiscovery = discoveryFlag === true;
   const discoveryEnabled = bootstrap.account?.settings?.enabled_connector_suggestions === true;
 
+  const spaClick = (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!onNavigate) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    onNavigate(href);
+  };
+
   return (
     <div className="flex flex-col gap-7 pb-10">
       <main>
@@ -36,19 +56,15 @@ export function ConnectorsSettings() {
           <div className={sectionBodyClass}>
             <div className="flex items-start justify-between gap-lg pb-sm">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <h3 className="text-heading-semibold text-primary">Connectors</h3>
+                <h3 className="text-heading-semibold text-primary">{text.connectors}</h3>
+                <p className="text-footnote text-secondary">{text.connectorsDescription}</p>
                 <p className="text-footnote text-secondary">
-                  Allow Claude to reference other apps and services for more context.
-                </p>
-                <p className="text-footnote text-secondary">
-                  Connectors have moved to{" "}
-                  <a
-                    className="cds-reset inline cursor-pointer rounded-[2px] text-accent underline decoration-[color-mix(in_srgb,currentColor,transparent_60%)] underline-offset-[3px] outline-none transition duration-fast hover:decoration-current focus-visible:shadow-focus focus-visible:decoration-current"
-                    href="/customize/connectors"
-                  >
-                    Customize
-                  </a>
-                  .
+                  {renderMessageWithLink(
+                    text.connectorsMoved,
+                    "/customize/connectors",
+                    undefined,
+                    onNavigate,
+                  )}
                 </p>
               </div>
             </div>
@@ -56,8 +72,8 @@ export function ConnectorsSettings() {
             {showDiscovery ? (
               <SettingsSection>
                 <SettingsRow
-                  label="Discovery"
-                  description="Let Claude surface connectors from the directory that may be relevant to your conversation."
+                  label={text.discovery}
+                  description={text.discoveryDescription}
                   control={
                     <Switch
                       checked={discoveryEnabled}
@@ -73,37 +89,39 @@ export function ConnectorsSettings() {
             <div className="pt-md">
               {items.length > 0 ? (
                 <ul className="flex flex-col divide-y divide-alpha-1">
-                  {items.map((item) => (
-                    <li key={item.id} className="flex items-center justify-between gap-4 py-md">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-body text-primary">{item.name}</p>
-                        {item.description ? (
-                          <p className="truncate text-footnote text-secondary">{item.description}</p>
-                        ) : null}
-                      </div>
-                      <a
-                        className="cds-reset shrink-0 text-footnote text-accent underline-offset-2 hover:underline"
-                        href={`/customize/connectors?selected=${encodeURIComponent(item.id)}`}
-                      >
-                        Configure
-                      </a>
-                    </li>
-                  ))}
+                  {items.map((item) => {
+                    const configureHref = `/customize/connectors?selected=${encodeURIComponent(item.id)}`;
+                    return (
+                      <li key={item.id} className="flex items-center justify-between gap-4 py-md">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-body text-primary">{item.name}</p>
+                          {item.description ? (
+                            <p className="truncate text-footnote text-secondary">{item.description}</p>
+                          ) : null}
+                        </div>
+                        <a
+                          className="cds-reset shrink-0 text-footnote text-accent underline-offset-2 hover:underline"
+                          href={configureHref}
+                          onClick={onNavigate ? spaClick(configureHref) : undefined}
+                        >
+                          {text.configure}
+                        </a>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <div className="flex w-full items-center justify-center gap-2 text-text-400">
-                  Your organization has not enabled any connectors
+                  {text.noConnectorsEnabled}
                 </div>
               )}
               <div className="mt-6 text-sm text-text-400">
-                Looking for desktop extensions? Manage them{" "}
-                <a
-                  className="cds-reset inline cursor-pointer rounded-[2px] text-accent underline decoration-[color-mix(in_srgb,currentColor,transparent_60%)] underline-offset-[3px] outline-none transition duration-fast hover:decoration-current focus-visible:shadow-focus focus-visible:decoration-current"
-                  href="/settings/desktop/extensions"
-                >
-                  here
-                </a>
-                .
+                {renderMessageWithLink(
+                  text.lookingForDesktopExtensions,
+                  "/settings/desktop/extensions",
+                  undefined,
+                  onNavigate,
+                )}
               </div>
             </div>
           </div>

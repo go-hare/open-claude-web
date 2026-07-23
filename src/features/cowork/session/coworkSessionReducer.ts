@@ -17,7 +17,12 @@ import {
 import { asRecord } from "./recordUtils";
 import { coworkAgentActivityFromStream } from "./stream/coworkStreamActivity";
 import type { CoworkStreamSnapshot } from "./stream/coworkStreamTypes";
-import type { CoworkInitializationStatus, CoworkRawMessage, CoworkSessionDataState } from "./types";
+import type {
+  CoworkInitializationStatus,
+  CoworkRawMessage,
+  CoworkSdkMcpStatus,
+  CoworkSessionDataState,
+} from "./types";
 
 export type CoworkSessionAction =
   | { type: "hydration-started" }
@@ -44,7 +49,9 @@ export type CoworkSessionAction =
   /** Official D1e fs_file_created|modified (~113624). */
   | { file: CoworkDetectedFile; type: "fs-file-upserted" }
   /** Official D1e fs_file_deleted (~113657). */
-  | { hostPath: string; type: "fs-file-deleted" };
+  | { hostPath: string; type: "fs-file-deleted" }
+  /** Official D1e sdk_mcp_status (~113842) → Le / sessionContext.sdkMcpStatuses. */
+  | { statuses: CoworkSdkMcpStatus[]; type: "sdk-mcp-statuses" };
 
 export function reduceCoworkSessionState(
   state: CoworkSessionDataState,
@@ -114,6 +121,8 @@ export function reduceCoworkSessionState(
       next.delete(action.hostPath);
       return { ...state, fsDetectedFiles: next };
     }
+    case "sdk-mcp-statuses":
+      return { ...state, sdkMcpStatuses: action.statuses };
   }
 }
 

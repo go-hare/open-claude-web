@@ -17,6 +17,7 @@ export function createInitialCoworkSessionState(sessionId: string): CoworkSessio
     pendingMessages: [],
     pendingTurn: null,
     promptSuggestion: null,
+    sdkMcpStatuses: undefined,
     session: null,
     sessionId,
     streamActivity: "idle",

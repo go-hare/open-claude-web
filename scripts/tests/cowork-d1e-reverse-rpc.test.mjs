@@ -21,6 +21,12 @@ const {
   "/src/features/cowork/session/rateLimit/coworkRateLimitMap.ts",
 );
 const {
+  buildCoworkRateLimitBannerModel,
+  pickCoworkRateLimitWindow,
+} = await vite.ssrLoadModule(
+  "/src/features/cowork/session/rateLimit/coworkRateLimitBannerCopy.ts",
+);
+const {
   applyCoworkRateLimitToStore,
   createCoworkRateLimitStore,
   coworkRateLimitStore,
@@ -267,6 +273,55 @@ test("scanCoworkTranscriptRateLimit (official Tke.scanTranscript)", () => {
     now,
   );
   assert.equal(env?.type, "exceeded_limit");
+});
+
+test("pickCoworkRateLimitWindow + buildCoworkRateLimitBannerModel (NVe subset)", () => {
+  const now = 2_000_000_000;
+  const future = now + 3600;
+  const approaching = mapCoworkRateLimitInfo({
+    status: "allowed_warning",
+    rateLimitType: "five_hour",
+    resetsAt: future,
+    utilization: 0.9,
+    surpassedThreshold: 0.8,
+  });
+  assert.equal(approaching.type, "approaching_limit");
+  const pick = pickCoworkRateLimitWindow(approaching.windows);
+  assert.equal(pick.windowName, "5h");
+  assert.equal(pick.surpassedThreshold, 0.8);
+  const model = buildCoworkRateLimitBannerModel(approaching, now);
+  assert.equal(model?.kind, "approaching");
+  assert.match(model?.body ?? "", /session limit|used/i);
+
+  const exceeded = mapCoworkRateLimitInfo({
+    status: "rejected",
+    rateLimitType: "seven_day",
+    resetsAt: future,
+    utilization: 1,
+  });
+  const exceededModel = buildCoworkRateLimitBannerModel(exceeded, now);
+  assert.equal(exceededModel?.kind, "exceeded");
+  assert.match(exceededModel?.body ?? "", /weekly limit|Usage limit/i);
+
+  assert.equal(
+    buildCoworkRateLimitBannerModel(
+      mapCoworkRateLimitInfo({ status: "allowed" }),
+      now,
+    ),
+    null,
+  );
+  assert.equal(
+    buildCoworkRateLimitBannerModel(
+      mapCoworkRateLimitInfo({
+        status: "rejected",
+        rateLimitType: "five_hour",
+        resetsAt: now - 10,
+        utilization: 1,
+      }),
+      now,
+    ),
+    null,
+  );
 });
 
 test("searchCoworkDirectoryServers first-party catalog", async () => {

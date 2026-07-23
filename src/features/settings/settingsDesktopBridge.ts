@@ -4,9 +4,18 @@
  * Reads window["claude.settings"] — same preload surface as official ut / EW hooks.
  */
 
+/**
+ * Official getMcpServersConfigWithStatus residual (cadc35a07):
+ * flat map key → { command, args?, env?, extensionId?, status?, error?, ... }.
+ * Nested `{ config }` also accepted for older bridge shapes.
+ */
 export type McpServerStatusEntry = {
+  args?: string[];
+  command?: string;
   config?: unknown;
+  env?: Record<string, string>;
   error?: string;
+  extensionId?: string;
   status?: string;
   [key: string]: unknown;
 };
@@ -17,9 +26,14 @@ export type McpSettingsBridge = {
   isLocalDevMcpEnabled?: () => Promise<boolean>;
   revealConfig?: () => Promise<boolean | void>;
   revealLogs?: () => Promise<boolean | void>;
+  /** Official I / revealServerLog(serverName). */
+  revealServerLog?: (serverName: string) => Promise<boolean | void>;
   setMcpServerConfigs?: (config: Record<string, unknown>) => Promise<unknown>;
   onMcpConfigChange?: (listener: (config: Record<string, unknown>) => void) => () => void;
-  onMcpStatusChanged?: (listener: (...args: unknown[]) => void) => () => void;
+  /** Official: (serverName, status, error?) => void */
+  onMcpStatusChanged?: (
+    listener: (serverName: string, status: string, error?: string | null) => void,
+  ) => () => void;
 };
 
 export type InstalledExtensionState = {

@@ -20,6 +20,8 @@ export type I18nMessages = Record<string, string>;
 export type MessageDescriptor = { defaultMessage: string; id: string };
 export type MessageDescriptors = Record<string, MessageDescriptor>;
 export const LOCALE_STORAGE_KEY = "claude-rebuild-locale";
+/** Official spa storage key (index-BELzQL5P l3t = "spa:locale"). Dual-read/write for parity. */
+export const OFFICIAL_LOCALE_STORAGE_KEY = "spa:locale";
 
 const DEFAULT_LOCALE = "en-US" satisfies SupportedLocale;
 const FALLBACK_APP_LOCALE = "zh-CN" satisfies SupportedLocale;
@@ -76,10 +78,12 @@ const APPEARANCE_MENU_MESSAGES = {
   light: { defaultMessage: "Light", id: "3cc4CtJM5h" },
   dark: { defaultMessage: "Mid", id: "sKM2ueljV6" },
   darker: { defaultMessage: "Dark", id: "tOdNiYuuag" },
-  matchSystem: { defaultMessage: "Match system", id: "KNFWQ+T1/T" },
+  /** Official Appearance auto — same id as General settings (+CwN9C/QFk), not footer KNFWQ+T1/T. */
+  matchSystem: { defaultMessage: "System", id: "+CwN9C/QFk" },
   font: { defaultMessage: "Font", id: "A3jj9z+p5h" },
   anthropicSans: { defaultMessage: "Anthropic Sans", id: "4EAtPWhM42" },
-  systemFont: { defaultMessage: "Match system", id: "KNFWQ+T1/T" },
+  /** Same official system/font label as Appearance tooltip (+CwN9C/QFk → 跟随系统 in zh-CN). */
+  systemFont: { defaultMessage: "System", id: "+CwN9C/QFk" },
 };
 
 type AppearanceMenuKey = keyof typeof APPEARANCE_MENU_MESSAGES;
@@ -97,16 +101,40 @@ declare global {
   }
 }
 
+function readStoredLocale(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return (
+      window.localStorage.getItem(LOCALE_STORAGE_KEY)
+      ?? window.localStorage.getItem(OFFICIAL_LOCALE_STORAGE_KEY)
+    );
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredLocale(locale: SupportedLocale): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+    window.localStorage.setItem(OFFICIAL_LOCALE_STORAGE_KEY, locale);
+  } catch {
+    /* private mode / quota */
+  }
+}
+
 export function getInitialLocale() {
   if (typeof window === "undefined") return FALLBACK_APP_LOCALE;
-  return normalizeLocale(window.localStorage.getItem(LOCALE_STORAGE_KEY) ?? navigator.language ?? FALLBACK_APP_LOCALE);
+  return normalizeLocale(readStoredLocale() ?? navigator.language ?? FALLBACK_APP_LOCALE);
 }
 
 export function applyLocaleOverride(locale: string) {
   if (typeof window === "undefined") return;
   const normalized = normalizeLocale(locale);
-  window.localStorage.setItem(LOCALE_STORAGE_KEY, normalized);
+  writeStoredLocale(normalized);
   document.documentElement.lang = normalized;
+  // Force re-fetch of /i18n catalogs for the next useI18nMessages tick.
+  resourceCache.delete(normalized);
   void window.electronIntl?.requestLocaleChange?.(normalized)?.catch?.(() => {});
   window.dispatchEvent(new CustomEvent("claude:locale-change", { detail: { locale: normalized } }));
 }
@@ -124,12 +152,25 @@ export function useCurrentLocale() {
       applyNextLocale((event as CustomEvent<{ locale?: string }>).detail?.locale);
     };
     const onStorage = (event: StorageEvent) => {
-      if (event.key === LOCALE_STORAGE_KEY && event.newValue) applyNextLocale(event.newValue);
+      if (
+        (event.key === LOCALE_STORAGE_KEY || event.key === OFFICIAL_LOCALE_STORAGE_KEY)
+        && event.newValue
+      ) {
+        applyNextLocale(event.newValue);
+      }
     };
 
     const initialDesktopLocale = window.electronIntl?.getInitialLocale?.();
-    if (!window.localStorage.getItem(LOCALE_STORAGE_KEY) && initialDesktopLocale !== undefined) {
-      void Promise.resolve(initialDesktopLocale).then(applyNextLocale).catch(() => {});
+    if (!readStoredLocale() && initialDesktopLocale !== undefined) {
+      void Promise.resolve(initialDesktopLocale)
+        .then((next) => {
+          const value = typeof next === "string" ? next : next?.locale;
+          if (value) {
+            writeStoredLocale(normalizeLocale(value));
+            applyNextLocale(value);
+          }
+        })
+        .catch(() => {});
     }
 
     const unsubscribeDesktopLocale = window.electronIntl?.localeChanged?.(applyNextLocale);
@@ -194,9 +235,23 @@ export async function loadI18nResource(locale: string) {
     fetchOptionalJson(`/i18n/statsig/${encodeURIComponent(normalized)}.json`),
     normalized === "en-US" ? Promise.resolve({}) : fetchOptionalJson(`/i18n/${encodeURIComponent(normalized)}.overrides.json`),
   ]);
+  // Official G0t residual: spa catalog + optional locale overrides. Empty base means
+  // fetch failed — do not cache so a later navigation can recover.
+  if (Object.keys(base).length === 0) {
+    return mergeKnownOverrides({ ...base, ...statsig }, overrides);
+  }
   const merged = mergeKnownOverrides({ ...base, ...statsig }, overrides);
   resourceCache.set(normalized, merged);
   return merged;
+}
+
+/** Drop in-memory catalogs (locale switch / hot override refresh). */
+export function clearI18nResourceCache(locale?: string) {
+  if (!locale) {
+    resourceCache.clear();
+    return;
+  }
+  resourceCache.delete(normalizeLocale(locale));
 }
 
 function buildTextMap<T extends MessageDescriptors>(descriptors: T, messages: I18nMessages = {}) {

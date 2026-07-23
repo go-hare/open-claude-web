@@ -93,22 +93,28 @@
 - directory_servers_* ~113664 → `respondDirectoryServers`
 - slash_menu_skills_resolve / addable_skills_search ~113738 → `respondSlashMenuSkills`
 - plugins_search ~113756 → `respondPluginSearch`
-- NVe ~96524 usage banner 依赖完整 account `hc()` / react-query messageLimits + EVe/IVe/AVe — **不发明 banner UI**
+- NVe ~96524 usage banner 完整形态依赖 account `hc()` / react-query messageLimits + EVe/IVe/AVe/TVe + pVe actions
+- rVe ~96073 window pick；_Be ~94342 / wBe ~94308 banner shells
+- sdk_mcp_status ~113842 → `Re(statuses)` → sessionContext `sdkMcpStatuses`
+- local_mcp_servers ~1138xx → `q1` → a1.setLocalClient/Tools — **full mcpCoordinator 墙，不发明**
 
 **Web 已落地（WIP until 提交）：**
 - `rateLimit/coworkRateLimitMap.ts`：`mapCoworkRateLimitInfo` (jue) + `extractRateLimitInfoFromMessageEvent` + `scanCoworkTranscriptRateLimit` (Tke)
 - `rateLimit/coworkRateLimitStore.ts`：local `messageLimits[orgUuid]`（非 full account bootstrap）
+- `rateLimit/coworkRateLimitBannerCopy.ts`：`pickCoworkRateLimitWindow` (rVe) + `buildCoworkRateLimitBannerModel` (NVe subset body；无 pVe)
+- `rateLimit/CoworkRateLimitBanner.tsx` + `CoworkConversationStatus` 挂载（_Be/wBe class shell；`data-rate-limit-kind`）
 - runtime live `rate_limit_event` → store；hydrate 后 `scanCoworkTranscriptRateLimit(transcript)` → store（seedTranscript 等价）
 - directory / slash skills / plugins reverse-RPC helpers + runtime respond paths
-- Tests：`cowork-d1e-reverse-rpc.test.mjs` + runtime reverse-RPC/rate_limit/hydrate-scan；typecheck clean
-
-- `cu_lock_released` (~114004)：session match → rAF `[data-autoscroll-container].scrollTop = scrollHeight`（`applyCoworkCuLockReleasedScroll`；不发明 CU lock 产品状态）
+- `sdk_mcp_status` → session `sdkMcpStatuses`（reducer/runtime/types；**无** q1/local_mcp invent）
+- `cu_lock_released` (~114004)：session match → rAF `[data-autoscroll-container].scrollTop = scrollHeight`
+- Tests：`cowork-d1e-reverse-rpc.test.mjs`（含 NVe model）+ runtime reverse-RPC/rate_limit/sdk_mcp/hydrate-scan；typecheck clean
+- Desktop `scripts/cdp-cowork-d1e-reverse-rpc-smoke.mjs`：CDP respond surface + autoscroll mount（非 agent-turn MCP invent）
 
 **诚实 residual：**
-- Full account messageLimits react-query + NVe usage banner UI（EVe/IVe/AVe）未接
+- Full account messageLimits react-query + NVe pVe upgrade/admin/overage actions / seat gates **未接**
 - plugins catalog 无 org 时 empty（honest）
-- live CDP agent turn smoke for directory/skills/plugins/rate_limit 未跑
-- `local_mcp_servers` / `sdk_mcp_status` 依赖 full mcpCoordinator / a1 remote store — **不发明**
+- live CDP **agent-turn** directory_servers_* emit 仍 residual（需真实 MCP tool 回合）；smoke 仅 prove respond IPC + DOM mount
+- `local_mcp_servers` → full mcpCoordinator / a1 remote store — **不发明**
 - dual-exec VM / Settings Th / Artifacts yn / full mcpCoordinator **不发明**
 
 ## 端到端证据矩阵

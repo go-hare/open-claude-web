@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { CdsButton, SettingsRow, SettingsSection, Switch } from "../SettingsShell";
+import {
+  formatDeleteMemoryLabel,
+  useCoworkSettingsText,
+} from "../settingsMessages";
 import { useDesktopPreferences } from "../useDesktopPreferences";
 import { useSettingsBootstrap } from "../useSettingsBootstrap";
 
@@ -29,9 +33,10 @@ type MemoryFile = {
  * (X.read/writeGlobalMemory) + Auto-organize $t (te.coworkSpaceContextEnabled) + Memory Vt.
  * Memory toggle: account.settings.enabled_cowork_memory via mutate J().
  * Memory list: X.listAccountMemories / deleteAccountMemory (gt/xt/Yt).
- * Official English copy.
+ * Copy via official message ids (settingsMessages COWORK_SETTINGS_MESSAGES).
  */
 export function CoworkSettings() {
+  const text = useCoworkSettingsText();
   const [preferences, setPreference] = useDesktopPreferences();
   const { bootstrap, updateAccountSetting } = useSettingsBootstrap();
   const [dispatchEnabled, setDispatchEnabled] = useState<boolean | null>(null);
@@ -154,7 +159,7 @@ export function CoworkSettings() {
     if (instructionsSaving) return;
     const memory = memoryBridge();
     if (!memory?.writeGlobalMemory) {
-      setInstructionsError("Failed to save instructions. You can try again.");
+      setInstructionsError(text.failedToSaveInstructions);
       return;
     }
     setInstructionsSaving(true);
@@ -164,32 +169,32 @@ export function CoworkSettings() {
       if (ok === false) throw new Error("write failed");
       setEditingInstructions(false);
     } catch {
-      setInstructionsError("Failed to save instructions. You can try again.");
+      setInstructionsError(text.failedToSaveInstructions);
     } finally {
       setInstructionsSaving(false);
     }
-  }, [instructions, instructionsSaving]);
+  }, [instructions, instructionsSaving, text.failedToSaveInstructions]);
 
   const deleteMemory = useCallback(async (path: string) => {
     setMemoryError("");
     const memory = memoryBridge();
     if (!memory?.deleteAccountMemory) {
-      setMemoryError("Couldn’t delete this memory. Please try again.");
+      setMemoryError(text.couldntDeleteMemory);
       return false;
     }
     try {
       const ok = await memory.deleteAccountMemory(path);
       if (ok === false) {
-        setMemoryError("Couldn’t delete this memory. Please try again.");
+        setMemoryError(text.couldntDeleteMemory);
         return false;
       }
       setMemoryTick((value) => value + 1);
       return true;
     } catch {
-      setMemoryError("Couldn’t delete this memory. Please try again.");
+      setMemoryError(text.couldntDeleteMemory);
       return false;
     }
-  }, []);
+  }, [text.couldntDeleteMemory]);
 
   const toggleMemoryEnabled = useCallback(() => {
     void updateAccountSetting("enabled_cowork_memory", !memoryEnabled);
@@ -199,19 +204,19 @@ export function CoworkSettings() {
 
   return (
     <main className="flex flex-col gap-7">
-      <h1 className="text-heading-semibold text-primary">Cowork</h1>
+      <h1 className="text-heading-semibold text-primary">{text.cowork}</h1>
       <SettingsSection>
         {dispatchEnabled !== null ? (
           <SettingsRow
             label={
               <span className="flex items-center gap-2">
-                Dispatch{" "}
+                {text.dispatch}{" "}
                 <span className="inline-flex rounded-full bg-bg-300 px-2 py-0.5 text-footnote text-secondary">
-                  Beta
+                  {text.beta}
                 </span>
               </span>
             }
-            description="Let Claude work on tasks from your phone using this computer. When off, your phone won't be able to dispatch work here."
+            description={text.dispatchDescription}
             control={
               <Switch
                 checked={dispatchEnabled}
@@ -224,8 +229,8 @@ export function CoworkSettings() {
           />
         ) : null}
         <SettingsRow
-          label="Auto-organize sessions into projects"
-          description="Claude groups related sessions into projects, surfaces the project's folders, and tells the session about its project on the next message."
+          label={text.autoOrganizeSessions}
+          description={text.autoOrganizeSessionsDescription}
           control={
             <Switch
               checked={!!preferences.coworkSpaceContextEnabled}
@@ -235,17 +240,14 @@ export function CoworkSettings() {
         />
         {editingInstructions ? (
           <div className="flex flex-col gap-3 py-md">
-            <p className="text-sm text-text-500">
-              Instructions here apply to all Cowork sessions. Use this for preferences, conventions, or
-              context that Claude should always know.
-            </p>
+            <p className="text-sm text-text-500">{text.globalInstructionsDescription}</p>
             {instructionsLoading ? (
-              <div className="flex h-64 items-center justify-center text-text-500">Loading...</div>
+              <div className="flex h-64 items-center justify-center text-text-500">{text.loading}</div>
             ) : (
               <textarea
-                aria-label="Global instructions"
+                aria-label={text.globalInstructions}
                 className="cds-input cds-reset h-64 resize-y rounded bg-fill-field px-sm py-sm font-mono text-body text-primary shadow-field-ring outline-none transition duration-fast placeholder:text-muted focus-visible:bg-surface-popover focus-visible:shadow-focus"
-                placeholder="Add instructions for Claude to follow in all Cowork sessions..."
+                placeholder={text.globalInstructionsPlaceholder}
                 spellCheck={false}
                 value={instructions}
                 onChange={(event) => setInstructions(event.currentTarget.value)}
@@ -259,35 +261,31 @@ export function CoworkSettings() {
                   setInstructionsError("");
                 }}
               >
-                Cancel
+                {text.cancel}
               </CdsButton>
               <CdsButton
                 primary
                 disabled={instructionsLoading || instructionsSaving}
                 onClick={() => void saveInstructions()}
               >
-                {instructionsSaving ? "Saving..." : "Save"}
+                {instructionsSaving ? text.saving : text.save}
               </CdsButton>
             </div>
           </div>
         ) : (
           <SettingsRow
-            label="Global instructions"
-            description="Instructions here apply to all Cowork sessions. Use this for preferences, conventions, or context that Claude should always know."
-            control={<CdsButton onClick={() => setEditingInstructions(true)}>Edit</CdsButton>}
+            label={text.globalInstructions}
+            description={text.globalInstructionsDescription}
+            control={<CdsButton onClick={() => setEditingInstructions(true)}>{text.edit}</CdsButton>}
           />
         )}
       </SettingsSection>
       {/* Official Vt: only when desktop product residual && memory bridge supported (r && o). */}
       {memoriesSupported ? (
-        <SettingsSection title="Memory">
+        <SettingsSection title={text.memory}>
           <SettingsRow
-            label="Use memory in sessions"
-            description={
-              memoryEnabled
-                ? "Claude will read and update these memories during Cowork sessions."
-                : "Paused. Existing memories are kept but won’t be read or updated in new sessions."
-            }
+            label={text.useMemoryInSessions}
+            description={memoryEnabled ? text.useMemoryInSessionsOn : text.useMemoryInSessionsOff}
             control={
               <Switch
                 checked={memoryEnabled}
@@ -297,20 +295,21 @@ export function CoworkSettings() {
               />
             }
           />
-          <p className="py-md text-footnote text-secondary">
-            Claude saves what it learns about you and your work during Cowork sessions. These files are
-            stored on this device.
-          </p>
+          <p className="py-md text-footnote text-secondary">{text.memoryStorageBlurb}</p>
           {memories.length > 0 ? (
             <div className="flex flex-col">
               {memories.map((file) => (
-                <MemoryRow key={file.path} file={file} onDelete={deleteMemory} />
+                <MemoryRow
+                  key={file.path}
+                  deleteLabel={text.delete}
+                  deleteNamedTemplate={text.deleteMemoryNamed}
+                  file={file}
+                  onDelete={deleteMemory}
+                />
               ))}
             </div>
           ) : memoriesLoading ? null : (
-            <p className="py-md text-footnote text-secondary">
-              No memories yet. Claude will add entries here as you work together.
-            </p>
+            <p className="py-md text-footnote text-secondary">{text.noMemoriesYet}</p>
           )}
           {memoryError ? (
             <p className="py-sm text-footnote text-danger-000" role="status">
@@ -324,9 +323,13 @@ export function CoworkSettings() {
 }
 
 function MemoryRow({
+  deleteLabel,
+  deleteNamedTemplate,
   file,
   onDelete,
 }: {
+  deleteLabel: string;
+  deleteNamedTemplate: string;
   file: MemoryFile;
   onDelete: (path: string) => Promise<boolean>;
 }) {
@@ -372,9 +375,9 @@ function MemoryRow({
             }
           })();
         }}
-        aria-label={`Delete memory ${title}`}
+        aria-label={formatDeleteMemoryLabel(deleteNamedTemplate, title)}
       >
-        Delete
+        {deleteLabel}
       </CdsButton>
     </div>
   );

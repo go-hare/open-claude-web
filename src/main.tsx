@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./app/App";
 import { queryClient } from "./app/queryClient";
 import { bootstrapAppearanceFromStorage } from "./features/settings/appearanceSettings";
+import { ErrorsProvider, ErrorsToastHost } from "./features/settings/errorsToast";
 import "./styles/global.css";
 
 bootstrapAppearanceFromStorage();
@@ -17,7 +18,10 @@ if (!root) {
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <ErrorsProvider>
+        <App />
+        <ErrorsToastHost />
+      </ErrorsProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

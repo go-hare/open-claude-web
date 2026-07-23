@@ -1,17 +1,26 @@
 /**
  * Official hYt Keep awake control (index-BELzQL5P).
- * mYt size md: font-base + icon 20 + default switch; dsVariant dark via lge/Zfe.
+ * mYt size md: font-base + icon 20 + default switch size.
  * Prefs: TW=claude.settings.AppPreferences keepAwakeEnabled via desktopBridge.Preferences.
- * Hover: pge/Xp side bottom — "When enabled, Claude will prevent your computer from going to sleep."
+ * Hover (non-controlOnly): pge/Xp side bottom — pkPdf3LvZO.
+ *
+ * Official lge residual (critical for settings alignment):
+ *   if (fq()) return iP  // CDS Switch on /settings* — ignores dsVariant
+ *   else Zfe with variant from dsVariant ("dark" for hYt)
+ * fq() is true for /settings and /admin-settings (and settings modal context).
+ * Desktop General ms passes controlOnly + size md → bare lge → CDS Switch next to
+ * Run on startup / Menu bar (cC/J), not dark Zfe.
  */
 import { useCallback, useEffect, useState } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
 import { Icon } from "../../../shell/icons";
+import { Switch as CdsSettingsSwitch } from "../../settings/SettingsShell";
 import { OfficialSwitch } from "../../shared/OfficialSwitch";
 import { OfficialTooltip } from "../../shared/OfficialTooltip";
 
 const sizeChrome = {
   sm: { textClass: "font-small", iconSize: "sm" as const, switchSize: "sm" as const },
+  // Official mYt.md.switchSize is void 0 → lge maps to "default"
   md: { textClass: "font-base", iconSize: "md" as const, switchSize: "default" as const },
 };
 
@@ -64,7 +73,8 @@ export function KeepAwakeControl({
     };
   }, []);
 
-  // Official hYt onCheckedChange toggles then TW.setPreference("keepAwakeEnabled", next)
+  // Official hYt: onCheckedChange toggles then TW.setPreference("keepAwakeEnabled", next)
+  // lge iP (CDS) and Zfe both surface boolean next via onCheckedChange.
   const onCheckedChange = useCallback((next: boolean) => {
     setEnabled(next);
     void desktopBridge.Preferences.setPreference?.("keepAwakeEnabled", next).catch(() => {
@@ -74,6 +84,25 @@ export function KeepAwakeControl({
 
   if (!prefsReady) return null;
 
+  /**
+   * Official lge when fq() (settings): CDS iP Switch — same family as row J switches.
+   * controlOnly is only used from Desktop General settings (c71860c77), so map 1:1.
+   */
+  if (controlOnly) {
+    return (
+      <span data-official-source="index-BELzQL5P.js:hYt/lge→iP">
+        <CdsSettingsSwitch
+          aria-label={ariaLabelledby ? undefined : "Keep awake"}
+          aria-labelledby={ariaLabelledby}
+          aria-describedby={ariaDescribedby}
+          checked={enabled}
+          onCheckedChange={onCheckedChange}
+        />
+      </span>
+    );
+  }
+
+  // Official non-controlOnly (scheduled bridge): Zfe dsVariant dark inside bottom tooltip
   const switchEl = (
     <OfficialSwitch
       aria-label={ariaLabelledby ? undefined : "Keep awake"}
@@ -85,15 +114,6 @@ export function KeepAwakeControl({
       size={switchSize}
     />
   );
-
-  // Official: controlOnly → bare switch for settings row
-  if (controlOnly) {
-    return (
-      <span data-official-source="index-BELzQL5P.js:hYt">
-        {switchEl}
-      </span>
-    );
-  }
 
   // Official hYt: pge({ content, side: "bottom", children: <span className={fullWidth ? "block w-full" : undefined}>...</span> })
   return (

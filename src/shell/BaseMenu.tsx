@@ -1,9 +1,19 @@
 import { Menu } from "@base-ui-components/react/menu";
 import { ContextMenu } from "@base-ui-components/react/context-menu";
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Icon } from "./icons";
+import {
+  readResolvedColorMode,
+  THEME_MODE_CHANGE_EVENT,
+} from "../features/settings/appearanceSettings";
 
-const popupClassName = "cds-root cds-reset flex flex-col min-w-[128px] max-w-[320px] max-h-[var(--available-height)] rounded-card bg-surface-3 backdrop-blur-[12px] shadow-panel data-[starting-style]:opacity-0 text-body text-primary outline-none";
+/**
+ * Official menu popup chrome (c43c5949a Surface popover + shadow-panel).
+ * Portal re-roots tokens via le-style cds-root + data-mode/density/platform
+ * (bare cds-root without data-mode re-applies light --cds-ring-* defaults).
+ */
+const popupClassName =
+  "cds-reset flex flex-col min-w-[128px] max-w-[320px] max-h-[var(--available-height)] rounded-card bg-surface-3 backdrop-blur-[12px] shadow-panel data-[starting-style]:opacity-0 text-body text-primary outline-none";
 const popupScrollClassName = "min-h-0 overflow-y-auto rounded-[inherit] p-1";
 const itemClassName = "cds-reset flex w-full items-center gap-xs px-md py-[calc((var(--cds-h-control)-var(--cds-leading-body))/2)] rounded text-body select-none outline-none data-[disabled]:opacity-50 data-[disabled]:pointer-events-none text-primary data-[highlighted]:bg-fill-ghost-hover";
 const submenuTriggerClassName = `${itemClassName} justify-between data-[popup-open]:bg-fill-ghost-hover`;
@@ -14,14 +24,45 @@ type Align = "start" | "center" | "end";
 
 export { ContextMenu, Menu };
 
+/** Official le portal root — same token re-root as GhostSelect CdsPortalRoot. */
+function CdsPortalRoot({ children }: { children: ReactNode }) {
+  const [mode, setMode] = useState<"light" | "dark">(() => readResolvedColorMode());
+  useEffect(() => {
+    const sync = () => setMode(readResolvedColorMode());
+    sync();
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    media.addEventListener("change", sync);
+    window.addEventListener("storage", sync);
+    window.addEventListener(THEME_MODE_CHANGE_EVENT, sync);
+    return () => {
+      media.removeEventListener("change", sync);
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(THEME_MODE_CHANGE_EVENT, sync);
+    };
+  }, []);
+  return (
+    <div
+      className="cds-root"
+      data-cds-portal=""
+      data-density="default"
+      data-mode={mode}
+      data-platform="desktop"
+    >
+      {children}
+    </div>
+  );
+}
+
 export function BaseMenuPopup({ align, children, className, side, sideOffset, style }: { align?: Align; children: ReactNode; className?: string; side?: Side; sideOffset?: number; style?: CSSProperties }) {
   return (
     <Menu.Portal>
-      <Menu.Positioner align={align} className="z-popover" side={side} sideOffset={sideOffset}>
-        <Menu.Popup className={`${popupClassName} ${className ?? ""}`} data-cds="Menu" style={style}>
-          <div className={popupScrollClassName}>{children}</div>
-        </Menu.Popup>
-      </Menu.Positioner>
+      <CdsPortalRoot>
+        <Menu.Positioner align={align} className="z-popover" side={side} sideOffset={sideOffset}>
+          <Menu.Popup className={`${popupClassName} ${className ?? ""}`} data-cds="Menu" style={style}>
+            <div className={popupScrollClassName}>{children}</div>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </CdsPortalRoot>
     </Menu.Portal>
   );
 }
@@ -29,11 +70,13 @@ export function BaseMenuPopup({ align, children, className, side, sideOffset, st
 export function BaseContextMenuPopup({ align, children, className, side, sideOffset, style }: { align?: Align; children: ReactNode; className?: string; side?: Side; sideOffset?: number; style?: CSSProperties }) {
   return (
     <ContextMenu.Portal>
-      <ContextMenu.Positioner align={align} className="z-popover" side={side} sideOffset={sideOffset}>
-        <ContextMenu.Popup className={`${popupClassName} ${className ?? ""}`} data-cds="Menu" style={style}>
-          <div className={popupScrollClassName}>{children}</div>
-        </ContextMenu.Popup>
-      </ContextMenu.Positioner>
+      <CdsPortalRoot>
+        <ContextMenu.Positioner align={align} className="z-popover" side={side} sideOffset={sideOffset}>
+          <ContextMenu.Popup className={`${popupClassName} ${className ?? ""}`} data-cds="Menu" style={style}>
+            <div className={popupScrollClassName}>{children}</div>
+          </ContextMenu.Popup>
+        </ContextMenu.Positioner>
+      </CdsPortalRoot>
     </ContextMenu.Portal>
   );
 }

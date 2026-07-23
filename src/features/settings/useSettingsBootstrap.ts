@@ -13,6 +13,8 @@ import {
   type NotificationFeaturePreference,
   type NotificationPreferencesPayload,
 } from "./accountSettingsApi";
+import { syncPreviewFeatureUsesArtifactsFromSettings, writePreviewFeatureUsesArtifacts } from "./artifactsPreference";
+import { syncResponseCompletionsPrefMirror } from "./responseCompletionNotify";
 
 /**
  * Bootstrap + account slice for personal settings (official Zn gates, Privacy gateway,
@@ -116,6 +118,12 @@ export function parseSettingsBootstrap(payload: unknown): Omit<SettingsBootstrap
   };
 }
 
+/** Official YBe residual: compass + completion both enable_push. */
+function responseCompletionsEnabledFromPrefs(preferences: Record<string, unknown> | undefined): boolean {
+  const feature = record(record(preferences).feature_preference);
+  return !!record(feature.compass).enable_push && !!record(feature.completion).enable_push;
+}
+
 async function loadSlice(): Promise<{
   notifications: NotificationPreferencesPayload;
   slice: SettingsBootstrapSlice;
@@ -128,11 +136,15 @@ async function loadSlice(): Promise<{
     fetchAccountSettings(),
     fetchNotificationPreferences(orgUuid),
   ]);
+  // Keep stream-end notify mirror aligned with server prefs (YBe).
+  syncResponseCompletionsPrefMirror(responseCompletionsEnabledFromPrefs(notifications.preferences));
   const account = base.account
     ? { ...base.account, settings: { ...base.account.settings, ...settings } }
     : Object.keys(settings).length
       ? { display_name: "", full_name: "", settings }
       : null;
+  // Artifacts residual: keep conversation showArtifacts mirror aligned with account.settings.
+  syncPreviewFeatureUsesArtifactsFromSettings(account?.settings);
   return {
     notifications,
     slice: {
@@ -226,6 +238,10 @@ export function useSettingsBootstrap() {
   const updateAccountSettings = useCallback(async (patch: Record<string, unknown>) => {
     const ok = await patchAccountSettings(patch);
     if (!ok) throw new Error("account settings save failed");
+    if ("preview_feature_uses_artifacts" in patch) {
+      // Official Visuals `_e` writes this key; conversation path reads showArtifacts from it.
+      writePreviewFeatureUsesArtifacts(patch.preview_feature_uses_artifacts !== false);
+    }
     setSlice((current) => ({
       ...current,
       account: current.account
@@ -256,6 +272,34 @@ export function useSettingsBootstrap() {
       });
       if (!result) throw new Error("notification preferences save failed");
       setNotifications(result);
+      syncResponseCompletionsPrefMirror(responseCompletionsEnabledFromPrefs(result.preferences));
+      return result;
+    },
+    [notifications.preferences, slice.org?.uuid],
+  );
+
+  /**
+   * Official ZBe residual (index-BELzQL5P): Response completions toggles
+   * feature_preference.compass + completion enable_push together in one PATCH.
+   */
+  const updateResponseCompletionsPush = useCallback(
+    async (enablePush: boolean) => {
+      const orgUuid = slice.org?.uuid ?? "00000000-0000-4000-8000-000000000001";
+      const currentFeature = record(
+        record(notifications.preferences).feature_preference,
+      ) as NotificationFeaturePreference;
+      const nextFeature: NotificationFeaturePreference = {
+        ...currentFeature,
+        compass: { ...record(currentFeature.compass), enable_push: enablePush },
+        completion: { ...record(currentFeature.completion), enable_push: enablePush },
+      };
+      const result = await patchNotificationPreferences(orgUuid, {
+        ...notifications.preferences,
+        feature_preference: nextFeature,
+      });
+      if (!result) throw new Error("notification preferences save failed");
+      setNotifications(result);
+      syncResponseCompletionsPrefMirror(enablePush);
       return result;
     },
     [notifications.preferences, slice.org?.uuid],
@@ -272,6 +316,7 @@ export function useSettingsBootstrap() {
     updateIdentity,
     updateNotificationFeature,
     updateProfile,
+    updateResponseCompletionsPush,
   };
 }
 

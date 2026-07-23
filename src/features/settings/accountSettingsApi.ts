@@ -18,13 +18,27 @@ export type AccountProfile = {
   work_function?: string | null;
 };
 
+/**
+ * Official feature_preference keys (c0db37792 ie + index YBe/ZBe/KBe):
+ * - compass + completion: Response completions (both enable_push must match)
+ * - bogosort: Code notifications (push) + Code emails
+ * - code_requires_action: Code permission requests
+ * - code_security_scan: Security scan emails
+ * - dispatch: Dispatch messages
+ */
 export type NotificationFeaturePreference = {
   bogosort?: { enable_email?: boolean; enable_push?: boolean };
   code_requires_action?: { enable_push?: boolean };
   code_security_scan?: { enable_email?: boolean };
+  /** Official KBe: Response completions push channels. */
+  compass?: { enable_push?: boolean };
+  completion?: { enable_push?: boolean };
   dispatch?: { enable_push?: boolean };
   [key: string]: unknown;
 };
+
+/** Official KBe residual — Response completions toggles both. */
+export const RESPONSE_COMPLETION_FEATURE_KEYS = ["compass", "completion"] as const;
 
 export type NotificationPreferencesPayload = {
   account_id?: number;
@@ -195,18 +209,22 @@ export const WORK_FUNCTION_VALUES = [
   "Other",
 ] as const;
 
+/**
+ * Official j4t defaultMessage residual (index-BELzQL5P). zh-CN catalog keeps
+ * English for these job titles — do not invent unofficial ZH labels.
+ */
 export const WORK_FUNCTION_LABELS: Record<(typeof WORK_FUNCTION_VALUES)[number], string> = {
-  "Product Management": "产品管理",
-  Engineering: "工程",
-  "Human Resources": "人力资源",
-  Finance: "财务",
-  Marketing: "市场",
-  Sales: "销售",
-  Operations: "运营",
-  "Data Science": "数据科学",
-  Design: "设计",
-  Legal: "法务",
-  Other: "其他",
+  "Product Management": "Product management",
+  Engineering: "Engineering",
+  "Human Resources": "Human resources",
+  Finance: "Finance",
+  Marketing: "Marketing",
+  Sales: "Sales",
+  Operations: "Operations",
+  "Data Science": "Data science",
+  Design: "Design",
+  Legal: "Legal",
+  Other: "Other",
 };
 
 export const WORK_FUNCTION_OPTIONS = WORK_FUNCTION_VALUES.map((value) => ({

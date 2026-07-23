@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SettingsRow, SettingsSection, Switch } from "../SettingsShell";
-import { AvatarControl, GhostSelect, SegmentedControl, TextInputControl } from "../SettingsControls";
+import {
+  AvatarControl,
+  ChatFontSelect,
+  GhostSelect,
+  InstructionsPreferencesField,
+  SegmentedControl,
+  TextInputControl,
+} from "../SettingsControls";
 import {
   applyThemeMode,
-  CHAT_FONT_OPTIONS,
   readChatFontSetting,
   readThemeMode,
   type ChatFontSetting,
@@ -13,19 +19,28 @@ import {
 } from "../appearanceSettings";
 import { WORK_FUNCTION_OPTIONS } from "../accountSettingsApi";
 import { useSettingsBootstrap } from "../useSettingsBootstrap";
-import {
-  ensureDesktopNotificationPermission,
-  readResponseCompletionsEnabled,
-  writeResponseCompletionsEnabled,
-} from "../desktopNotificationPermission";
+import { ensureDesktopNotificationPermission } from "../desktopNotificationPermission";
 import { notificationRowGatesFromBootstrap } from "../notificationRowGates";
+import {
+  renderInstructionsDescription,
+  useGeneralSettingsText,
+} from "../settingsMessages";
+import { hasCmekLockFromBootstrap } from "../cmekGate";
+import { useErrors } from "../errorsToast";
+import { syncResponseCompletionsPrefMirror } from "../responseCompletionNotify";
 
 /**
- * Official General (c0db37792 H): Profile X + Preferences _Component2 + Notifications _Component3.
- * Appearance mode: zR Kx("userThemeMode"); Chat font: O("customStyles:chatFont") + map K.
+ * Official General (c0db37792 H): Profile X + Preferences ee + Notifications ie.
+ * Appearance mode: zR Kx("userThemeMode"); Chat font: O("customStyles:chatFont") + map K + se Menu.
  * Profile: PUT /api/account (names) + PUT /api/account_profile (avatar/work_function/conversation_preferences).
- * Notifications: Response completions (always); Code rows + Dispatch gated by aA/bas/VBe/GBe residual
- * from bootstrap feature_flags / org capabilities (see notificationRowGates).
+ * Profile save toasts: PC addSuccess fsB/4pdUqN / addError ecSHaFmEbs.
+ * CMEK: LBt taint:cmek → Instructions locked + tooltip D4CuWTj4f5.
+ * Voice: official ne = C()?oe:null where C≈Iyt = voice_mode && media && !jd(); desktop jd() → omit.
+ * Notifications (official ie + YBe/ZBe/KBe):
+ *   Response completions — feature_preference.compass + completion enable_push (both)
+ *   Code / Dispatch rows gated by aA/bas/VBe/GBe residual (notificationRowGates)
+ * Code emails: Statsig keys 1tnv78j/162hnvx — residual EN defaults (not spa i18n).
+ * Copy uses official /i18n message ids via useGeneralSettingsText.
  */
 export function GeneralSettings() {
   const {
@@ -34,22 +49,41 @@ export function GeneralSettings() {
     updateIdentity,
     updateNotificationFeature,
     updateProfile,
+    updateResponseCompletionsPush,
   } = useSettingsBootstrap();
+  const text = useGeneralSettingsText();
+  const { addSuccess, addError } = useErrors();
   const [appearance, setAppearance] = useState<ThemeMode>(() => readThemeMode());
   const [chatFont, setChatFont] = useState<ChatFontSetting>(() => readChatFontSetting());
   const [avatarDraft, setAvatarDraft] = useState<number | undefined>(undefined);
-  const [prefsDraft, setPrefsDraft] = useState<string | null>(null);
-  const [responseCompletions, setResponseCompletions] = useState(() => readResponseCompletionsEnabled());
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [notifyError, setNotifyError] = useState("");
-  const prefsFocused = useRef(false);
 
   const fullName = bootstrap.account?.full_name ?? "";
   const displayName = bootstrap.account?.display_name ?? "";
   const workFunction = bootstrap.profile.work_function ?? "";
   const conversationPreferences = bootstrap.profile.conversation_preferences ?? "";
   const avatar = avatarDraft ?? bootstrap.profile.avatar ?? 0;
-  const prefsValue = prefsDraft ?? conversationPreferences;
+
+  // Official LBt: any membership org.capabilities includes "taint:cmek"
+  const cmekLocked = useMemo(
+    () => hasCmekLockFromBootstrap(bootstrap.bootstrapPayload, bootstrap.org?.capabilities),
+    [bootstrap.bootstrapPayload, bootstrap.org?.capabilities],
+  );
+
+  const onProfileSaved = useCallback(() => {
+    addSuccess(text.saved);
+  }, [addSuccess, text.saved]);
+
+  const onProfileSaveError = useCallback(
+    (error: unknown) => {
+      addError(text.couldntSaveThatChange, {
+        error,
+        messageForLogging: "settings-modal profile save failed",
+      });
+    },
+    [addError, text.couldntSaveThatChange],
+  );
 
   // Official ie(): e=aA (hL), t=bas (hM), n=VBe (hN); fe uses GBe (hV).
   const notifyGates = useMemo(
@@ -61,11 +95,49 @@ export function GeneralSettings() {
   );
 
   const feature = (notifications.preferences?.feature_preference ?? {}) as Record<string, Record<string, unknown>>;
+  // Official YBe: every(KBe) enable_push — KBe = ["compass","completion"]
+  const responseCompletions =
+    !!feature.compass?.enable_push && !!feature.completion?.enable_push;
   const codeNotifications = !!feature.bogosort?.enable_push;
   const codeEmails = !!feature.bogosort?.enable_email;
   const codePermissionRequests = !!feature.code_requires_action?.enable_push;
   const securityScanEmails = !!feature.code_security_scan?.enable_email;
   const dispatchMessages = !!feature.dispatch?.enable_push;
+
+  const chatFontLabels = useMemo(
+    () => ({
+      default: text.anthropicSerif,
+      sans: text.anthropicSans,
+      system: text.matchSystem,
+      dyslexia: text.dyslexicFriendly,
+    }),
+    [text.anthropicSans, text.anthropicSerif, text.dyslexicFriendly, text.matchSystem],
+  );
+
+  // Official ee Appearance XD: icon + tooltip only (no label) — tooltips from +CwN9C/QFk / 3cc4CtJM5h / tOdNiYuuag.
+  const appearanceOptions = useMemo(
+    () => [
+      { value: "auto", icon: "Computer", tooltip: text.matchSystem },
+      { value: "light", icon: "Sun", tooltip: text.light },
+      { value: "dark", icon: "Moon", tooltip: text.dark },
+    ],
+    [text.dark, text.light, text.matchSystem],
+  );
+
+  const instructionsPlaceholders = useMemo(
+    () => [
+      text.instructionsPlaceholder0,
+      text.instructionsPlaceholder1,
+      text.instructionsPlaceholder2,
+      text.instructionsPlaceholder3,
+    ],
+    [
+      text.instructionsPlaceholder0,
+      text.instructionsPlaceholder1,
+      text.instructionsPlaceholder2,
+      text.instructionsPlaceholder3,
+    ],
+  );
 
   useEffect(() => {
     writeThemeMode(appearance);
@@ -85,13 +157,25 @@ export function GeneralSettings() {
     if (avatarDraft !== undefined && bootstrap.profile.avatar === avatarDraft) setAvatarDraft(undefined);
   }, [avatarDraft, bootstrap.profile.avatar]);
 
-  useEffect(() => {
-    if (!prefsFocused.current) setPrefsDraft(null);
-  }, [conversationPreferences]);
-
   const saveAvatar = (next: number) => {
     setAvatarDraft(next);
-    void updateProfile({ avatar: next }).catch(() => setAvatarDraft(undefined));
+    void updateProfile({ avatar: next })
+      .then(onProfileSaved)
+      .catch((error) => {
+        setAvatarDraft(undefined);
+        onProfileSaveError(error);
+      });
+  };
+
+  const saveIdentity = (patch: { full_name?: string; display_name?: string }) => {
+    void updateIdentity(patch).then(onProfileSaved).catch(onProfileSaveError);
+  };
+
+  const saveProfile = (patch: {
+    work_function?: string;
+    conversation_preferences?: string;
+  }) => {
+    void updateProfile(patch).then(onProfileSaved).catch(onProfileSaveError);
   };
 
   const runToggle = async (key: string, work: () => Promise<void>) => {
@@ -101,17 +185,22 @@ export function GeneralSettings() {
     try {
       await work();
     } catch (error) {
-      setNotifyError(error instanceof Error ? error.message : "Couldn't update that setting");
+      setNotifyError(error instanceof Error ? error.message : text.couldNotUpdateSetting);
     } finally {
       setPendingKey(null);
     }
   };
 
+  // Keep local mirror in sync for stream-end notify (YBe residual).
+  useEffect(() => {
+    syncResponseCompletionsPrefMirror(responseCompletions);
+  }, [responseCompletions]);
+
   return (
     <main className="flex flex-col pb-10">
-      <SettingsSection title="Profile">
+      <SettingsSection title={text.profile}>
         <SettingsRow
-          label="Avatar"
+          label={text.avatar}
           control={
             <AvatarControl
               avatar={avatar}
@@ -122,131 +211,105 @@ export function GeneralSettings() {
           }
         />
         <SettingsRow
-          label="Full name"
+          label={text.fullName}
           control={
             <TextInputControl
-              ariaLabel="Full name"
+              ariaLabel={text.fullName}
               value={fullName}
               onSave={(value) => {
-                void updateIdentity({ full_name: value });
+                saveIdentity({ full_name: value });
               }}
             />
           }
         />
         <SettingsRow
-          label="What should Claude call you?"
+          label={text.whatShouldClaudeCallYou}
           control={
             <TextInputControl
-              ariaLabel="Display name"
+              ariaLabel={text.whatShouldClaudeCallYou}
               value={displayName}
               onSave={(value) => {
-                void updateIdentity({ display_name: value });
+                saveIdentity({ display_name: value });
               }}
             />
           }
         />
         <SettingsRow
-          label="What best describes your work?"
+          label={text.whatBestDescribesWork}
           control={
             <GhostSelect
               align="end"
-              placeholder="Select"
+              fullWidth={false}
+              placeholder={text.select}
+              searchable={false}
               value={workFunction}
               options={WORK_FUNCTION_OPTIONS}
               onChange={(value) => {
-                void updateProfile({ work_function: value });
+                saveProfile({ work_function: value });
               }}
             />
           }
         />
-        <div className="flex flex-col gap-sm py-md">
-          <label className="text-body text-primary" htmlFor="conversation-preferences">
-            What should Claude know about you?
-          </label>
-          <div className="text-footnote text-neutral-500">
-            Claude will use these details across chats and Cowork when they align with Anthropic&apos;s usage policies.{" "}
-            <a
-              className="text-accent underline-offset-2 hover:underline"
-              href="https://www.anthropic.com/legal/aup"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              Learn more
-            </a>
-          </div>
-          <textarea
-            id="conversation-preferences"
-            className="cds-input cds-reset min-h-[5.5rem] max-h-40 w-full resize-y rounded bg-fill-field px-sm py-sm text-body text-primary shadow-field-ring outline-none transition duration-fast placeholder:text-muted focus-visible:bg-surface-popover focus-visible:shadow-focus"
-            placeholder="e.g. Keep explanations short and direct"
-            rows={3}
-            value={prefsValue}
-            onChange={(event) => setPrefsDraft(event.currentTarget.value)}
-            onFocus={() => {
-              prefsFocused.current = true;
-            }}
-            onBlur={() => {
-              prefsFocused.current = false;
-              const next = prefsValue;
-              if (next === conversationPreferences) {
-                setPrefsDraft(null);
-                return;
-              }
-              void updateProfile({ conversation_preferences: next }).finally(() => setPrefsDraft(null));
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && prefsValue !== conversationPreferences) {
-                event.stopPropagation();
-                setPrefsDraft(conversationPreferences);
-              }
-            }}
-          />
-        </div>
+        <InstructionsPreferencesField
+          label={text.instructionsForClaude}
+          description={renderInstructionsDescription(text.instructionsDescription)}
+          placeholders={instructionsPlaceholders}
+          value={conversationPreferences}
+          disabled={cmekLocked}
+          lockTooltip={cmekLocked ? text.instructionsCmekLocked : undefined}
+          onSave={(next) => {
+            if (cmekLocked) return;
+            saveProfile({ conversation_preferences: next });
+          }}
+        />
       </SettingsSection>
-      <SettingsSection title="Preferences">
+      <SettingsSection title={text.preferences}>
         <SettingsRow
-          label="Appearance"
+          label={text.appearance}
           control={
             <SegmentedControl
-              ariaLabel="Appearance"
+              ariaLabel={text.appearance}
               value={appearance}
-              options={[
-                { value: "auto", label: "Match system", icon: "Computer" },
-                { value: "light", label: "Light", icon: "Sun" },
-                { value: "dark", label: "Dark", icon: "Moon" },
-              ]}
+              options={appearanceOptions}
               onChange={(value) => setAppearance(value as ThemeMode)}
             />
           }
         />
         <SettingsRow
-          label="Chat font"
+          label={text.chatFont}
           control={
-            <GhostSelect
-              align="end"
+            <ChatFontSelect
               value={chatFont}
-              options={CHAT_FONT_OPTIONS}
-              onChange={(value) => setChatFont(value as ChatFontSetting)}
+              labels={chatFontLabels}
+              onChange={(value) => setChatFont(value)}
             />
           }
         />
+        {/*
+          Official ne Voice: C()?oe:null where C = Iyt() =
+            ud("claude_ai_voice_mode") && media support && !jd().
+          jd() ≈ isClaudeApp/desktop → Voice row is residual-correct OFF on desktop.
+          Do not invent a Voice control until residual shows it for this product surface.
+        */}
       </SettingsSection>
-      <SettingsSection title="Notifications">
+      <SettingsSection title={text.notifications}>
         {/* Official ie order: ce, e&&de, e&&fe, e&&ue, t&&ge, n&&pe */}
         <SettingsRow
-          label="Response completions"
-          description="Get notified when Claude has finished a response. Useful for long-running tasks."
+          label={text.responseCompletions}
+          description={text.responseCompletionsDescription}
           control={
             <Switch
               checked={responseCompletions}
               disabled={pendingKey === "response"}
               onCheckedChange={(checked) => {
                 void runToggle("response", async () => {
+                  // Official ce: request desktop auth when enabling, then ZBe both channels.
                   if (checked) {
                     const granted = await ensureDesktopNotificationPermission();
                     if (!granted) throw new Error("browser-permission-denied");
                   }
-                  writeResponseCompletionsEnabled(checked);
-                  setResponseCompletions(checked);
+                  await updateResponseCompletionsPush(checked);
+                  syncResponseCompletionsPrefMirror(checked);
                 });
               }}
             />
@@ -254,8 +317,8 @@ export function GeneralSettings() {
         />
         {notifyGates.codeSession ? (
           <SettingsRow
-            label="Code notifications"
-            description="Claude can choose to notify you about important updates from a Code session."
+            label={text.codeNotifications}
+            description={text.codeNotificationsDescription}
             control={
               <Switch
                 checked={codeNotifications}
@@ -275,8 +338,8 @@ export function GeneralSettings() {
         ) : null}
         {notifyGates.codePermissionRequests ? (
           <SettingsRow
-            label="Code permission requests"
-            description="Get a push notification when Claude needs your approval to run a command in a Code session."
+            label={text.codePermissionRequests}
+            description={text.codePermissionRequestsDescription}
             control={
               <Switch
                 checked={codePermissionRequests}
@@ -292,8 +355,8 @@ export function GeneralSettings() {
         ) : null}
         {notifyGates.codeSession ? (
           <SettingsRow
-            label="Code emails"
-            description="Get an email about important updates from a Code session."
+            label={text.codeEmails}
+            description={text.codeEmailsDescription}
             control={
               <Switch
                 checked={codeEmails}
@@ -309,8 +372,8 @@ export function GeneralSettings() {
         ) : null}
         {notifyGates.securityScanEmails ? (
           <SettingsRow
-            label="Security scan emails"
-            description="Get an email when a Claude Code security scan finishes."
+            label={text.securityScanEmails}
+            description={text.securityScanEmailsDescription}
             control={
               <Switch
                 checked={securityScanEmails}
@@ -326,8 +389,8 @@ export function GeneralSettings() {
         ) : null}
         {notifyGates.dispatchMessages ? (
           <SettingsRow
-            label="Dispatch messages"
-            description="Get a push notification on your phone when Claude messages you in Dispatch."
+            label={text.dispatchMessages}
+            description={text.dispatchMessagesDescription}
             control={
               <Switch
                 checked={dispatchMessages}

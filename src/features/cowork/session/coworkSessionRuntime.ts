@@ -9,6 +9,7 @@ import type { OfficialStreamSnapshot } from "../../epitaxy/officialStreamSmoothe
 import {
   organizationUuidFromBootstrap,
 } from "../../settings/accountSettingsApi";
+import { emitResponseCompletion } from "../../settings/responseCompletionNotify";
 import { createPendingCoworkUserMessage } from "./coworkPendingMessages";
 import {
   coworkPermissionResolvedId,
@@ -227,6 +228,43 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
         sessionId,
       });
     }
+    // Official D1e ~113842: sdk_mcp_status → Re(statuses) / sessionContext.sdkMcpStatuses.
+    // Honest residual: no q1(local_mcp_servers) → a1.setLocalClient/Tools (full mcpCoordinator).
+    else if (type === "sdk_mcp_status") {
+      applySdkMcpStatusEvent(raw);
+    }
+  }
+
+  function applySdkMcpStatusEvent(raw: Record<string, unknown>) {
+    const data = raw.data;
+    let statuses: unknown = null;
+    if (typeof data === "string") {
+      try {
+        const parsed = JSON.parse(data) as { statuses?: unknown };
+        statuses = parsed.statuses;
+      } catch {
+        return;
+      }
+    } else if (data && typeof data === "object") {
+      statuses = (data as { statuses?: unknown }).statuses;
+    }
+    if (!Array.isArray(statuses)) return;
+    const normalized = statuses
+      .map((entry) => {
+        const rec = asRecord(entry);
+        const name = stringValue(rec.name);
+        const status = stringValue(rec.status);
+        if (!name || !status) return null;
+        return {
+          name,
+          status,
+          ...(typeof rec.configType === "string" ? { configType: rec.configType } : {}),
+          ...(typeof rec.displayName === "string" ? { displayName: rec.displayName } : {}),
+          ...(typeof rec.toolCount === "number" ? { toolCount: rec.toolCount } : {}),
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+    dispatch({ statuses: normalized, type: "sdk-mcp-statuses" });
   }
 
   function applyRateLimitEvent(event: unknown): boolean {
@@ -404,6 +442,8 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
     // Official result/done/error → Pke.clear (null Va); not message_stop.
     officialStreamClear(sessionId);
     dispatch({ disconnected: raw.code === 1, type: "settled" });
+    // Desktop response-completions bridge (YBe gate + away-window); not FCM residual.
+    emitResponseCompletion({ title: "Claude", body: "Response complete" });
   }
 
   function applyInitializationStatus(raw: Record<string, unknown>) {

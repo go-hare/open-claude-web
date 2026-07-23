@@ -252,6 +252,34 @@ export function useCoworkOpenSkill() {
   );
 }
 
+/**
+ * Official conversation path residual (index-BELzQL5P):
+ * `onOpenArtifact: showArtifacts ? gt : void 0` where
+ * `showArtifacts = Boolean(ve?.preview_feature_uses_artifacts || ue)`.
+ * Opens cFt drawer with SELECT_ARTIFACT / SELECT_COWORK_ARTIFACT.
+ */
+export function useCoworkOpenArtifact() {
+  const { dispatchChatResource } = useCoworkChatResource();
+  const { setIsDrawerExpanded } = useCoworkDrawerExpanded();
+  return useCallback(
+    (artifact: { id?: string; identifier?: string; messageUuid?: string } | unknown) => {
+      const record =
+        artifact && typeof artifact === "object" ? (artifact as Record<string, unknown>) : {};
+      const id =
+        (typeof record.id === "string" && record.id)
+        || (typeof record.identifier === "string" && record.identifier)
+        || "";
+      if (!id) return;
+      dispatchChatResource({ type: "SELECT_COWORK_ARTIFACT", id });
+      if (typeof record.messageUuid === "string" && record.messageUuid) {
+        dispatchChatResource({ type: "SET_ACTIVE_MESSAGE_UUID", uuid: record.messageUuid });
+      }
+      setIsDrawerExpanded(true);
+    },
+    [dispatchChatResource, setIsDrawerExpanded],
+  );
+}
+
 /** Official Gzt/cFt onClose: clear selection + collapse drawer. */
 export function useCoworkCloseFileDrawer() {
   const { dispatchChatResource } = useCoworkChatResource();

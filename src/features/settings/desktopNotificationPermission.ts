@@ -2,7 +2,10 @@
  * Official Response completions / Code push residual (c0db37792 ce/de):
  * when enabling push, request desktop notification authorization if not granted.
  * Bridge: claude.web.DesktopNotifications.getAuthorizationStatus / requestAuthorization.
- * Storage key for Response completions is local entitlement (not org feature_preference).
+ *
+ * Preference storage (official YBe/ZBe/KBe): feature_preference.compass + completion
+ * via PATCH /api/organizations/:uuid/notification/preferences — see useSettingsBootstrap.
+ * RESPONSE_COMPLETIONS_KEY is a legacy local mirror only; General UI no longer uses it.
  */
 
 export const RESPONSE_COMPLETIONS_KEY = "settings:responseCompletions";

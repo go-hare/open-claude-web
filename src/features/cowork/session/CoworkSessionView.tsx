@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { RouteViewProps } from "../../../app/routes";
+import {
+  ARTIFACTS_PREF_EVENT,
+  readPreviewFeatureUsesArtifacts,
+} from "../../settings/artifactsPreference";
 import { CoworkPermissionApprovals } from "../composer/CoworkPermissionApprovals";
 import { CoworkSessionComposer } from "../composer/CoworkSessionComposer";
 import { CoworkActivityPanelHeaderToggle } from "./activity/CoworkActivityPanelShell";
@@ -10,6 +14,7 @@ import {
   CoworkChatResourceProvider,
   useCoworkCloseFileDrawer,
   useCoworkFileDrawerOpen,
+  useCoworkOpenArtifact,
   useCoworkOpenFile,
   useCoworkSelectedItem,
   useCoworkStreamingFile,
@@ -48,6 +53,10 @@ export function CoworkSessionView({ onNavigate, sessionId }: Pick<RouteViewProps
 function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "onNavigate"> & { sessionId: string }) {
   const data = useCoworkSessionData();
   const openFile = useCoworkOpenFile();
+  const openArtifactHandler = useCoworkOpenArtifact();
+  // Official showArtifacts: h?.preview_feature_uses_artifacts ?? !1 — gate onOpenArtifact.
+  const showArtifacts = usePreviewFeatureUsesArtifacts();
+  const openArtifact = showArtifacts ? openArtifactHandler : undefined;
   const closeFileDrawer = useCoworkCloseFileDrawer();
   const selectedItem = useCoworkSelectedItem();
   const selectedFile = selectedItem?.type === "file" ? selectedItem : null;
@@ -111,8 +120,15 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
   }, [hasMessages, isLoading, sessionId]);
   useCoworkScrollShortcuts(sessionId, transcriptScrollRef, scrollToBottom);
   const actions = useMemo(
-    () => ({ bridge: coworkSessionsBridge, onNavigate, openFile, reload: data.reload, sessionId }),
-    [data.reload, onNavigate, openFile, sessionId],
+    () => ({
+      bridge: coworkSessionsBridge,
+      onNavigate,
+      openArtifact,
+      openFile,
+      reload: data.reload,
+      sessionId,
+    }),
+    [data.reload, onNavigate, openArtifact, openFile, sessionId],
   );
   const title = coworkSessionTitle(data.session?.title);
   // Official cFt: selectedItem type switch — file → Gzt, else activity detail panels.
@@ -298,4 +314,27 @@ function lastVisibleUserText(messageUuids: string[]) {
     if (text) return text;
   }
   return undefined;
+}
+
+/**
+ * Official conversation residual: showArtifacts from account.settings
+ * `preview_feature_uses_artifacts` (default false on message path `?? !1`,
+ * but settings Visuals default ON `?? !0` — mirror syncs from settings bag).
+ * Re-subscribes to local preference events so toggles apply without reload.
+ */
+function usePreviewFeatureUsesArtifacts(): boolean {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === "undefined") return () => {};
+      const handler = () => onStoreChange();
+      window.addEventListener(ARTIFACTS_PREF_EVENT, handler);
+      window.addEventListener("storage", handler);
+      return () => {
+        window.removeEventListener(ARTIFACTS_PREF_EVENT, handler);
+        window.removeEventListener("storage", handler);
+      };
+    },
+    () => readPreviewFeatureUsesArtifacts(),
+    () => true,
+  );
 }

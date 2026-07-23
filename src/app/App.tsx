@@ -1,8 +1,10 @@
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { matchRoute } from "./routes";
 import { isDesktopBridgeMissingInElectron } from "../adapters/desktopBridge";
+import { subscribeResponseCompletionEvents } from "../features/settings/responseCompletionNotify";
 import { DesktopFrame } from "../shell/DesktopFrame";
 import { useDesktopCoworkAccountSync } from "./useDesktopCoworkAccountSync";
+import { useDesktopQuickEntryRecentChatsSync } from "./useDesktopQuickEntryRecentChatsSync";
 
 const getLocation = () => window.location.pathname + window.location.search;
 
@@ -18,6 +20,9 @@ const subscribeLocation = (onChange: () => void) => {
 
 export function App() {
   useDesktopCoworkAccountSync();
+  // Official ion-dist residual: feed Quick Entry bottom recent-chat list (setRecentChats).
+  useDesktopQuickEntryRecentChatsSync();
+  useEffect(() => subscribeResponseCompletionEvents(), []);
   const locationKey = useSyncExternalStore(subscribeLocation, getLocation);
   const route = useMemo(() => matchRoute(window.location.pathname), [locationKey]);
 

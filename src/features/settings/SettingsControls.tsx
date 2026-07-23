@@ -1,7 +1,26 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
+import { Combobox } from "@base-ui-components/react/combobox";
+import { AnimatePresence, motion } from "motion/react";
 import { desktopBridge, type DesktopPreferences } from "../../adapters/desktopBridge";
+import { OfficialTooltip, OfficialTooltipWrap } from "../shared/OfficialTooltip";
 import { BaseMenuItem, BaseMenuPopup, Menu } from "../../shell/BaseMenu";
 import { Icon } from "../../shell/icons";
+import {
+  CHAT_FONT_CSS_VAR,
+  CHAT_FONT_ORDER,
+  readResolvedColorMode,
+  THEME_MODE_CHANGE_EVENT,
+  type ChatFontSetting,
+} from "./appearanceSettings";
 import { OfficialAvatarGlyph } from "./officialAvatars/OfficialAvatarGlyph";
 
 /**
@@ -109,45 +128,130 @@ export function TextInputControl({
   );
 }
 
+/**
+ * Official XD SegmentedControl (index-BELzQL5P / c0db37792 Appearance):
+ * - contained: h-control + rounded bg-segment-track p-px
+ * - thumb left/width from ResizeObserver on [data-checked] (not h-control math)
+ * - icon-only segments: icon set && label undefined → aspect-square px-0 + tooltip
+ * - icon size: comfortable density → md, else sm (Ji())
+ */
 export function SegmentedControl({
   ariaLabel,
   options,
   value,
   onChange,
+  size,
+  variant = "contained",
 }: {
   ariaLabel: string;
-  options: Array<{ value: string; label: string; icon?: string }>;
+  /**
+   * Official segment shape: `{ value, icon?, label?, tooltip? }`.
+   * Appearance passes icon + tooltip only (no label) so buttons stay square.
+   */
+  options: Array<{ value: string; label?: string; icon?: string; tooltip?: string }>;
   value: string;
   onChange: (value: string) => void;
+  /** Official size → data-size; Appearance leaves undefined (inherit density). */
+  size?: "xs" | "sm" | "md" | "lg";
+  variant?: "contained" | "ghost";
 }) {
-  const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null);
+  // Official f = "comfortable"===Ji() ? "md" : "sm"
+  const iconSize = useMemo<"sm" | "md">(() => {
+    if (typeof document === "undefined") return "md";
+    const density =
+      document.querySelector(".cds-root[data-density]")?.getAttribute("data-density")
+      ?? "comfortable";
+    return density === "comfortable" ? "md" : "sm";
+  }, []);
+
+  const measureThumb = useCallback(() => {
+    const root = rootRef.current;
+    const checked = root?.querySelector<HTMLElement>("[data-checked]");
+    if (!checked) {
+      setThumb(null);
+      return;
+    }
+    setThumb({ left: checked.offsetLeft, width: checked.offsetWidth });
+  }, []);
+
+  useEffect(() => {
+    measureThumb();
+    const root = rootRef.current;
+    if (!root || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => measureThumb());
+    observer.observe(root);
+    for (const child of Array.from(root.children)) {
+      if (child instanceof HTMLElement) observer.observe(child);
+    }
+    return () => observer.disconnect();
+  }, [measureThumb, value, options.length, size, variant]);
+
+  const contained = variant === "contained";
+
   return (
     <div
+      ref={rootRef}
       aria-label={ariaLabel}
-      className="relative inline-flex w-fit items-stretch h-control rounded bg-segment-track p-px"
+      className={`relative inline-flex w-fit items-stretch h-control ${
+        contained ? "rounded bg-segment-track p-px" : "gap-[1px]"
+      }`}
       data-cds="SegmentedControl"
+      data-size={size}
       role="radiogroup"
     >
-      <div
-        aria-hidden="true"
-        className="absolute rounded-[calc(var(--cds-radius)-1px)] bg-segment-thumb transition-[left,width] duration-base ease-snap motion-reduce:transition-none top-px bottom-px [box-shadow:inset_0_0_0_1px_var(--cds-border),0_1px_2px_0_rgb(0_0_0/0.05)]"
-        style={{ left: `calc(${selectedIndex} * var(--cds-h-control) + 1px)`, width: "calc(var(--cds-h-control) - 2px)" }}
-      />
+      {thumb ? (
+        <div
+          aria-hidden="true"
+          className={
+            "absolute rounded-[calc(var(--cds-radius)-1px)] bg-segment-thumb transition-[left,width] duration-base ease-snap motion-reduce:transition-none "
+            + (contained
+              ? "top-px bottom-px [box-shadow:inset_0_0_0_1px_var(--cds-border),0_1px_2px_0_rgb(0_0_0/0.05)]"
+              : "inset-y-0 [box-shadow:inset_0_0_0_1px_var(--cds-border)]")
+          }
+          style={{ left: thumb.left, width: thumb.width }}
+        />
+      ) : null}
       {options.map((option) => {
         const selected = option.value === value;
-        return (
+        // Official XD: t = e.icon && void 0 === e.label; tooltip s = e.tooltip ?? String(e.value)
+        const iconOnly = Boolean(option.icon && option.label === undefined);
+        const tooltip =
+          option.tooltip
+          ?? (typeof option.label === "string" ? option.label : undefined)
+          ?? String(option.value);
+        const button = (
           <button
-            key={option.value}
             aria-checked={selected}
-            className="cds-reset relative z-[1] inline-flex items-center justify-center gap-1.5 select-none border-0 bg-transparent outline-none rounded-[calc(var(--cds-radius)-2px)] text-body hover:text-primary data-[checked]:text-primary disabled:opacity-50 disabled:hover:text-current transition-shadow duration-fast focus-visible:shadow-focus text-muted aspect-square px-0"
+            aria-label={iconOnly ? tooltip : undefined}
+            className={
+              "cds-reset relative z-[1] inline-flex items-center justify-center gap-1.5 px-md select-none border-0 bg-transparent outline-none rounded-[calc(var(--cds-radius)-2px)] text-body hover:text-primary data-[checked]:text-primary disabled:opacity-50 disabled:hover:text-current transition-shadow duration-fast focus-visible:shadow-focus "
+              + (contained
+                ? "text-muted"
+                : "text-secondary [&:not([data-checked])]:hover:bg-fill-ghost-hover")
+              + (iconOnly ? " aspect-square px-0" : "")
+            }
             data-checked={selected ? "" : undefined}
             onClick={() => onChange(option.value)}
             role="radio"
-            title={option.label}
             type="button"
           >
-            {option.icon ? <Icon name={option.icon} size="sm" /> : null}
+            {option.icon ? <Icon name={option.icon} size={iconSize} /> : null}
+            {option.label}
           </button>
+        );
+        // Official XD: return t ? a.jsx(rl, { content: s, children: n }, e.value) : n
+        // rl = OfficialTooltip; content is already locale-resolved (zh: 跟随系统/浅色/深色).
+        if (iconOnly) {
+          return (
+            <OfficialTooltip key={option.value} side="top" tooltipContent={tooltip}>
+              {button}
+            </OfficialTooltip>
+          );
+        }
+        return (
+          <Fragment key={option.value}>{button}</Fragment>
         );
       })}
     </div>
@@ -160,83 +264,457 @@ type SelectOption = {
   fontFamily?: string;
 };
 
+type GhostSelectItem = {
+  fontFamily?: string;
+  label: ReactNode;
+  value: string;
+};
+
+/**
+ * Official c43c5949a $a Combobox residual (General work_function c0db37792):
+ * mode="select" variant="ghost" fullWidth=false align="end" searchable=false.
+ *
+ * Trigger shell = oa + ia.ghost + sa.select + pr-sm
+ * Portal = le (cds-root + data-mode/density/platform) so shadow-panel ring tokens resolve
+ * Popup = pa (rounded-card + popover surface) / ha / ma / ga + check indicator
+ * Positioner: side bottom, sideOffset 6, positionMethod fixed, z-popover,
+ * w-[var(--anchor-width)] min-w-[12rem]; anchor is the outer shell (official ye).
+ */
+const ghostSelectTriggerShell =
+  "cds-reset group/cbx inline-flex min-w-0 items-center gap-1.5 h-control rounded text-body text-primary outline-none transition duration-fast data-[disabled]:opacity-50 data-[disabled]:pointer-events-none bg-transparent hover:bg-fill-ghost-hover pl-0 has-[:focus-visible]:shadow-focus data-[disabled]:cursor-default pr-sm";
+
+/**
+ * Official pa = flex flex-col max-h… + ra("popover") + cds-reset…
+ * Theme tokens come from portal le (CdsPortalRoot), not from putting bare
+ * cds-root on the popup (bare cds-root without data-mode resets to light rings).
+ */
+const ghostSelectPopupClassName =
+  "flex flex-col max-h-[min(var(--available-height),var(--cds-popup-max-h,320px))] rounded-card bg-surface-3 backdrop-blur-[12px] shadow-panel cds-reset text-body text-primary outline-none data-[starting-style]:opacity-0";
+
+const ghostSelectPopupInnerClassName =
+  "flex min-h-0 flex-1 flex-col overflow-hidden rounded-[inherit] p-1";
+
+const ghostSelectListClassName =
+  "cds-reset min-h-0 flex-1 overflow-y-auto outline-none";
+
+const ghostSelectItemClassName =
+  "cds-reset group/cbx-item flex w-full items-center gap-2 min-h-control px-md py-1 rounded text-body text-primary select-none outline-none data-[highlighted]:bg-fill-ghost-hover data-[disabled]:opacity-50 data-[disabled]:pointer-events-none";
+
+const ghostSelectSearchInputClassName =
+  "-mx-1 -mt-1 mb-1 block w-[calc(100%+8px)] shrink-0 cds-reset bg-transparent border-0 border-b border-b-[var(--cds-border)] outline-none px-[calc(var(--cds-pad-md)+4px)] py-2 text-body text-primary placeholder:text-muted";
+
+/**
+ * Official le (c43c5949a): portaled surfaces re-root CDS tokens (ring/shadow-panel).
+ * Without this, shadow-panel loses --cds-ring-* / --cds-shadow-popover and looks borderless.
+ */
+function CdsPortalRoot({ children }: { children: ReactNode }) {
+  const [mode, setMode] = useState<"light" | "dark">(() => readResolvedColorMode());
+  useEffect(() => {
+    const sync = () => setMode(readResolvedColorMode());
+    sync();
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    media.addEventListener("change", sync);
+    window.addEventListener("storage", sync);
+    window.addEventListener(THEME_MODE_CHANGE_EVENT, sync);
+    return () => {
+      media.removeEventListener("change", sync);
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(THEME_MODE_CHANGE_EVENT, sync);
+    };
+  }, []);
+  return (
+    <div
+      className="cds-root"
+      data-cds-portal=""
+      data-density="default"
+      data-mode={mode}
+      data-platform="desktop"
+    >
+      {children}
+    </div>
+  );
+}
+
 export function GhostSelect({
   align = "end",
+  fullWidth = false,
   options,
   placeholder,
+  searchable,
   value,
   onChange,
 }: {
   align?: "start" | "center" | "end";
+  fullWidth?: boolean;
   options: SelectOption[];
   placeholder?: string;
+  /** Official default: true when items.length > 5. Work-function passes false. */
+  searchable?: boolean;
   value: string;
   onChange: (value: string) => void;
 }) {
-  const selected = options.find((option) => option.value === value);
-  const [highlighted, setHighlighted] = useState<string | null>(null);
-  const activeValue = highlighted ?? selected?.value ?? options[0]?.value;
-  const activeIndex = Math.max(0, options.findIndex((option) => option.value === activeValue));
-  const menuLabel = typeof selected?.label === "string" ? selected.label : selected?.label ?? placeholder;
+  const shellRef = useRef<HTMLDivElement>(null);
+  const items = useMemo<GhostSelectItem[]>(
+    () =>
+      options.map((option) => ({
+        value: option.value,
+        label: option.label,
+        fontFamily: option.fontFamily,
+      })),
+    [options],
+  );
+  const selected = useMemo(
+    () => items.find((item) => item.value === value) ?? null,
+    [items, value],
+  );
+  // Official A = searchable ?? (items.length > 5)
+  const enableSearch = searchable ?? items.length > 5;
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
 
-  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (options.length === 0) return;
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      const delta = event.key === "ArrowDown" ? 1 : -1;
-      const next = options[(activeIndex + delta + options.length) % options.length];
-      setHighlighted(next?.value ?? null);
-    }
-    if (event.key === "Home") {
-      event.preventDefault();
-      setHighlighted(options[0]?.value ?? null);
-    }
-    if (event.key === "End") {
-      event.preventDefault();
-      setHighlighted(options.at(-1)?.value ?? null);
-    }
-  };
+  // Official ve: when !searchable && mode select → filter null (no typeahead filter UI).
+  // Still keep a client filter when searchable for the popup search field.
+  const filtered = useMemo(() => {
+    if (!enableSearch) return items;
+    const needle = query.trim().toLocaleLowerCase();
+    if (!needle) return items;
+    return items.filter((item) => {
+      const label = typeof item.label === "string" ? item.label : item.value;
+      return (
+        label.toLocaleLowerCase().includes(needle)
+        || item.value.toLocaleLowerCase().includes(needle)
+      );
+    });
+  }, [enableSearch, items, query]);
+
+  const triggerLabel = selected ? (
+    <span style={selected.fontFamily ? { fontFamily: selected.fontFamily } : undefined}>
+      {selected.label}
+    </span>
+  ) : (
+    <span className="font-normal text-muted">{placeholder ?? "\u00a0"}</span>
+  );
 
   return (
-    <Menu.Root onOpenChange={(open) => !open && setHighlighted(null)}>
+    <Combobox.Root
+      // Official non-searchable select: filter null; searchable path filters via Re input + our filtered items.
+      filter={null}
+      items={filtered}
+      value={selected}
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setQuery("");
+      }}
+      onValueChange={(next) => {
+        if (next && typeof next === "object" && "value" in next) {
+          onChange(String((next as GhostSelectItem).value));
+        }
+      }}
+      onInputValueChange={(next) => {
+        if (enableSearch) setQuery(next);
+      }}
+      isItemEqualToValue={(a, b) => a?.value === b?.value}
+      itemToStringLabel={(item) =>
+        typeof item?.label === "string" ? item.label : item?.value ?? ""
+      }
+      itemToStringValue={(item) => item?.value ?? ""}
+    >
+      {/* Official ye shell: oa + ia[variant] + sa[mode] + pr-sm + optional w-full */}
+      <div
+        ref={shellRef}
+        className={`${ghostSelectTriggerShell}${fullWidth ? " w-full" : ""}`}
+        data-official-source="c43c5949a:$a ghost select"
+      >
+        <Combobox.Trigger
+          className="cds-reset flex min-w-0 flex-1 items-center gap-1.5 self-stretch pl-sm text-left border-0 bg-transparent p-0 outline-none"
+          type="button"
+        >
+          <span className="min-w-0 flex-1 truncate">{triggerLabel}</span>
+          <Icon
+            name="CaretDown"
+            size="sm"
+            className="mr-0.5 shrink-0 text-muted transition-colors group-hover/cbx:text-secondary"
+          />
+        </Combobox.Trigger>
+      </div>
+      <Combobox.Portal>
+        {/* Official is → le → ps → ms; le re-roots --cds-ring-* for shadow-panel border. */}
+        <CdsPortalRoot>
+          <Combobox.Positioner
+            align={align}
+            anchor={shellRef}
+            className="z-popover w-[var(--anchor-width)] min-w-[12rem]"
+            positionMethod="fixed"
+            side="bottom"
+            sideOffset={6}
+          >
+            <Combobox.Popup className={ghostSelectPopupClassName} data-cds="Combobox">
+              <div className={ghostSelectPopupInnerClassName}>
+                {/* Official Re: search field only when mode select && searchable */}
+                {enableSearch ? (
+                  <Combobox.Input
+                    className={ghostSelectSearchInputClassName}
+                    placeholder={placeholder}
+                  />
+                ) : null}
+                <div className={ghostSelectListClassName} tabIndex={-1}>
+                  {/*
+                    Official non-virtual List (c43c5949a $a → rs + Ea):
+                    children is Collection render fn WITHOUT index prop.
+                    Passing index skips CompositeList register; CompositeList then
+                    truncates listRef to sortedMap.size (0) → hover never sets
+                    data-highlighted → no bg-fill-ghost-hover.
+                    Only virtualized Ea passes index={t.index}.
+                  */}
+                  <Combobox.List className="cds-reset outline-none">
+                    {(item: GhostSelectItem) => (
+                      <Combobox.Item
+                        className={ghostSelectItemClassName}
+                        key={item.value}
+                        value={item}
+                      >
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span
+                            className="truncate"
+                            style={item.fontFamily ? { fontFamily: item.fontFamily } : undefined}
+                          >
+                            {item.label}
+                          </span>
+                        </div>
+                        <Combobox.ItemIndicator className="shrink-0 text-accent">
+                          <Icon name="Check" size="sm" />
+                        </Combobox.ItemIndicator>
+                      </Combobox.Item>
+                    )}
+                  </Combobox.List>
+                </div>
+              </div>
+            </Combobox.Popup>
+          </Combobox.Positioner>
+        </CdsPortalRoot>
+      </Combobox.Portal>
+    </Combobox.Root>
+  );
+}
+
+/**
+ * Official se Chat font (c0db37792): Menu k.Root/Trigger/Popup — not Combobox.
+ * Trigger: ghost h-control + sample fontFamily var(K[value].claude)
+ * Popup: w-56 listbox; item highlight via hover/focus; Check size md when selected.
+ */
+export function ChatFontSelect({
+  labels,
+  onChange,
+  value,
+}: {
+  labels: Record<ChatFontSetting, string>;
+  onChange: (value: ChatFontSetting) => void;
+  value: ChatFontSetting;
+}) {
+  const selected = CHAT_FONT_ORDER.includes(value) ? value : "default";
+  return (
+    <Menu.Root>
       <Menu.Trigger
         className="cds-reset inline-flex h-control min-w-0 cursor-default items-center gap-1.5 rounded bg-transparent pl-sm pr-0.5 text-body text-primary outline-none transition duration-fast hover:bg-fill-ghost-hover focus-visible:shadow-focus"
         type="button"
       >
-        <span className="truncate" style={selected?.fontFamily ? { fontFamily: selected.fontFamily } : undefined}>{menuLabel}</span>
-        <span aria-hidden="true" className="pointer-events-none flex size-icon shrink-0 items-center justify-center text-muted">
+        <span
+          className="truncate"
+          style={{ fontFamily: `var(${CHAT_FONT_CSS_VAR[selected]})` }}
+        >
+          {labels[selected]}
+        </span>
+        <span
+          aria-hidden="true"
+          className="pointer-events-none flex size-icon shrink-0 items-center justify-center text-muted"
+        >
           <Icon name="CaretDown" size="sm" />
         </span>
       </Menu.Trigger>
-      <BaseMenuPopup align={align} className="w-56" side="bottom" sideOffset={4}>
+      <BaseMenuPopup align="end" className="w-56" side="bottom" sideOffset={6}>
         <div
-          aria-label={placeholder}
+          aria-label="Chat font"
           className="-m-pad-lg flex flex-col p-1"
-          onKeyDown={onKeyDown}
-          onMouseLeave={() => setHighlighted(null)}
           role="listbox"
         >
-          {options.map((option) => (
-            <button
-              aria-selected={option.value === value}
-              className={`cds-reset flex min-h-control w-full cursor-default select-none items-center gap-2 rounded px-md py-1 text-left text-body text-primary outline-none ${option.value === highlighted ? "bg-fill-ghost-hover" : ""}`}
-              key={option.value}
-              onClick={() => onChange(option.value)}
-              onFocus={() => setHighlighted(option.value)}
-              onMouseEnter={() => setHighlighted(option.value)}
-              role="option"
-              style={option.fontFamily ? { fontFamily: option.fontFamily } : undefined}
-              tabIndex={option.value === activeValue ? 0 : -1}
-              type="button"
-            >
-              <span className="min-w-0 flex-1 truncate">{option.label}</span>
-              {option.value === value ? <Icon name="Check" size="md" className="shrink-0 text-accent" /> : null}
-            </button>
-          ))}
+          {CHAT_FONT_ORDER.map((font) => {
+            const active = font === selected;
+            return (
+              <Menu.Item
+                key={font}
+                className="cds-reset flex min-h-control w-full cursor-default select-none items-center gap-2 rounded px-md py-1 text-left text-body text-primary outline-none data-[highlighted]:bg-fill-ghost-hover"
+                onClick={() => onChange(font)}
+              >
+                <span
+                  className="min-w-0 flex-1 truncate"
+                  style={{ fontFamily: `var(${CHAT_FONT_CSS_VAR[font]})` }}
+                >
+                  {labels[font]}
+                </span>
+                {active ? (
+                  <Icon name="Check" size="md" className="shrink-0 text-accent" />
+                ) : null}
+              </Menu.Item>
+            );
+          })}
         </div>
       </BaseMenuPopup>
     </Menu.Root>
   );
+}
+
+/**
+ * Official X → Y conversation_preferences (c0db37792):
+ * autosize textarea min-h-[5.5rem] max-h-40; rotating placeholders when empty.
+ */
+/**
+ * Official RIe rotating placeholders (index-BELzQL5P):
+ *   interval default 6000; AnimatePresence + motion.p
+ *   initial { opacity:0, y:4 } → animate { opacity:1, y:0, transition:{ delay:0.3 } }
+ *   exit { opacity:0, y:-4 }
+ * c0db37792 Y: className "!px-sm !py-sm text-body text-muted" over base absolute inset padding.
+ */
+function SettingsRotatingPlaceholders({
+  className,
+  interval = 6000,
+  isShown,
+  placeholders,
+}: {
+  className?: string;
+  interval?: number;
+  isShown: boolean;
+  placeholders: string[];
+}) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isShown || placeholders.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setIndex((current) => (current + 1) % placeholders.length);
+    }, interval);
+    return () => window.clearInterval(timer);
+  }, [interval, isShown, placeholders.length]);
+
+  useEffect(() => {
+    if (!isShown) setIndex(0);
+  }, [isShown]);
+
+  return (
+    <div
+      aria-hidden="true"
+      className={[
+        "absolute top-0 left-0 right-0 bottom-0 w-full h-full p-3 pointer-events-none",
+        !isShown ? "opacity-0" : "",
+        className ?? "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-official-source="index-BELzQL5P:RIe"
+    >
+      {isShown ? (
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={index}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0, transition: { delay: 0.3 } }}
+            exit={{ opacity: 0, y: -4 }}
+            className="break-words absolute text-body text-muted"
+          >
+            {placeholders[index % Math.max(placeholders.length, 1)] ?? ""}
+          </motion.p>
+        </AnimatePresence>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Official X Instructions field (c0db37792): R tooltip when CMEK + Y textarea.
+ * disabled + opacity-50 + aria-disabled when locked (LBt taint:cmek).
+ * Placeholder rotation: official RIe (not plain text swap).
+ */
+export function InstructionsPreferencesField({
+  description,
+  disabled = false,
+  id = "conversation-preferences",
+  label,
+  lockTooltip,
+  onSave,
+  placeholders,
+  value,
+}: {
+  description: ReactNode;
+  disabled?: boolean;
+  id?: string;
+  label: ReactNode;
+  /** Official D4CuWTj4f5 when CMEK lock active. */
+  lockTooltip?: string;
+  onSave: (value: string) => void;
+  placeholders: string[];
+  value: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) setDraft(value);
+  }, [value]);
+
+  // Official Y: isShown = !value (draft empty) && not disabled
+  const showPlaceholder = !disabled && draft.length === 0 && placeholders.length > 0;
+
+  const field = (
+    <div
+      className={["flex flex-col gap-sm py-md", disabled ? "opacity-50" : ""].filter(Boolean).join(" ")}
+      aria-disabled={disabled || undefined}
+      tabIndex={disabled ? 0 : undefined}
+    >
+      <label className="text-body text-primary" htmlFor={id}>
+        {label}
+      </label>
+      <div className="text-footnote text-neutral-500">{description}</div>
+      <div className="relative">
+        <textarea
+          id={id}
+          className="cds-input cds-reset min-h-[5.5rem] max-h-40 w-full resize-y rounded bg-fill-field px-sm py-sm text-body text-primary shadow-field-ring outline-none transition duration-fast placeholder:text-muted focus-visible:bg-surface-popover focus-visible:shadow-focus disabled:cursor-not-allowed"
+          rows={3}
+          value={draft}
+          disabled={disabled}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+          onFocus={() => {
+            focused.current = true;
+          }}
+          onBlur={() => {
+            focused.current = false;
+            if (disabled || draft === value) return;
+            onSave(draft);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && draft !== value) {
+              event.stopPropagation();
+              setDraft(value);
+            }
+          }}
+        />
+        <SettingsRotatingPlaceholders
+          className="!px-sm !py-sm text-body text-muted"
+          isShown={showPlaceholder}
+          placeholders={placeholders}
+        />
+      </div>
+    </div>
+  );
+
+  if (disabled && lockTooltip) {
+    return (
+      <OfficialTooltipWrap tooltipContent={lockTooltip} side="top">
+        {field}
+      </OfficialTooltipWrap>
+    );
+  }
+
+  return field;
 }
 
 export function WorktreeSelect({ onChange, value = "default" }: { onChange: (value: DesktopPreferences["chillingSlothLocation"]) => void; value?: DesktopPreferences["chillingSlothLocation"] }) {

@@ -28,7 +28,21 @@ export function CoworkAssistantContentSegment({ hasTextAfter, isLastContent, seg
     actions?.openFile({ path, toolType: "create_file" });
   }, [actions]);
   if (!shouldRenderContent(segment.blocks, hasTextAfter, context.isThisMessageStreaming)) return null;
-  return <>{segment.blocks.map((block, index) => renderContentBlock(block, index, context.blocks, context, isLastContent, onLinkClick))}</>;
+  return (
+    <>
+      {segment.blocks.map((block, index) =>
+        renderContentBlock(
+          block,
+          index,
+          context.blocks,
+          context,
+          isLastContent,
+          onLinkClick,
+          actions?.openArtifact,
+        ),
+      )}
+    </>
+  );
 }
 
 export function CoworkContentAfterTimeline({ store, timelineIndex }: {
@@ -53,13 +67,27 @@ function renderContentBlock(
   context: ReturnType<typeof useCoworkAssistantRenderContext>,
   isLastContent: boolean,
   onLinkClick?: (event: MouseEvent<HTMLAnchorElement>, url: string) => void,
+  onOpenArtifact?: (artifact: unknown) => void,
 ) {
   const globalIndex = allBlocks.indexOf(block);
   if (block.type === "text" || block.type === "connector_text") {
     const text = block.type === "text" ? block.text : block.connector_text;
     if (!text) return null;
     const className = context.isThisMessageStreaming ? "progressive-markdown" : "standard-markdown";
-    return <CoworkAssistantMarkdown blockCitations={Array.isArray(block.citations) ? block.citations : []} className={className} isStreaming={context.isThisMessageStreaming} key={blockKey(block, index)} messageUuid={context.message.uuid} onLinkClick={onLinkClick} text={text} />;
+    // Official residual: onOpenArtifact only when showArtifacts (preview_feature_uses_artifacts).
+    // Missing handler → markdown falls back to plain <antArtifact> text (CoworkMarkdown renderHtml).
+    return (
+      <CoworkAssistantMarkdown
+        blockCitations={Array.isArray(block.citations) ? block.citations : []}
+        className={className}
+        isStreaming={context.isThisMessageStreaming}
+        key={blockKey(block, index)}
+        messageUuid={context.message.uuid}
+        onLinkClick={onLinkClick}
+        onOpenArtifact={onOpenArtifact}
+        text={text}
+      />
+    );
   }
   if (block.type !== "tool_use") return null;
   const nextBlock = globalIndex >= 0 ? allBlocks[globalIndex + 1] : undefined;

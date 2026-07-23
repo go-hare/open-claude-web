@@ -1,5 +1,9 @@
 import { SettingsRow, SettingsSection, Switch } from "../SettingsShell";
 import { BranchInput, WorktreeSelect } from "../SettingsControls";
+import {
+  renderClaudeCodeBypassDescription,
+  useClaudeCodeSettingsText,
+} from "../settingsMessages";
 import { useDesktopPreferences } from "../useDesktopPreferences";
 import { useSettingsBootstrap } from "../useSettingsBootstrap";
 
@@ -7,16 +11,17 @@ import { useSettingsBootstrap } from "../useSettingsBootstrap";
  * Official ClaudeCodePage (cc989143e): Local sessions Ct + Pull requests _t.
  * Local: te.setPreference desktop bridge.
  * PR: account.settings ccr_auto_create_pr_on_push / ccr_auto_create_pr_as_draft via mutate J().
- * Copy from official defaultMessage strings (Allow bypass permissions mode, Bounce dock, …).
+ * Official autoCreate: settings.ccr_auto_create_pr_on_push ?? false (account only).
+ * Auto-archive / autofix use Statsig copy keys — residual EN below (not spa i18n).
  */
 export function ClaudeCodeSettings() {
+  const text = useClaudeCodeSettingsText();
   const [preferences, setPreference] = useDesktopPreferences();
   const { bootstrap, updateAccountSetting } = useSettingsBootstrap();
   const settings = bootstrap.account?.settings ?? {};
-  // Official: g = settings.ccr_auto_create_pr_on_push ?? false; h = settings.ccr_auto_create_pr_as_draft ?? true
-  const autoCreatePr =
-    settings.ccr_auto_create_pr_on_push === true
-    || (settings.ccr_auto_create_pr_on_push === undefined && !!preferences.autoCreatePullRequests);
+  // Official _t: g = settings.ccr_auto_create_pr_on_push ?? false (no desktop pref fallback).
+  const autoCreatePr = settings.ccr_auto_create_pr_on_push === true;
+  // Official: h = settings.ccr_auto_create_pr_as_draft ?? true
   const createAsDraft = settings.ccr_auto_create_pr_as_draft !== false;
 
   const setAccountFlag = (key: "ccr_auto_create_pr_on_push" | "ccr_auto_create_pr_as_draft", next: boolean) => {
@@ -29,10 +34,10 @@ export function ClaudeCodeSettings() {
 
   return (
     <main>
-      <SettingsSection title="Local sessions">
+      <SettingsSection title={text.localSessions}>
         <SettingsRow
-          label="Allow bypass permissions mode"
-          description="Bypass all permission checks so Claude can work without interruption. This is useful for workflows like fixing lint errors or generating boilerplate. Letting Claude run arbitrary commands is risky and can lead to data loss, system damage, or data exfiltration (for example via prompt injection)."
+          label={text.allowBypassPermissionsMode}
+          description={renderClaudeCodeBypassDescription(text.allowBypassPermissionsModeDescription)}
           control={
             <Switch
               checked={!!preferences.bypassPermissionsModeEnabled}
@@ -41,8 +46,8 @@ export function ClaudeCodeSettings() {
           }
         />
         <SettingsRow
-          label="Notify me when attention is needed"
-          description="Bounce the dock icon or flash the taskbar when Claude needs your attention and the app is not focused."
+          label={text.drawAttentionOnNotifications}
+          description={text.drawAttentionOnNotificationsDescription}
           control={
             <Switch
               checked={!!preferences.dockBounceEnabled}
@@ -51,8 +56,8 @@ export function ClaudeCodeSettings() {
           }
         />
         <SettingsRow
-          label="Worktree location"
-          description="Where to store git worktrees for isolated coding sessions"
+          label={text.worktreeLocation}
+          description={text.worktreeLocationDescription}
           control={
             <WorktreeSelect
               onChange={(value) => setPreference("chillingSlothLocation", value)}
@@ -61,8 +66,8 @@ export function ClaudeCodeSettings() {
           }
         />
         <SettingsRow
-          label="Branch prefix"
-          description="Prefix added to the beginning of every worktree branch name"
+          label={text.branchPrefix}
+          description={text.branchPrefixDescription}
           control={
             <BranchInput
               onChange={(value) => setPreference("ccBranchPrefix", value)}
@@ -71,8 +76,8 @@ export function ClaudeCodeSettings() {
           }
         />
         <SettingsRow
-          label="Preview"
-          description="Claude can start dev servers, open a live preview, and verify code changes with screenshots, snapshots, and DOM inspection."
+          label={text.preview}
+          description={text.previewDescription}
           control={
             <Switch
               checked={!!preferences.launchEnabled}
@@ -82,8 +87,8 @@ export function ClaudeCodeSettings() {
         />
         {preferences.launchEnabled ? (
           <SettingsRow
-            label="Persist Preview sessions"
-            description="Save cookies, local storage, and login sessions for dev server previews. Data is stored per workspace and persists across app restarts. Turning this off clears all saved session data."
+            label={text.persistPreviewSessions}
+            description={text.persistPreviewSessionsDescription}
             control={
               <Switch
                 checked={!!preferences.launchPreviewPersistSession}
@@ -93,10 +98,10 @@ export function ClaudeCodeSettings() {
           />
         ) : null}
       </SettingsSection>
-      <SettingsSection title="Pull requests">
+      <SettingsSection title={text.pullRequests}>
         <SettingsRow
-          label="Create pull requests automatically"
-          description="When Claude pushes changes to a branch, it automatically opens a pull request without asking first. Applies to remote sessions only."
+          label={text.createPullRequestsAutomatically}
+          description={text.createPullRequestsAutomaticallyDescription}
           control={
             <Switch
               checked={autoCreatePr}
@@ -107,8 +112,8 @@ export function ClaudeCodeSettings() {
         {autoCreatePr ? (
           <SettingsRow
             className="pl-6"
-            label="Create as draft"
-            description="Open auto-created pull requests as drafts instead of ready for review."
+            label={text.createAsDraft}
+            description={text.createAsDraftDescription}
             control={
               <Switch
                 checked={createAsDraft}
@@ -117,6 +122,7 @@ export function ClaudeCodeSettings() {
             }
           />
         ) : null}
+        {/* Official _t Auto-archive: Statsig 1wdvcl / 1kh0255 (not spa i18n). Keep residual EN. */}
         <SettingsRow
           label="Auto-archive closed PR sessions"
           description="When an auto-created pull request is closed, automatically archive the matching local session."

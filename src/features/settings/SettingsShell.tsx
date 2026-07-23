@@ -2,6 +2,7 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 import type { RouteViewProps } from "../../app/routes";
 import { Icon } from "../../shell/icons";
 import { readResolvedColorMode, THEME_MODE_CHANGE_EVENT } from "./appearanceSettings";
+import { useSettingsNavText } from "./settingsMessages";
 
 export type NavSection = {
   id: string;
@@ -74,11 +75,12 @@ export function SettingsDFrame({
 }) {
   // Official cds-root data-mode follows ThemeProvider resolved mode (not hard-coded light).
   const colorMode = useResolvedColorMode();
+  const navText = useSettingsNavText();
   const content = (
     <div className="flex flex-col overflow-hidden bg-bg-100 h-full">
       <header className="flex h-12 shrink-0 items-center gap-1 pr-4 border-b-[0.5px] border-border-200 draggable pl-24">
         <button
-          aria-label="Back to Claude"
+          aria-label={navText.backToClaude}
           className={headerButtonClass}
           onClick={() => onNavigate("/code")}
           type="button"
@@ -128,8 +130,9 @@ export function PersonalSettingsLayout({
   groups: NavGroup[];
   pathname: string;
 }) {
+  const navText = useSettingsNavText();
   return (
-    <SettingsDFrame title="设置" onNavigate={onNavigate}>
+    <SettingsDFrame title={navText.settings} onNavigate={onNavigate}>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <main className="mx-auto mt-4 w-full flex-1 px-4 md:px-8 lg:mt-6 max-w-7xl !mt-0 lg:!mt-0">
           <div className="grid grid-cols-1 md:grid-cols-[220px_minmax(0px,_1fr)] gap-x-8 w-full pt-6">
@@ -150,8 +153,9 @@ export function SettingsNav({
   groups: NavGroup[];
   pathname: string;
 }) {
+  const navText = useSettingsNavText();
   return (
-    <nav aria-label="设置" className="min-w-0 w-full -ml-3 self-start md:sticky max-md:relative z-10 mb-4 md:mb-0 md:top-6">
+    <nav aria-label={navText.settings} className="min-w-0 w-full -ml-3 self-start md:sticky max-md:relative z-10 mb-4 md:mb-0 md:top-6">
       <div className="min-w-0 p-1 -m-1">
         <div className="overflow-x-auto overflow-y-hidden min-w-0 p-1 -m-1">
           {groups.map((group, index) => (
@@ -223,46 +227,81 @@ export function SettingsSection({
   );
 }
 
+/** Official yq control render residual: `{ labelId, descriptionId }`. */
+export type SettingsRowControlRender = (ids: {
+  descriptionId?: string;
+  labelId: string;
+}) => ReactNode;
+
 export function SettingsRow({
   className,
   control,
   description,
   htmlFor,
+  indent = false,
   label,
 }: {
   className?: string;
-  control?: ReactNode;
+  control?: ReactNode | SettingsRowControlRender;
   description?: ReactNode;
   htmlFor?: string;
+  /** Official yq indent → pl-lg */
+  indent?: boolean;
   label: ReactNode;
 }) {
   const labelId = useId();
   const descriptionId = useId();
+  // Official yq: control may be function({ labelId, descriptionId }) for a11y wiring (hYt/lge).
+  const resolvedControl =
+    typeof control === "function"
+      ? control({ labelId, descriptionId: description ? descriptionId : undefined })
+      : control;
   return (
     <div
       aria-describedby={description ? descriptionId : undefined}
       aria-labelledby={labelId}
-      className={`flex items-center justify-between gap-lg py-md ${className ?? ""}`}
+      className={`flex items-center justify-between gap-lg py-md ${indent ? "pl-lg" : ""} ${className ?? ""}`}
       role="group"
     >
       <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         {htmlFor ? <label className="text-body text-primary" htmlFor={htmlFor} id={labelId}>{label}</label> : <div className="text-body text-primary" id={labelId}>{label}</div>}
         {description ? <div className="text-body text-muted" id={descriptionId}>{description}</div> : null}
       </div>
-      {control ? <div className="flex shrink-0 items-center">{control}</div> : null}
+      {resolvedControl ? <div className="flex shrink-0 items-center">{resolvedControl}</div> : null}
     </div>
   );
 }
 
-export function Switch({ checked = false, disabled = false, onCheckedChange }: { checked?: boolean; disabled?: boolean; onCheckedChange?: (checked: boolean) => void }) {
+/** Official iP CDS Switch (settings path lge→iP / cC J). */
+export function Switch({
+  "aria-describedby": ariaDescribedby,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledby,
+  checked = false,
+  disabled = false,
+  id,
+  onCheckedChange,
+}: {
+  "aria-describedby"?: string;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+  checked?: boolean;
+  disabled?: boolean;
+  id?: string;
+  onCheckedChange?: (checked: boolean) => void;
+}) {
   const data = checked ? { "data-checked": "" } : { "data-unchecked": "" };
   return (
     <>
       <button
         aria-checked={checked}
+        aria-describedby={ariaDescribedby}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledby}
         className="cds-reset relative inline-flex shrink-0 rounded-full border-0 outline-none bg-switch-track hover:bg-switch-track-hover data-[checked]:bg-fill-accent data-[checked]:hover:bg-fill-accent-hover disabled:opacity-50 disabled:hover:bg-switch-track focus-visible:shadow-focus h-switch w-[calc(var(--cds-switch-h,20px)*1.8)] p-[2px] "
         data-cds="Switch"
         disabled={disabled}
+        id={id}
         onClick={() => onCheckedChange?.(!checked)}
         role="switch"
         type="button"

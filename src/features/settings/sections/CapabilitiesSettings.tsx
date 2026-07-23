@@ -1,12 +1,17 @@
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import { SettingsRow, SettingsSection, Switch } from "../SettingsShell";
 import { GhostSelect } from "../SettingsControls";
 import { useSettingsBootstrap } from "../useSettingsBootstrap";
 import { readBootstrapFeatureFlag } from "../notificationRowGates";
+import {
+  renderMessageWithLearnMore,
+  renderMessageWithLink,
+  useCapabilitiesText,
+} from "../settingsMessages";
 
 /**
  * Official Capabilities Fe (c71860c77-CQj8rzol):
- * Te Memory · Ce General · _e Visuals · Me · ee · Ee Skills
+ * Te Memory · Ce General · _e Visuals · Me (wiggle null) · ee Feature preview · Ee Skills
  *
  * Account keys (index-BELzQL5P):
  * - enabled_saffron_search — Search and reference chats
@@ -20,9 +25,11 @@ import { readBootstrapFeatureFlag } from "../notificationRowGates";
  *
  * Product residual (3P / custom3p):
  * - GrowthBook missing → show arms that only need account/settings PATCH (no invent Anthropic memory API).
- * - Memory "Chat memory · No memory yet" when no hosted synthesis feed.
- * - Inline visualizations toggles product residual key when no connected MCP tool keys.
+ * - Memory empty Ne only when memory isAvailable residual (enabled_saffron / melange).
+ * - Memory description without userSetting API: cowork product → IStNSe/rhY (has zh).
+ * - Inline visualizations residual key when no connected MCP tool keys.
  * - Drive cataloging is an account switch (enabled_gdrive_indexing) without inventing Drive OAuth.
+ * - Me / ee (Feature preview) stay absent without residual arms — do not invent.
  */
 
 const INLINE_VISUALIZATIONS_TOOL_KEY = "inline_visualizations";
@@ -33,10 +40,23 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-export function CapabilitiesSettings() {
+export function CapabilitiesSettings({
+  onNavigate,
+}: {
+  /** Official ye() SPA navigate for Skills → /customize/skills (Ee residual). */
+  onNavigate?: (href: string) => void;
+} = {}) {
   const { bootstrap, updateAccountSetting, updateAccountSettings } = useSettingsBootstrap();
+  const text = useCapabilitiesText();
   const settings = bootstrap.account?.settings ?? {};
   const payload = bootstrap.bootstrapPayload;
+
+  const searchSwitchId = useId();
+  const csvSwitchId = useId();
+  const driveSwitchId = useId();
+  const artifactsSwitchId = useId();
+  const aiArtifactsSwitchId = useId();
+  const inlineSwitchId = useId();
 
   const showCsv = useMemo(() => {
     const flag = readBootstrapFeatureFlag(payload, "chat_follow_up_chips_main");
@@ -113,28 +133,23 @@ export function CapabilitiesSettings() {
   const showGeneral = showCsv || showToolAccess || showDriveCatalog;
   const showVisuals = true; // Artifacts always; AI / inline optional
 
+  // Official Te: without userSetting/admin block + U() cowork → IStNSe/rhY (zh present).
+  // Desktop personal shell always surfaces Cowork → cowork description residual.
+  const memoryHistoryDescription = renderMessageWithLearnMore(
+    text.generateMemoryFromHistoryDescriptionCowork,
+  );
+
   return (
     <main className="flex flex-col pb-10">
       {showMemory ? (
-        <SettingsSection title="Memory">
+        <SettingsSection title={text.memory}>
           <SettingsRow
-            label="Search and reference chats"
-            description={
-              <>
-                Allow Claude to search for relevant details in past chats.{" "}
-                <a
-                  className="cds-reset inline cursor-pointer rounded-[2px] text-accent underline decoration-[color-mix(in_srgb,currentColor,transparent_60%)] underline-offset-[3px] outline-none transition duration-fast hover:decoration-current focus-visible:shadow-focus focus-visible:decoration-current"
-                  href="https://support.claude.com/en/articles/11817273-using-claude-s-chat-search-and-memory-to-build-on-previous-context"
-                  rel="noopener noreferrer"
-                  target="_blank"
-                >
-                  Learn more
-                </a>
-                .
-              </>
-            }
+            htmlFor={searchSwitchId}
+            label={text.searchAndReferenceChats}
+            description={renderMessageWithLearnMore(text.searchAndReferenceChatsDescription)}
             control={
               <Switch
+                id={searchSwitchId}
                 checked={saffronSearchEnabled}
                 onCheckedChange={(checked) => {
                   void updateAccountSetting("enabled_saffron_search", checked);
@@ -143,22 +158,9 @@ export function CapabilitiesSettings() {
             }
           />
           <SettingsRow
-            label="Generate memory from chat history"
-            description={
-              <>
-                Allow Claude to remember relevant context from your chats. Memory includes your
-                entire chat history with Claude.{" "}
-                <a
-                  className="cds-reset inline cursor-pointer rounded-[2px] text-accent underline decoration-[color-mix(in_srgb,currentColor,transparent_60%)] underline-offset-[3px] outline-none transition duration-fast hover:decoration-current focus-visible:shadow-focus focus-visible:decoration-current"
-                  href="https://support.claude.com/en/articles/11817273-using-claude-s-chat-search-and-memory-to-build-on-previous-context"
-                  rel="noopener noreferrer"
-                  target="_blank"
-                >
-                  Learn more
-                </a>
-                .
-              </>
-            }
+            className="group"
+            label={text.generateMemoryFromHistory}
+            description={memoryHistoryDescription}
             control={
               <Switch
                 checked={memoryFromHistoryEnabled}
@@ -174,22 +176,27 @@ export function CapabilitiesSettings() {
               />
             }
           />
-          {/* Official Ne residual without hosted memory feed */}
-          <div className="flex w-full items-center justify-between rounded-lg bg-surface-1 px-md py-sm text-left cursor-default">
-            <span className="min-w-0 truncate">
-              <span className="text-body text-primary">Chat memory</span>
-              <span className="text-footnote text-muted"> · No memory yet</span>
-            </span>
-          </div>
+          {/*
+            Official Ne: only when isAvailable; empty → Chat memory · No memory yet.
+            Chrome: bg-alpha-1 (not surface-1). No invent hosted memory manage modal.
+          */}
+          {memoryFromHistoryEnabled ? (
+            <div className="flex w-full items-center justify-between rounded-lg bg-alpha-1 px-md py-sm text-left">
+              <span className="min-w-0 truncate">
+                <span className="text-body text-primary">{text.chatMemory}</span>
+                <span className="text-footnote text-muted"> · {text.noMemoryYet}</span>
+              </span>
+            </div>
+          ) : null}
         </SettingsSection>
       ) : null}
 
       {showGeneral ? (
-        <SettingsSection title="General">
+        <SettingsSection title={text.general}>
           {showToolAccess ? (
             <SettingsRow
-              label="Tool access mode"
-              description="Controls how connector tools are loaded in new conversations."
+              label={text.toolAccessMode}
+              description={text.toolAccessModeDescription}
               control={
                 <div className="w-[220px]">
                   <GhostSelect
@@ -198,11 +205,11 @@ export function CapabilitiesSettings() {
                     options={[
                       {
                         value: "on",
-                        label: "Load tools when needed",
+                        label: text.loadToolsWhenNeeded,
                       },
                       {
                         value: "off",
-                        label: "Tools already loaded",
+                        label: text.toolsAlreadyLoaded,
                       },
                     ]}
                     onChange={(value) => {
@@ -216,10 +223,12 @@ export function CapabilitiesSettings() {
           ) : null}
           {showCsv ? (
             <SettingsRow
-              label="CSV chat suggestions"
-              description="Claude will suggest responses when you upload CSVs to your conversation."
+              htmlFor={csvSwitchId}
+              label={text.csvChatSuggestions}
+              description={text.csvChatSuggestionsDescription}
               control={
                 <Switch
+                  id={csvSwitchId}
                   checked={csvSuggestionsEnabled}
                   onCheckedChange={(checked) => {
                     void updateAccountSetting("enable_chat_suggestions", checked);
@@ -230,10 +239,12 @@ export function CapabilitiesSettings() {
           ) : null}
           {showDriveCatalog ? (
             <SettingsRow
-              label="Google Drive cataloging"
-              description="Allow Claude to store and catalog your Google Drive data for more accurate search results"
+              htmlFor={driveSwitchId}
+              label={text.googleDriveCataloging}
+              description={text.googleDriveCatalogingDescription}
               control={
                 <Switch
+                  id={driveSwitchId}
                   checked={driveCatalogEnabled}
                   onCheckedChange={(checked) => {
                     // Official toggleDriveSearchAndIndexingEnabled → enabled_gdrive_indexing
@@ -247,12 +258,14 @@ export function CapabilitiesSettings() {
       ) : null}
 
       {showVisuals ? (
-        <SettingsSection title="Visuals">
+        <SettingsSection title={text.visuals}>
           <SettingsRow
-            label="Artifacts"
-            description="Generate code, documents, and designs in a dedicated window alongside your conversation."
+            htmlFor={artifactsSwitchId}
+            label={text.artifacts}
+            description={text.artifactsDescription}
             control={
               <Switch
+                id={artifactsSwitchId}
                 checked={artifactsEnabled}
                 onCheckedChange={(checked) => {
                   void updateAccountSetting("preview_feature_uses_artifacts", checked);
@@ -262,10 +275,12 @@ export function CapabilitiesSettings() {
           />
           {showAiArtifacts ? (
             <SettingsRow
-              label="AI-powered artifacts"
-              description="Build apps and interactive documents that use Claude inside the artifact."
+              htmlFor={aiArtifactsSwitchId}
+              label={text.aiPoweredArtifacts}
+              description={text.aiPoweredArtifactsDescription}
               control={
                 <Switch
+                  id={aiArtifactsSwitchId}
                   checked={aiArtifactsEnabled}
                   onCheckedChange={(checked) => {
                     void updateAccountSetting("enabled_turmeric", checked);
@@ -276,10 +291,12 @@ export function CapabilitiesSettings() {
           ) : null}
           {showInlineVisualizations ? (
             <SettingsRow
-              label="Inline visualizations"
-              description="Allow Claude to generate interactive visualizations, charts, and diagrams directly in the conversation."
+              htmlFor={inlineSwitchId}
+              label={text.inlineVisualizations}
+              description={text.inlineVisualizationsDescription}
               control={
                 <Switch
+                  id={inlineSwitchId}
                   checked={inlineChecked}
                   onCheckedChange={(checked) => {
                     // Official: reduce toolKeys into enabled_mcp_tools map.
@@ -297,16 +314,10 @@ export function CapabilitiesSettings() {
       ) : null}
 
       {showSkills ? (
-        <SettingsSection title="Skills">
+        <SettingsSection title={text.skills}>
           <p className="py-md text-footnote text-secondary">
-            Skills have moved to{" "}
-            <a
-              className="cds-reset inline cursor-pointer rounded-[2px] text-accent underline decoration-[color-mix(in_srgb,currentColor,transparent_60%)] underline-offset-[3px] outline-none transition duration-fast hover:decoration-current focus-visible:shadow-focus focus-visible:decoration-current"
-              href="/customize/skills"
-            >
-              Customize
-            </a>
-            .
+            {/* Official Ee: ye("/customize/skills") → SPA link, not full reload. */}
+            {renderMessageWithLink(text.skillsMoved, "/customize/skills", undefined, onNavigate)}
           </p>
         </SettingsSection>
       ) : null}
