@@ -134,18 +134,29 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
         showDragPinHint={frame.showDragPinHint}
         onNavigate={onNavigate}
       />
-      <section data-kind="code" className="flex min-h-0 flex-1 flex-col gap-px">
-        <div className="flex-1 min-h-[120px] overflow-hidden">
-          <SidebarSectionHeader collapsed={recentsCollapsed} onToggle={() => frame.toggleGroupCollapsed("recents")} trailing={<RecentsControls mode="code" sessions={sessions} value={filter} onChange={updateFilter} />}>{text.recent}</SidebarSectionHeader>
-          {!recentsCollapsed && (
-            isLoadingLocal && sessions.length === 0
-              ? <div className="px-[var(--df-row-px)] py-2 text-xs text-text-500" role="status">Loading…</div>
-              : rows.length > 0
-                ? <RecentRows filter={filter} frame={frame} groups={groups} onAction={actions} renderActions={renderActions} selectedSessionId={openSessionId} onNavigate={onNavigate} rows={rows} />
-                : sessions.length > 0
-                  ? <div className="px-[var(--df-row-px)] py-1 text-xs text-text-500">{text.noFilteredSessions}</div>
-                  : null
-          )}
+      {/*
+        Official ca0135 recents residual:
+        div.group/section.flex.flex-col.gap-px → Fo(label:recents) → ie(SidebarSectionHeader)
+        Caret uses group-hover/section:opacity-100 — parent MUST be group/section.
+      */}
+      <section data-kind="code" className="group/section flex min-h-0 flex-1 flex-col gap-px">
+        <SidebarSectionHeader
+          collapsed={recentsCollapsed}
+          onToggle={() => frame.toggleGroupCollapsed("recents")}
+          trailing={recentsCollapsed ? undefined : <RecentsControls mode="code" sessions={sessions} value={filter} onChange={updateFilter} />}
+        >
+          {text.recent}
+        </SidebarSectionHeader>
+        <div className={recentsCollapsed ? "hidden" : "flex min-h-0 flex-1 flex-col overflow-hidden"}>
+          {isLoadingLocal && sessions.length === 0
+            ? <div className="px-[var(--df-row-px)] py-2 text-xs text-text-500" role="status">Loading…</div>
+            : rows.length > 0
+              ? <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+                  <RecentRows filter={filter} frame={frame} groups={groups} onAction={actions} renderActions={renderActions} selectedSessionId={openSessionId} onNavigate={onNavigate} rows={rows} />
+                </div>
+              : sessions.length > 0
+                ? <div className="px-[var(--df-row-px)] py-1 text-xs text-text-500">{text.noFilteredSessions}</div>
+                : null}
         </div>
       </section>
       <ConfirmDialog

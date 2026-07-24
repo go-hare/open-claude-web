@@ -9,6 +9,7 @@ import { FrameSidebar } from "./FrameSidebar";
 import { PaneLayout } from "./PaneLayout";
 import { SearchCommandPalette } from "./SearchCommandPalette";
 import { Icon } from "./icons";
+import { sessionHomePath, type SessionNavigationMode } from "./sessionPaths";
 
 type DesktopFrameProps = {
   currentRoute: AppRoute;
@@ -28,6 +29,10 @@ export function DesktopFrame({ children, currentRoute, onNavigate }: DesktopFram
     const routeMode = modeFromPath(window.location.pathname);
     if (routeMode && frame.mode !== routeMode) frame.setMode(routeMode);
   }, [currentRoute.path, frame]);
+
+  // Official ion-dist `q6t`: File→New Conversation / Cmd+N arrives as main→renderer
+  // binding `cmdK` (asar `gKA` → webContents.send("cmdK")), then navigates mode home.
+  useOfficialNewConversationBinding(frame.mode, onNavigate);
 
   const frameStyle = {
     "--df-sidebar-width": `${frame.sidebarWidth}px`,
@@ -218,6 +223,69 @@ function useBrowserNavigationState(): BrowserNavigationLoadState {
   }, []);
 
   return state;
+}
+
+/**
+ * Official ion-dist `q6t` + asar `gKA` residual:
+ * - Main menu File→New Conversation: mainView.send("cmdK") (asar gKA)
+ * - Renderer: claudeAppBindings.registerBinding("cmdK", handler) ≡ Px(zx.cmdK, p)
+ * - p: cancelable `claude:new-conversation` (U6t); if not prevented and not disabled, push home
+ *
+ * Official q6t disabled `d` (skip navigate after event):
+ *   !quickChatAvailable || path===home || path.startsWith("/code")
+ * Official home target `c`:
+ *   desktop-code-mode ? modeHomes[mode] : taskPath ? "/task/new" : "/new"
+ *
+ * Our shell routes code home at `/code` (official TK="/epitaxy"). For code mode the
+ * home target is `/code`; skip navigate when already on exact home (or cowork /task/new).
+ * Do NOT fire `epitaxy:reset-draft` here — that is sidebar NavItem residual (Qas), not q6t.
+ */
+function useOfficialNewConversationBinding(
+  mode: SessionNavigationMode,
+  onNavigate: (path: string) => void,
+) {
+  useEffect(() => {
+    const openNew = () => {
+      // Official U6t / p: always dispatch cancelable new-conversation first.
+      const event = new CustomEvent("claude:new-conversation", { cancelable: true });
+      window.dispatchEvent(event);
+      if (event.defaultPrevented) return;
+
+      const path = window.location.pathname;
+      const home = sessionHomePath(mode);
+      // Official: if already on home target, skip push (d includes e===c).
+      // Code: home is `/code` only — session routes `/code/:id` still navigate home.
+      // Cowork: `/task/new`.
+      if (path === home) return;
+
+      onNavigate(home);
+    };
+
+    const bindings = (window as Window & {
+      claudeAppBindings?: {
+        registerBinding?: (name: string, cb: (...args: unknown[]) => void) => void;
+        unregisterBinding?: (name: string) => void;
+      };
+    }).claudeAppBindings;
+
+    if (bindings?.registerBinding) {
+      try {
+        bindings.registerBinding("cmdK", openNew);
+        return () => {
+          try {
+            bindings.unregisterBinding?.("cmdK");
+          } catch {
+            /* ignore */
+          }
+        };
+      } catch {
+        /* fall through */
+      }
+    }
+
+    // Residual when preload bindings unavailable (pure web): menu cannot send cmdK.
+    return undefined;
+  }, [mode, onNavigate]);
 }
 
 /** Official ThemeProvider resolved mode for data-theme=claude wrapper (not hard-coded light). */

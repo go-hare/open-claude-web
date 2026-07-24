@@ -33,7 +33,27 @@ export function NavItem({ active, item, onNavigate }: NavItemProps) {
       data-row=""
       data-row-main-button=""
       data-selected={active ? "focused" : undefined}
-      onClick={() => onNavigate(item.href)}
+      onClick={(event) => {
+        /**
+         * Official ion-dist Qas / sidebar new-session residual:
+         * mode "epitaxy" (our code): plain left-click without modifiers →
+         * dispatch `epitaxy:reset-draft` (does not preventDefault / still navigates).
+         * mode "code" + flag: preventDefault + push new epitaxy id — not our shell path.
+         * Menu File→New Conversation does NOT fire reset-draft (that is q6t only).
+         */
+        if (
+          item.key === "new-session"
+          && item.href === "/code"
+          && !event.metaKey
+          && !event.ctrlKey
+          && !event.shiftKey
+          && !event.altKey
+          && event.button === 0
+        ) {
+          window.dispatchEvent(new CustomEvent("epitaxy:reset-draft"));
+        }
+        onNavigate(item.href);
+      }}
       type="button"
     >
       <span className="df-leading-slot">{leading}</span>

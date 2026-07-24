@@ -21,6 +21,28 @@ export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
     };
   }, []);
 
+  /**
+   * Official c119 residual when no session (`!E`) and selectedFolder `je` is set:
+   * Uo?.onOpenFile → pickFileAtCwd(je).then(tt).
+   * Official home is the same tile as the session (has file side pane `tt`).
+   * Our CodeNewSessionPage has no file pane — only the pick half of the residual
+   * is valid here. Do not invent epitaxy-open-file / openInEditor fallbacks.
+   * Full tt path lives on EpitaxySessionTile when a session is open.
+   */
+  useEffect(() => {
+    if (!workspace?.cwd) return;
+    const menuEvents = window["claude.web"]?.MenuEvents as
+      | { onOpenFile?: (cb: () => void) => (() => void) | void; openFile?: (cb: () => void) => (() => void) | void }
+      | undefined;
+    if (!menuEvents?.onOpenFile && !menuEvents?.openFile) return;
+    const cwd = workspace.cwd;
+    const pick = () => {
+      void desktopBridge.LocalSessions.pickFileAtCwd?.(cwd);
+    };
+    const subscribe = menuEvents.onOpenFile ?? menuEvents.openFile;
+    return subscribe?.(pick) ?? undefined;
+  }, [workspace?.cwd]);
+
   if (!workspace) return <EpitaxySessionLoading />;
 
   return <CodeNewSessionPage onNavigate={onNavigate} workspace={workspace} />;
@@ -35,12 +57,29 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
   const [composerWorkspace, setComposerWorkspace] = useState(workspace);
   const [sourceBranch, setSourceBranch] = useState(workspace.cwd ? workspace.branchName : "");
   const [useWorktree, setUseWorktree] = useState(false);
+  /** Official c119: epitaxy:reset-draft remount key when no session id (void 0===o). */
+  const [draftEpoch, setDraftEpoch] = useState(0);
 
   useEffect(() => {
     setComposerWorkspace(workspace);
     setSourceBranch(workspace.cwd ? workspace.branchName : "");
     setUseWorktree(false);
   }, [workspace]);
+
+  /**
+   * Official c119 residual (sidebar Qas epitaxy mode → CustomEvent "epitaxy:reset-draft"):
+   * when no session id, clear draft store + bump remount counter.
+   * Listener only on home draft (no session) — session tiles own their own residual.
+   */
+  useEffect(() => {
+    const onReset = () => {
+      setPrompt("");
+      setBusy(false);
+      setDraftEpoch((n) => n + 1);
+    };
+    window.addEventListener("epitaxy:reset-draft", onReset);
+    return () => window.removeEventListener("epitaxy:reset-draft", onReset);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -104,6 +143,7 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
             </div>
             <div className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]">
               <OfficialCodeComposer
+                key={draftEpoch}
                 busy={busy}
                 effort={effort}
                 model={model}

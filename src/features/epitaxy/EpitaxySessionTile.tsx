@@ -348,6 +348,56 @@ function EpitaxyChatPanel({
     window.addEventListener("epitaxy-open-file", onOpenFile as EventListener);
     return () => window.removeEventListener("epitaxy-open-file", onOpenFile as EventListener);
   }, [openFile]);
+  /**
+   * Official c119 residual: File → Open File… (asar oEr → MenuEvents.openFile).
+   * st = () => {
+   *   if (E && E.type !== "remote") pickSessionFile(E.id).then(tt)
+   *   else if (!E && je) pickFileAtCwd(je).then(tt)   // je = selectedFolder
+   * }
+   * tt → setFileView + side pane "file" (our openFile).
+   * Only the active primary panel claims the menu binding.
+   */
+  useEffect(() => {
+    if (!isPanelActive) return;
+    const menuEvents = window["claude.web"]?.MenuEvents as
+      | { onOpenFile?: (cb: () => void) => (() => void) | void; openFile?: (cb: () => void) => (() => void) | void }
+      | undefined;
+    if (!menuEvents?.onOpenFile && !menuEvents?.openFile) return;
+
+    const pickAndOpen = () => {
+      const ref = effectiveSessionRef;
+      // Official: remote session has no pickSessionFile branch for menu open.
+      if (ref?.type === "remote") return;
+
+      if (ref) {
+        if (!bridge.pickSessionFile) return;
+        void bridge.pickSessionFile(ref.id).then((picked) => {
+          if (picked) openFile({ path: picked });
+        });
+        return;
+      }
+
+      // Official !E && je: je is selectedFolder store. Prefer session.cwd, else workspace cwd.
+      const folder = session?.cwd;
+      if (folder) {
+        if (!bridge.pickFileAtCwd) return;
+        void bridge.pickFileAtCwd(folder).then((picked) => {
+          if (picked) openFile({ path: picked });
+        });
+        return;
+      }
+      void desktopBridge.Preferences.getWorkspaceContext().then((workspace) => {
+        const cwd = workspace?.cwd;
+        if (!cwd || !bridge.pickFileAtCwd) return;
+        void bridge.pickFileAtCwd(cwd).then((picked) => {
+          if (picked) openFile({ path: picked });
+        });
+      });
+    };
+
+    const subscribe = menuEvents.onOpenFile ?? menuEvents.openFile;
+    return subscribe?.(pickAndOpen) ?? undefined;
+  }, [bridge, effectiveSessionRef, isPanelActive, openFile, session?.cwd]);
   // Official ab Play: open terminal pane and write command into default shell PTY.
   useEffect(() => {
     const onRunInline = (event: Event) => {

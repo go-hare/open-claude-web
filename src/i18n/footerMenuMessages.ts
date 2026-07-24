@@ -215,14 +215,26 @@ export function useI18nText<T extends MessageDescriptors>(descriptors: T, explic
 export function useI18nMessages(locale: string) {
   const normalized = normalizeLocale(locale);
   const [messages, setMessages] = useState<I18nMessages | null>(() => resourceCache.get(normalized) ?? null);
+  const [reloadToken, setReloadToken] = useState(0);
+  useEffect(() => {
+    const bump = () => setReloadToken((n) => n + 1);
+    window.addEventListener("claude:locale-change", bump);
+    window.addEventListener("claude:i18n-refresh", bump);
+    return () => {
+      window.removeEventListener("claude:locale-change", bump);
+      window.removeEventListener("claude:i18n-refresh", bump);
+    };
+  }, []);
   useEffect(() => {
     let cancelled = false;
+    // Locale switch / explicit refresh drops the in-memory catalog so JSON overrides re-merge.
+    if (reloadToken > 0) resourceCache.delete(normalized);
     setMessages(resourceCache.get(normalized) ?? null);
     loadI18nResource(normalized).then(next => {
       if (!cancelled) setMessages(next);
     });
     return () => { cancelled = true; };
-  }, [normalized]);
+  }, [normalized, reloadToken]);
   return messages;
 }
 
@@ -262,13 +274,14 @@ function buildTextMap<T extends MessageDescriptors>(descriptors: T, messages: I1
 }
 
 async function fetchJson(path: string) {
-  const response = await fetch(path);
+  // no-store: locale JSON / overrides edit during dev must not stick to HTTP cache.
+  const response = await fetch(path, { cache: "no-store" });
   if (!response.ok) return {};
   return await response.json() as I18nMessages;
 }
 
 async function fetchOptionalJson(path: string) {
-  const response = await fetch(path).catch(() => null);
+  const response = await fetch(path, { cache: "no-store" }).catch(() => null);
   if (!response?.ok) return {};
   return await response.json() as I18nMessages;
 }
