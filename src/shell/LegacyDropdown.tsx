@@ -35,23 +35,53 @@ export function LegacyDropdownPopup({
 }) {
   return (
     <Menu.Portal>
-      <div className="epitaxy-root">
-        <Menu.Positioner align={align} alignOffset={alignOffset} collisionPadding={collisionPadding} side={side} sideOffset={sideOffset}>
-          <Menu.Popup
-            className={`${dropdownContentClassName} ${className ?? ""}`}
-            onMouseEnter={onMouseEnter}
-            onMouseLeave={onMouseLeave}
-            {...dataProps}
-          >
-            {children}
-          </Menu.Popup>
-        </Menu.Positioner>
-      </div>
+      {/*
+        Official Rde puts z-dropdown on Content. Base UI Positioner is the
+        positioned node (fixed); z-index must live here or a z-20 sidebar
+        (FrameSidebar) paints above an auto-z positioner and clips the menu.
+      */}
+      <Menu.Positioner
+        align={align}
+        alignOffset={alignOffset}
+        className="z-dropdown"
+        collisionPadding={collisionPadding ?? 8}
+        side={side}
+        sideOffset={sideOffset}
+      >
+        <Menu.Popup
+          className={`${dropdownContentClassName} ${className ?? ""}`}
+          onMouseEnter={onMouseEnter}
+          onMouseLeave={onMouseLeave}
+          {...dataProps}
+        >
+          {children}
+        </Menu.Popup>
+      </Menu.Positioner>
     </Menu.Portal>
   );
 }
 
-export function LegacyDropdownItem({ children, className, icon, onSelect, trailing }: { children: ReactNode; className?: string; icon?: ReactNode; onSelect?: () => void; trailing?: ReactNode }) {
+/** Official qde DropdownItem — icon is raw residual SVG (gc size default 20), not CDS size-icon. */
+export function LegacyDropdownItem({
+  children,
+  className,
+  danger,
+  disabled,
+  icon,
+  onSelect,
+  trailing,
+  ...dataProps
+}: {
+  children: ReactNode;
+  className?: string;
+  /** Official jde: !text-danger-000 [&[data-highlighted]]:bg-danger-900 */
+  danger?: boolean;
+  disabled?: boolean;
+  icon?: ReactNode;
+  onSelect?: () => void;
+  trailing?: ReactNode;
+  [key: `data-${string}`]: string | undefined;
+}) {
   const content = icon || trailing ? (
     <div className="flex items-center gap-2 w-full font-base group">
       {icon}
@@ -60,9 +90,26 @@ export function LegacyDropdownItem({ children, className, icon, onSelect, traili
     </div>
   ) : children;
 
-  return <Menu.Item className={`${dropdownItemClassName} ${className ?? ""}`} onClick={onSelect}>{content}</Menu.Item>;
+  return (
+    <Menu.Item
+      className={[
+        dropdownItemClassName,
+        disabled ? "opacity-50 !cursor-default" : "",
+        danger ? "!text-danger-000 [&[data-highlighted]]:bg-danger-900" : "",
+        className ?? "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      disabled={disabled}
+      onClick={disabled ? undefined : onSelect}
+      {...dataProps}
+    >
+      {content}
+    </Menu.Item>
+  );
 }
 
+/** Official Yde / Mde separator. */
 export function LegacyDropdownSeparator({ className }: { className?: string }) {
   return <Menu.Separator className={`${dropdownSeparatorClassName} ${className ?? ""}`} />;
 }

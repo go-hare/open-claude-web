@@ -53,6 +53,22 @@ const terminalPaths: CoworkGlyphPath[] = [
 const searchPath = "M8.5 2a6.5 6.5 0 0 1 4.935 10.728l4.419 4.419.064.078a.5.5 0 0 1-.693.693l-.079-.064-4.419-4.42A6.5 6.5 0 1 1 8.5 2m0 1a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11";
 const todoPath = "M6 13.5a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1zm-2 3h2v-2H4zM16.5 15a.5.5 0 0 1 0 1h-7a.5.5 0 1 1 0-1zM6 8a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zm-2 3h2V9H4zm12.5-1.5a.5.5 0 0 1 0 1h-7a.5.5 0 1 1 0-1zM6.126 2.918a.5.5 0 0 1 .748.664l-2.218 2.5a.5.5 0 0 1-.744.004L2.88 4.947l-.06-.082a.5.5 0 0 1 .725-.658l.075.068.657.725zM16.5 4a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1z";
 const editPath = "M9.728 2.88a1.5 1.5 0 0 1 1.946-.847l2.792 1.1a1.5 1.5 0 0 1 .845 1.945l-3.92 9.953a1.5 1.5 0 0 1-.452.615l-.088.066-3.143 2.186a.75.75 0 0 1-1.135-.362l-.026-.095-.81-3.742a1.5 1.5 0 0 1 .071-.867zm-2.99 10.319a.5.5 0 0 0-.023.288l.73 3.376 2.835-1.971.058-.047a.5.5 0 0 0 .122-.18l2.637-6.698-3.721-1.466zm4.57-10.236a.5.5 0 0 0-.65.283L9.743 5.57l3.722 1.467.917-2.327a.5.5 0 0 0-.283-.648z";
+// Official index-BELzQL5P `Lv` (pin) / `Rv` (unpin) — desktop B4() path in hUt.
+const pinPath = "M13 4.5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0-.5.5v3.528c0 .388-.09.77-.264 1.118L5.31 12h9.382l-1.428-2.854A2.5 2.5 0 0 1 13 8.028zm1 3.528c0 .233.054.462.158.67l1.428 2.855A1 1 0 0 1 14.69 13H10.5v3.5a.5.5 0 0 1-1 0V13H5.31a1 1 0 0 1-.895-1.447l1.427-2.855A1.5 1.5 0 0 0 6 8.028V4.5A1.5 1.5 0 0 1 7.5 3h5A1.5 1.5 0 0 1 14 4.5z";
+const unpinPath = "M14 8.028c0 .233.054.462.158.67l1.428 2.855A1 1 0 0 1 14.69 13H10.5v3.5a.5.5 0 0 1-1 0V13H5.31a1 1 0 0 1-.895-1.447l1.427-2.855A1.5 1.5 0 0 0 6 8.028V4.5A1.5 1.5 0 0 1 7.5 3h5A1.5 1.5 0 0 1 14 4.5z";
+// Official `oy` archive (dual path).
+const archivePaths: CoworkGlyphPath[] = [
+  "M11.5 9.5a.5.5 0 0 1 0 1h-3a.5.5 0 0 1 0-1z",
+  {
+    clipRule: "evenodd",
+    d: "M15.653 3.008A1.5 1.5 0 0 1 17 4.5v2l-.008.153A1.5 1.5 0 0 1 16 7.913V15a2 2 0 0 1-1.796 1.99L14 17H6a2 2 0 0 1-2-2V7.912a1.5 1.5 0 0 1-.992-1.259L3 6.5v-2A1.5 1.5 0 0 1 4.5 3h11zM5 15a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8H5zM4.5 4a.5.5 0 0 0-.5.5v2a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 0-.5-.5z",
+    fillRule: "evenodd",
+  },
+];
+// Official `mC` delete/trash.
+const trashPath = "M11.323 1.5a1.5 1.5 0 0 1 1.393.943L13.338 4H17.5l.1.01a.5.5 0 0 1 0 .98l-.1.01h-1.537l-.894 11.615A1.5 1.5 0 0 1 13.574 18H6.426a1.5 1.5 0 0 1-1.478-1.24l-.017-.145L4.037 5H2.5a.5.5 0 0 1 0-1h4.162l.622-1.557.047-.104A1.5 1.5 0 0 1 8.677 1.5zM5.928 16.538a.5.5 0 0 0 .498.462h7.148a.5.5 0 0 0 .498-.462L14.961 5H5.039zM8.5 8a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 .5-.5m3 0a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 .5-.5M8.677 2.5a.5.5 0 0 0-.43.246l-.034.068L7.738 4h4.524l-.475-1.186a.5.5 0 0 0-.464-.314z";
+// Official c5f4e1303 `Rx` exported as `im` — plain check used by hUt Mark done.
+const markDonePath = "M15.188 5.11a.5.5 0 0 1 .752.626l-.056.084-7.5 9a.5.5 0 0 1-.738.033l-3.5-3.5-.064-.078a.501.501 0 0 1 .693-.693l.078.064 3.113 3.113 7.15-8.58z";
 const externalLinkPath = "M9.5 3a.5.5 0 0 1 0 1h-5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-5a.5.5 0 0 1 1 0v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15.5v-11A1.5 1.5 0 0 1 4.5 3zm7 0a.5.5 0 0 1 .18.034l.021.01q.03.014.059.03l.023.014a.5.5 0 0 1 .07.058l.065.079q.015.025.026.052l.018.034a.5.5 0 0 1 .032.128Q17 3.47 17 3.5v4a.5.5 0 0 1-1 0V4.707l-4.146 4.147a.5.5 0 1 1-.707-.708L15.293 4H12.5a.5.5 0 0 1 0-1z";
 const retryPath = "M10.386 2.51A7.5 7.5 0 1 1 5.499 4H3a.5.5 0 0 1 0-1h3.5a.5.5 0 0 1 .49.402L7 3.5V7a.5.5 0 0 1-1 0V4.879a6.5 6.5 0 1 0 4.335-1.37L10 3.5l-.1-.01a.5.5 0 0 1 .1-.99z";
 const toolboxPath = "M8.517 1.741a4.5 4.5 0 0 1 4.13 2.85l.116.33a4.5 4.5 0 0 1-.956 4.326l2.391 6.071.066.195a2 2 0 0 1-1.007 2.314l-.187.085a2 2 0 0 1-2.508-.941l-.085-.187-2.388-6.06a4.5 4.5 0 0 1-3.675-2.511l-.141-.322a4.5 4.5 0 0 1 1.1-4.923l.046-.04a.5.5 0 0 1 .762.22l1.195 3.035.042.093a1 1 0 0 0 1.255.471l.093-.042c.42-.217.632-.703.504-1.158l-.034-.097-1.191-3.025a.502.502 0 0 1 .472-.684m1.65 3.343.066.193a2 2 0 0 1-1.007 2.316l-.187.085a2 2 0 0 1-2.509-.942l-.085-.186-.89-2.261a3.5 3.5 0 0 0-.352 3.234l.11.251A3.5 3.5 0 0 0 8.18 9.728l.26.012.075.006a.5.5 0 0 1 .386.31l2.506 6.362.042.093a1 1 0 0 0 1.255.47l.094-.042a1 1 0 0 0 .503-1.158l-.032-.097-2.51-6.37a.5.5 0 0 1 .119-.545 3.5 3.5 0 0 0 .928-3.554l-.09-.257A3.5 3.5 0 0 0 9.283 2.84z";
@@ -152,6 +168,31 @@ export function CoworkTodoGlyph(props: CoworkOfficialGlyphProps) {
 
 export function CoworkEditGlyph(props: CoworkOfficialGlyphProps) {
   return <CoworkOfficialGlyph {...props} path={editPath} />;
+}
+
+/** Official index-BELzQL5P `Lv` — Pin (desktop hUt). */
+export function CoworkPinGlyph(props: CoworkOfficialGlyphProps) {
+  return <CoworkOfficialGlyph {...props} path={pinPath} />;
+}
+
+/** Official index-BELzQL5P `Rv` — Unpin (desktop hUt). */
+export function CoworkUnpinGlyph(props: CoworkOfficialGlyphProps) {
+  return <CoworkOfficialGlyph {...props} path={unpinPath} />;
+}
+
+/** Official index-BELzQL5P `oy` — Archive. */
+export function CoworkArchiveGlyph(props: CoworkOfficialGlyphProps) {
+  return <CoworkOfficialGlyph {...props} path={archivePaths} />;
+}
+
+/** Official index-BELzQL5P `mC` — Delete/trash. */
+export function CoworkTrashGlyph(props: CoworkOfficialGlyphProps) {
+  return <CoworkOfficialGlyph {...props} path={trashPath} />;
+}
+
+/** Official c5f4e1303 `Rx` / index `im` — Mark done check. */
+export function CoworkMarkDoneGlyph(props: CoworkOfficialGlyphProps) {
+  return <CoworkOfficialGlyph {...props} path={markDonePath} />;
 }
 
 export function CoworkExternalLinkGlyph(props: CoworkOfficialGlyphProps) {

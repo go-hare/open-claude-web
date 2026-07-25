@@ -78,7 +78,15 @@ export function EpitaxyChatHeader({ activeView, canOpenBrowser = false, canOpenF
   );
 }
 
-export function useEpitaxyViewShortcuts(onSelect: (view: OfficialViewPane) => void, enabled = true) {
+export function useEpitaxyViewShortcuts(
+  onSelect: (view: OfficialViewPane) => void,
+  enabled = true,
+  /**
+   * Official VC() — when false, ⇧⌘F is a no-op (same as Files menu hidden).
+   * Default keeps prior sync probe for callers that omit the gate.
+   */
+  canOpenBrowser: boolean = canUseOfficialFilesBrowser(),
+) {
   useEffect(() => {
     if (!enabled) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -95,7 +103,7 @@ export function useEpitaxyViewShortcuts(onSelect: (view: OfficialViewPane) => vo
       }
       // Official toggleBrowser ⇧⌘F — only when VC() Files is available.
       if (event.metaKey && event.shiftKey && event.code === "KeyF") {
-        if (!canUseOfficialFilesBrowser()) return;
+        if (!canOpenBrowser) return;
         event.preventDefault();
         onSelect("browser");
         return;
@@ -107,7 +115,7 @@ export function useEpitaxyViewShortcuts(onSelect: (view: OfficialViewPane) => vo
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [enabled, onSelect]);
+  }, [canOpenBrowser, enabled, onSelect]);
 }
 
 /**

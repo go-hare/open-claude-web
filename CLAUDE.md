@@ -43,3 +43,21 @@
 - 流式输出与加载逻辑对齐官方
 - macOS / Windows 平台分支对齐官方
 - 只在官方确实没有覆盖的适配层做最小桥接
+
+### 本机 host-loop 与 VM dual-exec
+
+- **默认产品路径是本机（host-loop）**，不要为日常 Code / Cowork 会话强行走虚拟机。
+- **Local Code 会话**（桌面 `claudeCliRunner.spawnClaude`）永远在本机 spawn 自带 CLI，与 dual-exec 无关。
+- **Cowork**：`hostLoopMode: true` → 本机；`hostLoopMode: false` → dual-exec guest + 可能 `startVM`。
+- **VM / dual-exec 代码必须保留**（官方 residual），禁止以“只要本机”为由删除。
+- 未显式 dual-exec 时，不得把 guest/VM 问题当成默认路径阻塞。
+
+### 桌面第三方推理与 CLI 配置
+
+- 「配置第三方推理…」多配置主源是桌面 **`userData/configLibrary/`**（官方 wrA residual；非 `~/.claude/settings.json`）。
+- 遗留 `desktop-shell-settings.json` 的 `custom3pConfigs` 仅 migrate 用；Web 不另造配置源。
+- 官方 residual：主进程 `G4`/`HFi` 把 3p 注入 CLI env；产品对应 `custom3pCliEnv` → local spawn + Cowork host-loop `options.env`。
+- bootstrap / Account 同步仍走 `app://localhost` 等桌面桥接。
+- **1p / 3p**：无 3p activation 时 bootstrap `account: null` → `accountDetailsFromBootstrap` 的 `isLoggedOut: true`；有 `inferenceProvider` 才是 3p 合成账号。Web 不另判部署模式。
+- **登录页 residual**：LoginRoute 对主窗 `resize(600,600,{center})`（非独立小窗）。有 3p provider 时 `M5t` 双卡（Gateway + Anthropic + Local configuration pill）；`/login` → `LoginDesktopPage` + App `isLoggedOut` 门闩。不发明 OAuth。
+- **账号菜单 Sign out residual**（Gns）：`!!EQt()` 时显示「Sign out」`xXbJsopyfR`（中文「退出登录」）→ `NQt("clear")`。产品：`SidebarFooter` + `footerMenuMessages.signOut`。

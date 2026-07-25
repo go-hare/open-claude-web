@@ -9,10 +9,12 @@ import {
 } from "../OfficialEpitaxyComponents";
 import { useWorkspaceTrustGate } from "../trust/useWorkspaceTrustGate";
 import {
-  codeModelOptions,
+  normalizeSelectorModelValue,
+  useCodeModelOptions,
+} from "../../cowork/composer/useCoworkModelOptions";
+import {
   effortLabel,
   effortOptions,
-  modelLabel,
   permissionModeLabel,
   permissionModeOptions,
 } from "./options";
@@ -61,12 +63,18 @@ export function OfficialCodeComposer({
   workspace,
 }: OfficialCodeComposerProps) {
   const { ensureTrusted, modal } = useWorkspaceTrustGate(workspace.cwd);
+  const codeModelOptions = useCodeModelOptions();
   const submitStateRef = useRef({ busy, ensureTrusted, hasPrompt: false, onSubmit, workspaceCwd: workspace.cwd });
   const promptSetterRef = useRef(setPrompt);
   const [replayKey, setReplayKey] = useState(0);
   const [openFooterMenu, setOpenFooterMenu] = useState<"effort" | "mode" | "model" | null>(null);
   const hasPrompt = prompt.trim().length > 0;
   const isModelMenuOpen = openFooterMenu === "model" || openFooterMenu === "effort";
+  const allowedModelValues = useMemo(
+    () => codeModelOptions.items.map((item) => item.value),
+    [codeModelOptions.items],
+  );
+  const selectedModel = normalizeSelectorModelValue(model, allowedModelValues);
 
   submitStateRef.current = { busy, ensureTrusted, hasPrompt, onSubmit, workspaceCwd: workspace.cwd };
   promptSetterRef.current = setPrompt;
@@ -77,15 +85,33 @@ export function OfficialCodeComposer({
     (mode) => onPermissionModeChange(mode as PermissionMode),
   );
 
+  // Official c119: sticky restore when draft still on default after bag loads.
+  useEffect(() => {
+    if (!codeModelOptions.ready) return;
+    if (normalizeSelectorModelValue(model, allowedModelValues) !== "default") return;
+    if (codeModelOptions.preferredSelectorValue === "default") return;
+    onModelChange(codeModelOptions.preferredSelectorValue);
+  }, [allowedModelValues, codeModelOptions.preferredSelectorValue, codeModelOptions.ready, model, onModelChange]);
+
+  // Drop shell-leaked session models (grok/kimi) once bag list is known.
+  useEffect(() => {
+    if (!codeModelOptions.ready) return;
+    const normalized = normalizeSelectorModelValue(model, allowedModelValues);
+    if (normalized !== model) onModelChange(normalized);
+  }, [allowedModelValues, codeModelOptions.ready, model, onModelChange]);
+
   const permissionItems: OfficialDropdownItem[] = permissionModeOptions.map((option) => ({
     checked: option.value === permissionMode,
     label: option.label,
     onSelect: () => permissionModeConfirm.select(option.value),
   }));
-  const modelItems: OfficialDropdownItem[] = codeModelOptions.map((option) => ({
-    checked: option.value === model,
+  const modelItems: OfficialDropdownItem[] = codeModelOptions.items.map((option) => ({
+    checked: option.value === selectedModel,
     label: option.label,
-    onSelect: () => onModelChange(option.value),
+    onSelect: () => {
+      codeModelOptions.setStickyModelPreference(option.value);
+      onModelChange(option.value);
+    },
   }));
   const effortItems: OfficialDropdownItem[] = effortOptions.map((option) => ({
     checked: option.value === effort,
@@ -279,7 +305,7 @@ export function OfficialCodeComposer({
             }]}
             header="Models"
             items={numberedModelItems}
-            label={<OfficialModelFooterLabel effortLabel={effortLabel(effort)} modelLabel={modelLabel(model)} />}
+            label={<OfficialModelFooterLabel effortLabel={effortLabel(effort)} modelLabel={codeModelOptions.labelFor(selectedModel)} />}
             mode="text"
             onOpenChange={(open) => setOpenFooterMenu(open ? (openFooterMenu === "effort" ? "effort" : "model") : null)}
             open={isModelMenuOpen}

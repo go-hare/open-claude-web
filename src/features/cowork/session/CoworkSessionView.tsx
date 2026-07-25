@@ -131,6 +131,13 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
     [data.reload, onNavigate, openArtifact, openFile, sessionId],
   );
   const title = coworkSessionTitle(data.session?.title);
+  const onSessionPatched = useCallback(
+    (_patch: Partial<NonNullable<typeof data.session>>) => {
+      // Header optimistically patches; re-fetch so sidebar/store catch up.
+      void data.reload();
+    },
+    [data],
+  );
   // Official cFt: selectedItem type switch — file → Gzt, else activity detail panels.
   const drawer = (() => {
     if (!selectedItem) return null;
@@ -170,7 +177,11 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
             <div className="relative flex h-full min-w-0 flex-1 flex-col">
               <CoworkSessionHeader
                 isTitleLoading={data.isLoading && !data.session}
+                onNavigate={onNavigate}
+                onSessionPatched={onSessionPatched}
                 rightAction={!data.isSessionNotFound ? <CoworkActivityPanelHeaderToggle sessionId={sessionId} /> : null}
+                session={data.session}
+                sessionId={sessionId}
                 title={title}
               />
               <CoworkChatBody

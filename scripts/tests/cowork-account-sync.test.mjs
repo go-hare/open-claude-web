@@ -60,3 +60,13 @@ test("does not report logout when bootstrap transport fails", async () => {
   );
   assert.deepEqual(updates, []);
 });
+
+test("bootstrapUrls prefers app://localhost over relative path", async () => {
+  const { bootstrapUrls } = await vite.ssrLoadModule(
+    "/src/app/useDesktopCoworkAccountSync.ts",
+  );
+  assert.deepEqual(bootstrapUrls("/api/bootstrap"), [
+    "app://localhost/api/bootstrap",
+    "/api/bootstrap",
+  ]);
+});

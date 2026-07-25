@@ -63,6 +63,8 @@ const FOOTER_MENU_MESSAGES = {
   privacyChoices: { defaultMessage: "Your privacy choices", id: "9z1SUK0pfj" },
   privacyPolicy: { defaultMessage: "Privacy policy", id: "cPwv2cbzf2" },
   settings: { defaultMessage: "Settings", id: "D3idYvSLF9" },
+  // Official account menu residual (index-BELzQL5P Gns): Sign out when EQt/getLoginDesktop3pStatus truthy
+  signOut: { defaultMessage: "Sign out", id: "xXbJsopyfR" },
   tutorials: { defaultMessage: "Tutorials", id: "4u7hBBtxd+" },
   courses: { defaultMessage: "Courses", id: "R85gsW8HY9" },
   usagePolicy: { defaultMessage: "Usage policy", id: "2hfc4AKs6b" },

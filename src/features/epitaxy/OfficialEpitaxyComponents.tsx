@@ -1,9 +1,20 @@
 import { Menu } from "@base-ui-components/react/menu";
-import { useEffect, useMemo, useReducer, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
-import type { SessionSummary } from "../../adapters/desktopBridge";
+import { desktopBridge, type SessionSummary } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
 import { OfficialTooltip } from "../shared/OfficialTooltip";
+import { officialCodeSessionStore } from "./session/officialCodeSessionStore";
 import { copyOfficialMessageRich } from "./session/officialMessageClipboard";
 
 export type OfficialSessionRef = {
@@ -141,7 +152,7 @@ type OfficialSearchSelectProps<T> = {
 
 type OfficialSessionHeaderProps = {
   activeView?: OfficialViewPane;
-  /** Official VC — show Files (browser) Views item when bridge supports list+mentions. */
+  /** Official VC — Files when el(ccd_file_browser) + listSessionDirectory + fetchMentionOptions. */
   canOpenBrowser?: boolean;
   /** Official YR Screen — framebufferPreview supported + sources/open. */
   canOpenFramebuffer?: boolean;
@@ -691,7 +702,15 @@ export function OfficialSessionHeader({
         {sessionRef ? (
           isTitleLoading
             ? <span aria-hidden="true" className="h-[10px] w-[128px] rounded-r3 bg-t2 animate-pulse" />
-            : <OfficialSessionTitle paneIndex={paneIndex} title={title} />
+            : (
+              <OfficialSessionTitle
+                onSessionRemoved={onSessionRemoved}
+                paneIndex={paneIndex}
+                session={session}
+                sessionRef={sessionRef}
+                title={title}
+              />
+            )
         ) : null}
       </div>
       {dragHandle}
@@ -1207,15 +1226,131 @@ function formatTranscriptTimestampTitle(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(new Date(time));
 }
 
-function OfficialSessionTitle({ paneIndex, title }: { paneIndex: number; title: string }) {
+/**
+ * Official c11959232 code session title (`Q` inline edit + chevron `vu` actions).
+ * Click title → start rename; menu Rename → same; commit → LocalSessions.updateSession + store patch.
+ */
+function OfficialSessionTitle({
+  onSessionRemoved,
+  paneIndex,
+  session: _session,
+  sessionRef,
+  title,
+}: {
+  onSessionRemoved?: () => void;
+  paneIndex: number;
+  session: SessionSummary | null;
+  sessionRef: OfficialSessionRef;
+  title: string;
+}) {
+  void _session;
+  const sessionId = sessionRef.id;
+  const isShared = sessionRef.type !== "local";
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const committedRef = useRef(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(title);
+  }, [editing, title]);
+
+  useEffect(() => {
+    if (!editing) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [editing]);
+
+  const startRename = useCallback(
+    (event?: { preventDefault?: () => void; stopPropagation?: () => void }) => {
+      if (isShared) return;
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      committedRef.current = false;
+      setDraft(title);
+      setEditing(true);
+    },
+    [isShared, title],
+  );
+
+  const commitRename = useCallback(() => {
+    if (committedRef.current) return;
+    committedRef.current = true;
+    setEditing(false);
+    const next = draft.trim();
+    if (!next || next === title) return;
+    officialCodeSessionStore.getState().patchSession(sessionId, { title: next });
+    void desktopBridge.LocalSessions.updateSession?.(sessionId, { title: next }).then((updated) => {
+      if (updated) officialCodeSessionStore.getState().patchSession(sessionId, updated);
+    });
+  }, [draft, sessionId, title]);
+
+  const onKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      event.stopPropagation();
+      if (event.nativeEvent.isComposing) return;
+      if (event.key === "Enter") {
+        event.preventDefault();
+        commitRename();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        committedRef.current = true;
+        setEditing(false);
+        setDraft(title);
+      }
+    },
+    [commitRename, title],
+  );
+
+  const archiveSession = useCallback(async () => {
+    try {
+      await desktopBridge.LocalSessions.archive(sessionId);
+      officialCodeSessionStore.getState().patchSession(sessionId, { isArchived: true });
+      onSessionRemoved?.();
+    } catch {
+      /* bridge residual */
+    }
+  }, [onSessionRemoved, sessionId]);
+
+  const deleteSession = useCallback(async () => {
+    try {
+      await desktopBridge.LocalSessions.delete(sessionId);
+      onSessionRemoved?.();
+    } catch {
+      /* bridge residual */
+    }
+  }, [onSessionRemoved, sessionId]);
+
   const actions: OfficialDropdownItem[] = [
-    { label: "Rename" },
-    { label: "Archive" },
-    { label: "Delete" },
+    { label: "Rename", onSelect: () => startRename() },
+    { label: "Archive", onSelect: () => { void archiveSession(); } },
+    { label: "Delete", onSelect: () => { void deleteSession(); } },
   ];
+
+  if (editing) {
+    return (
+      <div className="flex items-center min-w-[32px] flex-1" data-official-source="c11959232:inline-rename" data-pane-index={paneIndex}>
+        <input
+          aria-label="Session name"
+          className="epitaxy-prompt-input h-small flex-1 min-w-0 text-body bg-transparent border-0"
+          onBlur={commitRename}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={onKeyDown}
+          ref={inputRef}
+          size={Math.max(draft.length, 10)}
+          value={draft}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center min-w-[32px] flex-1" data-pane-index={paneIndex}>
-      <button type="button" className="truncate text-left text-body text-t7 select-none bg-transparent border-0 p-0 outline-none cursor-text">
+    <div className="flex items-center min-w-[32px] flex-1" data-official-source="c11959232:session-title" data-pane-index={paneIndex}>
+      <button
+        className={`truncate text-left text-body text-t7 select-none bg-transparent border-0 p-0 outline-none ${isShared ? "" : "cursor-text"}`}
+        onClick={isShared ? undefined : startRename}
+        type="button"
+      >
         {title}
       </button>
       <Menu.Root>
@@ -1289,7 +1424,7 @@ function OfficialViewsButton({
   openViews,
 }: {
   activeView?: OfficialViewPane;
-  /** Official VC() — Files (browser) gated on listSessionDirectory + fetchMentionOptions. */
+  /** Official VC() — Files (browser) gated on ccd_file_browser + list + mentions. */
   canOpenBrowser?: boolean;
   /** Official YR Screen — T && (sources || already open framebuffer). */
   canOpenFramebuffer?: boolean;

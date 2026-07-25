@@ -15,6 +15,8 @@ import {
   shouldShowCoworkProjectWarning,
   type CoworkPendingProjectWarning,
 } from "./CoworkProjectContext";
+import { CoworkActiveTasksSection } from "./CoworkActiveTasksSection";
+import { CoworkConfigHealthBanner } from "./CoworkConfigHealthBanner";
 import { CoworkSuggestions, type CoworkPromptSuggestion } from "./CoworkSuggestions";
 import { coworkUploadedFilePaths, formatCoworkPromptWithUploadedFiles, mergeCoworkUploadedFiles, type CoworkUploadedFile } from "./coworkUploadedFiles";
 
@@ -115,6 +117,8 @@ export function CoworkNewTaskPage({
         <div className="relative isolate flex h-full min-w-0 flex-1 flex-col overflow-x-clip overflow-y-auto">
           <CoworkGridBackground />
           <div className="flex flex-1 flex-col items-center justify-start px-4 pb-6 pt-24 md:px-14">
+            {/* Official AQt: ConfigHealth banner above header (index-BELzQL5P cowork home) */}
+            <CoworkConfigHealthBanner />
             <div className="w-full max-w-2xl">
               <div className="mb-4">
                 <CoworkHeader />
@@ -143,10 +147,14 @@ export function CoworkNewTaskPage({
               </div>
             </div>
             {!busy ? (
-              <CoworkSuggestions
-                onCustomizeWithPlugins={() => onNavigate("/customize")}
-                onSelect={selectSuggestion}
-              />
+              <>
+                {/* Official order: p6t active overview above r6t suggestions */}
+                <CoworkActiveTasksSection onNavigate={onNavigate} />
+                <CoworkSuggestions
+                  onCustomizeWithPlugins={() => onNavigate("/customize")}
+                  onSelect={selectSuggestion}
+                />
+              </>
             ) : null}
           </div>
         </div>

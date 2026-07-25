@@ -18,8 +18,8 @@ import { CoworkSessionSlashMenu } from "./slash/CoworkSessionSlashMenu";
 import { CoworkSkillChip } from "./slash/CoworkSkillChip";
 import { CoworkSlashCommandSuggestion } from "./slash/CoworkSlashCommandSuggestion";
 import type { CoworkSlashCommandMenuProps } from "./slash/CoworkSlashTypes";
-
-const modelOptions = [{ label: "Default", value: "default" }, { label: "Sonnet", value: "sonnet" }, { label: "Opus", value: "opus" }];
+import { coworkSlashSkillChipContent } from "./slash/CoworkSlashTypes";
+import { useCoworkModelOptions } from "./useCoworkModelOptions";
 
 type CoworkSessionComposerProps = {
   disabled: boolean;
@@ -43,9 +43,10 @@ export function CoworkSessionComposer(props: CoworkSessionComposerProps) {
 
 function useCoworkComposerController(props: CoworkSessionComposerProps) {
   const ask = useCoworkAskUserQuestion();
+  const modelOptions = useCoworkModelOptions();
   const [text, setText] = useState("");
   const [isSubmitting, setSubmitting] = useState(false);
-  const [model, setModel] = useState(() => normalizeModel(props.session?.model));
+  const [model, setModel] = useState(() => normalizeModel(props.session?.model, []));
   const [selectedFiles, setSelectedFiles] = useState<CoworkUploadedFile[]>([]);
   const [isConfigBusy, setConfigBusy] = useState(false);
   const [questionMinimized, setQuestionMinimized] = useState(false);
@@ -69,16 +70,43 @@ function useCoworkComposerController(props: CoworkSessionComposerProps) {
     try { await props.onSubmit(submission.text, submission.input); } finally { setSubmitting(false); }
   }, [props.onSubmit, props.toolStates]);
   submitRef.current = submit;
-  useEffect(() => { setModel(normalizeModel(props.session?.model)); }, [props.session?.model]);
+  useEffect(() => {
+    setModel(normalizeModel(props.session?.model, modelOptions.items.map((item) => item.value)));
+  }, [modelOptions.items, props.session?.model]);
   useEffect(() => { setSelectedFiles([]); }, [props.sessionId]);
   useEffect(() => { setQuestionMinimized(false); }, [ask.data?.blockId]);
   useEffect(() => { editor?.setEditable(!props.disabled); }, [editor, props.disabled]);
+  // Official composer imperative handle: setContent / executeSkill / sendMessage.
+  // hUt Schedule → executeSkill("schedule"); Turn into skill → setContent(...).
+  const executeSkill = useCallback((skillId: string, skillDisplayName: string, skillDescription = "") => {
+    if (!editor) return false;
+    return editor
+      .chain()
+      .focus()
+      .clearContent()
+      .insertContent(coworkSlashSkillChipContent(skillId, skillDisplayName, skillDescription))
+      .run();
+  }, [editor]);
   useEffect(() => registerCoworkSessionComposerActions(props.sessionId, {
+    executeSkill,
     prefillPrompt: restore,
     sendPrompt: sendRewindPrompt,
-  }), [props.sessionId, restore, sendRewindPrompt]);
-  const actions = useComposerConfiguration({ model, props, setConfigBusy, setModel, setSelectedFiles });
-  const modelItems: CoworkDropdownItem[] = modelOptions.map((option) => ({ checked: option.value === model, label: option.label, onSelect: () => void actions.applyModel(option.value) }));
+  }), [executeSkill, props.sessionId, restore, sendRewindPrompt]);
+  const actions = useComposerConfiguration({
+    model,
+    props,
+    setConfigBusy,
+    setModel: (value) => {
+      modelOptions.setStickyModelPreference(value);
+      setModel(value);
+    },
+    setSelectedFiles,
+  });
+  const modelItems: CoworkDropdownItem[] = modelOptions.items.map((option) => ({
+    checked: option.value === model,
+    label: option.label,
+    onSelect: () => void actions.applyModel(option.value),
+  }));
   // Official local_session / agent path: dqe || isAgentNewRoute → hide project/Drive/GitHub + modes.
   const plusMenuItems = createCoworkAddMenuItems({ isAgentRoute: true, includeAddFolder: true, onAddFiles: () => void actions.addFiles(), onAddFolder: () => void actions.addFolder(), onNavigate: props.onNavigate });
   const minimizeQuestion = () => {
@@ -88,7 +116,31 @@ function useCoworkComposerController(props: CoworkSessionComposerProps) {
   };
   const questionBanner = ask.data && !questionMinimized ? <div className="mb-2"><CoworkAskUserQuestionBanner data={ask.data} onDismiss={minimizeQuestion} onSubmit={(answer) => { ask.submit?.(answer); ask.clear(); }} /></div> : null;
   const stop = async () => { ask.dismiss?.(); ask.clear(); await actions.stop(); };
-  return { canStop, canSubmit, editor, isConfigBusy, isSubmitting, modelItems, modelLabel: modelLabel(model), onKeyDownCapture: (event: React.KeyboardEvent<HTMLElement>) => handleComposerKey(event, { askActive: Boolean(ask.data), clear, editor, questionMinimized, reopenQuestion: () => setQuestionMinimized(false), text }), placeholder: ask.data ? "Or reply directly…" : "Write a message...", plusMenuItems, questionBanner, removeFile: (path: string) => setSelectedFiles((current) => current.filter((file) => file.path !== path)), selectedFiles, stop, submit, text };
+  return {
+    canStop,
+    canSubmit,
+    editor,
+    isConfigBusy,
+    isSubmitting,
+    modelItems,
+    modelLabel: modelOptions.labelFor(model),
+    onKeyDownCapture: (event: React.KeyboardEvent<HTMLElement>) => handleComposerKey(event, {
+      askActive: Boolean(ask.data),
+      clear,
+      editor,
+      questionMinimized,
+      reopenQuestion: () => setQuestionMinimized(false),
+      text,
+    }),
+    placeholder: ask.data ? "Or reply directly…" : "Write a message...",
+    plusMenuItems,
+    questionBanner,
+    removeFile: (path: string) => setSelectedFiles((current) => current.filter((file) => file.path !== path)),
+    selectedFiles,
+    stop,
+    submit,
+    text,
+  };
 }
 
 function useCoworkComposerEditor(input: { disabled: boolean; session: SessionSummary | null; sessionId: string; setText: (text: string) => void; submitRef: React.MutableRefObject<() => Promise<void>> }) {
@@ -160,6 +212,10 @@ function handleComposerKey(event: React.KeyboardEvent<HTMLElement>, input: { ask
   if (event.key === "ArrowUp" && input.askActive && input.questionMinimized && input.text === "Continue without answering") { event.preventDefault(); input.clear(); input.reopenQuestion(); return; }
   if (event.key === "Escape" && !slashMenuVisible(input.editor)) { event.preventDefault(); input.clear(); }
 }
-function normalizeModel(value?: string) { return modelOptions.some((option) => option.value === value) ? value! : "default"; }
-function modelLabel(value: string) { return modelOptions.find((option) => option.value === value)?.label ?? value; }
+function normalizeModel(value: string | undefined, allowedValues: string[]) {
+  if (!value) return "default";
+  if (value === "default") return "default";
+  if (allowedValues.length === 0) return value;
+  return allowedValues.includes(value) ? value : "default";
+}
 function plainTextDoc(value: string) { return { type: "doc", content: value.split("\n").map((line) => ({ type: "paragraph", content: line ? [{ type: "text", text: line }] : undefined })) }; }

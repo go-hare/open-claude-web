@@ -16,6 +16,7 @@ import {
   coworkPermissionModeOptionsForModes,
   isCoworkUnsupervisedPermissionMode,
 } from "../cowork/composer/options";
+import { useCoworkModelOptions } from "../cowork/composer/useCoworkModelOptions";
 import { useCoworkPermissionModeAvailability } from "../cowork/composer/useCoworkPermissionModeAvailability";
 import { useCoworkNewTaskText } from "../cowork/newTask/coworkNewTaskMessages";
 import { CoworkComposerPlusIcon } from "../cowork/newTask/CoworkAddMenuIcons";
@@ -74,12 +75,6 @@ const officialMenuPopupClass = "epitaxy-popup relative isolate min-w-[130px] max
 const officialMenuScrollClass = "flex-1 min-h-0 flex flex-col overflow-y-auto";
 const officialMenuItemBaseClass = "relative isolate flex items-center min-h-[var(--h4)] shrink-0 px-p8 text-body select-none cursor-default outline-none hide-focus-ring before:content-[''] before:absolute before:-z-[1] before:inset-y-0 before:left-[6px] before:right-[6px] before:rounded-r5 data-[disabled]:opacity-50 data-[disabled]:pointer-events-none text-[var(--menu-item-color,var(--t8))] data-[highlighted]:before:bg-fill-uncontained-hover hover:before:bg-fill-uncontained-hover focus-visible:before:bg-fill-uncontained-hover";
 const officialMenuIconStyle = { "--class-base-icon": "14px" } as CSSProperties;
-const coworkModelItems = [
-  { label: "Default model", value: "default" },
-  { label: "Opus 4", value: "claude-opus-4" },
-  { label: "Sonnet", value: "claude-sonnet-4" },
-];
-
 type OfficialCoworkComposerBridge = Pick<CoworkSessionsBridge,
   | "addTrustedFolder" | "clearSession" | "forkSession" | "getSupportedCommands"
   | "isFolderTrusted" | "launchUltrareview" | "rewind" | "setMcpServers" | "submitFeedback"
@@ -111,17 +106,28 @@ export function OfficialCoworkPromptBox({
   const selectedFolders = workspace.folders ?? [];
   const text = useCoworkNewTaskText();
   const permissionAvailability = useCoworkPermissionModeAvailability();
+  // Official u2/ote residual — bag models via bootstrap, not hardcoded Opus/Sonnet.
+  const modelOptions = useCoworkModelOptions();
   const rotatingPlaceholders = useMemo(
     () => [text.composerPlaceholder, text.composerPlaceholderSkills],
     [text.composerPlaceholder, text.composerPlaceholderSkills],
   );
-  const modelItems: OfficialDropdownItem[] = coworkModelItems.map((item, index) => ({
+  useEffect(() => {
+    if (!modelOptions.ready) return;
+    if (model !== "default") return;
+    if (modelOptions.preferredSelectorValue === "default") return;
+    onModelChange(modelOptions.preferredSelectorValue);
+  }, [model, modelOptions.preferredSelectorValue, modelOptions.ready, onModelChange]);
+  const modelItems: OfficialDropdownItem[] = modelOptions.items.map((item, index) => ({
     checked: item.value === model,
     label: item.label,
     noQuickKey: index === 0,
-    onSelect: () => onModelChange(item.value),
+    onSelect: () => {
+      modelOptions.setStickyModelPreference(item.value);
+      onModelChange(item.value);
+    },
   }));
-  const modelLabel = coworkModelItems.find((item) => item.value === model)?.label ?? "Default model";
+  const modelLabel = modelOptions.labelFor(model);
   const permissionOptions = useMemo(
     () => coworkPermissionModeOptionsForModes(permissionAvailability.modes),
     [permissionAvailability.modes],

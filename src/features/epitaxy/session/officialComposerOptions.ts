@@ -1,12 +1,17 @@
 /**
- * Official code model / permission mode / effort options (c11959232 Os).
- * Extracted from EpitaxySessionTile — behavior unchanged.
+ * Official code permission / effort options (c11959232).
+ * Model list is NOT hardcoded Sonnet/Opus — use useCodeModelOptions() Ye("ccr_model")
+ * from bag bootstrap (userData/configLibrary inferenceModels).
  */
 
+import {
+  formatCoworkModelDisplayName,
+  normalizeSelectorModelValue,
+} from "../../cowork/composer/useCoworkModelOptions";
+
+/** @deprecated Prefer useCodeModelOptions().items — kept as Default-only fallback. */
 export const codeModelOptions = [
   { label: "Default", value: "default" },
-  { label: "Sonnet", value: "sonnet" },
-  { label: "Opus", value: "opus" },
 ];
 
 export const permissionModeOptions = [
@@ -48,22 +53,18 @@ export const effortLevelOptions = [
   { label: "Max", value: "max" },
 ];
 
-export function modelLabel(value: string) {
-  const normalized = normalizeCodeModelValue(value);
-  return codeModelOptions.find((option) => option.value === normalized)?.label ?? formatClaudeModelLabel(value);
+export function modelLabel(value: string, allowedValues: string[] = []) {
+  const normalized = normalizeCodeModelValue(value, allowedValues);
+  if (normalized === "default") return "Default";
+  return formatCoworkModelDisplayName(normalized);
 }
 
-export function normalizeCodeModelValue(value?: string) {
-  if (!value || value === "opus-4") return "default";
-  if (value === "sonnet-4") return "sonnet";
-  return value;
+export function normalizeCodeModelValue(value?: string, allowedValues: string[] = []) {
+  return normalizeSelectorModelValue(value, allowedValues);
 }
 
 export function formatClaudeModelLabel(value: string) {
-  const match = value.match(/^claude-([a-z]+)-(\d+)(?:-(\d+))?/i);
-  if (!match) return value;
-  const family = `${match[1].charAt(0).toUpperCase()}${match[1].slice(1)}`;
-  return `${family} ${match[2]}${match[3] ? `.${match[3]}` : ""}`;
+  return formatCoworkModelDisplayName(value);
 }
 
 export function permissionModeLabel(value: string) {

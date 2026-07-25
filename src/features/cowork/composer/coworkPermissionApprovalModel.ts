@@ -4,6 +4,8 @@ export type CoworkPermissionApprovalKind =
   | "artifact"
   | "browser"
   | "computer-access"
+  | "computer-enable"
+  | "computer-tcc"
   | "computer-teach"
   | "directory"
   | "file-delete"
@@ -34,6 +36,29 @@ export function coworkPermissionApprovalKind(toolName: string): CoworkPermission
   if (toolName === "computer:request_teach_access") return "computer-teach";
   if (toolName === "computer:request_access") return "computer-access";
   return "generic";
+}
+
+/**
+ * Official Age residual (index-BELzQL5P):
+ *   featureDisabled → Uge (ComputerUseEnablePanel)
+ *   tccState → Fge (ComputerUseTccPanel)
+ *   else → Oge (ComputerUseAppListPanel)
+ */
+export function coworkComputerAccessApprovalKind(
+  input: Record<string, unknown> | undefined,
+): "computer-enable" | "computer-tcc" | "computer-access" {
+  if (input?.featureDisabled === true) return "computer-enable";
+  if (input?.tccState !== undefined) return "computer-tcc";
+  return "computer-access";
+}
+
+export function coworkPermissionApprovalKindFromRequest(
+  request: Pick<CoworkPermissionRequest, "toolName" | "input">,
+): CoworkPermissionApprovalKind {
+  if (request.toolName === "computer:request_access") {
+    return coworkComputerAccessApprovalKind(request.input);
+  }
+  return coworkPermissionApprovalKind(request.toolName);
 }
 
 export function visibleCoworkPermissions(requests: CoworkPermissionRequest[]): VisibleCoworkPermission[] {

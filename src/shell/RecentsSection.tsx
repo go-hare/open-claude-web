@@ -173,7 +173,17 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
         isOpen={renameTarget !== null}
         onClose={() => setRenameTarget(null)}
         onSubmit={(name) => {
-          setSessions((current) => current.map((item) => item.id === renameTarget?.id ? { ...item, title: name } : item));
+          const target = renameTarget;
+          if (!target) return;
+          const nextTitle = name.trim();
+          if (!nextTitle || nextTitle === target.title) return;
+          setSessions((current) => current.map((item) => item.id === target.id ? { ...item, title: nextTitle } : item));
+          officialCodeSessionStore.getState().patchSession(target.id, { title: nextTitle });
+          void desktopBridge.LocalSessions.updateSession?.(target.id, { title: nextTitle }).then((updated) => {
+            if (!updated) return;
+            setSessions((current) => current.map((item) => item.id === target.id ? { ...item, ...updated } : item));
+            officialCodeSessionStore.getState().patchSession(target.id, updated);
+          });
         }}
         placeholder={text.sessionName}
         title={text.renameSession}

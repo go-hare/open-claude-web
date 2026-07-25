@@ -34,11 +34,12 @@ import type { EpitaxySessionRef } from "./epitaxyTranscriptActionContext";
 import { officialCodeSessionStore } from "./officialCodeSessionStore";
 import { InlineToolPermissionApprovals } from "./OfficialToolPermissionApprovals";
 import {
-  codeModelOptions,
+  normalizeSelectorModelValue,
+  useCodeModelOptions,
+} from "../../cowork/composer/useCoworkModelOptions";
+import {
   effortLevelOptions,
   effortLevelLabel,
-  modelLabel,
-  normalizeCodeModelValue,
   normalizeEffortValue,
   permissionModeLabel,
   permissionModeOptions,
@@ -91,12 +92,18 @@ export function ExistingSessionComposer({
   sessionRef: EpitaxySessionRef | null;
   showScrollButton: boolean;
 }) {
+  const codeModelOptions = useCodeModelOptions();
+  const allowedModelValues = useMemo(
+    () => codeModelOptions.items.map((item) => item.value),
+    [codeModelOptions.items],
+  );
   const [text, setText] = useState("");
   const [isSubmitting, setSubmitting] = useState(false);
-  const [model, setModel] = useState(() => normalizeCodeModelValue(session?.model));
+  const [model, setModel] = useState(() => normalizeSelectorModelValue(session?.model, []));
   const [permissionMode, setPermissionMode] = useState(session?.permissionMode ?? "default");
   const [effort, setEffort] = useState(() => normalizeEffortValue(session?.effort));
   const [isConfigBusy, setConfigBusy] = useState(false);
+  const selectedModel = normalizeSelectorModelValue(model, allowedModelValues);
   const submitRef = useRef<() => Promise<void>>(async () => {});
   const clearComposerRef = useRef<() => void>(() => {});
   const tiptapEditorRef = useRef<Editor | null>(null);
@@ -159,10 +166,22 @@ export function ExistingSessionComposer({
   }, [placeholder, slashMenuComponent]);
 
   useEffect(() => {
-    setModel(normalizeCodeModelValue(session?.model));
+    setModel(normalizeSelectorModelValue(session?.model, allowedModelValues));
     setPermissionMode(session?.permissionMode ?? "default");
     setEffort(normalizeEffortValue(session?.effort));
-  }, [session?.effort, session?.model, session?.permissionMode]);
+  }, [allowedModelValues, session?.effort, session?.model, session?.permissionMode]);
+
+  // Drop shell-leaked session model (grok/kimi) once bag list is known.
+  useEffect(() => {
+    if (!codeModelOptions.ready) return;
+    const normalized = normalizeSelectorModelValue(model, allowedModelValues);
+    if (normalized !== model) {
+      setModel(normalized);
+      if (sessionRef && bridge.setModel && normalized === "default") {
+        void bridge.setModel(sessionRef.id, "default").catch(() => undefined);
+      }
+    }
+  }, [allowedModelValues, bridge, codeModelOptions.ready, model, sessionRef]);
 
   useEffect(() => {
     bashModeRef.current = isBashMode;
@@ -264,7 +283,8 @@ export function ExistingSessionComposer({
   };
 
   const applyModel = async (nextModel: string) => {
-    if (!sessionRef || nextModel === model) return;
+    if (!sessionRef || nextModel === selectedModel) return;
+    codeModelOptions.setStickyModelPreference(nextModel);
     setModel(nextModel);
     setConfigBusy(true);
     try {
@@ -322,9 +342,9 @@ export function ExistingSessionComposer({
     }
   };
 
-  const modelItems = codeModelOptions.map((option) => ({
+  const modelItems = codeModelOptions.items.map((option) => ({
     label: option.label,
-    checked: option.value === model,
+    checked: option.value === selectedModel,
     onSelect: () => void applyModel(option.value),
   }));
   const permissionItems = permissionModeOptions.map((option) => ({
@@ -406,7 +426,7 @@ export function ExistingSessionComposer({
         loops={undefined}
         modelExtraSections={modelExtraSections}
         modelItems={modelItems}
-        modelLabel={modelLabel(model)}
+        modelLabel={codeModelOptions.labelFor(selectedModel)}
         modelPickerDisabled={disabled || isConfigBusy}
         onCoordinatorModeChange={undefined}
         permissionDanger={permissionMode === "bypassPermissions"}

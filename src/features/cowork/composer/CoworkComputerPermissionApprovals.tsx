@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { desktopBridge } from "../../../adapters/desktopBridge";
 import { Icon } from "../../../shell/icons";
+import { ConfirmDialog } from "../../../shell/ConfirmDialog";
 import type { CoworkPermissionDecision, CoworkPermissionRequest } from "../session/coworkPermissionTypes";
-import { CoworkComputerAccessGlyph, CoworkComputerTeachGlyph } from "../ui/CoworkOfficialGlyphs";
+import { CoworkComputerAccessGlyph } from "../ui/CoworkOfficialGlyphs";
 import { CoworkComposerButton } from "./CoworkComposerPrimitives";
 import { useCoworkPermissionKeyboard } from "./useCoworkPermissionKeyboard";
 
@@ -11,6 +13,251 @@ type ApprovalProps = {
   onDecide: (decision: CoworkPermissionDecision, input?: Record<string, unknown>) => void;
   request: CoworkPermissionRequest;
 };
+
+type TccGrantState = "granted" | "denied" | "not-determined" | "not-supported";
+type TccState = { accessibility: TccGrantState; screenRecording: TccGrantState };
+
+/**
+ * Official residual Uge ComputerUseEnablePanel (index-BELzQL5P):
+ *   title “Claude wants to use your computer”
+ *   row Computer use → Enable → xge confirm “Turn on computer use?” → setPreference chicagoEnabled true
+ *   optional Accessibility / Screen recording rows when input.tccState present and chicago already on
+ *   Deny / Continue
+ */
+export function CoworkComputerEnableApproval(props: ApprovalProps) {
+  const rootRef = useApprovalScrollIntoView();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [chicagoEnabled, setChicagoEnabled] = useState(false);
+  const [tcc, setTcc] = useState<TccState | null>(readTccFromInput(props.request.input.tccState));
+  const hasTccInInput = props.request.input.tccState !== undefined;
+  const accessibilityGranted = tcc?.accessibility === "granted";
+  const screenRecordingGranted = tcc?.screenRecording === "granted";
+  const showOsRows = chicagoEnabled && hasTccInInput;
+  const needsOs = showOsRows && (!accessibilityGranted || !screenRecordingGranted);
+
+  useEffect(() => {
+    let alive = true;
+    void desktopBridge.Preferences.getPreferences?.().then((prefs) => {
+      if (!alive) return;
+      setChicagoEnabled(Boolean((prefs as { chicagoEnabled?: boolean } | null)?.chicagoEnabled));
+    });
+    const unsub = desktopBridge.Preferences.onPreferencesChanged?.((prefs) => {
+      setChicagoEnabled(Boolean((prefs as { chicagoEnabled?: boolean }).chicagoEnabled));
+    });
+    return () => {
+      alive = false;
+      unsub?.();
+    };
+  }, []);
+
+  const refreshTcc = useCallback(() => {
+    void computerUseTcc()?.getState?.().then((state) => {
+      if (state) setTcc(normalizeTcc(state));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (hasTccInInput) refreshTcc();
+  }, [hasTccInInput, refreshTcc]);
+
+  const onDeny = useCallback(() => {
+    props.onDecide("deny");
+  }, [props]);
+
+  const onEnableConfirm = useCallback(() => {
+    setConfirmOpen(false);
+    setChicagoEnabled(true);
+    void desktopBridge.Preferences.setPreference?.(
+      "chicagoEnabled" as never,
+      true as never,
+    );
+  }, []);
+
+  const onContinue = useCallback(() => {
+    // Official Continue after enable = deny the current featureDisabled request
+    // so the model re-calls request_access (CFi residual post-enable message).
+    props.onDecide("deny");
+  }, [props]);
+
+  useComputerShortcuts(
+    props.busy || props.disableKeyboardShortcuts === true || confirmOpen,
+    onDeny,
+    chicagoEnabled ? onContinue : onDeny,
+  );
+
+  const reason = text(props.request.input.reason);
+
+  return (
+    <div ref={rootRef}>
+      {reason ? <p className="text-text-100 mb-3">{reason}</p> : null}
+      <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4">
+        <div className="p-3">
+          <div className="flex items-start gap-2 mb-3">
+            <CoworkComputerAccessGlyph className="text-text-300 flex-shrink-0" size={20} />
+            <span className="text-sm text-text-200 font-semibold">Claude wants to use your computer</span>
+          </div>
+          <div className="ml-7 mb-3 border border-border-300 rounded-lg divide-y divide-border-300">
+            <ComputerPermissionToggleRow
+              buttonLabel="Enable"
+              description="Let Claude see your screen and control your mouse and keyboard."
+              granted={chicagoEnabled}
+              label="Computer use"
+              onRequest={() => setConfirmOpen(true)}
+            />
+            {showOsRows && !accessibilityGranted ? (
+              <ComputerPermissionToggleRow
+                description="Required for mouse and keyboard control."
+                granted={false}
+                label="Accessibility"
+                onRequest={() => {
+                  void computerUseTcc()?.requestAccessibility?.().finally(refreshTcc);
+                }}
+              />
+            ) : null}
+            {showOsRows && !screenRecordingGranted ? (
+              <ComputerPermissionToggleRow
+                description="Required for screen visibility. macOS may ask you to restart."
+                granted={false}
+                label="Screen recording"
+                onRequest={() => {
+                  void computerUseTcc()?.requestScreenRecording?.().finally(refreshTcc);
+                }}
+              />
+            ) : null}
+          </div>
+          {needsOs ? (
+            <p className="text-xs text-text-400 ml-7 mb-3">
+              Grant the macOS permissions above to finish. You&apos;ll need to be at your Mac for these.
+            </p>
+          ) : null}
+          <div className="flex gap-2 ml-7">
+            <CoworkComposerButton
+              className="!font-semibold !text-xs !h-9"
+              disabled={props.busy}
+              onClick={onDeny}
+              shortcut={shortcut(props.disableKeyboardShortcuts || confirmOpen, "cmd+.")}
+              variant="secondary"
+            >
+              Deny
+            </CoworkComposerButton>
+            {chicagoEnabled ? (
+              <CoworkComposerButton
+                className="!font-semibold !text-xs !h-9"
+                disabled={props.busy}
+                onClick={onContinue}
+                shortcut={shortcut(props.disableKeyboardShortcuts || confirmOpen, "cmd+enter")}
+              >
+                Continue
+              </CoworkComposerButton>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      {/* Official xge: Turn on computer use? / Turn on / warning */}
+      {/* Official xge: variant warning + Turn on / Turn on computer use? */}
+      <ConfirmDialog
+        confirmText="Turn on"
+        isOpen={confirmOpen}
+        message={
+          <div className="flex flex-col gap-3 pt-1">
+            <p>
+              Claude will take screenshots of your screen and control your mouse and keyboard. You&apos;ll approve each app, but not confirm each step Claude performs. Prefer tasks where mistakes are easy to fix.
+            </p>
+          </div>
+        }
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={onEnableConfirm}
+        title="Turn on computer use?"
+        variant="warning"
+      />
+    </div>
+  );
+}
+
+/**
+ * Official residual Fge ComputerUseTccPanel:
+ * System permissions needed + Accessibility / Screen recording rows + Deny / Ask again.
+ */
+export function CoworkComputerTccApproval(props: ApprovalProps) {
+  const rootRef = useApprovalScrollIntoView();
+  const [tcc, setTcc] = useState<TccState | null>(readTccFromInput(props.request.input.tccState));
+  const accessibilityGranted = tcc?.accessibility === "granted";
+  const screenRecordingGranted = tcc?.screenRecording === "granted";
+  const ready = Boolean(accessibilityGranted && screenRecordingGranted);
+
+  const refreshTcc = useCallback(() => {
+    void computerUseTcc()?.getState?.().then((state) => {
+      if (state) setTcc(normalizeTcc(state));
+    });
+  }, []);
+
+  useEffect(() => {
+    refreshTcc();
+  }, [refreshTcc]);
+
+  const onDeny = useCallback(() => {
+    props.onDecide("deny");
+  }, [props]);
+
+  useComputerShortcuts(props.busy || props.disableKeyboardShortcuts === true, onDeny, onDeny);
+
+  return (
+    <div ref={rootRef}>
+      <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4">
+        <div className="p-3">
+          <div className="flex items-start gap-2 mb-1">
+            <CoworkComputerAccessGlyph className="text-text-300 flex-shrink-0" size={20} />
+            <span className="text-sm text-text-200 font-semibold">System permissions needed</span>
+          </div>
+          <p className="text-sm text-text-300 ml-7 mb-3">
+            Computer use needs two macOS permissions. Click each one, grant it in System Settings, then come back here.
+          </p>
+          <div className="ml-7 mb-3 border border-border-300 rounded-lg divide-y divide-border-300">
+            <ComputerPermissionToggleRow
+              description="Required for mouse and keyboard control."
+              granted={accessibilityGranted === true}
+              label="Accessibility"
+              onRequest={() => {
+                void computerUseTcc()?.requestAccessibility?.().finally(refreshTcc);
+              }}
+            />
+            <ComputerPermissionToggleRow
+              description="Required for screen visibility. macOS may ask you to restart."
+              granted={screenRecordingGranted === true}
+              label="Screen recording"
+              onRequest={() => {
+                void computerUseTcc()?.requestScreenRecording?.().finally(refreshTcc);
+              }}
+            />
+          </div>
+          {ready ? (
+            <p className="text-xs text-text-400 ml-7 mb-3">Permissions are ready. Click Ask again to continue.</p>
+          ) : null}
+          <div className="flex gap-2 ml-7">
+            <CoworkComposerButton
+              className="!font-semibold !text-xs !h-9"
+              disabled={props.busy}
+              onClick={onDeny}
+              shortcut={shortcut(props.disableKeyboardShortcuts, "cmd+.")}
+              variant="secondary"
+            >
+              Deny
+            </CoworkComposerButton>
+            {ready ? (
+              <CoworkComposerButton
+                className="!font-semibold !text-xs !h-9"
+                disabled={props.busy}
+                onClick={onDeny}
+              >
+                Ask again
+              </CoworkComposerButton>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function CoworkComputerAccessApproval(props: ApprovalProps) {
   const rootRef = useApprovalScrollIntoView();
@@ -46,7 +293,7 @@ export function CoworkComputerTeachApproval(props: ApprovalProps) {
     <div ref={rootRef}>
       <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4">
         <div className="p-3">
-          <div className="flex items-start gap-2 mb-1"><CoworkComputerTeachGlyph className="text-text-300 flex-shrink-0" size={20} /><span className="text-sm text-text-200 font-semibold">Let Claude guide you step by step?</span></div>
+          <div className="flex items-start gap-2 mb-1"><CoworkComputerAccessGlyph className="text-text-300 flex-shrink-0" size={20} /><span className="text-sm text-text-200 font-semibold">Let Claude guide you step by step?</span></div>
           <p className="text-sm text-text-300 ml-7 mb-2">{text(props.request.input.reason)}</p>
           <p className="text-xs text-text-400 ml-7 mb-3">The Claude window will hide. A tooltip appears next to each step with a Next button. Click Exit anytime to stop.</p>
           {apps.length ? <div className="ml-7 mb-3 rounded-lg border border-border-300 bg-bg-100 divide-y divide-border-300 [&>*:nth-child(even)]:bg-bg-200/40">{apps.map((app, index) => <ComputerAppRow app={app} key={app.resolved?.bundleId ?? `unresolved-${index}`} />)}</div> : null}
@@ -58,6 +305,37 @@ export function CoworkComputerTeachApproval(props: ApprovalProps) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Official qge row: label + description + granted check / action button. */
+function ComputerPermissionToggleRow({
+  buttonLabel = "Enable",
+  description,
+  granted,
+  label,
+  onRequest,
+}: {
+  buttonLabel?: string;
+  description: string;
+  granted: boolean;
+  label: string;
+  onRequest: () => void;
+}) {
+  return (
+    <div className="p-3 flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="text-sm text-text-200 font-medium">{label}</span>
+        <span className="text-xs text-text-400">{description}</span>
+      </div>
+      {granted ? (
+        <span className="text-xs text-text-400 flex-shrink-0 pt-0.5">On</span>
+      ) : (
+        <CoworkComposerButton className="!font-semibold !text-xs !h-8 shrink-0" onClick={onRequest} variant="secondary">
+          {buttonLabel}
+        </CoworkComposerButton>
+      )}
     </div>
   );
 }
@@ -121,6 +399,38 @@ function computerTitle(apps: ComputerApp[], hasFlags: boolean) { if (!apps.lengt
 function tierLabel(tier: ComputerApp["proposedTier"]) { return tier === "read" ? "View only" : tier === "click" ? "Click only" : "Full control"; }
 function record(value: unknown) { return value && typeof value === "object" ? value as Record<string, unknown> : {}; }
 function text(value: unknown) { return typeof value === "string" ? value : ""; }
+
+function readTccFromInput(value: unknown): TccState | null {
+  const row = record(value);
+  if (!row.accessibility && !row.screenRecording) return null;
+  return normalizeTcc(row);
+}
+
+function normalizeTcc(value: unknown): TccState {
+  const row = record(value);
+  return {
+    accessibility: asGrant(row.accessibility),
+    screenRecording: asGrant(row.screenRecording),
+  };
+}
+
+function asGrant(value: unknown): TccGrantState {
+  if (value === "granted" || value === "denied" || value === "not-determined" || value === "not-supported") {
+    return value;
+  }
+  return "not-determined";
+}
+
+type ComputerUseTccBridge = {
+  getState?: () => Promise<TccState | null | undefined>;
+  requestAccessibility?: () => Promise<unknown>;
+  requestScreenRecording?: () => Promise<unknown>;
+};
+
+function computerUseTcc(): ComputerUseTccBridge | undefined {
+  const web = (window as unknown as { "claude.web"?: { ComputerUseTcc?: ComputerUseTccBridge } })["claude.web"];
+  return web?.ComputerUseTcc;
+}
 
 function useApprovalScrollIntoView() { const ref = useRef<HTMLDivElement | null>(null); useEffect(() => { ref.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, []); return ref; }
 function useComputerShortcuts(busy: boolean, onDeny: () => void, onAllow: () => void) { useCoworkPermissionKeyboard({ enabled: !busy, modifiedOnly: true, onDeny, onEnter: onAllow }); }

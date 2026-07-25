@@ -19,11 +19,14 @@ export const PROJECT_CARD_CLASS =
 export function ProjectsPageShell({
   action,
   children,
+  subheader,
   tabsEnd,
   title = "项目",
 }: {
   action?: ReactNode;
   children?: ReactNode;
+  /** Official EGt `subheader` — sits under BFe, outside scroll body. */
+  subheader?: ReactNode;
   tabsEnd?: ReactNode;
   title?: ReactNode;
 }) {
@@ -49,6 +52,9 @@ export function ProjectsPageShell({
           {toolbar}
         </div>
       </header>
+      {subheader ? (
+        <div className="shrink-0 mx-auto w-full max-w-4xl px-4 md:!px-8 -mt-1 pb-3">{subheader}</div>
+      ) : null}
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="mx-auto w-full max-w-4xl px-4 md:!px-8 mt-2 md:mt-4 pb-8">{children}</div>
       </div>

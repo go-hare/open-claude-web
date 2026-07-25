@@ -65,6 +65,7 @@ const SHELL_MESSAGES = {
   project: { defaultMessage: "Project", id: "k36uSwr4q5", zhCN: "项目" },
   projects: { defaultMessage: "Projects", id: "UxTJRaKagI", zhCN: "项目" },
   recent: { defaultMessage: "Recent", id: "wA4FIMmtlS", zhCN: "最近" },
+  viewAll: { defaultMessage: "View all", id: "pFK6bJU0EM", zhCN: "查看全部" },
   recency: { defaultMessage: "Recent activity", id: "YsScAYZTjo", zhCN: "最近活动优先" },
   remoteControl: { defaultMessage: "Remote control", id: "4mv6Z9Tv+V", zhCN: "远程控制" },
   rename: { defaultMessage: "Rename", id: "iXNbPfQDIZ", zhCN: "重命名" },

@@ -8,6 +8,8 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   bypassPermissionsModeEnabled: false,
   ccAutoArchiveOnPrClose: false,
   ccBranchPrefix: "claude",
+  // Official HSA chicagoEnabled:!1
+  chicagoEnabled: false,
   chillingSlothLocation: "default",
   coworkSpaceContextEnabled: false,
   dockBounceEnabled: false,

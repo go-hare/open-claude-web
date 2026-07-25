@@ -22,15 +22,42 @@ function getFramebufferBridge() {
       : undefined);
 }
 
-/** Official T: framebufferPreview supported when bridge expose attach/listSources. */
+/**
+ * Official T (c11959232 YR):
+ *   T = capabilities.framebufferPreview.status === "supported"
+ * Product: open-claude-desktop FramebufferPreview is a residual shell only
+ * (desktopCapturer listSources + attach metadata; RFB MessagePort not wired).
+ * Do NOT treat "bridge methods exist" as supported — that made Screen always
+ * appear via desktop window/screen sources, unlike official YR gating.
+ * Until real simulator/device framebuffer is implemented, T is false.
+ */
 export function canUseOfficialFramebufferPreview(): boolean {
-  const bridge = getFramebufferBridge();
-  return Boolean(bridge?.attach || bridge?.listSources);
+  const bridge = getFramebufferBridge() as
+    | {
+        attach?: unknown;
+        listSources?: unknown;
+        /** Optional product residual: explicit supported flag when real RFB lands. */
+        isSupported?: () => boolean | Promise<boolean>;
+        getStatus?: () => { status?: string } | Promise<{ status?: string }>;
+      }
+    | undefined;
+  if (!bridge) return false;
+  // Explicit host capability only — never invent support from method presence.
+  try {
+    if (typeof bridge.isSupported === "function") {
+      const value = bridge.isSupported();
+      if (value === true) return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
 }
 
 /**
  * Official YR Screen item: T && (A || already open).
- * A = listSources(cwd).length > 0 (polled). Without cwd, still allow if bridge exists so empty pane can show folder hint.
+ * A = listSources(cwd).length > 0 (polled) — only meaningful when T is true.
+ * When T is false, Screen stays hidden even if pane was somehow open in state.
  */
 export function useOfficialFramebufferMenuGate(cwd: string | undefined | null, paneOpen: boolean): boolean {
   const [hasSources, setHasSources] = useState(false);
@@ -51,7 +78,21 @@ export function useOfficialFramebufferMenuGate(cwd: string | undefined | null, p
         const bridge = getFramebufferBridge();
         const sources = await bridge?.listSources?.(cwd) ?? [];
         if (!alive) return;
-        setHasSources(Array.isArray(sources) && sources.length > 0);
+        // Official framebuffer sources are simulator/device streams, not desktopCapturer
+        // screen/window thumbnails. Prefer sources that declare a device-ish origin.
+        const real = (Array.isArray(sources) ? sources : []).filter((row) => {
+          if (!row || typeof row !== "object") return false;
+          const item = row as Record<string, unknown>;
+          const origin = typeof item.origin === "string" ? item.origin : "";
+          const kind = typeof item.kind === "string" ? item.kind : typeof item.type === "string" ? item.type : "";
+          // Reject Electron desktopCapturer ids (screen:… / window:…).
+          const id = typeof item.id === "string" ? item.id : "";
+          if (id.startsWith("screen:") || id.startsWith("window:")) return false;
+          if (kind === "screen" || kind === "window") return false;
+          if (origin.startsWith("screen:") || origin.startsWith("window:")) return false;
+          return Boolean(item.name || id);
+        });
+        setHasSources(real.length > 0);
       } catch {
         if (alive) setHasSources(false);
       }

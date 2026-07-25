@@ -68,22 +68,8 @@ function ToolbarHeader({ children, compact = false, title }: { children?: ReactN
   );
 }
 
-export function RecentsPage({ onNavigate }: RouteViewProps) {
-  return (
-    <Surface>
-      <ToolbarHeader compact title="Chats">
-        <button className={smallSecondaryClass} style={{ height: 32, width: 106 }} type="button">Select chats</button>
-        <a className={smallPrimaryClass} href="/new" onClick={(e) => { e.preventDefault(); onNavigate("/task/new"); }} style={{ height: 32, width: 87 }}>New chat</a>
-      </ToolbarHeader>
-      <div className="sticky top-0 z-header bg-bg-100">
-        <div className="relative mx-auto w-full max-w-4xl px-4 pt-4 pb-2 md:px-8 lg:pt-6"><SearchInput placeholder="Search chats..." /></div>
-      </div>
-      <main className="mx-auto mt-4 w-full flex-1 px-4 md:px-8 lg:mt-6 max-w-4xl !mt-2">
-        <EmptyState cta="New chat" description="Think through anything with Claude—from big ideas to quick questions. Your chats will show up here." headline="Ready for your first chat?" minHeight={452} onClick={() => onNavigate("/task/new")} />
-      </main>
-    </Surface>
-  );
-}
+/** Official c1b9abf13 chats list (Select chats / Search / rows). Was empty-only shell. */
+export { ChatsPage as RecentsPage } from "./ChatsPage";
 
 /** Official `_Component32` cowork branch — see `./ProjectsPage`. */
 export { ProjectsPage } from "./ProjectsPage";

@@ -2,11 +2,16 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useMemo, type Dispatch, type SetStateAction } from "react";
 import type { CoworkSessionsBridge } from "../../../adapters/desktopBridge/types";
 import type { CoworkPermissionDecision, CoworkPermissionRequest } from "../session/coworkPermissionTypes";
-import { CoworkComputerAccessApproval, CoworkComputerTeachApproval } from "./CoworkComputerPermissionApprovals";
+import {
+  CoworkComputerAccessApproval,
+  CoworkComputerEnableApproval,
+  CoworkComputerTccApproval,
+  CoworkComputerTeachApproval,
+} from "./CoworkComputerPermissionApprovals";
 import { CoworkArtifactApproval, CoworkSaveSkillApproval, CoworkScheduledTaskApproval } from "./CoworkPermissionContentApprovals";
 import { CoworkGenericPermissionApproval } from "./CoworkGenericPermissionApproval";
 import {
-  coworkPermissionApprovalKind,
+  coworkPermissionApprovalKindFromRequest,
   visibleCoworkPermissions,
   type VisibleCoworkPermission,
 } from "./coworkPermissionApprovalModel";
@@ -35,7 +40,7 @@ export function CoworkPermissionApprovals({ controller }: { controller: CoworkPe
   const visible = useMemo(() => visibleCoworkPermissions(controller.requests), [controller.requests]);
   const decide = useCoworkPermissionDecision(controller);
   const setupCode = useLaunchCodeSession(controller, decide);
-  const firstBrowserRequestId = visible.find((entry) => coworkPermissionApprovalKind(entry.request.toolName) === "browser")?.request.requestId;
+  const firstBrowserRequestId = visible.find((entry) => coworkPermissionApprovalKindFromRequest(entry.request) === "browser")?.request.requestId;
   if (!controller.bridge.respondToToolPermission) return null;
   return (
     <div className={visible.length > 0 ? "mb-6" : undefined}>
@@ -50,7 +55,7 @@ export function CoworkPermissionApprovals({ controller }: { controller: CoworkPe
           >
             <CoworkPermissionApproval
               entry={entry}
-              disableKeyboardShortcuts={controller.disableKeyboardShortcuts === true || (coworkPermissionApprovalKind(entry.request.toolName) === "browser" && entry.request.requestId !== firstBrowserRequestId)}
+              disableKeyboardShortcuts={controller.disableKeyboardShortcuts === true || (coworkPermissionApprovalKindFromRequest(entry.request) === "browser" && entry.request.requestId !== firstBrowserRequestId)}
               isScheduledTask={controller.isScheduledTask === true}
               onDecide={(decision, input) => void decide(entry, decision, input)}
               onSetup={setupCode}
@@ -70,7 +75,8 @@ function CoworkPermissionApproval({ disableKeyboardShortcuts, entry, isScheduled
   onSetup?: (request: CoworkPermissionRequest) => void;
 }) {
   const props = { busy: false, disableKeyboardShortcuts, onDecide, request: entry.request };
-  switch (coworkPermissionApprovalKind(entry.request.toolName)) {
+  // Official Age residual for computer:request_access (featureDisabled / tcc / apps).
+  switch (coworkPermissionApprovalKindFromRequest(entry.request)) {
     case "directory": return <CoworkDirectoryApproval {...props} isScheduledTask={isScheduledTask} />;
     case "file-delete": return <CoworkFileDeleteApproval {...props} />;
     case "launch-code": return <CoworkLaunchCodeApproval {...props} onSetup={onSetup} />;
@@ -80,6 +86,8 @@ function CoworkPermissionApproval({ disableKeyboardShortcuts, entry, isScheduled
     case "browser": return <CoworkBrowserApproval {...props} duplicateCount={entry.duplicateRequestIds.length + 1} isScheduledTask={isScheduledTask} />;
     case "web-fetch": return <CoworkWebFetchApproval {...props} />;
     case "computer-teach": return <CoworkComputerTeachApproval {...props} />;
+    case "computer-enable": return <CoworkComputerEnableApproval {...props} />;
+    case "computer-tcc": return <CoworkComputerTccApproval {...props} />;
     case "computer-access": return <CoworkComputerAccessApproval {...props} />;
     default: return <CoworkGenericPermissionApproval {...props} isScheduledTask={isScheduledTask} />;
   }

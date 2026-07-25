@@ -319,7 +319,9 @@ function isDesktopFrame() {
 }
 
 function modeFromPath(pathname: string) {
+  // Official Pos/uAe: bare `/` redirects to Cowork `/task/new` — not Code mode.
   if (
+    pathname === "/" ||
     pathname === "/new" ||
     pathname.startsWith("/chat/") ||
     pathname === "/task" ||
@@ -332,7 +334,6 @@ function modeFromPath(pathname: string) {
     pathname.startsWith("/cowork/agent")
   ) return "cowork";
   if (
-    pathname === "/" ||
     pathname === "/code" ||
     pathname.startsWith("/code/") ||
     pathname.startsWith("/claude-code-desktop")

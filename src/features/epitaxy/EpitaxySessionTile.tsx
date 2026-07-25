@@ -16,7 +16,7 @@ import {
   officialCodeSessionStore,
 } from "./session/officialCodeSessionStore";
 import {
-  canUseOfficialFilesBrowser,
+  useOfficialFilesBrowserMenuGate,
 } from "./session/OfficialFilesBrowserPane";
 import { useOfficialFramebufferMenuGate } from "./session/OfficialFramebufferPane";
 import { sessionHasOfficialRuns } from "./session/OfficialRunsPane";
@@ -240,6 +240,8 @@ function EpitaxyChatPanel({
   // Official YR Screen: T && (A || u.has("framebuffer"))
   const framebufferPaneOpen = sideTiles.includes("framebuffer");
   const canOpenFramebuffer = useOfficialFramebufferMenuGate(session?.cwd, framebufferPaneOpen);
+  // Official VC(): el("ccd_file_browser") && listSessionDirectory && fetchMentionOptions
+  const canOpenBrowser = useOfficialFilesBrowserMenuGate();
   // Official setSidePane(e): if tile already present only focus; else ur() insert (column under existing side).
   const openSidePane = useCallback((view: OfficialViewPane) => {
     setSideTiles((current) => current.includes(view) ? current : [...current, view]);
@@ -337,7 +339,7 @@ function EpitaxyChatPanel({
     });
   }, []);
 
-  useEpitaxyViewShortcuts(selectView);
+  useEpitaxyViewShortcuts(selectView, true, canOpenBrowser);
   // Bridge OfficialCodeMarkdown / Hb inline path clicks (ob/db/Db) → file pane.
   useEffect(() => {
     const onOpenFile = (event: Event) => {
@@ -539,7 +541,7 @@ function EpitaxyChatPanel({
             />
             <EpitaxyChatHeader
               activeView={activeView}
-              canOpenBrowser={canUseOfficialFilesBrowser()}
+              canOpenBrowser={canOpenBrowser}
               canOpenFramebuffer={canOpenFramebuffer}
               canOpenRuns={sessionHasOfficialRuns(session, effectiveSessionRef)}
               dragHandle={dragHandle}

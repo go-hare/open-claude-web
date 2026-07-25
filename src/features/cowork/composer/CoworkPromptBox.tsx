@@ -19,6 +19,7 @@ import {
   coworkPermissionModeOptionsForModes,
   isCoworkUnsupervisedPermissionMode,
 } from "./options";
+import { useCoworkModelOptions } from "./useCoworkModelOptions";
 import { useCoworkPermissionModeAvailability } from "./useCoworkPermissionModeAvailability";
 import { useCoworkRecentFolders } from "./useCoworkRecentFolders";
 
@@ -44,11 +45,6 @@ export type CoworkPromptBoxProps = {
   workspace: WorkspaceContext;
 };
 
-const modelOptions = [
-  { label: "Default model", value: "default" },
-  { label: "Opus 4", value: "claude-opus-4" },
-  { label: "Sonnet", value: "claude-sonnet-4" },
-];
 const noop = () => undefined;
 
 /**
@@ -87,12 +83,21 @@ function useCoworkPromptBoxState(props: CoworkPromptBoxProps) {
   const selectedFolders = props.workspace.folders ?? [];
   // Official skt: isAvailable from OZe; modes from Ewt("cowork", {auto,bypass}).
   const permissionAvailability = useCoworkPermissionModeAvailability();
+  // Official u2/ote residual: model list from bootstrap bag, not hardcoded Opus/Sonnet.
+  const modelOptions = useCoworkModelOptions();
   // Official skt effect: when OZe null, draftPermissionMode resets to default.
   useEffect(() => {
     if (!permissionAvailability.isAvailable && isCoworkUnsupervisedPermissionMode(props.permissionMode)) {
       props.onPermissionModeChange("default");
     }
   }, [permissionAvailability.isAvailable, props.onPermissionModeChange, props.permissionMode]);
+  // Sticky residual: if parent still has default and sticky is valid, surface sticky once ready.
+  useEffect(() => {
+    if (!modelOptions.ready) return;
+    if (props.model !== "default") return;
+    if (modelOptions.preferredSelectorValue === "default") return;
+    props.onModelChange(modelOptions.preferredSelectorValue);
+  }, [modelOptions.preferredSelectorValue, modelOptions.ready, props]);
   const updateFolders = useCallback(
     (folders: string[]) => props.onWorkspaceChange({ ...props.workspace, folders: [...new Set(folders.filter(Boolean))] }),
     [props],
@@ -117,11 +122,14 @@ function useCoworkPromptBoxState(props: CoworkPromptBoxProps) {
         : [{ icon: createElement(CoworkAddMenuFolderAddIcon, { size: 14 }), label: "Add folder", onSelect: addFolder }],
     [addFolder, props],
   );
-  const modelItems = modelOptions.map((item, index) => ({
+  const modelItems = modelOptions.items.map((item, index) => ({
     checked: item.value === props.model,
     label: item.label,
     noQuickKey: index === 0,
-    onSelect: () => props.onModelChange(item.value),
+    onSelect: () => {
+      modelOptions.setStickyModelPreference(item.value);
+      props.onModelChange(item.value);
+    },
   }));
   // Official nkt → Kwt only when isAvailable; otherwise null (no Ask UI).
   const permissionOptions = useMemo(
@@ -139,7 +147,7 @@ function useCoworkPromptBoxState(props: CoworkPromptBoxProps) {
   return {
     addMenuItems,
     modelItems,
-    modelLabel: modelOptions.find((item) => item.value === props.model)?.label ?? "Default model",
+    modelLabel: modelOptions.labelFor(props.model),
     permissionAvailable: permissionAvailability.isAvailable,
     permissionItems,
     permissionLabel,

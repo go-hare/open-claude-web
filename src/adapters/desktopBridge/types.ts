@@ -190,6 +190,11 @@ export type DesktopPreferences = {
   bypassPermissionsModeEnabled?: boolean;
   ccAutoArchiveOnPrClose?: boolean;
   ccBranchPrefix?: string;
+  /**
+   * Official gi("chicagoEnabled") — Computer use feature switch.
+   * Default false (HSA residual). Uge Enable → setPreference true.
+   */
+  chicagoEnabled?: boolean;
   chillingSlothLocation?: "default" | { customPath: string };
   coworkSpaceContextEnabled?: boolean;
   dockBounceEnabled?: boolean;
@@ -235,6 +240,8 @@ export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
 export type StartSessionInput = {
   kind: SessionSummary["kind"];
   effort?: EffortLevel;
+  /** Official LocalAgentModeSessions.start residual: first-turn image attachments. */
+  images?: CoworkImagePayload[];
   message?: string;
   messageUuid?: string;
   model?: string;

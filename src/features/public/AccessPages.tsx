@@ -105,6 +105,30 @@ export function OAuthDevicePage() {
   );
 }
 
+/**
+ * Official ion-dist residual:
+ *   path:"login" LoginRoute (index-BELzQL5P.js uls) + c19e49841 login form
+ *   `/` beforeLoad: isLoggedOut && !bootstrapFailed → /login
+ *   Copy: "Enter your email" / "Continue with email" / "Continue with SSO"
+ *
+ * Product honesty: 1p Anthropic OAuth is owned by anthropicOriginUrl (https://claude.ai).
+ * Local product web must NOT invent OAuth success — Continue navigates to official login.
+ * 3p mode uses synthetic bootstrap account and never hits this route.
+ */
+/**
+ * @deprecated Product `/login` is LoginDesktop (sVt/M5t). Keep only if a caller still imports
+ * the old claude.ai email-form approximation — do not rewire public routes here.
+ */
+export function LoginPage() {
+  // Thin redirect residual: avoid inventing OAuth UI; send to LoginDesktop route.
+  useEffect(() => {
+    if (window.location.pathname === "/login") return;
+    window.history.replaceState({}, "", "/login");
+    window.dispatchEvent(new Event("app:navigation"));
+  }, []);
+  return null;
+}
+
 export function DesktopTutorialPage({ onNavigate }: RouteViewProps) {
   const complete = () => {
     onNavigate("/");

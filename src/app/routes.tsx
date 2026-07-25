@@ -80,7 +80,31 @@ function CoworkLegacyTaskRedirect() {
   return null;
 }
 
+/**
+ * Official Pos residual (index-BELzQL5P.js):
+ *   isLoggedOut → /login
+ *   else → uAe(account) which returns "/task/new" (Cowork home), not Code `/code`.
+ * Product must not map bare `/` to EpitaxyHome/Code.
+ */
+function RootHomeRedirect() {
+  useEffect(() => {
+    window.history.replaceState({}, "", "/task/new");
+    window.dispatchEvent(new Event("app:navigation"));
+  }, []);
+  return null;
+}
+
 export const routes: AppRoute[] = [
+  {
+    id: "root-home",
+    path: "/",
+    title: "Home",
+    navKey: "new-session",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js Pos → uAe → /task/new",
+    Component: RootHomeRedirect,
+    match: (pathname) => pathname === "/",
+  },
   {
     id: "cowork-home",
     path: "/task/new",
@@ -128,7 +152,7 @@ export const routes: AppRoute[] = [
     kind: "code",
     sourceChunk: "cf52a4cc1-Cp3wVf85.js + c11959232-h_zsw3wI.js",
     Component: EpitaxyHome,
-    match: (pathname) => pathname === "/" || pathname === "/code",
+    match: (pathname) => pathname === "/code",
   },
 
   {
@@ -311,6 +335,16 @@ export const routes: AppRoute[] = [
     navKey: "recents",
     kind: "epitaxy",
     sourceChunk: "c1b9abf13-BWGqUBhA.js",
+    Component: RecentsPage,
+  },
+  {
+    // Official ca0135 Ba residual: cowork/chat/home → "/chats" (View all from recents header).
+    id: "chats",
+    path: "/chats",
+    title: "Chats",
+    navKey: "recents",
+    kind: "epitaxy",
+    sourceChunk: "c1b9abf13-BWGqUBhA.js + ca0135bc5-Cab670j1.js",
     Component: RecentsPage,
   },
   {

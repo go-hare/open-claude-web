@@ -4,6 +4,14 @@ import { useShellText } from "../../../i18n/shellMessages";
 import type { FrameStore } from "../../../stores/frameStore";
 import { BaseMenuItem, BaseMenuPopup, BaseMenuSeparator, Menu } from "../../../shell/BaseMenu";
 import { Icon } from "../../../shell/icons";
+import {
+  CoworkArchiveGlyph,
+  CoworkEditGlyph,
+  CoworkMarkDoneGlyph,
+  CoworkPinGlyph,
+  CoworkTrashGlyph,
+  CoworkUnpinGlyph,
+} from "../ui/CoworkOfficialGlyphs";
 import { coworkSessionPinKey, isCoworkSessionPinned, pinCoworkSession, unpinCoworkSession } from "./coworkSessionPinning";
 
 export type CoworkRowAction = "pin" | "unpin" | "rename" | "archive" | "delete" | "toggleDone";
@@ -62,12 +70,12 @@ export function CoworkSessionRowMenu({ frame, onAction, session }: { frame: Fram
   const pinned = isCoworkSessionPinned(session, frame.pinnedOrder);
   return (
     <>
-      <BaseMenuItem icon={pinned ? "PinSlash" : "Pin"} onClick={() => onAction(session, pinned ? "unpin" : "pin")}>{pinned ? text.unpin : text.pin}</BaseMenuItem>
-      <BaseMenuItem icon="Edit" onClick={() => onAction(session, "rename")}>{text.rename}</BaseMenuItem>
-      <BaseMenuItem icon={session.isAgentCompleted ? "ArrowReturn" : "CheckCircle"} onClick={() => onAction(session, "toggleDone")}>{session.isAgentCompleted ? "标记为未完成" : "标记为完成"}</BaseMenuItem>
+      <BaseMenuItem icon={pinned ? <CoworkUnpinGlyph size={16} /> : <CoworkPinGlyph size={16} />} onClick={() => onAction(session, pinned ? "unpin" : "pin")}>{pinned ? text.unpin : text.pin}</BaseMenuItem>
+      <BaseMenuItem icon={<CoworkEditGlyph size={16} />} onClick={() => onAction(session, "rename")}>{text.rename}</BaseMenuItem>
+      <BaseMenuItem icon={<CoworkMarkDoneGlyph size={16} />} onClick={() => onAction(session, "toggleDone")}>{session.isAgentCompleted ? "标记为未完成" : "标记为完成"}</BaseMenuItem>
       <BaseMenuSeparator />
-      <BaseMenuItem icon="Archive" onClick={() => onAction(session, "archive")}>{text.archive}</BaseMenuItem>
-      <BaseMenuItem icon="Trash" onClick={() => onAction(session, "delete")}>{text.delete}</BaseMenuItem>
+      <BaseMenuItem icon={<CoworkArchiveGlyph size={16} />} onClick={() => onAction(session, "archive")}>{text.archive}</BaseMenuItem>
+      <BaseMenuItem icon={<CoworkTrashGlyph size={16} />} onClick={() => onAction(session, "delete")}>{text.delete}</BaseMenuItem>
     </>
   );
 }

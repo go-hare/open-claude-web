@@ -2,11 +2,21 @@
  * Official XC Files browser pane (c11959232).
  * Tree via fe.listSessionDirectory; fuzzy via Le.fetchMentionOptions; content via Le.searchFileContents (?query).
  * Click file → setFileView + setSidePane("file") (host openFile).
+ *
+ * Views menu gate = official VC():
+ *   el("ccd_file_browser") && fe?.listSessionDirectory && Le?.fetchMentionOptions
  */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { desktopBridge, type LocalSessionsBridge, type SessionSummary } from "../../../adapters/desktopBridge";
+import { fetchBootstrapPayload } from "../../settings/accountSettingsApi";
 import { Icon } from "../../../shell/icons";
 import { OfficialButton, type OfficialSessionRef } from "../OfficialEpitaxyComponents";
+import {
+  bridgesSupportFilesBrowser,
+  evaluateOfficialFilesBrowserGate,
+  getCachedCcdFileBrowserFlag,
+  loadCcdFileBrowserFlag,
+} from "./officialFilesBrowserGate";
 
 /** Local mini spinner — OfficialSparkSpinner lives in EpitaxySessionTile; keep XC independent. */
 function FilesPaneSpinner({ size = "s" }: { size?: "s" | "m" | "l" }) {
@@ -629,7 +639,61 @@ export function OfficialFilesBrowserPane({
   );
 }
 
-/** Official VC() — enable Files menu when listSessionDirectory + fetchMentionOptions exist. */
-export function canUseOfficialFilesBrowser(bridge: LocalSessionsBridge = desktopBridge.LocalSessions): boolean {
-  return Boolean(bridge.listSessionDirectory && desktopBridge.Resources?.fetchMentionOptions);
+/**
+ * Official VC() residual (c11959232):
+ *   el("ccd_file_browser") && fe.listSessionDirectory && Le.fetchMentionOptions
+ *
+ * GrowthBook `el` is false when the key is missing. Product must NOT treat bridge
+ * method presence alone as enough — that always showed Files while official Views
+ * hid it without the flag (screenshot residual: Preview/Diff/Terminal/Tasks/Plan).
+ * Do not invent ccd_file_browser:true in custom3p FEATURE_FLAGS.
+ */
+export { resetOfficialFilesBrowserFlagCacheForTests } from "./officialFilesBrowserGate";
+
+/**
+ * Official VC() — Files Views item + ⇧⌘F.
+ * Requires GrowthBook ccd_file_browser === true AND listSessionDirectory + fetchMentionOptions.
+ * When flag not yet loaded / missing / false → hide (matches el()).
+ */
+export function canUseOfficialFilesBrowser(
+  bridge: LocalSessionsBridge = desktopBridge.LocalSessions,
+  options?: {
+    /** Explicit el("ccd_file_browser") value; omit to use bootstrap cache (kick off load). */
+    featureFlag?: boolean | undefined;
+    loadBootstrap?: () => Promise<Record<string, unknown> | null>;
+  },
+): boolean {
+  return evaluateOfficialFilesBrowserGate({
+    bridge,
+    resources: desktopBridge.Resources,
+    ...(options && "featureFlag" in options ? { featureFlag: options.featureFlag } : {}),
+    loadBootstrap: options?.loadBootstrap ?? fetchBootstrapPayload,
+  });
+}
+
+/**
+ * Reactive VC() for Views menu — re-renders when bootstrap flag resolves.
+ * Official k = VC() is sync via GrowthBook; product bootstrap is async so we hook it.
+ */
+export function useOfficialFilesBrowserMenuGate(
+  bridge: LocalSessionsBridge = desktopBridge.LocalSessions,
+): boolean {
+  const bridgesOk = bridgesSupportFilesBrowser(bridge, desktopBridge.Resources);
+  const [flagOn, setFlagOn] = useState(() => getCachedCcdFileBrowserFlag() === true);
+
+  useEffect(() => {
+    if (!bridgesOk) {
+      setFlagOn(false);
+      return undefined;
+    }
+    let alive = true;
+    void loadCcdFileBrowserFlag(fetchBootstrapPayload).then((on) => {
+      if (alive) setFlagOn(on);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [bridgesOk]);
+
+  return bridgesOk && flagOn;
 }

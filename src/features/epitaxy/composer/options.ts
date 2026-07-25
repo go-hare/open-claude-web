@@ -1,9 +1,15 @@
 import type { EffortLevel, PermissionMode } from "../../../adapters/desktopBridge";
+import {
+  formatCoworkModelDisplayName,
+  normalizeSelectorModelValue,
+} from "../../cowork/composer/useCoworkModelOptions";
 
-export const codeModelOptions = [
+/**
+ * @deprecated Hardcoded Sonnet/Opus invent — use useCodeModelOptions() (Ye("ccr_model")).
+ * Kept empty-safe helpers for permission/effort only.
+ */
+export const codeModelOptions: Array<{ label: string; value: string }> = [
   { label: "Default", value: "default" },
-  { label: "Sonnet", value: "sonnet" },
-  { label: "Opus", value: "opus" },
 ];
 
 export const permissionModeOptions: Array<{ label: string; value: PermissionMode }> = [
@@ -21,9 +27,10 @@ export const effortOptions: Array<{ label: string; value: EffortLevel }> = [
   { label: "Max", value: "max" },
 ];
 
-export function modelLabel(value: string) {
-  const normalized = normalizeCodeModelValue(value);
-  return codeModelOptions.find((option) => option.value === normalized)?.label ?? formatClaudeModelLabel(value);
+export function modelLabel(value: string, allowedValues: string[] = []) {
+  const normalized = normalizeSelectorModelValue(value, allowedValues);
+  if (normalized === "default") return "Default";
+  return formatCoworkModelDisplayName(normalized);
 }
 
 export function permissionModeLabel(value: PermissionMode) {
@@ -38,15 +45,6 @@ export function normalizePermissionMode(value: unknown): PermissionMode {
   return permissionModeOptions.find((option) => option.value === value)?.value ?? "default";
 }
 
-function normalizeCodeModelValue(value?: string) {
-  if (!value || value === "opus-4") return "default";
-  if (value === "sonnet-4") return "sonnet";
-  return value;
-}
-
-function formatClaudeModelLabel(value: string) {
-  const match = value.match(/^claude-([a-z]+)-(\d+)(?:-(\d+))?/i);
-  if (!match) return value;
-  const family = `${match[1].charAt(0).toUpperCase()}${match[1].slice(1)}`;
-  return `${family} ${match[2]}${match[3] ? `.${match[3]}` : ""}`;
+export function normalizeCodeModelValue(value?: string, allowedValues: string[] = []) {
+  return normalizeSelectorModelValue(value, allowedValues);
 }

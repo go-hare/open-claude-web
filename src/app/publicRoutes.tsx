@@ -10,6 +10,7 @@ import {
   ServiceStatusPage,
   UnauthorizedPage,
 } from "../features/public/AccessPages";
+import { LoginDesktopPage } from "../features/public/LoginDesktop";
 import { DirectoryPage } from "../features/public/DirectoryPage";
 import { ChromeInstalledPage, ChromePage, DownloadPage } from "../features/public/MarketingPages";
 import { PageNotFound } from "../features/shared/PageNotFound";
@@ -18,6 +19,22 @@ import { BlankProjectPage } from "../features/workspace/WorkspacePages";
 const startsWithPath = (pathname: string, prefix: string) => pathname === prefix || pathname.startsWith(`${prefix}/`);
 
 export const publicRoutes: AppRoute[] = [
+  // Official ion-dist residual:
+  // - web LoginRoute (path:"login") is claude.ai email form when mainView is mN host
+  // - product shell keeps open-claude-web; 1p logged-out uses LoginDesktop sVt/M5t chooser
+  //   (index-BELzQL5P.js sVt + M5t + j5t; T5t portal is hide1p org-only overlay)
+  // Not a 520×340 BrowserWindow — that residual is Verify sign-in code only.
+  {
+    id: "login",
+    path: "/login",
+    title: "Sign in",
+    navKey: "new-session",
+    kind: "settings",
+    frame: "standalone",
+    sourceChunk: "index-BELzQL5P.js sVt/M5t/j5t LoginDesktop + EQt getLoginDesktop3pStatus",
+    Component: LoginDesktopPage,
+    match: (pathname) => pathname === "/login" || pathname.startsWith("/login/"),
+  },
   { id: "task-new", path: "/task/new", title: "New chat", navKey: "new-session", kind: "epitaxy", sourceChunk: "index-BELzQL5P.js Nds redirect target", Component: BlankProjectPage },
   { id: "ask-your-org", path: "/ask-your-org", title: "Ask your org", navKey: "new-session", kind: "settings", frame: "standalone", sourceChunk: "ce28369f9-C9QQvDN-.js:2962-3034", Component: RedirectPage, match: (pathname) => startsWithPath(pathname, "/ask-your-org") },
   { id: "security-root", path: "/security", title: "Security", navKey: "new-session", kind: "settings", frame: "standalone", sourceChunk: "index-BELzQL5P.js Nls + live redirect", Component: RedirectPage },

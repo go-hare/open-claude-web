@@ -100,6 +100,11 @@ export function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLay
   );
 }
 
+/**
+ * Official cbc59a8af FrameHeader (`xs`): empty chrome only —
+ * `gs` PaneTitleBreadcrumb (session ref when present), header slot, draggable, actions.
+ * Does NOT render static `currentRoute.title` (product previously invented "Chats" on /chats).
+ */
 function FrameHeader({ currentKey, currentRoute, mode }: { currentKey: string; currentRoute: AppRoute; mode: FrameMode }) {
   const currentRef = paneRefFromPath(window.location.pathname, currentRoute.title);
   if (currentRoute.id === "code-session" || currentRoute.id === "cowork-session") return null;
@@ -108,20 +113,16 @@ function FrameHeader({ currentKey, currentRoute, mode }: { currentKey: string; c
     if (currentRef) paneStore.addPane(mode, currentKey, currentRef);
   };
   return (
-    <header className="dframe-header h-12 shrink-0 relative isolate z-10">
+    <header className="dframe-header h-12 shrink-0 relative isolate z-10" data-official-source="cbc59a8af:xs FrameHeader">
       <div className="dframe-pane-header flex h-full items-center gap-2 pl-6 pr-3">
-        {!isNewSessionHome ? (
-          <div className="flex items-center gap-1 max-w-[480px] min-w-0">
-            <div className="text-[13px] text-text-300 truncate min-w-0">{currentRoute.title}</div>
-          </div>
-        ) : null}
+        {/* Official `gs` only mounts session breadcrumb when focused ref is a live session — never route titles. */}
         <div id="dframe-header-slot" className="flex items-center gap-2 min-w-0" />
         <div className="draggable h-full flex-1 min-w-0" />
-        {!isNewSessionHome ? (
-          <div id="dframe-pane-actions" className="dframe-pane-actions flex items-center gap-2 shrink-0">
+        <div id="dframe-pane-actions" className="dframe-pane-actions flex items-center gap-2 shrink-0">
+          {!isNewSessionHome ? (
             <PrimaryPaneMenu canOpenSplit={currentRef?.kind === "code" && mode === "code"} onOpenSplit={openSplit} />
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
     </header>
   );

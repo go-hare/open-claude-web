@@ -1,6 +1,8 @@
 export type CoworkRewindPromptMode = "prefill" | "send";
 
 export type CoworkSessionComposerActions = {
+  /** Official composer imperative `executeSkill(name, displayName, description)`. */
+  executeSkill: (skillId: string, skillDisplayName: string, skillDescription?: string) => boolean;
   prefillPrompt: (prompt: string) => void;
   sendPrompt: (prompt: string) => Promise<void>;
 };
@@ -30,6 +32,30 @@ export function applyCoworkRewindPrompt(
     return true;
   }
   return actions.sendPrompt(normalizedPrompt).then(() => true);
+}
+
+/**
+ * Official hUt Schedule residual (v$t Ze):
+ * Ye=schedule skill; He.current.executeSkill(Ye.name, Ye.name, Ye.description??"")
+ */
+export function executeCoworkSessionSkill(
+  sessionId: string,
+  skillId: string,
+  skillDisplayName = skillId,
+  skillDescription = "",
+) {
+  return actionsBySessionId.get(sessionId)?.executeSkill(skillId, skillDisplayName, skillDescription) ?? false;
+}
+
+/**
+ * Official hUt Turn into skill residual (v$t Qe):
+ * He.current.setContent("Turn this task into a skill", [], [])
+ */
+export function prefillCoworkSessionComposer(sessionId: string, prompt: string) {
+  const actions = actionsBySessionId.get(sessionId);
+  if (!actions) return false;
+  actions.prefillPrompt(prompt);
+  return true;
 }
 
 export function hasCoworkSessionComposerActions(sessionId: string) {

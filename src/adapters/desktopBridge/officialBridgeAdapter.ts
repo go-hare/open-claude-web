@@ -940,10 +940,18 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     },
     sendMessage: async (id, text, input) => {
       const messageUuid = input?.messageUuid ?? createMessageUuid();
-      const item = await raw?.sendMessage?.(id, text, [], input?.permissionMode, messageUuid, {
+      // LocalSessions residual also accepts images as 3rd arg (do not hardcode []).
+      const item = await raw?.sendMessage?.(
+        id,
+        text,
+        input?.images ?? [],
+        input?.permissionMode,
         messageUuid,
-        userSelectedFiles: input?.userSelectedFiles?.length ? input.userSelectedFiles : undefined,
-      });
+        {
+          messageUuid,
+          userSelectedFiles: input?.userSelectedFiles?.length ? input.userSelectedFiles : undefined,
+        },
+      );
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
     },
     // Official Yr → transport.cancelQueued(sessionId, uuid). Desktop IPC is currently a no-op true.
@@ -1477,6 +1485,8 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
   const selectedFolders = input.userSelectedFolders?.length ? input.userSelectedFolders : cwd ? [cwd] : [];
   const permissionMode = input.permissionMode === "bypass" ? "bypassPermissions" : input.permissionMode ?? "default";
   const message = input.message ?? input.prompt;
+  // Official start residual accepts images on first turn (CoworkStartSessionInput.images).
+  const images = input.images?.filter((image) => typeof image?.base64 === "string" && image.base64.length > 0);
   return {
     kind: targetKind,
     message,
@@ -1485,6 +1495,7 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
     cwd,
     effort: input.effort,
     folders: selectedFolders,
+    images: images?.length ? images : undefined,
     messageUuid: input.messageUuid,
     model: input.model,
     scheduledTaskId: input.scheduledTaskId,
