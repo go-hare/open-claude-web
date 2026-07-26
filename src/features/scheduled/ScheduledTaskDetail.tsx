@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RouteViewProps } from "../../app/routes";
 import { desktopBridge, type ScheduledTaskSummary, type SessionSummary } from "../../adapters/desktopBridge";
+import { useWorkspaceTrustGate } from "../epitaxy/trust/useWorkspaceTrustGate";
 import { ConfirmDialog } from "../../shell/ConfirmDialog";
 import { sessionPath } from "../../shell/sessionPaths";
 import { DetailActions, DetailLeftColumn, DetailRightColumn, basename } from "./ScheduledTaskDetailBlocks";
 import { RoutineHeader, ScheduledRouteShell } from "./ScheduledPrimitives";
 import { taskDisplayName } from "./scheduleUtils";
+import { SCHEDULED_DETAIL_MESSAGES, formatScheduledTemplate } from "./scheduledDetailMessages";
+import { useI18nText } from "../../i18n/footerMenuMessages";
 import { scheduledTaskIndexPath } from "./scheduledPaths";
 import { useScheduledTasks } from "./useScheduledTasks";
 
@@ -73,22 +76,33 @@ function ScheduledTaskDetailView({ task, onBack, onNavigate }: { task: Scheduled
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const { loadRuns, runs, runsLoading } = useScheduledRuns(task.id);
+  // Official c705 D run-now: checkTrust(cwd); if untrusted show skip/toast. Product uses OfficialTrustModal
+  // (same residual gate as new Code session) so Run now can proceed after accept instead of silent no-op.
+  const { ensureTrusted, modal: trustModal } = useWorkspaceTrustGate(task.cwd ?? undefined);
+  const detailText = useI18nText(SCHEDULED_DETAIL_MESSAGES);
   const title = taskDisplayName(task);
   const toggle = async () => {
     const next = !enabled;
     setEnabled(next);
     await desktopBridge.CCDScheduledTasks.updateStatus?.(task.id, next ? "enabled" : "disabled");
   };
-  const runNow = async () => {
-    if (isRunning || !task.cwd) return;
-    if (!(await canStartScheduledRun(task))) return;
+  const executeRunNow = useCallback(async () => {
+    if (isRunning || !task.cwd || !task.prompt) return;
     setIsRunning(true);
     try {
+      // Residual qt.start({ cwd, message, scheduledTaskId, ... }) — bridge toStartPayload flattens workspace.cwd.
       await startScheduledRun(task, title);
       await loadRuns();
     } finally {
       setIsRunning(false);
     }
+  }, [isRunning, loadRuns, task, title]);
+  const runNow = async () => {
+    if (isRunning || !task.cwd) return;
+    if (!task.prompt) return;
+    await ensureTrusted(task.cwd, () => {
+      void executeRunNow();
+    });
   };
   const remove = async () => {
     if (isDeleting) return;
@@ -123,23 +137,18 @@ function ScheduledTaskDetailView({ task, onBack, onNavigate }: { task: Scheduled
           </div>
         </div>
         <ConfirmDialog
-          confirmText="Delete"
+          confirmText={detailText.delete}
           isOpen={deleteOpen}
-          message={`Delete "${title}"? Any sessions from this task will be archived.`}
+          message={formatScheduledTemplate(detailText.deleteBody, { taskName: title })}
           onClose={() => setDeleteOpen(false)}
           onConfirm={() => { void remove(); }}
-          title="Delete routine"
+          title={detailText.deleteTitle}
           variant="danger"
         />
+        {trustModal}
       </div>
     </ScheduledRouteShell>
   );
-}
-
-async function canStartScheduledRun(task: ScheduledTaskSummary) {
-  if (!task.cwd || !task.prompt) return false;
-  const trust = await desktopBridge.LocalSessions.checkTrust?.(task.cwd).catch(() => ({ trusted: true }));
-  return trust?.trusted !== false;
 }
 
 function useScheduledRuns(taskId: string) {

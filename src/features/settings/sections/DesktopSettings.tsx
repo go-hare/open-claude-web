@@ -26,10 +26,15 @@ import {
  * quickEntryDictation Voice shortcut; Menu bar / System tray; Keep awake / Wake for work (hYt controlOnly);
  * Browser Use allowAllBrowserActions.
  *
- * Native keys (nativeQuickEntry / quickEntryDictation / customQuickEntryDictationShortcut /
- * wakeScheduler) stay unavailable until a real native API exists — never invent supported.
- * Without wakeScheduler supported: "Keep computer awake" copy (not "Wake for work").
- * Without nativeQuickEntry: legacy global shortcut row.
+ * Feature gates come from AppFeatures.getSupportedFeatures → official pw() residual
+ * (open-claude-desktop supportedFeatures.ts: Dvi/mvi/OW/Ovi/mT/…).
+ *   - nativeQuickEntry supported (Dvi: darwin+macOS13+) → Quick access shortcut row
+ *   - else → legacy global shortcut row (wl6vXYrxQW)
+ *   - quickEntryDictation supported (mvi: darwin+macOS14+, mic not restricted) → Voice shortcut
+ *   - customQuickEntryDictationShortcut is OW always supported when features resolve
+ *   - wakeScheduler supported (mT(Ovi)) → "Wake for work" copy; else Keep computer awake
+ * Never invent supported in the renderer — only consume main-process residual map.
+ * Official ms: return null until getSupportedFeatures resolves (`c ? … : null`).
  * Copy uses official /i18n message ids via useDesktopSettingsText.
  */
 export function DesktopSettings() {

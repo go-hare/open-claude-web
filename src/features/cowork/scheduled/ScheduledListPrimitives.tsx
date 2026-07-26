@@ -4,7 +4,9 @@
  * gYt filter (vIe + Dc ghost icon_sm), Ide sort, Kfe/Gfe banner, yYt/bYt status pill.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
 import { Icon } from "../../../shell/icons";
+import { SCHEDULED_LIST_MESSAGES } from "./scheduledListMessages";
 import { OfficialButton } from "../../shared/OfficialButton";
 import { OfficialTextInput } from "../../shared/OfficialTextInput";
 import { OfficialTooltip } from "../../shared/OfficialTooltip";
@@ -137,12 +139,16 @@ export function ScheduledTaskCard({
 
 export function ScheduledTaskStatusPill({
   completed,
+  completedLabel,
   enabled,
   label,
+  pausedLabel,
 }: {
   completed?: boolean;
+  completedLabel?: string;
   enabled: boolean;
   label?: string | null;
+  pausedLabel?: string;
 }) {
   // Official yYt
   if (enabled && label) {
@@ -163,7 +169,7 @@ export function ScheduledTaskStatusPill({
         data-official-source="index-BELzQL5P.js:yYt paused"
       >
         <Icon name={completed ? "check" : "Stop"} size="xs" />
-        {completed ? "Completed" : "Paused"}
+        {completed ? (completedLabel ?? "Completed") : (pausedLabel ?? "Paused")}
       </span>
     );
   }
@@ -180,6 +186,8 @@ export function ScheduledTasksFilterControl({
   value: string;
 }) {
   // Official gYt: collapsed Dc ghost icon_sm; expanded vIe size sm w-[200px]
+  const listText = useI18nText(SCHEDULED_LIST_MESSAGES);
+  const clearFilterLabel = listText.clearFilter;
   const [expanded, setExpanded] = useState(value !== "");
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -204,7 +212,7 @@ export function ScheduledTasksFilterControl({
       <OfficialTextInput
         append={
           <button
-            aria-label="Clear filter"
+            aria-label={clearFilterLabel}
             className="p-0.5 rounded hover:bg-bg-300 text-text-400 hover:text-text-200"
             onClick={() => {
               onChange("");
@@ -262,7 +270,8 @@ export function ScheduledTasksSortControl({
   onChange: (value: "nextRun" | "name") => void;
   value: "nextRun" | "name";
 }) {
-  // Official CYt: Ide trigger = Dc ghost icon_sm + Sort icon; menu items Next run / Name
+  // Official CYt: Ide trigger = Dc ghost icon_sm + Sort icon; menu items Next run / Name (ccd3 sortBy/sortNextRun/sortName)
+  const text = useI18nText(SCHEDULED_LIST_MESSAGES);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -278,9 +287,9 @@ export function ScheduledTasksSortControl({
   return (
     <div className="relative" data-official-source="index-BELzQL5P.js:CYt sort Ide" ref={rootRef}>
       {/* Official Ide trigger is Dc ghost icon_sm aria-label Sort by; hover description via Xp-style tooltip */}
-      <OfficialTooltip side="top" tooltipContent="Sort by">
+      <OfficialTooltip side="top" tooltipContent={text.sortBy}>
         <OfficialButton
-          aria-label="Sort by"
+          aria-label={text.sortBy}
           onClick={() => setOpen((current) => !current)}
           size="icon_sm"
           variant="ghost"
@@ -292,8 +301,8 @@ export function ScheduledTasksSortControl({
         <div className="absolute right-0 top-full z-30 mt-1 min-w-[9rem] rounded-lg border-0.5 border-border-300 bg-bg-100 p-1 shadow-md">
           {(
             [
-              ["nextRun", "Next run"],
-              ["name", "Name"],
+              ["nextRun", text.sortNextRun],
+              ["name", text.sortName],
             ] as const
           ).map(([option, label]) => (
             <button
@@ -317,6 +326,8 @@ export function ScheduledTasksSortControl({
 export function ScheduledLocalAwakeBanner({ action }: { action?: ReactNode }) {
   // Official CYt: Kfe variant main + className !w-full inside w-full mb-6 wrapper
   // customAction = <div className="flex items-center h-8"><hYt size="md" context="scheduled-task"/></div>
+  // Banner copy residual ccd3 qgksMV96yc (Scheduled tasks only run while your computer is awake.)
+  const text = useI18nText(SCHEDULED_LIST_MESSAGES);
   const resolvedAction = action ?? <KeepAwakeControl size="md" />;
   return (
     <div className="w-full mb-6" data-official-source="index-BELzQL5P.js:CYt awake wrapper">
@@ -330,7 +341,7 @@ export function ScheduledLocalAwakeBanner({ action }: { action?: ReactNode }) {
         </div>
         <div className="flex flex-wrap items-start gap-y-1 gap-x-3 flex-1">
           <div className="my-[0.35rem] flex-1 min-w-[min(20ch,100%)] text-text-300">
-            Scheduled tasks only run while your computer is awake.
+            {text.bannerScheduledAwake}
           </div>
           <div className="flex items-center h-8">{resolvedAction}</div>
         </div>
@@ -340,14 +351,15 @@ export function ScheduledLocalAwakeBanner({ action }: { action?: ReactNode }) {
 }
 
 export function ScheduledTasksEmptyState() {
-  // Official CYt empty: xB size medium + "No scheduled tasks yet."
+  // Official CYt empty: xB size medium + residual Lrl5Trz+z3
+  const text = useI18nText(SCHEDULED_LIST_MESSAGES);
   return (
     <div
       className="flex flex-col items-center justify-center py-16 gap-4 text-text-500 font-base"
       data-official-source="index-BELzQL5P.js:CYt empty"
     >
       <ScheduledTasksEmptyPictogram size="medium" />
-      No scheduled tasks yet.
+      {text.emptyState}
     </div>
   );
 }

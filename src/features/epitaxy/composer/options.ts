@@ -27,6 +27,17 @@ export const effortOptions: Array<{ label: string; value: EffortLevel }> = [
   { label: "Max", value: "max" },
 ];
 
+/** Official Ultracode residual — session-only, maps to xhigh + workflows. */
+export const ULTRACODE_OPTION = {
+  label: "Ultracode",
+  value: "ultra" as const,
+  accent: true as const,
+  help: {
+    title: "Ultracode",
+    body: "Ultracode is xhigh effort plus workflows. Most thorough, slowest, and heaviest on your limits. Applies to this chat only. New chats start without it.",
+  },
+};
+
 export function modelLabel(value: string, allowedValues: string[] = []) {
   const normalized = normalizeSelectorModelValue(value, allowedValues);
   if (normalized === "default") return "Default";

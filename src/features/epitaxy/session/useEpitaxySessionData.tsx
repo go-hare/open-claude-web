@@ -251,58 +251,11 @@ export function useEpitaxySessionData(sessionId?: string) {
 
   const clearStreamState = useCallback((markSessionSettled = false) => {
     if (!sessionId) return;
-    // Promote Va only when durable does not already hold this Anthropic message id
-    // (CLI final assistant dump usually lands first — re-promoting duplicated the whole turn).
-    const live = streamSnapshotRef.current;
-    if (markSessionSettled && live && live.blocks.length > 0) {
-      const alreadyDurable = store.getState().buckets[sessionId]?.messages.some((message) => {
-        if (message.role !== "assistant") return false;
-        const raw = asRecord(message.raw);
-        const nested = asRecord(raw.message);
-        const anthropicId = stringValue(nested.id) ?? stringValue(raw.message_id) ?? message.id;
-        return anthropicId === live.messageId;
-      });
-      if (!alreadyDurable) {
-        const content: Array<Record<string, unknown>> = [];
-        for (const block of live.blocks) {
-          if (block.kind === "text" && block.text) content.push({ type: "text", text: block.text });
-          else if (block.kind === "thinking" && block.text) content.push({ type: "thinking", thinking: block.text });
-          else if (block.kind === "tool") {
-            content.push({
-              type: "tool_use",
-              id: block.id,
-              name: block.name,
-              input: (() => {
-                try { return JSON.parse(block.partialJson || "{}"); } catch { return {}; }
-              })(),
-            });
-          }
-        }
-        if (content.length > 0) {
-          const text = content
-            .map((block) => (typeof block.text === "string" ? block.text : ""))
-            .filter(Boolean)
-            .join("");
-          const createdAt = new Date().toISOString();
-          store.getState().mergeMessage(sessionId, {
-            id: live.messageId,
-            role: "assistant",
-            text,
-            createdAt,
-            raw: {
-              type: "assistant",
-              uuid: live.messageId,
-              timestamp: createdAt,
-              message: {
-                id: live.messageId,
-                role: "assistant",
-                content,
-              },
-            },
-          });
-        }
-      }
-    }
+    // Official settle (result → clear Va / Rke + Jwe): do NOT invent a durable assistant
+    // with outer uuid = Anthropic message.id. Live multi-emit already lands via
+    // mergeMessage (outer CLI uuid); eke suppress lifts when streamingMessageId nulls
+    // and f() merges consecutive assistants. Synthetic promote polluted identity and
+    // could race real multi-emit rows (residual P1-B).
     officialStreamClear(sessionId);
     // Official Jwe(sessionId) drops Xwe cache when stream settles / clears.
     clearOfficialEkeCache(sessionId);
@@ -374,7 +327,10 @@ export function useEpitaxySessionData(sessionId?: string) {
     let alive = true;
     if (!sessionId) return () => { alive = false; };
     const existing = store.getState().buckets[sessionId];
-    const silent = Boolean(existing && (existing.messages.length > 0 || existing.session));
+    // Official silent revalidate only when Ya already has content. Session meta from
+    // Recents openSession must still run a non-silent load so Ja/B stays true until
+    // getTranscript paints (avoids empty→full transcript jump).
+    const silent = Boolean(existing && (existing.messages.length > 0 || existing.streamSnapshot !== null));
     void reload({ silent }).finally(() => {
       if (!alive) return;
     });
@@ -721,6 +677,14 @@ function chatMessageContentRichness(message: ChatMessage): number {
   return message.text?.length ?? 0;
 }
 
+/**
+ * Official eke/zke load path (index-BELzQL5P):
+ * - Identity for de-dupe is OUTER CLI uuid (per NDJSON event), NOT Anthropic message.id.
+ * - Multi-emit assistants (thinking emit + text emit, same mid, different uuid) stay as
+ *   separate ChatMessages; eke ake + f() merges consecutive assistant items into one bubble.
+ * - session.messages durable assistants are mid-collapsed chat history — only back-fill when
+ *   no transcript multi-emit for that Anthropic id is present.
+ */
 async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMessage[]; session: SessionSummary } | null> {
   const bridge = desktopBridge.LocalSessions;
   const session = await bridge.getSession(sessionId).catch(() => null);
@@ -728,38 +692,48 @@ async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMe
   const transcript = await bridge.getTranscript?.(sessionId).catch(() => undefined);
   const sessionMessages = session.messages ?? [];
   const transcriptMessages = transcript?.length ? transcript : [];
-  // Load-time collapse (not live upsert):
-  // - Assistant → Anthropic message.id (one turn one history row; multi-emit partials collapse)
-  // - Prefer content-block richness over text.length so tools/thinking are not wiped
-  // - User → outer uuid/id
-  const identityOf = (message: ChatMessage) => {
+  const outerUuidOf = (message: ChatMessage) => {
     const raw = asRecord(message.raw);
-    const nested = asRecord(raw.message);
-    if (message.role === "assistant" || stringValue(raw.type) === "assistant") {
-      return stringValue(nested.id) ?? stringValue(raw.message_id) ?? stringValue(raw.uuid) ?? stringValue(raw.id) ?? message.id;
-    }
     return stringValue(raw.uuid) ?? stringValue(raw.id) ?? message.id;
   };
+  const anthropicIdOf = (message: ChatMessage) => {
+    const raw = asRecord(message.raw);
+    const nested = asRecord(raw.message);
+    if (message.role !== "assistant" && stringValue(raw.type) !== "assistant") return undefined;
+    return stringValue(nested.id) ?? stringValue(raw.message_id);
+  };
   const isStreamEvent = (message: ChatMessage) => stringValue(asRecord(message.raw).type) === "stream_event";
-  const byId = new Map<string, ChatMessage>();
+  const byOuter = new Map<string, ChatMessage>();
   const order: string[] = [];
+  const anthropicIdsFromTranscript = new Set<string>();
   const put = (message: ChatMessage) => {
     if (isStreamEvent(message)) return;
-    const key = identityOf(message);
-    const existing = byId.get(key);
+    const key = outerUuidOf(message);
+    const existing = byOuter.get(key);
     if (!existing) {
-      byId.set(key, message);
+      byOuter.set(key, message);
       order.push(key);
       return;
     }
+    // Same outer uuid only — prefer richer envelope (not multi-emit mid collapse).
     if (chatMessageContentRichness(message) >= chatMessageContentRichness(existing)) {
-      byId.set(key, message);
+      byOuter.set(key, message);
     }
   };
-  // Preserve transcript order first, then append durable-only rows (optimistic user etc.).
-  for (const message of transcriptMessages) put(message);
-  for (const message of sessionMessages) put(message);
-  const messages = order.map((key) => byId.get(key)!).filter(Boolean);
+  for (const message of transcriptMessages) {
+    put(message);
+    const mid = anthropicIdOf(message);
+    if (mid) anthropicIdsFromTranscript.add(mid);
+  }
+  for (const message of sessionMessages) {
+    if (message.role === "assistant") {
+      const mid = anthropicIdOf(message) ?? message.id;
+      // Durable mid-collapsed row must not replace multi-emit transcript rows.
+      if (mid && anthropicIdsFromTranscript.has(mid)) continue;
+    }
+    put(message);
+  }
+  const messages = order.map((key) => byOuter.get(key)!).filter(Boolean);
   return { messages, session: { ...session, messages } };
 }
 

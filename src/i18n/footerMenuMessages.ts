@@ -92,6 +92,8 @@ type AppearanceMenuKey = keyof typeof APPEARANCE_MENU_MESSAGES;
 export type AppearanceMenuText = Record<AppearanceMenuKey, string>;
 
 const resourceCache = new Map<string, I18nMessages>();
+/** In-flight catalog fetches — share one promise so mount + preload don't race to EN flash. */
+const loadPromises = new Map<string, Promise<I18nMessages>>();
 
 declare global {
   interface Window {
@@ -230,9 +232,16 @@ export function useI18nMessages(locale: string) {
   useEffect(() => {
     let cancelled = false;
     // Locale switch / explicit refresh drops the in-memory catalog so JSON overrides re-merge.
-    if (reloadToken > 0) resourceCache.delete(normalized);
-    setMessages(resourceCache.get(normalized) ?? null);
-    loadI18nResource(normalized).then(next => {
+    // Keep currently rendered messages until the new catalog arrives — otherwise buildTextMap
+    // falls back to English defaultMessage and the UI flashes EN → zh on refresh.
+    if (reloadToken > 0) {
+      resourceCache.delete(normalized);
+      loadPromises.delete(normalized);
+    } else {
+      const cached = resourceCache.get(normalized);
+      if (cached) setMessages(cached);
+    }
+    void loadI18nResource(normalized).then((next) => {
       if (!cancelled) setMessages(next);
     });
     return () => { cancelled = true; };
@@ -244,28 +253,46 @@ export async function loadI18nResource(locale: string) {
   const normalized = normalizeLocale(locale);
   const cached = resourceCache.get(normalized);
   if (cached) return cached;
-  const [base, statsig, overrides] = await Promise.all([
-    fetchJson(`/i18n/${encodeURIComponent(normalized)}.json`),
-    fetchOptionalJson(`/i18n/statsig/${encodeURIComponent(normalized)}.json`),
-    normalized === "en-US" ? Promise.resolve({}) : fetchOptionalJson(`/i18n/${encodeURIComponent(normalized)}.overrides.json`),
-  ]);
-  // Official G0t residual: spa catalog + optional locale overrides. Empty base means
-  // fetch failed — do not cache so a later navigation can recover.
-  if (Object.keys(base).length === 0) {
-    return mergeKnownOverrides({ ...base, ...statsig }, overrides);
-  }
-  const merged = mergeKnownOverrides({ ...base, ...statsig }, overrides);
-  resourceCache.set(normalized, merged);
-  return merged;
+  const inflight = loadPromises.get(normalized);
+  if (inflight) return inflight;
+
+  const promise = (async () => {
+    const [base, statsig, overrides] = await Promise.all([
+      fetchJson(`/i18n/${encodeURIComponent(normalized)}.json`),
+      fetchOptionalJson(`/i18n/statsig/${encodeURIComponent(normalized)}.json`),
+      normalized === "en-US" ? Promise.resolve({}) : fetchOptionalJson(`/i18n/${encodeURIComponent(normalized)}.overrides.json`),
+    ]);
+    // Official G0t residual: spa catalog + optional locale overrides. Empty base means
+    // fetch failed — do not cache so a later navigation can recover.
+    if (Object.keys(base).length === 0) {
+      return mergeKnownOverrides({ ...base, ...statsig }, overrides);
+    }
+    const merged = mergeKnownOverrides({ ...base, ...statsig }, overrides);
+    resourceCache.set(normalized, merged);
+    return merged;
+  })().finally(() => {
+    loadPromises.delete(normalized);
+  });
+
+  loadPromises.set(normalized, promise);
+  return promise;
+}
+
+/** True when the locale catalog is already in memory (after bootstrap preload or first fetch). */
+export function hasI18nCatalog(locale?: string) {
+  return resourceCache.has(normalizeLocale(locale ?? getInitialLocale()));
 }
 
 /** Drop in-memory catalogs (locale switch / hot override refresh). */
 export function clearI18nResourceCache(locale?: string) {
   if (!locale) {
     resourceCache.clear();
+    loadPromises.clear();
     return;
   }
-  resourceCache.delete(normalizeLocale(locale));
+  const normalized = normalizeLocale(locale);
+  resourceCache.delete(normalized);
+  loadPromises.delete(normalized);
 }
 
 function buildTextMap<T extends MessageDescriptors>(descriptors: T, messages: I18nMessages = {}) {

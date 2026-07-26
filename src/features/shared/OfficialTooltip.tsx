@@ -116,6 +116,55 @@ export function OfficialTooltip({
   );
 }
 
+/**
+ * Official ya (shared-13) hover-card tooltip — Ene help (?) popup.
+ * Sa popup residual: epitaxy-popup flex flex-col gap-g1 rounded-r7 py-p7 px-p8
+ * text-body text-t7 font-ui + surface-popover/effect-hud (official aa elevation="popover").
+ */
+const hoverCardContentClass =
+  "epitaxy-popup draggable-none relative isolate flex flex-col gap-g1 rounded-r7 py-p7 px-p8 outline-none text-body text-t7 font-ui";
+
+export function OfficialHoverCardTooltip({
+  align = "start",
+  alignOffset,
+  children,
+  className,
+  delayDuration = 200,
+  side = "top",
+  sideOffset = 8,
+  tooltipContent,
+}: Omit<OfficialTooltipProps, "keyboardShortcut"> & {
+  align?: "start" | "center" | "end";
+  alignOffset?: number;
+}) {
+  if (tooltipContent == null || tooltipContent === false || !isValidElement(children)) {
+    return children;
+  }
+
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger delay={delayDuration} render={children as ReactElement<Record<string, unknown>>} />
+      <Tooltip.Portal>
+        <Tooltip.Positioner
+          align={align}
+          alignOffset={alignOffset}
+          className="epitaxy-root z-[60]"
+          side={side}
+          sideOffset={sideOffset}
+        >
+          <Tooltip.Popup
+            className={[hoverCardContentClass, className ?? ""].filter(Boolean).join(" ")}
+            data-official-source="shared-13:ya/Sa"
+          >
+            <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
+            {tooltipContent}
+          </Tooltip.Popup>
+        </Tooltip.Positioner>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
+
 /** Wrap arbitrary node when child is not a single element (fallback span trigger). */
 export function OfficialTooltipWrap({
   children,

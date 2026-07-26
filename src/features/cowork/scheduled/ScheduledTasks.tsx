@@ -6,6 +6,7 @@
 import { useMemo, useState } from "react";
 import type { RouteViewProps } from "../../../app/routes";
 import { desktopBridge, type ScheduledTaskSummary } from "../../../adapters/desktopBridge";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
 import { OfficialButton } from "../../shared/OfficialButton";
 import {
   ScheduledLocalAwakeBanner,
@@ -18,12 +19,18 @@ import {
   ScheduledTasksSortControl,
 } from "./ScheduledListPrimitives";
 import { ScheduledTaskCreateModal } from "./ScheduledTaskCreateModal";
-import { scheduleLabel, taskDisplayName } from "./scheduleUtils";
+import { formatTime, taskDisplayName } from "./scheduleUtils";
 import { scheduledTaskDetailPath } from "./scheduledPaths";
 import { useScheduledTasks } from "./useScheduledTasks";
+import {
+  SCHEDULED_LIST_MESSAGES,
+  localizedListScheduleLabel,
+  type ScheduledListText,
+} from "./scheduledListMessages";
 
 export function ScheduledTasks({ onNavigate }: RouteViewProps) {
   const { tasks, existingNames, isLoading } = useScheduledTasks();
+  const text = useI18nText(SCHEDULED_LIST_MESSAGES);
   const [createOpen, setCreateOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [sortBy, setSortBy] = useState<"nextRun" | "name">("nextRun");
@@ -50,10 +57,8 @@ export function ScheduledTasks({ onNavigate }: RouteViewProps) {
   }, [filter, sortBy, tasks]);
 
   const hasFilter = filter.trim().length > 0;
-  // Official CYt: r?.createScheduledTask
-  const canCreate =
-    typeof desktopBridge.CoworkScheduledTasks.create === "function" ||
-    typeof desktopBridge.CCDScheduledTasks.create === "function";
+  // Official CYt: r?.createScheduledTask on CoworkScheduledTasks (jT), not CCD/ST.
+  const canCreate = typeof desktopBridge.CoworkScheduledTasks.create === "function";
 
   return (
     <div className="h-full" data-official-source="index-BELzQL5P.js:CYt">
@@ -61,13 +66,13 @@ export function ScheduledTasks({ onNavigate }: RouteViewProps) {
         action={
           canCreate ? (
             <OfficialButton onClick={() => setCreateOpen(true)} size="sm" variant="primary">
-              新任务
+              {text.newTask}
             </OfficialButton>
           ) : undefined
         }
         subheader={
           <p className="text-sm text-text-500">
-            Run tasks on a schedule or whenever you need them. Type /schedule in any existing task to set one up.
+            {text.subtitleCowork}
           </p>
         }
         tabsEnd={
@@ -75,17 +80,17 @@ export function ScheduledTasks({ onNavigate }: RouteViewProps) {
             <ScheduledTasksSortControl onChange={setSortBy} value={sortBy} />
             <ScheduledTasksFilterControl
               onChange={setFilter}
-              placeholder="Filter scheduled tasks"
+              placeholder={text.searchPlaceholder}
               value={filter}
             />
           </>
         }
-        title="Scheduled tasks"
+        title={text.title}
       >
         <ScheduledLocalAwakeBanner />
         {!isLoading && filteredTasks.length === 0 ? (
           hasFilter ? (
-            <div className="text-sm text-text-500 mt-4">No scheduled tasks match your search.</div>
+            <div className="text-sm text-text-500 mt-4">{text.noResults}</div>
           ) : (
             <ScheduledTasksEmptyState />
           )
@@ -97,6 +102,7 @@ export function ScheduledTasks({ onNavigate }: RouteViewProps) {
                 key={task.id}
                 onSelect={() => onNavigate(scheduledTaskDetailPath(task.id))}
                 task={task}
+                text={text}
               />
             ))}
           </ScheduledTaskCardGrid>
@@ -116,16 +122,26 @@ export function ScheduledTasks({ onNavigate }: RouteViewProps) {
 function ScheduledTaskListCard({
   onSelect,
   task,
+  text,
 }: {
   onSelect: () => void;
   task: ScheduledTaskSummary;
+  text: ScheduledListText;
 }) {
   const completed = !task.enabled && Boolean(task.fireAt) && Boolean(task.lastRunAt);
-  const statusLabel = task.enabled ? scheduleLabel(task) : null;
+  const statusLabel = task.enabled ? localizedListScheduleLabel(task, text, formatTime) : null;
   return (
     <ScheduledTaskCard
       description={task.description}
-      footer={<ScheduledTaskStatusPill completed={completed} enabled={task.enabled} label={statusLabel} />}
+      footer={
+        <ScheduledTaskStatusPill
+          completed={completed}
+          completedLabel={text.completed}
+          enabled={task.enabled}
+          label={statusLabel}
+          pausedLabel={text.paused}
+        />
+      }
       href={scheduledTaskDetailPath(task.id)}
       onClick={onSelect}
       title={taskDisplayName(task)}

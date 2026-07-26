@@ -308,9 +308,22 @@ function createFakeScheduledTasksBridge(items: ScheduledTaskSummary[]): Schedule
         useWorktree: input.useWorktree,
         sourceBranch: input.sourceBranch,
         userSelectedFolders: input.userSelectedFolders,
+        spaceId: input.spaceId && input.spaceId.length > 0 ? input.spaceId : undefined,
       };
       items.unshift(task);
       return task;
+    },
+    update: async (id, input) => {
+      const index = items.findIndex((task) => task.id === id);
+      if (index < 0) return null;
+      const spaceId =
+        input.spaceId === undefined
+          ? items[index].spaceId
+          : input.spaceId && input.spaceId.length > 0
+            ? input.spaceId
+            : undefined;
+      items[index] = { ...items[index], ...input, spaceId, id };
+      return { ...items[index] };
     },
     updateStatus: async (id, status) => {
       const index = items.findIndex((task) => task.id === id);
@@ -339,7 +352,8 @@ let preferences: DesktopPreferences = {
   dockBounceEnabled: false,
   enabledCoworkMemory: true,
   keepAwakeEnabled: false,
-  launchEnabled: false,
+  // Official SSA launchEnabled: true
+  launchEnabled: true,
   launchPreviewPersistSession: false,
   menuBarEnabled: true,
   quickEntryDictationShortcut: "off",
@@ -451,7 +465,11 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   getDefaultPermissionMode: async () => null,
   getDetectedProjects: async () => fakeDetectedProjects(targetKind),
   getDiffFileContent: async () => null,
-  getEffort: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind)?.effort ?? "medium",
+  getEffort: async (id) => ({
+    effort: sessions.find((session) => session.id === id && session.kind === targetKind)?.effort ?? "medium",
+    effortLevels: null,
+    ultracodeOfferable: null,
+  }),
   getGitInfo: async (idOrCwd) => ({
     cwd: idOrCwd,
     root: idOrCwd,
@@ -844,19 +862,65 @@ export const fakeDesktopBridge: DesktopBridge = {
   CoworkScheduledTasks: createFakeScheduledTasksBridge(coworkScheduledTasks),
   CoworkSpaces: {
     list: async () => coworkSpaces.map((space) => ({ ...space })),
+    get: async (spaceId) => coworkSpaces.find((space) => space.id === spaceId) ?? null,
     create: async (input) => {
       const space = {
         id: `space-${Date.now()}`,
         name: input.name,
         description: input.instructions ?? null,
+        instructions: input.instructions ?? null,
         createdAtMs: Date.now(),
         updatedAtMs: Date.now(),
+        folders: [] as Array<{ path: string }>,
       };
       coworkSpaces.unshift(space);
       return { ...space };
     },
     createSpaceFolder: async (location, name) => `${location.replace(/[\\/]+$/, "")}/${name}`,
-    addFolderToSpace: async () => {},
+    update: async (spaceId, input) => {
+      const space = coworkSpaces.find((item) => item.id === spaceId);
+      if (!space) return null;
+      if (input.name !== undefined) space.name = input.name;
+      if (input.instructions !== undefined) space.instructions = input.instructions;
+      if (input.description !== undefined) space.description = input.description;
+      space.updatedAtMs = Date.now();
+      return { ...space };
+    },
+    addFolderToSpace: async (spaceId, folderPath) => {
+      const space = coworkSpaces.find((item) => item.id === spaceId);
+      if (!space) return;
+      const folders = Array.isArray(space.folders) ? [...space.folders] : [];
+      if (!folders.some((folder) => folder.path === folderPath)) folders.push({ path: folderPath });
+      space.folders = folders;
+      space.updatedAtMs = Date.now();
+    },
+    removeFolderFromSpace: async (spaceId, folderPath) => {
+      const space = coworkSpaces.find((item) => item.id === spaceId);
+      if (!space) return;
+      space.folders = (space.folders ?? []).filter((folder) => folder.path !== folderPath);
+      space.updatedAtMs = Date.now();
+    },
+    addLinkToSpace: async (spaceId, link) => {
+      const space = coworkSpaces.find((item) => item.id === spaceId);
+      if (!space) return;
+      const links = Array.isArray(space.links) ? [...space.links] : [];
+      if (!links.some((item) => item.url === link.url)) links.push(link);
+      space.links = links;
+      space.updatedAtMs = Date.now();
+    },
+    removeLinkFromSpace: async (spaceId, link) => {
+      const space = coworkSpaces.find((item) => item.id === spaceId);
+      if (!space) return;
+      const url = typeof link === "string" ? link : link.url;
+      space.links = (space.links ?? []).filter((item) => item.url !== url);
+      space.updatedAtMs = Date.now();
+    },
+    getAutoMemoryDir: async (spaceId) => `/tmp/fake-cowork-memory/${spaceId}`,
+    listFolderContents: async (_spaceId, folderPath) => {
+      // Empty residual-shaped listing for fake host.
+      void folderPath;
+      return [];
+    },
     onEvent: () => () => {},
   },
   CoworkFilePreview: {

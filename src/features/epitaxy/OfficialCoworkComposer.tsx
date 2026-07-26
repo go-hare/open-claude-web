@@ -43,6 +43,8 @@ type OfficialCoworkPromptBoxProps = {
   onSubmit: () => void;
   onWorkspaceChange: (workspace: WorkspaceContext) => void;
   permissionMode: PermissionMode;
+  /** Residual ce283 Bs space-page placeholder (wLFo5icPEr); falls back to new-task rotating copy. */
+  placeholder?: string;
   projectMenuItems?: CoworkAddMenuProject[];
   prompt: string;
   selectedFiles?: CoworkUploadedFile[];
@@ -94,6 +96,7 @@ export function OfficialCoworkPromptBox({
   onSubmit,
   onWorkspaceChange,
   permissionMode,
+  placeholder,
   projectMenuItems = [],
   prompt,
   selectedFiles = [],
@@ -108,9 +111,13 @@ export function OfficialCoworkPromptBox({
   const permissionAvailability = useCoworkPermissionModeAvailability();
   // Official u2/ote residual — bag models via bootstrap, not hardcoded Opus/Sonnet.
   const modelOptions = useCoworkModelOptions();
+  const composerPlaceholder = placeholder?.trim() || text.composerPlaceholder;
   const rotatingPlaceholders = useMemo(
-    () => [text.composerPlaceholder, text.composerPlaceholderSkills],
-    [text.composerPlaceholder, text.composerPlaceholderSkills],
+    () =>
+      placeholder?.trim()
+        ? [placeholder.trim()]
+        : [text.composerPlaceholder, text.composerPlaceholderSkills],
+    [placeholder, text.composerPlaceholder, text.composerPlaceholderSkills],
   );
   useEffect(() => {
     if (!modelOptions.ready) return;
@@ -183,7 +190,7 @@ export function OfficialCoworkPromptBox({
                   disabled={busy}
                   onChange={setPrompt}
                   onSubmit={onSubmit}
-                  placeholder={text.composerPlaceholder}
+                  placeholder={composerPlaceholder}
                   ref={inputRef}
                   rotatingPlaceholders={rotatingPlaceholders}
                   slashCwd={workspace.cwd}

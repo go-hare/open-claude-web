@@ -192,7 +192,7 @@ function CoworkActivityPanelBody({ allTodosCompleted, connectedOfficeFiles, cont
   return (
     <>
       {scheduledRuns.length > 0 ? <CoworkScheduledRunsSection currentSessionId={sessionId} isExpanded={runsOpen} onNavigate={onNavigate} onToggle={onRunsToggle} runs={scheduledRuns} /> : null}
-      <CoworkProgressSection allTodosCompleted={allTodosCompleted} isExpanded={progressOpen} onToggle={onProgressToggle} tasks={tasks} todos={todos} />
+      <CoworkProgressSection allTodosCompleted={allTodosCompleted} isExpanded={progressOpen} onToggle={onProgressToggle} todos={todos} />
       <CoworkActivitySection contentClassName={hasFolderRows ? undefined : "!pb-3"} headerLeftAction={folderHeaderAction} isExpanded={foldersOpen} maxContentHeight="24rem" title={coworkFolderSectionTitle(folders)} onToggle={onFoldersToggle}>
         <CoworkWorkingFolderContent folders={folders} hasConnectedOfficeFiles={connectedOfficeFiles.length > 0} instructionFolder={instructionFolder} resources={resourceSections.workingResources} scratchpadResources={resourceSections.scratchpadResources} sessionId={sessionId} onOpenFile={onOpenFile} />
         <CoworkConnectedOfficeFilesSection files={connectedOfficeFiles} isExpanded={officeFilesOpen} onToggle={onOfficeFilesToggle} />

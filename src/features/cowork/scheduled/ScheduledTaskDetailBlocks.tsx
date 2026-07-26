@@ -1,163 +1,482 @@
+/**
+ * Official residual cowork scheduled-task detail body (index-BELzQL5P function rKt + aKt + iKt).
+ * Layout: back link → title/description/status + actions → hr → grid lg:[2fr_3fr]
+ *   left (order-2): History
+ *   right (order-1): Instructions, Project, Folder, Folders(+from project), Repeats, Always allowed
+ */
+import { useState } from "react";
 import type { ScheduledTaskSummary, SessionSummary } from "../../../adapters/desktopBridge";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
 import { Icon } from "../../../shell/icons";
-import { CoworkButton } from "../ui/CoworkButton";
-import { DetailSection, chipClass } from "./ScheduledPrimitives";
-import { scheduleLabel, taskDisplayName } from "./scheduleUtils";
+import { OfficialButton } from "../../shared/OfficialButton";
+import { OfficialSwitch } from "../../shared/OfficialSwitch";
+import { OfficialTooltip } from "../../shared/OfficialTooltip";
+import {
+  CoworkEditGlyph,
+  CoworkPlayGlyph,
+  CoworkTrashGlyph,
+} from "../ui/CoworkOfficialGlyphs";
+import {
+  SCHEDULED_DETAIL_MESSAGES,
+  formatScheduledTemplate,
+  formatWebsiteCount,
+  type ScheduledDetailText,
+} from "./scheduledDetailMessages";
+import { formatTime, scheduleLabel, taskDisplayName } from "./scheduleUtils";
 
-export function DetailActions({ isDeleting, isRunDisabled, isRunning, onDelete, onRunNow }: { isDeleting: boolean; isRunDisabled: boolean; isRunning: boolean; onDelete: () => void; onRunNow: () => void }) {
-  return (
-    <>
-      <CoworkButton ariaLabel="Delete" disabled={isDeleting} icon="TrashCanRound" onClick={onDelete} size="base" variant="uncontained" />
-      <CoworkButton disabled={isRunning || isRunDisabled} onClick={onRunNow} size="small" variant="primary">
-        <span className="inline-flex items-center gap-g2">
-          <Icon name="Play" size="s" />
-          <span>{isRunning ? "In progress" : "Run now"}</span>
-        </span>
-      </CoworkButton>
-    </>
-  );
-}
+export type LinkedSpaceInfo = {
+  id: string;
+  name: string;
+  folders: string[];
+};
 
-export function DetailLeftColumn({ task, enabled, onToggle }: { task: ScheduledTaskSummary; enabled: boolean; onToggle: () => void }) {
-  const folders = folderListForTask(task);
-  const repeatLabel = task.fireAt || task.cronExpression ? scheduleLabel(task) : "Manual only";
-  const nextRunLabel = enabled ? detailNextRunLabel(task) : null;
-  const status = detailStatus(task, enabled);
+export function DetailActions({
+  isDeleting,
+  isRunDisabled,
+  isRunning,
+  onDelete,
+  onEdit,
+  onRunNow,
+}: {
+  isDeleting: boolean;
+  isRunDisabled: boolean;
+  isRunning: boolean;
+  onDelete: () => void;
+  onEdit: () => void;
+  onRunNow: () => void;
+}) {
+  const text = useI18nText(SCHEDULED_DETAIL_MESSAGES);
+  // Residual rKt: Dc icon ghost + ev/mC size 20 (Nx viewBox 0 0 20 20), not Anthropicons Pencil/TrashCanRound.
   return (
-    <div className="flex flex-col gap-g8">
-      {task.description ? <DetailSection heading="Description"><p className="text-body text-t9">{task.description}</p></DetailSection> : null}
-      <DetailSection heading="Status">
-        <div className="flex items-center gap-g4 flex-wrap">
-          {status !== "completed" && task.cronExpression ? <RoutineStatusSwitch checked={enabled} onChange={onToggle} /> : null}
-          <StatusBadge status={status} />
-          {nextRunLabel ? <span className="text-footnote text-t6">{nextRunLabel}</span> : null}
-        </div>
-      </DetailSection>
-      {folders.length > 0 ? <DetailSection heading={task.cwd ? "Folder" : "Folders"}><div className="flex flex-col gap-g3">{folders.map((folder) => <FolderPathChip key={folder} path={folder} />)}</div></DetailSection> : null}
-      <DetailSection heading="Repeats"><p className="text-body text-t9">{repeatLabel}</p></DetailSection>
-      <AlwaysAllowedSection task={task} />
+    <div className="flex items-center gap-1" data-official-source="index-BELzQL5P.js:rKt actions">
+      <OfficialButton
+        aria-label={text.edit}
+        className="!min-w-0"
+        onClick={onEdit}
+        size="icon"
+        variant="ghost"
+      >
+        <CoworkEditGlyph size={20} />
+      </OfficialButton>
+      <OfficialButton
+        aria-label={text.delete}
+        className="!min-w-0"
+        disabled={isDeleting}
+        onClick={onDelete}
+        size="icon"
+        variant="ghost"
+      >
+        <CoworkTrashGlyph size={20} />
+      </OfficialButton>
+      <OfficialButton
+        className="ml-2"
+        disabled={isRunning || isRunDisabled}
+        loading={isRunning}
+        onClick={onRunNow}
+        prepend={isRunning ? undefined : <CoworkPlayGlyph size={20} />}
+        variant="primary"
+      >
+        {isRunning ? text.inProgress : text.runNow}
+      </OfficialButton>
     </div>
   );
 }
 
-export function DetailRightColumn({ runs, runsLoading, task, onOpenRun }: { runs: SessionSummary[]; runsLoading: boolean; task: ScheduledTaskSummary; onOpenRun: (session: SessionSummary) => void }) {
+export function DetailHero({
+  enabled,
+  onToggle,
+  task,
+  text,
+}: {
+  enabled: boolean;
+  onToggle: () => void;
+  task: ScheduledTaskSummary;
+  text: ScheduledDetailText;
+}) {
+  const title = taskDisplayName(task);
+  const nextRunLabel = enabled ? detailNextRunLabel(task, text) : null;
   return (
-    <div className="flex flex-col gap-g8">
-      <DetailSection heading="Instructions">
-        <div className="px-p6 py-p5 rounded-r6 bg-t1 text-body text-t8 whitespace-pre-wrap break-words max-h-[480px] overflow-y-auto">
-          {task.prompt ? task.prompt : <span className="text-t5">Task file not found or has unexpected format.</span>}
-        </div>
-      </DetailSection>
-      <DetailSection heading="History">
-        <ScheduledRunHistory runs={runs} runsLoading={runsLoading} task={task} onOpenRun={onOpenRun} />
-      </DetailSection>
+    <div data-official-source="index-BELzQL5P.js:rKt hero">
+      <h1 className="font-heading font-bold text-text-100">{title}</h1>
+      {task.description ? <p className="text-text-300 mt-2">{task.description}</p> : null}
+      {/* Residual rKt hero status row: flex items-center gap-2 mt-4 */}
+      <div className="flex items-center gap-2 mt-4">
+        {task.cronExpression ? (
+          <label className="cursor-pointer">
+            <OfficialSwitch
+              aria-label={text.enableSchedule}
+              checked={enabled}
+              onCheckedChange={() => onToggle()}
+            />
+          </label>
+        ) : null}
+        <StatusBadge enabled={enabled} task={task} text={text} />
+        {nextRunLabel ? <span className="text-text-400 text-sm">{nextRunLabel}</span> : null}
+      </div>
     </div>
   );
 }
 
-function ScheduledRunHistory({ runs, runsLoading, task, onOpenRun }: { runs: SessionSummary[]; runsLoading: boolean; task: ScheduledTaskSummary; onOpenRun: (session: SessionSummary) => void }) {
-  if (runsLoading) return <p className="text-footnote text-t5">Loading runs…</p>;
-  const items = historyItems(runs, task.missedRuns);
-  if (items.length === 0) return <p className="text-footnote text-t5">No runs yet.</p>;
+export function DetailMetaColumn({
+  linkedSpace,
+  onEdit,
+  onOpenSpace,
+  onUnlinkSpace,
+  spacesInitialized,
+  task,
+  text,
+}: {
+  linkedSpace: LinkedSpaceInfo | null;
+  onEdit: () => void;
+  onOpenSpace?: (spaceId: string) => void;
+  onUnlinkSpace?: () => void;
+  spacesInitialized: boolean;
+  task: ScheduledTaskSummary;
+  text: ScheduledDetailText;
+}) {
+  const repeatLabel =
+    task.fireAt || task.cronExpression ? localizedScheduleLabel(task, text) : text.manualOnly;
+  // Residual O = void 0!==w||void 0!==k — section mounts when permission mutators exist.
+  // Product always surfaces empty-state copy so users know approvals land here.
+  const showAlwaysAllowed = true;
   return (
-    <div className="flex flex-col gap-g3">
-      {items.map((item) => item.type === "session"
-        ? <ScheduledSessionRunRow key={item.session.id} onOpenRun={onOpenRun} run={item.session} task={task} />
-        : <ScheduledMissedRunRow key={`missed-${item.time.getTime()}`} reason={item.reason} time={item.time} />)}
-    </div>
-  );
-}
-
-function RoutineStatusSwitch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  const data = checked ? { "data-checked": "" } : { "data-unchecked": "" };
-  return (
-    <button
-      aria-checked={checked}
-      aria-label={checked ? "Pause routine" : "Enable routine"}
-      className="cds-reset relative inline-flex shrink-0 rounded-full border-0 outline-none bg-switch-track hover:bg-switch-track-hover data-[checked]:bg-fill-accent data-[checked]:hover:bg-fill-accent-hover disabled:opacity-50 disabled:hover:bg-switch-track focus-visible:shadow-focus h-switch w-[calc(var(--cds-switch-h,20px)*1.8)] p-[2px]"
-      data-cds="Switch"
-      onClick={onChange}
-      role="switch"
-      type="button"
-      {...data}
+    <div
+      className="flex flex-col gap-8 min-w-0 order-1 lg:order-2"
+      data-official-source="index-BELzQL5P.js:rKt meta column"
     >
-      <span className="block rounded-full bg-switch-knob shadow-sm transition-transform duration-snap ease-overshoot motion-reduce:transition-none size-[calc(var(--cds-switch-h,20px)-4px)] data-[checked]:translate-x-[calc(var(--cds-switch-h,20px)*0.8)]" {...data} />
-    </button>
-  );
-}
+      <section>
+        <h2 className="font-base text-text-500 mb-3">{text.instructions}</h2>
+        {task.prompt ? (
+          <div className="font-claude-response-small text-text-300 whitespace-pre-wrap break-words">
+            {task.prompt}
+          </div>
+        ) : (
+          <p className="text-sm text-text-400 italic">{text.noPrompt}</p>
+        )}
+      </section>
 
-function StatusBadge({ status }: { status: "active" | "completed" | "paused" }) {
-  return (
-    <span className="inline-flex items-center gap-g2 px-p4 py-p1 rounded-r4 bg-t2 text-footnote text-t7">
-      {status === "active" ? <Icon name="CircleCheck" size="s" className="text-extended-green" /> : null}
-      {status === "active" ? "Active" : status === "completed" ? "Ran" : "Paused"}
-    </span>
-  );
-}
+      {task.spaceId && spacesInitialized ? (
+        <section>
+          <h2 className="font-base text-text-500 mb-2">{text.project}</h2>
+          {linkedSpace ? (
+            <button
+              className="text-sm text-brand-100 hover:underline text-left"
+              onClick={() => onOpenSpace?.(linkedSpace.id)}
+              type="button"
+            >
+              {linkedSpace.name}
+            </button>
+          ) : (
+            <div className="text-sm text-text-400">
+              <p className="italic mb-2">{text.projectMissing}</p>
+              {onUnlinkSpace ? (
+                <OfficialButton onClick={onUnlinkSpace} size="sm" variant="secondary">
+                  {text.unlink}
+                </OfficialButton>
+              ) : null}
+            </div>
+          )}
+        </section>
+      ) : null}
 
-function FolderPathChip({ path }: { path: string }) {
-  const label = basename(path) ?? path;
-  return (
-    <span className={chipClass} title={path}>
-      <Icon name="Folder1" size="s" />
-      <span className="min-w-0 truncate">{label}</span>
-    </span>
-  );
-}
-
-function AlwaysAllowedSection({ task }: { task: ScheduledTaskSummary }) {
-  const approvals = task.approvedPermissions ?? [];
-  const hasBrowserApproval = Boolean(task.chromePermissionMode);
-  return (
-    <DetailSection heading="Always allowed">
-      {hasBrowserApproval || approvals.length > 0 ? (
-        <div className="flex flex-wrap gap-g3">
-          {hasBrowserApproval ? (
-            <span className={chipClass}>
-              <Icon name="Globe" size="s" />
-              <span className="inline-flex items-baseline gap-g2">
-                <span>Browser</span>
-                <span className="text-t6">{task.chromePermissionMode === "SkipAllPermissionChecks" ? "All websites" : websiteCountLabel(task.chromeAllowedDomains?.length ?? 0)}</span>
-              </span>
+      {task.cwd ? (
+        <section>
+          <h2 className="font-base text-text-500 mb-2">{text.folder}</h2>
+          <div className="flex items-center gap-2 text-sm text-text-300">
+            <Icon className="text-text-400 flex-shrink-0" name="Folder1" size="s" />
+            <span className="truncate" title={task.cwd}>
+              {basename(task.cwd) ?? task.cwd}
             </span>
-          ) : null}
-          {approvals.map((approval) => <ApprovalChip key={approval.toolName} toolName={approval.toolName} />)}
-        </div>
-      ) : <p className="text-footnote text-t5">Approvals you grant during a run appear here.</p>}
-    </DetailSection>
+          </div>
+        </section>
+      ) : null}
+
+      <FoldersSection
+        linkedSpace={linkedSpace}
+        onOpenSpace={onOpenSpace}
+        task={task}
+        text={text}
+      />
+
+      <section>
+        <h2 className="font-base text-text-500 mb-3">
+          {task.fireAt ? text.runs : text.repeats}
+        </h2>
+        <span className="text-sm text-text-100">{repeatLabel}</span>
+      </section>
+
+      {showAlwaysAllowed ? (
+        <AlwaysAllowedSection onEdit={onEdit} task={task} text={text} />
+      ) : null}
+    </div>
   );
 }
 
-function ApprovalChip({ toolName }: { toolName: string }) {
+export function DetailHistoryColumn({
+  onOpenRun,
+  runs,
+  runsLoading,
+  task,
+  text,
+}: {
+  onOpenRun: (session: SessionSummary) => void;
+  runs: SessionSummary[];
+  runsLoading: boolean;
+  task: ScheduledTaskSummary;
+  text: ScheduledDetailText;
+}) {
+  // Residual rKt: A=useState(100); R.slice(0,A); Show more +=100
+  const [visibleCount, setVisibleCount] = useState(100);
+  const items = historyItems(runs, task.missedRuns);
+  if (runsLoading) {
+    return (
+      <div className="flex flex-col gap-8 min-w-0 order-2 lg:order-1">
+        <p className="text-sm text-text-400">{text.inProgress}</p>
+      </div>
+    );
+  }
+  // Residual rKt: History section only rendered when R.length > 0
+  if (items.length === 0) {
+    return <div className="flex flex-col gap-8 min-w-0 order-2 lg:order-1" />;
+  }
+  const visible = items.slice(0, visibleCount);
   return (
-    <span className={chipClass}>
-      <Icon name="Tool" size="s" />
-      <span className="min-w-0 truncate">{displayToolName(toolName)}</span>
+    <div
+      className="flex flex-col gap-8 min-w-0 order-2 lg:order-1"
+      data-official-source="index-BELzQL5P.js:rKt history"
+    >
+      <section>
+        <h2 className="font-base text-text-500">{text.history}</h2>
+        <ul>
+          {visible.map((item) =>
+            item.type === "session" ? (
+              <HistorySessionRow
+                key={item.session.id}
+                onOpenRun={onOpenRun}
+                run={item.session}
+                text={text}
+              />
+            ) : (
+              <HistoryMissedRow
+                key={`missed-${item.time.getTime()}`}
+                reason={item.reason}
+                text={text}
+                time={item.time}
+              />
+            ),
+          )}
+        </ul>
+        {items.length > visibleCount ? (
+          <OfficialButton
+            className="w-full mt-2"
+            onClick={() => setVisibleCount((current) => current + 100)}
+            variant="secondary"
+          >
+            {text.showMore}
+          </OfficialButton>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function FoldersSection({
+  linkedSpace,
+  onOpenSpace,
+  task,
+  text,
+}: {
+  linkedSpace: LinkedSpaceInfo | null;
+  onOpenSpace?: (spaceId: string) => void;
+  task: ScheduledTaskSummary;
+  text: ScheduledDetailText;
+}) {
+  // Residual iKt: taskFolders = userSelectedFolders, space folders merged, from-project qc link
+  const taskFolders = task.userSelectedFolders ?? [];
+  const spaceFolders = linkedSpace?.folders ?? [];
+  const all = [...new Set([...taskFolders, ...spaceFolders])];
+  const spaceSet = new Set(spaceFolders);
+  if (all.length === 0) return null;
+  return (
+    <section data-official-source="index-BELzQL5P.js:iKt">
+      <h2 className="font-base text-text-500 mb-2">{text.folders}</h2>
+      <div className="flex flex-col gap-1">
+        {all.map((folderPath) => (
+          <div className="flex items-center gap-2 text-sm text-text-300" key={folderPath}>
+            <Icon className="text-text-400 flex-shrink-0" name="Folder1" size="s" />
+            <span className="truncate" title={folderPath}>
+              {basename(folderPath) ?? folderPath}
+            </span>
+            {spaceSet.has(folderPath) && linkedSpace ? (
+              <button
+                className="text-xs text-text-500 hover:text-brand-100 flex-shrink-0 transition-colors"
+                onClick={() => onOpenSpace?.(linkedSpace.id)}
+                type="button"
+              >
+                {formatScheduledTemplate(text.fromProject, { spaceName: linkedSpace.name })}
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AlwaysAllowedSection({
+  onEdit,
+  task,
+  text,
+}: {
+  onEdit: () => void;
+  task: ScheduledTaskSummary;
+  text: ScheduledDetailText;
+}) {
+  const unsupervised = isUnsupervisedMode(task.permissionMode);
+  const approvals = task.approvedPermissions ?? [];
+  const hasBrowser = Boolean(task.chromePermissionMode);
+  const hasAny = approvals.length > 0 || hasBrowser;
+  return (
+    <section data-official-source="index-BELzQL5P.js:rKt always allowed">
+      <h2 className="flex items-center gap-1.5 font-base text-text-500 mb-3">
+        <span>{text.alwaysAllowed}</span>
+      </h2>
+      {unsupervised ? (
+        <button
+          className="w-full flex items-center gap-2.5 px-3 py-2 bg-bg-200 hover:bg-bg-300 rounded-lg text-left transition-colors"
+          onClick={onEdit}
+          type="button"
+        >
+          <Icon className="text-text-400 flex-shrink-0" name="WarningShield" size="s" />
+          <span className="text-sm font-medium text-text-200">{text.unsupervised}</span>
+        </button>
+      ) : hasAny ? (
+        <div className="bg-bg-200 rounded-lg divide-y divide-border-300">
+          {hasBrowser ? (
+            <div className="flex items-center justify-between px-3 py-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Icon className="text-text-400 flex-shrink-0" name="Globe" size="s" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium text-text-200 flex-shrink-0">
+                      {text.browser}
+                    </span>
+                    <span className="text-sm text-text-400 truncate">
+                      {task.chromePermissionMode === "SkipAllPermissionChecks" ||
+                      task.chromePermissionMode === "skip_all_permission_checks"
+                        ? text.allWebsites
+                        : formatWebsiteCount(text.websiteCount, task.chromeAllowedDomains?.length ?? 0)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {approvals.map((approval) => (
+            <div className="flex items-center justify-between px-3 py-2" key={approval.toolName}>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-sm text-text-400 truncate">
+                  {displayToolName(approval.toolName)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-text-400">{text.alwaysAllowedEmpty}</p>
+      )}
+    </section>
+  );
+}
+
+function StatusBadge({
+  enabled,
+  task,
+  text,
+}: {
+  enabled: boolean;
+  task: ScheduledTaskSummary;
+  text: ScheduledDetailText;
+}) {
+  // Residual aKt: enabled → 进行中 success pill; else completed(fireAt+lastRun) Ran / Paused
+  if (enabled) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium border-0.5 border-success-000/40 text-success-000 bg-success-900">
+        <Icon className="text-success-000" name="CheckCircle" size="s" />
+        {text.active}
+      </span>
+    );
+  }
+  const completed = Boolean(task.fireAt && task.lastRunAt);
+  return (
+    <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium border-0.5 border-border-300 text-text-400 bg-bg-200">
+      {completed ? (
+        <Icon name="CheckCircle" size="s" />
+      ) : (
+        <Icon name="Pause" size="s" />
+      )}
+      {completed ? text.ran : text.paused}
     </span>
   );
 }
 
-function ScheduledSessionRunRow({ run, task, onOpenRun }: { run: SessionSummary; task: ScheduledTaskSummary; onOpenRun: (session: SessionSummary) => void }) {
+function HistorySessionRow({
+  onOpenRun,
+  run,
+  text,
+}: {
+  onOpenRun: (session: SessionSummary) => void;
+  run: SessionSummary;
+  text: ScheduledDetailText;
+}) {
   return (
-    <button type="button" className="group flex items-center gap-g4 px-p6 py-p4 rounded-r6 bg-t1 hover:bg-t2 text-left outline-none hide-focus-ring ring-focus" onClick={() => onOpenRun(run)}>
-      <span className="shrink-0 flex items-center justify-center size-[14px]">
-        {run.isRunning ? <Icon name="Spinner" size="s" /> : run.showRetryButton || run.connectionState === "error" ? <Icon name="XCrossCloseMedium" size="s" className="text-extended-pink" /> : <Icon name="CircleCheck" size="s" className="text-extended-green" />}
-      </span>
-      <span className="flex-1 min-w-0 text-body text-t9 truncate">{run.createdAtMs ? formatRelativeTime(new Date(run.createdAtMs)) : run.title || taskDisplayName(task)}</span>
-      {run.showRetryButton || run.connectionState === "error" ? <span className="shrink-0 text-footnote text-t6">Error</span> : run.isRunning ? <span className="shrink-0 text-footnote text-t6">Running</span> : null}
-    </button>
+    <li className="border-b-0.5 border-border-300 last:border-b-0 hover:border-transparent transition-colors">
+      <button
+        className="flex w-full items-center justify-between py-3 px-2 -mx-2 rounded-lg hover:bg-bg-200 transition-colors text-left"
+        onClick={() => onOpenRun(run)}
+        type="button"
+      >
+        <span className="text-sm text-text-100">
+          {run.createdAtMs ? formatRelativeTime(new Date(run.createdAtMs)) : run.title ?? ""}
+        </span>
+        {run.showRetryButton || run.connectionState === "error" ? (
+          <span className="flex items-center gap-1 text-xs text-text-400">
+            <Icon name="XCrossCloseMedium" size="s" />
+            {text.error}
+          </span>
+        ) : run.isRunning ? (
+          <span className="flex items-center gap-1 text-xs text-text-400">
+            <Icon name="Spinner" size="s" />
+            {text.running}
+          </span>
+        ) : null}
+      </button>
+    </li>
   );
 }
 
-function ScheduledMissedRunRow({ reason, time }: { reason?: string; time: Date }) {
+function HistoryMissedRow({
+  reason,
+  text,
+  time,
+}: {
+  reason?: string;
+  text: ScheduledDetailText;
+  time: Date;
+}) {
+  const tip = missedRunReasonLabel(reason, text);
   return (
-    <div className="flex items-center gap-g4 px-p6 py-p4 rounded-r6 bg-t1">
-      <span aria-hidden="true" className="shrink-0 flex items-center justify-center size-[14px]">
-        <span className="size-[6px] rounded-full border border-[var(--t5)]" />
-      </span>
-      <span className="flex-1 min-w-0 text-body text-t9 truncate">{formatRelativeTime(time)}</span>
-      <span tabIndex={0} title={missedRunReasonLabel(reason)} className="shrink-0 text-footnote text-t6 rounded-r4 outline-none hide-focus-ring ring-focus">Skipped</span>
-    </div>
+    <li className="border-b-0.5 border-border-300 last:border-b-0">
+      <div className="flex items-center justify-between py-3 px-2 -mx-2">
+        <span className="text-sm text-text-100">{formatRelativeTime(time)}</span>
+        <OfficialTooltip tooltipContent={tip}>
+          <span className="flex items-center gap-1 text-xs text-text-400" tabIndex={0}>
+            <Icon name="Clock" size="s" />
+            {text.skipped}
+          </span>
+        </OfficialTooltip>
+      </div>
+    </li>
   );
 }
 
@@ -165,7 +484,10 @@ type HistoryItem =
   | { type: "session"; session: SessionSummary; time: number }
   | { type: "missed"; time: Date; reason?: string };
 
-function historyItems(runs: SessionSummary[], missedRuns?: ScheduledTaskSummary["missedRuns"]): HistoryItem[] {
+function historyItems(
+  runs: SessionSummary[],
+  missedRuns?: ScheduledTaskSummary["missedRuns"],
+): HistoryItem[] {
   const items: HistoryItem[] = runs.map((session) => ({
     type: "session",
     session,
@@ -173,7 +495,13 @@ function historyItems(runs: SessionSummary[], missedRuns?: ScheduledTaskSummary[
   }));
   for (const missed of missedRuns ?? []) {
     const time = new Date(typeof missed === "string" ? missed : missed.time);
-    if (!Number.isNaN(time.getTime())) items.push({ type: "missed", time, reason: typeof missed === "string" ? undefined : missed.reason });
+    if (!Number.isNaN(time.getTime())) {
+      items.push({
+        type: "missed",
+        time,
+        reason: typeof missed === "string" ? undefined : missed.reason,
+      });
+    }
   }
   return items.sort((left, right) => historyTime(right) - historyTime(left));
 }
@@ -186,23 +514,28 @@ export function basename(value?: string): string | undefined {
   return value?.split(/[\\/]/).filter(Boolean).at(-1);
 }
 
-function folderListForTask(task: ScheduledTaskSummary) {
-  const folders = new Set<string>();
-  if (task.cwd) folders.add(task.cwd);
-  for (const folder of task.userSelectedFolders ?? []) folders.add(folder);
-  return [...folders];
-}
-
-function detailNextRunLabel(task: ScheduledTaskSummary) {
-  if (task.fireAt && !task.lastRunAt) return `Runs at: ${formatDateTime(task.fireAt)}`;
-  if (task.nextRunAt) return `Next run: ${formatDateTime(task.nextRunAt)}`;
+function detailNextRunLabel(task: ScheduledTaskSummary, text: ScheduledDetailText) {
+  if (task.fireAt && !task.lastRunAt) {
+    return formatScheduledTemplate(text.runsAt, { date: formatDateTime(task.fireAt) });
+  }
+  if (task.nextRunAt) {
+    return formatScheduledTemplate(text.nextRun, { date: formatDateTime(task.nextRunAt) });
+  }
   return null;
 }
 
-function detailStatus(task: ScheduledTaskSummary, enabled: boolean): "active" | "completed" | "paused" {
-  if (enabled) return "active";
-  if (task.fireAt && task.lastRunAt) return "completed";
-  return "paused";
+function localizedScheduleLabel(task: ScheduledTaskSummary, text: ScheduledDetailText) {
+  const cron = task.cronExpression;
+  if (task.fireAt) return text.manual;
+  if (!cron) return text.manualOnly;
+  const [minute, hour, , , day] = cron.split(" ");
+  if (hour === "*") return text.hourly;
+  if (day === "1-5") return `${text.weekdays} ${formatTime(Number(hour), Number(minute))}`;
+  if (day && day !== "*") return `${text.weekly} ${formatTime(Number(hour), Number(minute))}`;
+  if (hour !== undefined && minute !== undefined) {
+    return `${text.daily} ${formatTime(Number(hour), Number(minute))}`;
+  }
+  return scheduleLabel(task);
 }
 
 function formatDateTime(value: string) {
@@ -218,20 +551,21 @@ function formatRelativeTime(date: Date) {
   if (abs < 60_000) return formatter.format(Math.round(diffMs / 1000), "second");
   if (abs < 3_600_000) return formatter.format(Math.round(diffMs / 60_000), "minute");
   if (abs < 86_400_000) return formatter.format(Math.round(diffMs / 3_600_000), "hour");
-  if (abs < 604_800_000) return formatter.format(Math.round(diffMs / 86_400_000), "day");
-  return date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-}
-
-function missedRunReasonLabel(reason?: string) {
-  if (reason === "PerTaskLimit" || reason === "per_task_limit") return "The previous run was still in progress.";
-  if (reason === "GlobalLimit" || reason === "global_limit") return "Other scheduled tasks were already running.";
-  return "Scheduled tasks only run while your computer is awake.";
+  if (abs < 2_592_000_000) return formatter.format(Math.round(diffMs / 86_400_000), "day");
+  return formatter.format(Math.round(diffMs / 2_592_000_000), "month");
 }
 
 function displayToolName(toolName: string) {
-  return toolName.split("__").filter(Boolean).at(-1) ?? toolName;
+  return toolName.replace(/^mcp__/i, "").replace(/__/g, " · ");
 }
 
-function websiteCountLabel(count: number) {
-  return count === 1 ? "1 website" : `${count} websites`;
+function isUnsupervisedMode(mode?: ScheduledTaskSummary["permissionMode"]) {
+  // Residual oKt / DZe: auto | bypassPermissions
+  return mode === "auto" || mode === "bypassPermissions";
+}
+
+function missedRunReasonLabel(reason: string | undefined, text: ScheduledDetailText) {
+  if (reason === "PerTaskLimit" || reason === "per_task_limit") return text.skippedPerTask;
+  if (reason === "GlobalLimit" || reason === "global_limit") return text.skippedGlobal;
+  return text.skippedAsleep;
 }

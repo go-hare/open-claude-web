@@ -132,11 +132,13 @@ export function ProjectCard({
 
 /** Official gYt expandable filter (Cmd/Ctrl+F). */
 export function ProjectsExpandableSearch({
+  clearLabel = "Clear filter",
   onChange,
   onExpandChange,
   placeholder = "Search projects",
   value,
 }: {
+  clearLabel?: string;
   onChange: (value: string) => void;
   onExpandChange?: (expanded: boolean) => void;
   placeholder?: string;
@@ -166,7 +168,7 @@ export function ProjectsExpandableSearch({
       <OfficialTextInput
         append={
           <button
-            aria-label="Clear filter"
+            aria-label={clearLabel}
             className="p-0.5 rounded hover:bg-bg-300 text-text-400 hover:text-text-200"
             onClick={() => {
               onChange("");
@@ -221,23 +223,32 @@ export function ProjectsExpandableSearch({
 
 export type ProjectSortBy = "recent" | "created" | "alphabetical";
 
-const SORT_LABELS: Record<ProjectSortBy, string> = {
+const DEFAULT_SORT_LABELS: Record<ProjectSortBy, string> = {
   recent: "Recent",
   created: "Created",
   alphabetical: "Alphabetical",
 };
 
 export function ProjectsSortMenu({
+  labels,
   onChange,
   value,
 }: {
+  labels?: Partial<Record<ProjectSortBy, string>> & { sortBy?: string };
   onChange: (value: ProjectSortBy) => void;
   value: ProjectSortBy;
 }) {
+  const sortLabels: Record<ProjectSortBy, string> = {
+    recent: labels?.recent ?? DEFAULT_SORT_LABELS.recent,
+    created: labels?.created ?? DEFAULT_SORT_LABELS.created,
+    alphabetical: labels?.alphabetical ?? DEFAULT_SORT_LABELS.alphabetical,
+  };
+  const sortByLabel = labels?.sortBy ?? "Sort by";
+
   return (
     <Menu.Root>
       <Menu.Trigger
-        aria-label="Sort by"
+        aria-label={sortByLabel}
         className="inline-flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent text-text-300 hover:bg-bg-200"
         data-official-source="index-BELzQL5P.js:_Component32 sort"
         type="button"
@@ -247,13 +258,13 @@ export function ProjectsSortMenu({
       <Menu.Portal>
         <Menu.Positioner align="end" className="z-popover" sideOffset={6}>
           <Menu.Popup className="min-w-[10rem] rounded-xl border border-border-300 bg-bg-000 p-1 shadow-lg outline-none">
-            {(Object.keys(SORT_LABELS) as ProjectSortBy[]).map((option) => (
+            {(Object.keys(sortLabels) as ProjectSortBy[]).map((option) => (
               <Menu.Item
                 className="flex cursor-default items-center rounded-lg px-3 py-2 text-sm text-text-200 outline-none data-[highlighted]:bg-bg-200"
                 key={option}
                 onClick={() => onChange(option)}
               >
-                <span className="flex-1">{SORT_LABELS[option]}</span>
+                <span className="flex-1">{sortLabels[option]}</span>
                 {value === option ? <Icon className="text-accent-100" customSize={14} name="Check" /> : null}
               </Menu.Item>
             ))}

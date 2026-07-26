@@ -67,6 +67,8 @@ const archivePaths: CoworkGlyphPath[] = [
 ];
 // Official `mC` delete/trash.
 const trashPath = "M11.323 1.5a1.5 1.5 0 0 1 1.393.943L13.338 4H17.5l.1.01a.5.5 0 0 1 0 .98l-.1.01h-1.537l-.894 11.615A1.5 1.5 0 0 1 13.574 18H6.426a1.5 1.5 0 0 1-1.478-1.24l-.017-.145L4.037 5H2.5a.5.5 0 0 1 0-1h4.162l.622-1.557.047-.104A1.5 1.5 0 0 1 8.677 1.5zM5.928 16.538a.5.5 0 0 0 .498.462h7.148a.5.5 0 0 0 .498-.462L14.961 5H5.039zM8.5 8a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 .5-.5m3 0a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 .5-.5M8.677 2.5a.5.5 0 0 0-.43.246l-.034.068L7.738 4h4.524l-.475-1.186a.5.5 0 0 0-.464-.314z";
+// Official index-BELzQL5P `Ov` — play triangle (rKt Run now prepend).
+const playPath = "M4 4.047A1.5 1.5 0 0 1 6.29 2.77l9.603 5.954a1.5 1.5 0 0 1 0 2.55L6.29 17.227a1.5 1.5 0 0 1-2.275-1.06L4 15.953zm1.764-.425A.5.5 0 0 0 5 4.047v11.906l.005.072a.5.5 0 0 0 .759.353l9.601-5.953a.5.5 0 0 0 0-.85z";
 // Official c5f4e1303 `Rx` exported as `im` — plain check used by hUt Mark done.
 const markDonePath = "M15.188 5.11a.5.5 0 0 1 .752.626l-.056.084-7.5 9a.5.5 0 0 1-.738.033l-3.5-3.5-.064-.078a.501.501 0 0 1 .693-.693l.078.064 3.113 3.113 7.15-8.58z";
 const externalLinkPath = "M9.5 3a.5.5 0 0 1 0 1h-5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-5a.5.5 0 0 1 1 0v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15.5v-11A1.5 1.5 0 0 1 4.5 3zm7 0a.5.5 0 0 1 .18.034l.021.01q.03.014.059.03l.023.014a.5.5 0 0 1 .07.058l.065.079q.015.025.026.052l.018.034a.5.5 0 0 1 .032.128Q17 3.47 17 3.5v4a.5.5 0 0 1-1 0V4.707l-4.146 4.147a.5.5 0 1 1-.707-.708L15.293 4H12.5a.5.5 0 0 1 0-1z";
@@ -188,6 +190,11 @@ export function CoworkArchiveGlyph(props: CoworkOfficialGlyphProps) {
 /** Official index-BELzQL5P `mC` — Delete/trash. */
 export function CoworkTrashGlyph(props: CoworkOfficialGlyphProps) {
   return <CoworkOfficialGlyph {...props} path={trashPath} />;
+}
+
+/** Official index-BELzQL5P `Ov` — Play (rKt Run now). */
+export function CoworkPlayGlyph(props: CoworkOfficialGlyphProps) {
+  return <CoworkOfficialGlyph {...props} path={playPath} />;
 }
 
 /** Official c5f4e1303 `Rx` / index `im` — Mark done check. */

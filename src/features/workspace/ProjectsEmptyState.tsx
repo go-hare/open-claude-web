@@ -1,6 +1,7 @@
 /**
  * Official M4t / bF empty state (index-BELzQL5P), variant="projects" → Kq pictogram.
  * Cowork description branch from c1b9abf13 _Component32 (C=true).
+ * Copy is passed from ProjectsPage via residual PROJECTS_MESSAGES (no EN defaults here).
  */
 import type { ReactNode } from "react";
 import { Icon } from "../../shell/icons";
@@ -9,17 +10,17 @@ import { ProjectsEmptyPictogram } from "./ProjectsEmptyPictogram";
 
 export type ProjectsEmptyStateProps = {
   className?: string;
-  ctaLabel?: ReactNode;
-  description?: ReactNode;
-  headline?: ReactNode;
+  ctaLabel: ReactNode;
+  description: ReactNode;
+  headline: ReactNode;
   onCtaClick?: () => void;
 };
 
 export function ProjectsEmptyState({
   className = "mt-8",
-  ctaLabel = "New project",
-  description = "Point Claude at a folder on your machine and work on it together.",
-  headline = "Looking to start a project?",
+  ctaLabel,
+  description,
+  headline,
   onCtaClick,
 }: ProjectsEmptyStateProps) {
   return (

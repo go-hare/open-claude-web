@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { EffortLevel, PermissionMode, WorkspaceContext } from "../../../adapters/desktopBridge";
@@ -13,19 +13,22 @@ import {
   useCodeModelOptions,
 } from "../../cowork/composer/useCoworkModelOptions";
 import {
-  effortLabel,
-  effortOptions,
   permissionModeLabel,
   permissionModeOptions,
+  ULTRACODE_OPTION,
+  effortOptions,
 } from "./options";
 import { numberComposerMenuItems } from "./composerMenuItems";
 import { EpitaxyPermissionModeModal } from "./EpitaxyPermissionModeModal";
+import { OfficialEffortControl, type OfficialEffortItem } from "./OfficialEffortControl";
 import { OfficialWorkspaceControls } from "./OfficialWorkspaceControls";
 import { usePermissionModeConfirm } from "./usePermissionModeConfirm";
 
 type OfficialCodeComposerProps = {
   busy: boolean;
   effort: EffortLevel;
+  /** Official get_settings.applied (CLI 2.7.16+) for the new-session draft ladder. */
+  effortLevels?: string[] | null;
   model: string;
   onEffortChange: (value: EffortLevel) => void;
   onModelChange: (value: string) => void;
@@ -38,6 +41,7 @@ type OfficialCodeComposerProps = {
   prompt: string;
   setPrompt: (value: string) => void;
   sourceBranch: string;
+  ultracodeOfferable?: boolean | null;
   useWorktree: boolean;
   workspace: WorkspaceContext;
 };
@@ -47,6 +51,7 @@ const composerIconButtonClass = "group/btn relative isolate inline-flex items-ce
 export function OfficialCodeComposer({
   busy,
   effort,
+  effortLevels = null,
   model,
   onEffortChange,
   onModelChange,
@@ -59,6 +64,7 @@ export function OfficialCodeComposer({
   prompt,
   setPrompt,
   sourceBranch,
+  ultracodeOfferable = null,
   useWorktree,
   workspace,
 }: OfficialCodeComposerProps) {
@@ -69,7 +75,8 @@ export function OfficialCodeComposer({
   const [replayKey, setReplayKey] = useState(0);
   const [openFooterMenu, setOpenFooterMenu] = useState<"effort" | "mode" | "model" | null>(null);
   const hasPrompt = prompt.trim().length > 0;
-  const isModelMenuOpen = openFooterMenu === "model" || openFooterMenu === "effort";
+  const ultracode = effort === "ultracode";
+  const effortLevel: EffortLevel = ultracode ? "xhigh" : (effort as EffortLevel);
   const allowedModelValues = useMemo(
     () => codeModelOptions.items.map((item) => item.value),
     [codeModelOptions.items],
@@ -113,30 +120,47 @@ export function OfficialCodeComposer({
       onModelChange(option.value);
     },
   }));
-  const effortItems: OfficialDropdownItem[] = effortOptions.map((option) => ({
-    checked: option.value === effort,
-    label: option.label,
-    onSelect: () => onEffortChange(option.value),
-  }));
+  const effortItems: OfficialEffortItem[] = useMemo(() => {
+    // Official get_settings.applied.effortLevels (CLI 2.7.16+): per-model catalog
+    // ladder — deepseek-v4-pro only offers high|max. null → hardcoded 5-stop fallback.
+    const allowed = effortLevels && effortLevels.length > 0 ? new Set(effortLevels) : null;
+    const ladder = allowed ? effortOptions.filter((o) => allowed.has(o.value)) : effortOptions;
+    const items: OfficialEffortItem[] = ladder.map((option) => ({
+      checked: !ultracode && option.value === effortLevel,
+      label: option.label,
+      value: option.value,
+      onSelect: () => onEffortChange(option.value),
+    }));
+    // Official $ gate: ultracodeOfferable=false → hide the Ultracode stop.
+    if (ultracodeOfferable !== false) {
+      items.push({
+        accent: true,
+        checked: ultracode,
+        help: ULTRACODE_OPTION.help,
+        label: ULTRACODE_OPTION.label,
+        value: ULTRACODE_OPTION.value,
+        onSelect: () => onEffortChange("ultracode"),
+      });
+    }
+    return items;
+  }, [effortLevel, effortLevels, onEffortChange, ultracode, ultracodeOfferable]);
   const numberedPermissionItems = useMemo(() => (
     openFooterMenu === "mode" ? numberComposerMenuItems(permissionItems) : permissionItems
   ), [openFooterMenu, permissionItems]);
   const numberedModelItems = useMemo(() => (
     openFooterMenu === "model" ? numberComposerMenuItems(modelItems) : modelItems
   ), [modelItems, openFooterMenu]);
-  const numberedEffortItems = useMemo(() => (
-    openFooterMenu === "effort" ? numberComposerMenuItems(effortItems) : effortItems
-  ), [effortItems, openFooterMenu]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const hasOnlyDigit = !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey);
       if (openFooterMenu && hasOnlyDigit && event.code.startsWith("Digit")) {
         const index = Number(event.code.slice(5)) - 1;
+        // Official Dne: digit quick-keys also apply while Effort slider popover is open.
         const items = openFooterMenu === "mode"
           ? numberedPermissionItems
           : openFooterMenu === "effort"
-            ? numberedEffortItems
+            ? effortItems
             : numberedModelItems;
         const item = items[index];
         if (item?.onSelect && !item.disabled) {
@@ -169,7 +193,7 @@ export function OfficialCodeComposer({
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [effortItems, modelItems, numberedEffortItems, numberedModelItems, numberedPermissionItems, openFooterMenu, permissionItems.length]);
+  }, [effortItems, modelItems, numberedModelItems, numberedPermissionItems, openFooterMenu, permissionItems.length]);
 
   const submitWithTrust = useCallback(() => {
     const state = submitStateRef.current;
@@ -298,22 +322,23 @@ export function OfficialCodeComposer({
             align="end"
             ariaLabel="Model"
             disabled={busy}
-            extraSections={[{
-              header: "Effort",
-              items: numberedEffortItems,
-              triggerKey: "cmd+shift+e",
-            }]}
             header="Models"
             items={numberedModelItems}
-            label={<OfficialModelFooterLabel effortLabel={effortLabel(effort)} modelLabel={codeModelOptions.labelFor(selectedModel)} />}
+            label={codeModelOptions.labelFor(selectedModel)}
             mode="text"
-            onOpenChange={(open) => setOpenFooterMenu(open ? (openFooterMenu === "effort" ? "effort" : "model") : null)}
-            open={isModelMenuOpen}
+            onOpenChange={(open) => setOpenFooterMenu(open ? "model" : null)}
+            open={openFooterMenu === "model"}
             revealChevron="never"
             side="top"
             size="small"
             triggerKey="cmd+shift+i"
             variant="uncontained"
+          />
+          <OfficialEffortControl
+            disabled={busy}
+            items={effortItems}
+            onOpenChange={(open) => setOpenFooterMenu(open ? "effort" : null)}
+            open={openFooterMenu === "effort"}
           />
           <button className={`${composerIconButtonClass} h-small text-footnote rounded-small shrink-0`} type="button" aria-label="Usage">
             <span aria-hidden="true" className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)] group-hover/btn:bg-[var(--fill-uncontained-hover)]" />
@@ -348,14 +373,4 @@ function tiptapDocFromPlainText(value: string) {
       content: line ? [{ type: "text", text: line }] : [],
     })),
   };
-}
-
-function OfficialModelFooterLabel({ effortLabel, modelLabel }: { effortLabel?: ReactNode; modelLabel: ReactNode }) {
-  if (!effortLabel) return <>{modelLabel}</>;
-  return (
-    <span className="flex items-baseline gap-g3 min-w-0">
-      <span className="truncate">{modelLabel}</span>
-      <span className="text-t6 shrink-0">· {effortLabel}</span>
-    </span>
-  );
 }

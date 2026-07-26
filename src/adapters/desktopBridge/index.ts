@@ -44,6 +44,7 @@ export type {
   CoworkSessionsBridge,
   CoworkSpaceSummary,
   CoworkMountedProject,
+  SpaceFolderEntry,
   DesktopBridge,
   DesktopPreferences,
   CreateScheduledTaskInput,

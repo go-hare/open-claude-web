@@ -163,8 +163,10 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   if (error && entries.length === 0) return <SessionError error={error} onRetry={reload} />;
   if (!initialSessionId) return <div className="h-full overflow-y-auto overflow-x-hidden">{landingBody ?? null}</div>;
   const transcriptKey = `${initialSessionId}:messages`;
-  // Official Ja: Boolean(D) && 0===Ya.length && (B||J) — only when nothing to show yet.
-  if (isLoading && entries.length === 0 && !session) {
+  // Official Ja: Boolean(D) && 0===Ya.length && (B||J). Za delays spinner 20ms.
+  // Do NOT gate on !session — Recents openSession seeds meta before getTranscript;
+  // that used to skip Ja and flash "No messages yet." / empty→full jump.
+  if (isLoading && entries.length === 0) {
     return <OfficialConversationLoading />;
   }
   if (entries.length === 0 && !isResponding) return <div className="h-full flex items-center justify-center text-body text-t5">No messages yet.</div>;
@@ -385,6 +387,8 @@ function estimateTranscriptRowSize(row: TranscriptRow) {
  * Official Fu virtualizer (c3d5 `ve`, used as Fu from c119 Gb/R):
  * - pin is set only by scroll-direction in Fu, setPinned/scrollToIndex, or restore
  * - while pinned + not mid-user-scroll, stick scrollTop = totalSize
+ * - measureElement ResizeObserver re-pins when nested content reflows (markdown/fonts/tools)
+ * - mid-scroll size delta uses sizer translateY compensation (residual I/z), flushed when scroll ends
  * - unmount saves isPinned + anchorKey + anchorOffsetPx + measurements for restoreKey
  */
 function useOfficialTranscriptVirtualizer<TItem>({
@@ -427,6 +431,13 @@ function useOfficialTranscriptVirtualizer<TItem>({
   const pendingMissingAnchorKeyRef = useRef<string | null>(null);
   const didInitRestoreRef = useRef(false);
   const lastItemCountForMissingRef = useRef(0);
+  // Residual ve: mid-scroll size compensation (I/z) so content does not jump under the finger.
+  const midScrollShiftPxRef = useRef(0);
+  const skipNextPrependAdjustRef = useRef(false);
+  const firstItemKeyRef = useRef<string | null>(null);
+  const lastTotalSizeForPrependRef = useRef(0);
+  const paddingStartRef = useRef(paddingStart ?? 0);
+  const prependAdjustedThisPassRef = useRef(false);
 
   const initialOffsetRef = useRef<number | undefined>(undefined);
   if (initialOffsetRef.current === undefined) {
@@ -474,23 +485,38 @@ function useOfficialTranscriptVirtualizer<TItem>({
     sizer.style.height = `${Math.max(size, height)}px`;
   }, []);
 
+  const applyScrollDelta = useCallback((delta: number, node: HTMLElement) => {
+    const vz = virtualizerRef.current;
+    if (vz.isScrolling) {
+      // Residual I: while user is scrolling, shift sizer via translateY instead of scrollTop.
+      midScrollShiftPxRef.current += delta;
+      const sizer = sizerRef.current;
+      if (sizer) sizer.style.transform = `translateY(${-midScrollShiftPxRef.current}px)`;
+    } else {
+      node.scrollTop += delta;
+      lastObservedScrollTopRef.current = node.scrollTop;
+    }
+  }, []);
+
   const tryRestoreAnchorKey = useCallback((anchorKey: string) => {
     const index = itemsRef.current.findIndex((item) => getKeyRef.current(item) === anchorKey);
     if (index < 0) return false;
     restoreTargetIndexRef.current = index;
     pendingMissingAnchorKeyRef.current = null;
     pinnedRef.current = false;
+    skipNextPrependAdjustRef.current = true;
     return true;
   }, []);
 
   // Official Fu scroll handler: direction vs content shrink decides pin — never distance-from-bottom alone.
+  // Residual P: effective scrollTop includes mid-scroll translate compensation (z).
   useEffect(() => {
     const node = scrollRef.current;
     if (!node) return undefined;
     const onScroll = () => {
       const vz = virtualizerRef.current;
       const nextTotal = vz.getTotalSize();
-      const scrollTop = node.scrollTop;
+      const scrollTop = node.scrollTop + midScrollShiftPxRef.current;
       const deltaUp = lastObservedScrollTopRef.current - scrollTop;
       const shrinkAllowance = Math.max(0, lastObservedTotalSizeRef.current - nextTotal);
       lastObservedScrollTopRef.current = scrollTop;
@@ -506,7 +532,7 @@ function useOfficialTranscriptVirtualizer<TItem>({
     };
     node.addEventListener("scroll", onScroll, { passive: true });
     return () => node.removeEventListener("scroll", onScroll);
-  }, [itemCount]);
+  }, []);
 
   // Official Fu layout: restore anchor once, else while pinned stick to totalSize (skip if user is mid-scroll).
   useLayoutEffect(() => {
@@ -567,6 +593,59 @@ function useOfficialTranscriptVirtualizer<TItem>({
     lastObservedTotalSizeRef.current = nextTotal;
   }, [applySizerHeight, isScrolling, itemCount, totalSize, tryRestoreAnchorKey]);
 
+  // Residual ve: when list head key changes (prepend / history union), adjust scroll by totalSize delta.
+  useLayoutEffect(() => {
+    const firstKey = itemCount > 0 ? getKeyRef.current(itemsRef.current[0]) : null;
+    const previousFirstKey = firstItemKeyRef.current;
+    firstItemKeyRef.current = firstKey;
+    const totalDelta = totalSize - lastTotalSizeForPrependRef.current;
+    lastTotalSizeForPrependRef.current = totalSize;
+    prependAdjustedThisPassRef.current = false;
+    if (previousFirstKey === null || firstKey === previousFirstKey) return;
+    if (pinnedRef.current) return;
+    if (skipNextPrependAdjustRef.current) {
+      skipNextPrependAdjustRef.current = false;
+      return;
+    }
+    if (restoreTargetIndexRef.current !== null) {
+      const previousIndex = itemsRef.current.findIndex((item) => getKeyRef.current(item) === previousFirstKey);
+      if (previousIndex > 0) restoreTargetIndexRef.current += previousIndex;
+    }
+    const node = scrollRef.current;
+    if (node && totalDelta !== 0) {
+      prependAdjustedThisPassRef.current = true;
+      applyScrollDelta(totalDelta, node);
+      lastObservedTotalSizeRef.current = totalSize;
+    }
+  }, [applyScrollDelta, itemCount, totalSize]);
+
+  // Residual ve: paddingStart changes shift unpinned scroll.
+  useLayoutEffect(() => {
+    const previous = paddingStartRef.current;
+    const next = paddingStart ?? 0;
+    paddingStartRef.current = next;
+    if (next === previous) return;
+    if (pinnedRef.current) return;
+    if (restoreTargetIndexRef.current !== null) return;
+    if (prependAdjustedThisPassRef.current) return;
+    const node = scrollRef.current;
+    if (node) applyScrollDelta(next - previous, node);
+  }, [applyScrollDelta, paddingStart]);
+
+  // Residual ve: flush mid-scroll translateY into scrollTop when scroll ends.
+  useLayoutEffect(() => {
+    if (isScrolling) return;
+    const shift = midScrollShiftPxRef.current;
+    if (shift === 0) return;
+    const node = scrollRef.current;
+    const sizer = sizerRef.current;
+    if (!node || !sizer) return;
+    midScrollShiftPxRef.current = 0;
+    sizer.style.transform = "";
+    node.scrollTop += shift;
+    lastObservedScrollTopRef.current = node.scrollTop;
+  }, [isScrolling]);
+
   useLayoutEffect(() => {
     const sizer = sizerRef.current;
     if (sizer) sizer.style.height = `${sizerHeight}px`;
@@ -583,8 +662,8 @@ function useOfficialTranscriptVirtualizer<TItem>({
       return;
     }
     const vz = virtualizerRef.current;
-    const node = scrollRef.current;
-    const scrollOffset = node?.scrollTop ?? vz.scrollOffset ?? 0;
+    const shift = midScrollShiftPxRef.current;
+    const scrollOffset = (scrollRef.current?.scrollTop ?? vz.scrollOffset ?? 0) + shift;
     const measurements = vz.measurementsCache;
     const anchor = measurements.find((item) => item.end > scrollOffset);
     officialTranscriptScrollRestores.set(key, {
@@ -595,10 +674,57 @@ function useOfficialTranscriptVirtualizer<TItem>({
     });
   }, []);
 
-  // Official measureElement: measure only; pin stick is handled by the layout effect above.
+  // Residual ve measureElement: tanstack measure + ResizeObserver so nested reflow re-pins
+  // (first-load markdown / font / tool rows that grow after estimateSize).
+  const resizeObserveBag = useMemo(() => {
+    if (typeof ResizeObserver === "undefined") return null;
+    const observed = new Set<Element>();
+    const ro = new ResizeObserver((entries) => {
+      const vz = virtualizerRef.current;
+      for (const entry of entries) vz.measureElement(entry.target as Element);
+      if (!pinnedRef.current) return;
+      const node = scrollRef.current;
+      const sizer = sizerRef.current;
+      if (!node || !sizer) return;
+      if (vz.isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
+      const nextTotal = vz.getTotalSize();
+      if (nextTotal === lastObservedTotalSizeRef.current) return;
+      const height = vz.scrollRect?.height ?? 0;
+      sizer.style.height = `${Math.max(nextTotal, height)}px`;
+      node.scrollTop = nextTotal;
+      lastProgrammaticScrollTopRef.current = node.scrollTop;
+      lastObservedScrollTopRef.current = node.scrollTop;
+      lastObservedTotalSizeRef.current = nextTotal;
+    });
+    return { observed, ro };
+  }, [virtualizer]);
+
+  useEffect(() => {
+    if (!resizeObserveBag) return undefined;
+    for (const node of resizeObserveBag.observed) {
+      resizeObserveBag.ro.observe(node, { box: "border-box" });
+    }
+    return () => resizeObserveBag.ro.disconnect();
+  }, [resizeObserveBag]);
+
   const measureElement = useCallback((node: HTMLElement | null) => {
-    virtualizerRef.current.measureElement(node);
-  }, []);
+    const vz = virtualizerRef.current;
+    vz.measureElement(node);
+    if (!resizeObserveBag) return;
+    if (node) {
+      if (!resizeObserveBag.observed.has(node)) {
+        resizeObserveBag.observed.add(node);
+        resizeObserveBag.ro.observe(node, { box: "border-box" });
+      }
+      return;
+    }
+    for (const observed of resizeObserveBag.observed) {
+      if (!observed.isConnected) {
+        resizeObserveBag.ro.unobserve(observed);
+        resizeObserveBag.observed.delete(observed);
+      }
+    }
+  }, [resizeObserveBag]);
 
   const scrollToIndex = useCallback((index: number, align: "start" | "center" | "end" | "auto" = "start") => {
     pinnedRef.current = false;

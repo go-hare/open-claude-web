@@ -127,14 +127,39 @@ export type SessionSummary = {
   }>;
 };
 
+export type CoworkSpaceFolder = {
+  path: string;
+};
+
+/** Residual space.links entry (ce283 Ba / addLinkToSpace). */
+export type CoworkSpaceLink = {
+  url: string;
+  title?: string | null;
+  provider?: string | null;
+};
+
+/** Residual space.projects entry (ce283 Ha / chat project uuid). */
+export type CoworkSpaceProjectRef = {
+  uuid: string;
+  name?: string;
+};
+
 export type CoworkSpaceSummary = {
   id: string;
   name: string;
   description?: string | null;
+  /** Residual space.instructions (onboarding create input). */
+  instructions?: string | null;
   createdAtMs?: number;
   updatedAtMs: number;
   isStarred?: boolean;
   sessionIds?: string[];
+  /** Residual space.folders[{path}]. */
+  folders?: CoworkSpaceFolder[];
+  /** Residual space.links. */
+  links?: CoworkSpaceLink[];
+  /** Residual space.projects (chat projects). */
+  projects?: CoworkSpaceProjectRef[];
 };
 
 export type CreateCoworkSpaceInput = {
@@ -162,7 +187,24 @@ export type ScheduledTaskSummary = {
   chromeAllowedDomains?: string[];
   chromePermissionMode?: string;
   userSelectedFolders?: string[];
+  /** Residual Qa: linked cowork space id (absent / empty = unlinked). */
+  spaceId?: string;
   missedRuns?: Array<string | { time: string; reason?: string }>;
+};
+
+export type UpdateScheduledTaskInput = {
+  description?: string;
+  prompt?: string;
+  cronExpression?: string | null;
+  cwd?: string;
+  model?: string;
+  permissionMode?: ScheduledTaskSummary["permissionMode"];
+  userSelectedFolders?: string[];
+  /** Residual Qa link/unlink — pass "" to unlink. */
+  spaceId?: string;
+  enabled?: boolean;
+  title?: string;
+  name?: string;
 };
 
 export type CreateScheduledTaskInput = {
@@ -237,6 +279,17 @@ export type PermissionMode = "default" | "acceptEdits" | "auto" | "bypassPermiss
 
 export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
 
+/**
+ * Official get_settings.applied (CLI 2.7.16+): runtime effort + per-model catalog
+ * ladder (effortLevels) + Ultracode gate. effortLevels/ultracodeOfferable null when
+ * the CLI cannot report (composer falls back to the hardcoded 5-stop ladder).
+ */
+export type EffortApplied = {
+  effort: EffortLevel | string;
+  effortLevels?: string[] | null;
+  ultracodeOfferable?: boolean | null;
+};
+
 export type StartSessionInput = {
   kind: SessionSummary["kind"];
   effort?: EffortLevel;
@@ -250,6 +303,8 @@ export type StartSessionInput = {
   scheduledTaskId?: string;
   sessionId?: string;
   skipRedirect?: boolean;
+  /** Official space_page Ys residual — attach session to cowork space. */
+  spaceId?: string;
   sourceBranch?: string;
   title?: string;
   origin?: string;
@@ -430,7 +485,9 @@ export type LocalSessionsBridge = {
   getDefaultPermissionMode?: (cwd?: string) => Promise<string | null>;
   getDetectedProjects?: () => Promise<SessionSummary[]>;
   getDiffFileContent?: (idOrCwd: string, mergeBase: string, filePath: string, previousFilePath?: string) => Promise<DiffFileContentResult>;
-  getEffort?: (id: string) => Promise<EffortLevel | string>;
+  getEffort?: (id: string) => Promise<EffortApplied | string>;
+  /** Official get_settings applied probe for the new-session draft (per-model catalog ladder). */
+  getEffortCatalogDefaults?: (model?: string) => Promise<EffortApplied | null>;
   getGitInfo?: (idOrCwd: string) => Promise<unknown>;
   getGitDiff?: (idOrCwd: string, base?: string) => Promise<OfficialGitDiffComparison | null>;
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
@@ -544,7 +601,9 @@ export type CoworkSessionsBridge = {
   getDefaultPermissionMode?: (cwd?: string) => Promise<string | null>;
   getDetectedProjects?: () => Promise<SessionSummary[]>;
   getDiffFileContent?: (idOrCwd: string, mergeBase: string, filePath: string, previousFilePath?: string) => Promise<DiffFileContentResult>;
-  getEffort?: (id: string) => Promise<EffortLevel | string>;
+  getEffort?: (id: string) => Promise<EffortApplied | string>;
+  /** Official get_settings applied probe for the new-session draft (per-model catalog ladder). */
+  getEffortCatalogDefaults?: (model?: string) => Promise<EffortApplied | null>;
   getGitInfo?: (idOrCwd: string) => Promise<unknown>;
   getGitDiff?: (idOrCwd: string, base?: string) => Promise<OfficialGitDiffComparison | null>;
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<GitCommandResult>;
@@ -622,18 +681,55 @@ export type ScheduledTasksBridge = {
   list: () => Promise<ScheduledTaskSummary[]>;
   get: (id: string) => Promise<ScheduledTaskSummary | null>;
   create?: (input: CreateScheduledTaskInput) => Promise<ScheduledTaskSummary | null>;
+  /** Official residual updateScheduledTask(id, patch) — also used by space Qa link/unlink. */
+  update?: (id: string, input: UpdateScheduledTaskInput) => Promise<ScheduledTaskSummary | null>;
   updateStatus?: (id: string, status: "enabled" | "disabled" | "deleted") => Promise<void>;
   onEvent?: (listener: (event: unknown) => void) => () => void;
 };
 
+export type UpdateCoworkSpaceInput = {
+  description?: string | null;
+  instructions?: string | null;
+  name?: string;
+};
+
+/** Official residual folder entry from gT.listFolderContents (ce283 Va/Ya → Rs). */
+export type SpaceFolderEntry = {
+  isDirectory?: boolean;
+  name: string;
+  path: string;
+};
+
 export type CoworkSpacesBridge = {
   list: () => Promise<CoworkSpaceSummary[]>;
+  /** Official gT.getSpace(spaceId) */
+  get?: (spaceId: string) => Promise<CoworkSpaceSummary | null>;
   /** Official gT.createSpace */
   create?: (input: CreateCoworkSpaceInput) => Promise<CoworkSpaceSummary | null>;
+  /** Official gT.updateSpace(spaceId, patch) — ce283 Ka instructions save. */
+  update?: (spaceId: string, input: UpdateCoworkSpaceInput) => Promise<CoworkSpaceSummary | null>;
   /** Official gT.createSpaceFolder(location, name) → folder path */
   createSpaceFolder?: (location: string, name: string) => Promise<string | null>;
   /** Official gT.addFolderToSpace(spaceId, folderPath) */
   addFolderToSpace?: (spaceId: string, folderPath: string) => Promise<void>;
+  /** Official gT.removeFolderFromSpace(spaceId, folderPath) */
+  removeFolderFromSpace?: (spaceId: string, folderPath: string) => Promise<void>;
+  /** Official gT.addLinkToSpace(spaceId, link) — ce283 Ga/Ba. */
+  addLinkToSpace?: (spaceId: string, link: CoworkSpaceLink) => Promise<void>;
+  /** Official gT.removeLinkFromSpace(spaceId, link|url). */
+  removeLinkFromSpace?: (spaceId: string, link: CoworkSpaceLink | string) => Promise<void>;
+  /** Official gT.copyFilesToSpaceFolder(spaceId, filePaths) */
+  copyFilesToSpaceFolder?: (spaceId: string, filePaths: string[]) => Promise<string[]>;
+  /**
+   * Official gT.getAutoMemoryDir(spaceId) — ce283 Aa residual.
+   * Returns space-scoped memory dir path when supported, else null.
+   */
+  getAutoMemoryDir?: (spaceId: string) => Promise<string | null>;
+  /**
+   * Official gT.listFolderContents(spaceId, folderPath) — ce283 Va/Ya residual.
+   * Host may accept (path) only; product normalizes to SpaceFolderEntry[].
+   */
+  listFolderContents?: (spaceId: string, folderPath: string) => Promise<SpaceFolderEntry[]>;
   onEvent?: (listener: (event: unknown) => void) => () => void;
 };
 
@@ -695,7 +791,11 @@ export type CoworkFilePreviewBridge = {
 };
 
 export type FileSystemBridge = {
-  browseFiles?: (options?: { defaultPath?: string; multiSelections?: boolean; title?: string }) => Promise<string[]>;
+  browseFiles?: (options?: string | { defaultPath?: string; multiSelections?: boolean; title?: string }) => Promise<string[]>;
+  /** Official residual bT.browseFolder(title, multi?) → folder path string. */
+  browseFolder?: (options?: string | { defaultPath?: string; title?: string }, defaultPath?: string) => Promise<string | null>;
+  /** Official residual bT.getSystemPath(zI.Documents) etc. */
+  getSystemPath?: (name: string) => Promise<string | null>;
   listFilesInFolder?: (sessionId: string, folderPath: string) => Promise<LocalFileEntry[]>;
   openLocalFile?: (filePathOrSessionId: string, encodedFilePath?: string, reveal?: boolean) => Promise<unknown>;
   readLocalFile?: (filePathOrSessionId: string, encodedFilePath?: string, options?: { encoding?: "base64" | "utf8" }) => Promise<LocalFileReadResult>;

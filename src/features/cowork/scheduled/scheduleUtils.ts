@@ -25,14 +25,29 @@ export const normalizeTaskId = (name: string) => {
     .replace(/^[-_]+|[-_]+$/g, "");
 };
 
-export const taskNameError = (name: string, existingNames: Set<string>) => {
+export type TaskNameErrorText = {
+  nameMustContainLetter: string;
+  nameReserved: string;
+  nameExists: string;
+};
+
+export const taskNameError = (
+  name: string,
+  existingNames: Set<string>,
+  text?: TaskNameErrorText,
+) => {
   if (!name.trim()) return undefined;
   const normalized = normalizeTaskId(name);
-  if (!normalized) return "Name must contain at least one letter or number.";
+  if (!normalized) {
+    return text?.nameMustContainLetter ?? "Name must contain at least one letter or number.";
+  }
   if (RESERVED_TASK_IDS.has(normalized) || normalized.startsWith("trig_")) {
-    return "This name is reserved. Please choose a different name.";
+    return text?.nameReserved ?? "This name is reserved. Please choose a different name.";
   }
   if (existingNames.has(normalized)) {
+    if (text?.nameExists) {
+      return text.nameExists.replaceAll("{name}", normalized);
+    }
     return `A scheduled task named "${normalized}" already exists.`;
   }
   return undefined;
@@ -65,3 +80,36 @@ export const labelFromCron = (cron?: string) => {
 export const formatTime = (hour: number, minute: number) => {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 };
+
+/** Residual uYt edit seed: cronExpression → frequency/hour/minute/dayOfWeek. */
+export function scheduleFromCron(cron?: string | null): {
+  frequency: ScheduleFrequency;
+  hour: number;
+  minute: number;
+  dayOfWeek: number;
+} {
+  if (!cron) {
+    return { frequency: "once", hour: 9, minute: 0, dayOfWeek: 1 };
+  }
+  const [minuteRaw, hourRaw, , , day] = cron.split(" ");
+  const minute = Number(minuteRaw);
+  const hour = Number(hourRaw);
+  const safeMinute = Number.isFinite(minute) ? minute : 0;
+  const safeHour = Number.isFinite(hour) ? hour : 9;
+  if (hourRaw === "*") {
+    return { frequency: "hourly", hour: safeHour, minute: safeMinute, dayOfWeek: 1 };
+  }
+  if (day === "1-5") {
+    return { frequency: "weekdays", hour: safeHour, minute: safeMinute, dayOfWeek: 1 };
+  }
+  if (day && day !== "*") {
+    const dayOfWeek = Number(day);
+    return {
+      frequency: "weekly",
+      hour: safeHour,
+      minute: safeMinute,
+      dayOfWeek: Number.isFinite(dayOfWeek) ? dayOfWeek : 1,
+    };
+  }
+  return { frequency: "daily", hour: safeHour, minute: safeMinute, dayOfWeek: 1 };
+}

@@ -306,6 +306,20 @@ function EpitaxyChatPanel({
   const attachAsContext = useCallback((text: string) => {
     composerAttachRef.current?.(text);
   }, []);
+  // Official mc submitToChat — Preview Set up / start-failed residual (c11959232).
+  const submitToChat = useCallback(
+    async (text: string) => {
+      if (!initialSessionId) {
+        composerAttachRef.current?.(text);
+        return;
+      }
+      const messageUuid = createMessageUuid();
+      beginLocalUserTurn(text, messageUuid);
+      scrollTranscriptToBottom();
+      await sendMessageToSession(initialSessionId, text, { messageUuid });
+    },
+    [beginLocalUserTurn, initialSessionId, scrollTranscriptToBottom],
+  );
   const transcriptActionContext = useMemo(() => ({
     attachAsContext,
     bridge,
@@ -318,7 +332,8 @@ function EpitaxyChatPanel({
     onNavigate,
     reload,
     sessionId: initialSessionId,
-  }), [attachAsContext, bridge, cancelQueuedMessage, initialSessionId, onNavigate, openFile, openPlan, openPreview, openSubagent, openTasks, reload]);
+    submitToChat,
+  }), [attachAsContext, bridge, cancelQueuedMessage, initialSessionId, onNavigate, openFile, openPlan, openPreview, openSubagent, openTasks, reload, submitToChat]);
   // Official toggleSidePane: remove if present else ur insert.
   const selectView = useCallback((view: OfficialViewPane) => {
     setSideTiles((current) => {

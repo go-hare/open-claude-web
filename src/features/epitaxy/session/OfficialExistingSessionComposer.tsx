@@ -1,29 +1,17 @@
 /**
- * Official existing-session composer (TipTap + footer + usage) — c11959232.
- * Extracted from EpitaxySessionTile — behavior unchanged.
+ * Official existing-session composer (TipTap + footer + usage) — c11959232 / c360a9e1c Effort.
+ * Effort chip is OfficialComposerFooter → OfficialEffortControl (not Models extraSections list).
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type MutableRefObject, type ReactNode } from "react";
-import { Popover } from "@base-ui-components/react/popover";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
-import { desktopBridge, type ContextUsage, type SessionSummary } from "../../../adapters/desktopBridge";
+import { desktopBridge, type SessionSummary } from "../../../adapters/desktopBridge";
 import type { LocalSessionsBridge, SendMessageInput } from "../../../adapters/desktopBridge/types";
 import { Icon } from "../../../shell/icons";
-import {
-  OfficialButton,
-  OfficialDropdownButton,
-  OfficialSessionSource,
-  type OfficialDropdownItem,
-} from "../OfficialEpitaxyComponents";
+import { OfficialButton } from "../OfficialEpitaxyComponents";
+import { OfficialComposerFooter } from "../OfficialComposerFooter";
 import { OfficialEpitaxyBranchRows } from "../OfficialEpitaxyBranchRows";
-import {
-  OfficialContextWindowSummary,
-  OfficialUsageCircle,
-  composerUsageCircumference,
-  formatUsageTokenCount,
-  officialClampPercent,
-} from "../OfficialComposerContextUsage";
 import { EpitaxyPermissionModeModal } from "../composer/EpitaxyPermissionModeModal";
 import { usePermissionModeConfirm } from "../composer/usePermissionModeConfirm";
 import { OfficialEpitaxySlashCommandMenu } from "../slash/OfficialEpitaxySlashCommandMenu";
@@ -38,14 +26,13 @@ import {
   useCodeModelOptions,
 } from "../../cowork/composer/useCoworkModelOptions";
 import {
-  effortLevelOptions,
-  effortLevelLabel,
+  buildOfficialEffortMenuItems,
   normalizeEffortValue,
   permissionModeLabel,
   permissionModeOptions,
+  type OfficialEffortLevel,
 } from "./officialComposerOptions";
 import { setOfficialUltrareviewLaunching } from "./officialUltrareviewLaunch";
-import { isMacPlatform } from "./useEpitaxySessionData";
 
 /** Plain text → TipTap doc (same shape as OfficialCodeComposer). */
 function tiptapDocFromPlainText(value: string) {
@@ -101,7 +88,21 @@ export function ExistingSessionComposer({
   const [isSubmitting, setSubmitting] = useState(false);
   const [model, setModel] = useState(() => normalizeSelectorModelValue(session?.model, []));
   const [permissionMode, setPermissionMode] = useState(session?.permissionMode ?? "default");
-  const [effort, setEffort] = useState(() => normalizeEffortValue(session?.effort));
+  const [effort, setEffort] = useState(() => normalizeEffortValue(session?.effort === "ultracode" ? "xhigh" : session?.effort));
+  /** Official yR session ultracode map — session-only; new chats start without it. */
+  const [ultracode, setUltracode] = useState(() => session?.effort === "ultracode");
+  /**
+   * Official get_settings.applied (CLI 2.7.16+): per-model catalog ladder + Ultracode gate.
+   * null → CLI has not reported (legacy CLI / probe timeout) → hardcoded 5-stop fallback.
+   */
+  const [effortLevels, setEffortLevels] = useState<string[] | null>(null);
+  const [ultracodeOfferable, setUltracodeOfferable] = useState<boolean | null>(null);
+  /**
+   * Official jR `N`/`R(L)` lock: after user picks effort via X, local b/H win over
+   * session meta T until session id changes. Prevents silent reload / stale
+   * session_updated from snapping the Effort slider 2→3→2.
+   */
+  const effortLocalLockRef = useRef<string | null>(null);
   const [isConfigBusy, setConfigBusy] = useState(false);
   const selectedModel = normalizeSelectorModelValue(model, allowedModelValues);
   const submitRef = useRef<() => Promise<void>>(async () => {});
@@ -168,8 +169,51 @@ export function ExistingSessionComposer({
   useEffect(() => {
     setModel(normalizeSelectorModelValue(session?.model, allowedModelValues));
     setPermissionMode(session?.permissionMode ?? "default");
-    setEffort(normalizeEffortValue(session?.effort));
-  }, [allowedModelValues, session?.effort, session?.model, session?.permissionMode]);
+    // Official D = N!==L && T!=null ? T : b — while lock is this session, keep local effort.
+    const sessionId = sessionRef?.id ?? null;
+    if (sessionId && effortLocalLockRef.current === sessionId) {
+      return;
+    }
+    if (session?.effort === "ultracode") {
+      setEffort("xhigh");
+      setUltracode(true);
+    } else {
+      setEffort(normalizeEffortValue(session?.effort));
+      setUltracode(false);
+    }
+  }, [allowedModelValues, session?.effort, session?.model, session?.permissionMode, sessionRef?.id]);
+
+  // New session id: drop official N lock so meta T can seed again.
+  useEffect(() => {
+    effortLocalLockRef.current = null;
+  }, [sessionRef?.id]);
+
+  /**
+   * Official get_settings → applied (CLI 2.7.16+): pull runtime effort + per-model
+   * catalog ladder (effortLevels) + Ultracode gate on session/model change and after
+   * our own apply. effort applied syncs through host store → session_updated → the
+   * session?.effort effect above; here we only lift the ladder/gate + reconcile
+   * effort when there is no local lock (CLI is authoritative).
+   */
+  useEffect(() => {
+    const sessionId = sessionRef?.id;
+    if (!sessionId || !bridge.getEffort) return;
+    let cancelled = false;
+    void bridge.getEffort(sessionId).then((applied) => {
+      if (cancelled || !applied || typeof applied === "string") return;
+      setEffortLevels(applied.effortLevels ?? null);
+      setUltracodeOfferable(applied.ultracodeOfferable ?? null);
+      if (effortLocalLockRef.current === sessionId) return;
+      if (applied.effort === "ultracode") {
+        setEffort("xhigh");
+        setUltracode(true);
+      } else if (applied.effort) {
+        setEffort(normalizeEffortValue(applied.effort));
+        setUltracode(false);
+      }
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [bridge, sessionRef?.id, selectedModel]);
 
   // Drop shell-leaked session model (grok/kimi) once bag list is known.
   useEffect(() => {
@@ -316,15 +360,43 @@ export function ExistingSessionComposer({
     (mode) => void applyPermissionMode(mode),
   );
 
-  const applyEffort = async (nextEffort: string) => {
-    if (!sessionRef || nextEffort === effort) return;
+  /**
+   * Official jR `X(level, ultracode)`:
+   *   R(L); k(e); H(t); V({level, ultracode})  — local state first, then async apply.
+   * Wire "ultracode" for CLI --effort ultracode; else level id.
+   * Do NOT let reload/session_updated overwrite local b while N===L.
+   */
+  const applyEffort = async (nextEffort: OfficialEffortLevel, nextUltracode: boolean) => {
+    if (!sessionRef) return;
+    if (nextEffort === effort && nextUltracode === ultracode) return;
+    // Official R(L) + k(e) + H(t) — sync before any await so Ene h(null)+onSelect batches.
+    effortLocalLockRef.current = sessionRef.id;
     setEffort(nextEffort);
-    setConfigBusy(true);
+    setUltracode(nextUltracode);
+    // Official V success `a(..., {effort})` patchMeta — keep bucket session.effort aligned.
+    const wireEffort = nextUltracode ? "ultracode" : nextEffort;
+    officialCodeSessionStore.setState((state) => {
+      const prev = state.buckets[sessionRef.id];
+      if (!prev?.session || prev.session.effort === wireEffort) return state;
+      return {
+        ...state,
+        buckets: {
+          ...state.buckets,
+          [sessionRef.id]: {
+            ...prev,
+            session: { ...prev.session, effort: wireEffort },
+          },
+        },
+      };
+    });
+    // Official X/V: local state already drives Ene; async apply must NOT flip
+    // modelPickerDisabled/isConfigBusy — that remounts stop dots (Image #31 flash)
+    // via EffortControl disabled → stopTooltips tree swap.
     try {
-      await bridge.setEffort?.(sessionRef.id, nextEffort);
-      await reload({ silent: true });
-    } finally {
-      setConfigBusy(false);
+      // Official V: E?.(L,t) / applyFlagSettings — UI already updated; no full reload.
+      await bridge.setEffort?.(sessionRef.id, wireEffort);
+    } catch {
+      // Keep local effort selection; bridge errors surface via session status elsewhere.
     }
   };
 
@@ -352,11 +424,15 @@ export function ExistingSessionComposer({
     checked: option.value === permissionMode,
     onSelect: () => permissionModeConfirm.select(option.value),
   }));
-  const effortItems = effortLevelOptions.map((option) => ({
-    label: option.label,
-    checked: option.value === effort,
-    onSelect: () => void applyEffort(option.value),
-  }));
+  const effortItems = buildOfficialEffortMenuItems({
+    current: effort,
+    ultracode,
+    // Official $ gate: CLI 2.7.16+ ultracodeOfferable=false → hide the Ultracode stop
+    // (model catalog / workflows latch off). null (not reported) → keep residual default on.
+    showUltracode: Boolean(bridge.setEffort) && ultracodeOfferable !== false,
+    effortLevels,
+    onSelect: (level, nextUltracode) => void applyEffort(level, nextUltracode),
+  });
   const modelExtraSections = bridge.setEffort ? [{ key: "effort", header: "Effort", items: effortItems }] : undefined;
   const plusMenuItems = [{ icon: "Folder1", label: "Add folder", onSelect: () => void addFolder() }];
 
@@ -432,7 +508,6 @@ export function ExistingSessionComposer({
         permissionDanger={permissionMode === "bypassPermissions"}
         permissionItems={permissionItems}
         permissionLabel={permissionModeLabel(permissionMode)}
-        plusAriaLabel="Add"
         plusMenuItems={plusMenuItems}
         session={session}
         sessionRef={sessionRef}
@@ -447,378 +522,3 @@ export function ExistingSessionComposer({
     </div>
   );
 }
-
-type OfficialComposerDropdownItem = OfficialDropdownItem & { noQuickKey?: boolean };
-type OfficialComposerExtraSection = {
-  header?: ReactNode;
-  items: OfficialComposerDropdownItem[];
-  key?: string;
-  triggerKey?: string;
-};
-type OfficialComposerLoop = {
-  createdAt: number;
-  cron?: string;
-  humanSchedule?: string;
-  id: string;
-  nextRunAt?: number;
-  prompt?: string;
-};
-type OfficialComposerFooterProps = {
-  bridge: LocalSessionsBridge;
-  coordinatorMode?: boolean;
-  dictationDisabledReason?: ReactNode;
-  fastModeOn?: boolean;
-  hideDictation?: boolean;
-  isPanelActive?: boolean;
-  loops?: OfficialComposerLoop[];
-  modelExtraSections?: OfficialComposerExtraSection[];
-  modelItems: OfficialComposerDropdownItem[];
-  modelLabel: ReactNode;
-  modelPickerDisabled?: boolean;
-  hideSessionSource?: boolean;
-  plusAriaLabel?: string;
-  onAddFiles?: (files: File[]) => void;
-  onCoordinatorModeChange?: (value: boolean) => void;
-  onInsertSlashCommand?: () => void;
-  onStopLoop?: (loop: OfficialComposerLoop) => void;
-  permissionDanger?: boolean | null;
-  permissionItems: OfficialComposerDropdownItem[];
-  permissionLabel: ReactNode;
-  plusMenuAlignOffset?: number;
-  plusMenuItems?: OfficialComposerDropdownItem[];
-  plusMenuPopupClassName?: string;
-  plusMenuSide?: "top" | "right" | "bottom" | "left";
-  plusMenuSideOffset?: number;
-  session?: SessionSummary | null;
-  sessionRef?: EpitaxySessionRef | null;
-  showDictationButton?: boolean;
-  supportsFileAttachments?: boolean;
-};
-
-const emptyComposerMenuItems: OfficialComposerDropdownItem[] = [];
-const composerShortcutBindings = [
-  { command: "togglePreview", key: "cmd+shift+p", code: "KeyP", when: "isClaudeApp" },
-  { command: "togglePreview", key: "cmd+alt+p", code: "KeyP" },
-  { command: "toggleDiff", key: "cmd+shift+d", code: "KeyD", when: "isClaudeApp" },
-  { command: "toggleDiff", key: "ctrl+shift+d", code: "KeyD", when: "!isClaudeApp" },
-  { command: "toggleTerminal", key: "ctrl+`", code: "Backquote" },
-  { command: "toggleBrowser", key: "cmd+shift+f", code: "KeyF" },
-  { command: "closePane", key: "cmd+\\", code: "Backslash" },
-  { command: "toggleSideChat", key: "cmd+;", code: "Semicolon" },
-  { command: "cycleTranscriptMode", key: "ctrl+o", code: "KeyO" },
-  { command: "openModeMenu", key: "cmd+shift+m", code: "KeyM", when: "isClaudeApp" },
-  { command: "openModeMenu", key: "cmd+alt+m", code: "KeyM" },
-  { command: "openModelMenu", key: "cmd+shift+i", code: "KeyI" },
-  { command: "openEffortMenu", key: "cmd+shift+e", code: "KeyE" },
-  { command: "toggleSelectionMode", key: "cmd+shift+s", code: "KeyS" },
-] as const;
-const composerMenuTargetByCommand = { openModeMenu: "mode", openModelMenu: "model", openEffortMenu: "effort" } as const;
-
-type ComposerShortcutCommand = (typeof composerShortcutBindings)[number]["command"];
-type ComposerMenuTarget = "mode" | "model" | "effort";
-
-function OfficialComposerFooter({
-  bridge,
-  coordinatorMode = false,
-  dictationDisabledReason,
-  fastModeOn = false,
-  hideDictation = false,
-  isPanelActive = true,
-  loops,
-  modelExtraSections,
-  modelItems,
-  modelLabel,
-  modelPickerDisabled = false,
-  hideSessionSource = false,
-  plusAriaLabel = "Add",
-  onAddFiles,
-  onCoordinatorModeChange,
-  onInsertSlashCommand,
-  onStopLoop,
-  permissionDanger = null,
-  permissionItems,
-  permissionLabel,
-  plusMenuAlignOffset,
-  plusMenuItems,
-  plusMenuPopupClassName,
-  plusMenuSide,
-  plusMenuSideOffset,
-  session,
-  sessionRef = null,
-  showDictationButton = false,
-  supportsFileAttachments = false,
-}: OfficialComposerFooterProps) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const effortSection = modelExtraSections?.find((section) => section.key === "effort");
-  const effortItems = effortSection?.items ?? emptyComposerMenuItems;
-  const menu = useOfficialComposerFooterMenuState({ effortItems, isPanelActive, modeItems: permissionItems, modelItems });
-  const selectedEffortLabel = effortSection?.items.find((item) => item.checked)?.label;
-  const fastModeLabel = fastModeOn ? "Fast" : null;
-  const modelSections = useMemo(() => modelExtraSections?.map((section) => section.key === "effort" ? {
-    ...section,
-    items: menu.numberedEffortItems,
-    triggerKey: composerShortcutForCommand("openEffortMenu", true),
-  } : section), [menu.numberedEffortItems, modelExtraSections]);
-  const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
-  const footerPlusItems = useMemo(() => composeOfficialPlusItems(onInsertSlashCommand, onAddFiles ? openFilePicker : undefined, supportsFileAttachments, plusMenuItems), [onAddFiles, onInsertSlashCommand, openFilePicker, plusMenuItems, supportsFileAttachments]);
-  const onFileInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
-    if (files.length > 0) onAddFiles?.(files);
-    event.target.value = "";
-  }, [onAddFiles]);
-  return (
-    <div className="w-full flex items-center gap-g5 py-[4px]">
-      <div className="flex items-center gap-g5 min-w-0">
-        <OfficialDropdownButton ariaLabel="Permission mode" align="start" header="Mode" items={menu.numberedModeItems} label={permissionDanger ? <span className="text-extended-yellow">{permissionLabel}</span> : permissionLabel} onOpenChange={menu.onModeOpenChange} open={menu.modeOpen} revealChevron="never" side="top" size="small" triggerKey={composerShortcutForCommand("openModeMenu", true)} />
-        {onCoordinatorModeChange ? <OfficialCoordinatorModeToggle onChange={onCoordinatorModeChange} value={coordinatorMode} /> : null}
-        {plusAriaLabel === "Add" ? (
-          <OfficialDropdownButton ariaLabel="Add" align="start" className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} revealChevron="never" side="top" size="small" />
-        ) : (
-          <OfficialDropdownButton align="start" alignOffset={plusMenuAlignOffset} ariaLabel={plusAriaLabel} className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} popupClassName={plusMenuPopupClassName} revealChevron="never" side={plusMenuSide ?? "top"} sideOffset={plusMenuSideOffset} size="small" />
-        )}
-        <input ref={fileInputRef} type="file" multiple accept={supportsFileAttachments ? undefined : "image/png,image/jpeg,image/gif,image/webp"} className="hidden" onChange={onFileInputChange} />
-        {sessionRef && !hideSessionSource ? <span className="flex min-w-0"><OfficialSessionSource ariaLabel="Workspace" session={session ?? null} sessionRef={sessionRef} /></span> : null}
-        {hideDictation ? null : <OfficialDictationSlot disabledReason={dictationDisabledReason} showButton={showDictationButton} />}
-        {loops?.length && onStopLoop ? <OfficialLoopIndicator loops={loops} onStopLoop={onStopLoop} /> : null}
-      </div>
-      <div className="ml-auto flex items-center gap-g4">
-        <OfficialDropdownButton ariaLabel="Model" align="end" disabled={modelItems.length === 0 || modelPickerDisabled} extraSections={modelSections} header="Models" items={menu.numberedModelItems} label={<OfficialModelFooterLabel effortLabel={selectedEffortLabel} fastModeLabel={fastModeLabel} modelLabel={modelLabel} />} onOpenChange={menu.onModelOpenChange} open={menu.modelOpen} revealChevron="never" side="top" size="small" triggerKey={composerShortcutForCommand("openModelMenu", true)} />
-        <OfficialComposerUsageIndicator bridge={bridge} session={session} sessionRef={sessionRef} />
-      </div>
-    </div>
-  );
-}
-
-function OfficialModelFooterLabel({ effortLabel, fastModeLabel, modelLabel }: { effortLabel?: ReactNode; fastModeLabel?: ReactNode; modelLabel: ReactNode }) {
-  if (!effortLabel && !fastModeLabel) return <>{modelLabel}</>;
-  return (
-    <span className="flex items-baseline gap-g3 min-w-0">
-      <span className="truncate">{modelLabel}</span>
-      {effortLabel ? <span className="text-t6 shrink-0">· {effortLabel}</span> : null}
-      {fastModeLabel ? <span className="text-t6 shrink-0">· {fastModeLabel}</span> : null}
-    </span>
-  );
-}
-
-function OfficialCoordinatorModeToggle({ onChange, value }: { onChange: (value: boolean) => void; value: boolean }) {
-  return <OfficialButton ariaLabel="Toggle coordinator mode" icon="AgentPlanPath" onClick={() => onChange(!value)} pressed={value} size="small" variant="toggle" />;
-}
-
-function OfficialDictationSlot({ disabledReason, showButton }: { disabledReason?: ReactNode; showButton: boolean }) {
-  const ariaLabel = disabledReason ? String(disabledReason) : "Dictate";
-  return showButton ? <OfficialButton ariaLabel="Dictate" disabled icon="MicrophoneDictation" size="small" /> : <OfficialButton ariaLabel={ariaLabel} disabled icon="MicrophoneDictation" size="small" />;
-}
-
-function OfficialLoopIndicator({ loops, onStopLoop }: { loops: OfficialComposerLoop[]; onStopLoop: (loop: OfficialComposerLoop) => void }) {
-  const label = loops.length > 1 ? `${loops.length} loops` : "Loop";
-  const items = loops.map((loop) => ({ icon: "XCrossCloseMedium", label: loop.prompt || "Recurring loop", onSelect: () => onStopLoop(loop) }));
-  return <OfficialDropdownButton className="shrink-0" header="Active loops" items={items} label={label} revealChevron="never" side="top" size="small" />;
-}
-
-function composeOfficialPlusItems(onInsertSlashCommand: (() => void) | undefined, openFilePicker: (() => void) | undefined, supportsFileAttachments: boolean, plusMenuItems?: OfficialComposerDropdownItem[]) {
-  const items: OfficialComposerDropdownItem[] = [];
-  if (onInsertSlashCommand) {
-    items.push({
-      icon: "SlashShortcutCommand",
-      label: "Slash commands",
-      onSelect: onInsertSlashCommand,
-    });
-  }
-  if (openFilePicker) {
-    items.push({
-      icon: "PaperclipAttach",
-      label: supportsFileAttachments ? "Add files or photos" : "Add image",
-      onSelect: openFilePicker,
-    });
-  }
-  if (plusMenuItems?.length) items.push(...plusMenuItems);
-  return items.length > 0 ? items : emptyComposerMenuItems;
-}
-
-const officialContextUsageCache = new Map<string, ContextUsage>();
-
-function OfficialComposerUsageIndicator({ bridge, session, sessionRef }: { bridge: LocalSessionsBridge; session?: SessionSummary | null; sessionRef?: EpitaxySessionRef | null }) {
-  const sessionId = sessionRef?.id;
-  const [bridgeUsage, setBridgeUsage] = useState<ContextUsage | null>(() => sessionId ? officialContextUsageCache.get(sessionId) ?? null : null);
-  const [isFetching, setIsFetching] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const setUsageForSession = useCallback((nextUsage: ContextUsage | null) => {
-    if (!sessionId) {
-      setBridgeUsage(null);
-      return;
-    }
-    if (nextUsage) officialContextUsageCache.set(sessionId, nextUsage);
-    setBridgeUsage(nextUsage ?? officialContextUsageCache.get(sessionId) ?? null);
-  }, [sessionId]);
-  const refreshUsage = useCallback(async () => {
-    if (!sessionId || !bridge.getContextUsage) {
-      setUsageForSession(null);
-      setIsFetching(false);
-      return;
-    }
-    setIsFetching(true);
-    let alive = true;
-    await bridge.getContextUsage(sessionId).then((nextUsage) => {
-      if (alive) setUsageForSession(nextUsage);
-    }).catch(() => {
-      if (alive) setUsageForSession(null);
-    }).finally(() => {
-      if (alive) setIsFetching(false);
-    });
-    alive = false;
-  }, [bridge, sessionId, setUsageForSession]);
-  useEffect(() => {
-    let alive = true;
-    if (!sessionId || !bridge.getContextUsage) {
-      setUsageForSession(null);
-      setIsFetching(false);
-      return undefined;
-    }
-    setBridgeUsage(officialContextUsageCache.get(sessionId) ?? null);
-    setIsFetching(true);
-    void bridge.getContextUsage(sessionId).then((nextUsage) => {
-      if (alive) setUsageForSession(nextUsage);
-    }).catch(() => {
-      if (alive) setUsageForSession(null);
-    }).finally(() => {
-      if (alive) setIsFetching(false);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [bridge, sessionId, setUsageForSession]);
-
-  const isLocalContext = sessionRef?.type === "local" || session?.kind === "code";
-  const usage = bridgeUsage;
-  const usedTokens = usage?.totalTokens ?? 0;
-  const maxTokens = usage?.rawMaxTokens ?? null;
-  const usagePercent = typeof maxTokens === "number" && maxTokens > 0 ? officialClampPercent(usedTokens / maxTokens * 100) : null;
-  const contextSummary = typeof maxTokens === "number" && maxTokens > 0 ? `${formatUsageTokenCount(usedTokens)} / ${formatUsageTokenCount(maxTokens)} (${usagePercent}%)` : formatUsageTokenCount(usedTokens);
-  const triggerPercent = isLocalContext ? usagePercent ?? 0 : 0;
-  const strokeDashoffset = composerUsageCircumference * (1 - triggerPercent / 100);
-  const ariaParts = [isLocalContext ? `context ${usagePercent !== null ? `${usagePercent}%` : contextSummary}` : null].filter(Boolean);
-  const ariaLabel = ariaParts.length > 0 ? `Usage: ${ariaParts.join(", ")}` : "Usage";
-  const handleOpenChange = useCallback((open: boolean) => {
-    if (open && isLocalContext) void refreshUsage();
-    if (!open) setExpanded(false);
-  }, [isLocalContext, refreshUsage]);
-  return (
-    <Popover.Root onOpenChange={handleOpenChange}>
-      <Popover.Trigger render={<OfficialButton ariaLabel={ariaLabel} className="shrink-0" customIcon={<OfficialUsageCircle strokeDashoffset={strokeDashoffset} usagePercent={triggerPercent} />} size="small" variant="uncontained" />} />
-      <Popover.Portal>
-        <Popover.Positioner align="end" className="epitaxy-root size-0" side="top" sideOffset={8}>
-          <Popover.Popup className="outline-none absolute bottom-0 right-0">
-            <div className="relative isolate flex flex-col py-p5 rounded-r6 w-[360px] max-w-[calc(100vw-2rem)] max-h-[min(var(--available-height),640px)]">
-              <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
-              <h2 className="sr-only">Usage</h2>
-              <div className="flex-1 min-h-0 flex flex-col overflow-y-auto overscroll-contain">
-                {isLocalContext ? (
-                  <OfficialContextWindowSummary
-                    contextPct={usagePercent}
-                    contextUsage={usage}
-                    expanded={expanded}
-                    isFetching={isFetching}
-                    onToggle={() => setExpanded((value) => !value)}
-                    summary={contextSummary}
-                  />
-                ) : null}
-              </div>
-            </div>
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
-  );
-}
-
-function useOfficialComposerFooterMenuState({ effortItems, isPanelActive, modeItems, modelItems }: { effortItems: OfficialComposerDropdownItem[]; isPanelActive: boolean; modeItems: OfficialComposerDropdownItem[]; modelItems: OfficialComposerDropdownItem[] }) {
-  const [openMenu, setOpenMenu] = useState<ComposerMenuTarget | null>(null);
-  const closeMenu = useCallback(() => setOpenMenu(null), []);
-  useEffect(() => { if (!isPanelActive) closeMenu(); }, [closeMenu, isPanelActive]);
-  const selectableModeItems = useMemo(() => modeItems.filter(isQuickSelectableComposerItem), [modeItems]);
-  const selectableModelItems = useMemo(() => modelItems.filter(isQuickSelectableComposerItem), [modelItems]);
-  const selectableEffortItems = useMemo(() => effortItems.filter(isQuickSelectableComposerItem), [effortItems]);
-  const onKeyDown = useCallback((event: KeyboardEvent) => {
-    handleComposerFooterKeyDown(event, { closeMenu, effortItems, isPanelActive, modeItems, modelItems, openMenu, selectableEffortItems, selectableModeItems, selectableModelItems, setOpenMenu });
-  }, [closeMenu, effortItems, isPanelActive, modeItems, modelItems, openMenu, selectableEffortItems, selectableModeItems, selectableModelItems]);
-  useEffect(() => {
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [onKeyDown]);
-  return {
-    modeOpen: openMenu === "mode",
-    modelOpen: openMenu === "model" || openMenu === "effort",
-    numberedEffortItems: openMenu === "effort" ? numberComposerMenuItems(effortItems) : effortItems,
-    numberedModeItems: openMenu === "mode" ? numberComposerMenuItems(modeItems) : modeItems,
-    numberedModelItems: openMenu === "model" ? numberComposerMenuItems(modelItems) : modelItems,
-    onModeOpenChange: (open: boolean) => setOpenMenu(open ? "mode" : null),
-    onModelOpenChange: (open: boolean) => setOpenMenu(open ? "model" : null),
-  };
-}
-
-function handleComposerFooterKeyDown(event: KeyboardEvent, state: { closeMenu: () => void; effortItems: OfficialComposerDropdownItem[]; isPanelActive: boolean; modeItems: OfficialComposerDropdownItem[]; modelItems: OfficialComposerDropdownItem[]; openMenu: ComposerMenuTarget | null; selectableEffortItems: OfficialComposerDropdownItem[]; selectableModeItems: OfficialComposerDropdownItem[]; selectableModelItems: OfficialComposerDropdownItem[]; setOpenMenu: (menu: ComposerMenuTarget | null) => void }) {
-  if (!state.isPanelActive || event.defaultPrevented) return;
-  const menuIsOpen = state.openMenu !== null;
-  const plainKey = !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey);
-  if (menuIsOpen && plainKey && event.key === "Escape") return event.preventDefault(), event.stopImmediatePropagation(), state.closeMenu();
-  if (menuIsOpen && plainKey && event.code.startsWith("Digit")) return selectNumberedComposerItem(event, state);
-  const command = composerCommandForKeyboardEvent(event, { isClaudeApp: true, mac: isMacPlatform() });
-  const target = command ? composerMenuTargetByCommand[command as keyof typeof composerMenuTargetByCommand] : undefined;
-  if (!target || !composerMenuHasItems(target, state)) return;
-  event.preventDefault();
-  event.stopPropagation();
-  if (!menuIsOpen) state.setOpenMenu(target === "effort" && state.effortItems.length === 0 ? "model" : target);
-}
-
-function selectNumberedComposerItem(event: KeyboardEvent, state: Parameters<typeof handleComposerFooterKeyDown>[1]) {
-  event.preventDefault();
-  event.stopPropagation();
-  const digit = Number(event.code.slice(5));
-  if (digit < 1 || digit > 9) return;
-  const items = state.openMenu === "mode" ? state.selectableModeItems : state.openMenu === "effort" ? state.selectableEffortItems : state.selectableModelItems;
-  const item = items[digit - 1];
-  if (!item?.onSelect) return;
-  item.onSelect();
-  state.closeMenu();
-}
-
-function composerMenuHasItems(target: ComposerMenuTarget, state: { effortItems: OfficialComposerDropdownItem[]; modeItems: OfficialComposerDropdownItem[]; modelItems: OfficialComposerDropdownItem[] }) {
-  if (target === "mode") return state.modeItems.length > 0;
-  if (target === "effort") return state.effortItems.length > 0 || state.modelItems.length > 0;
-  return state.modelItems.length > 0 || state.effortItems.length > 0;
-}
-
-function numberComposerMenuItems(items: OfficialComposerDropdownItem[]) {
-  let count = 0;
-  return items.map((item) => item.disabled || item.noQuickKey || count >= 9 ? item : { ...item, shortcut: String(++count) });
-}
-
-function isQuickSelectableComposerItem(item: OfficialComposerDropdownItem) {
-  return !item.disabled && !item.noQuickKey;
-}
-
-function composerCommandForKeyboardEvent(event: KeyboardEvent, options: { isClaudeApp: boolean; mac: boolean }) {
-  for (const binding of composerShortcutBindings) {
-    const when = "when" in binding ? binding.when : undefined;
-    if (event.code === binding.code && composerShortcutConditionMatches(when, options.isClaudeApp) && composerShortcutMatches(event, binding.key, options.mac)) return binding.command;
-  }
-  return null;
-}
-
-function composerShortcutConditionMatches(when: string | undefined, isClaudeApp: boolean) {
-  return when === "isClaudeApp" ? isClaudeApp : when !== "!isClaudeApp" || !isClaudeApp;
-}
-
-function composerShortcutMatches(event: KeyboardEvent, spec: string, mac: boolean) {
-  const parts = spec.split("+");
-  const wantsCmd = parts.includes("cmd");
-  const wantsCtrl = parts.includes("ctrl");
-  return event.metaKey === (mac && wantsCmd) && event.ctrlKey === (wantsCtrl || (!mac && wantsCmd)) && event.shiftKey === parts.includes("shift") && event.altKey === parts.includes("alt");
-}
-
-function composerShortcutForCommand(command: ComposerShortcutCommand, isClaudeApp: boolean) {
-  const binding = composerShortcutBindings.find((item) => item.command === command && composerShortcutConditionMatches("when" in item ? item.when : undefined, isClaudeApp));
-  return binding?.key;
-}
-
-/** Official ExitPlanMode tool names that mount Wk (not the generic approval card). */

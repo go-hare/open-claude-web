@@ -21,4 +21,6 @@ export type CoworkTodoItem = {
   content: string;
   id: string;
   status: "completed" | "in_progress" | "pending";
+  /** Residual $he activeForm — shown when status is in_progress (CZt). */
+  activeForm?: string;
 };

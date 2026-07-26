@@ -28,8 +28,8 @@ import {
   ProjectsPage,
   RecentsPage,
   SpaceIndexPage,
-  SpaceProjectNotFoundPage,
 } from "../features/workspace/WorkspacePages";
+import { SpaceDetailPage } from "../features/workspace/SpaceDetailPage";
 
 export type RouteKind = "epitaxy" | "code" | "customize" | "settings";
 
@@ -395,7 +395,7 @@ export const routes: AppRoute[] = [
     match: (pathname) => startsWithPath(pathname, "/artifacts"),
   },
   { id: "space", path: "/space", title: "项目", navKey: "projects", kind: "epitaxy", sourceChunk: "ce28369f9-C9QQvDN-.js", Component: SpaceIndexPage },
-  { id: "space-detail", path: "/space/:spaceId", title: "Project", navKey: "projects", kind: "epitaxy", sourceChunk: "ce28369f9-C9QQvDN-.js", Component: SpaceProjectNotFoundPage, match: (pathname) => pathname.startsWith("/space/") },
+  { id: "space-detail", path: "/space/:spaceId", title: "Project", navKey: "projects", kind: "epitaxy", sourceChunk: "ce28369f9-C9QQvDN-.js", Component: SpaceDetailPage, match: (pathname) => pathname.startsWith("/space/") },
   { id: "knowledge", path: "/knowledge", title: "Page not found", navKey: "new-session", kind: "epitaxy", sourceChunk: "c4829262c-BTq0Z261.js", Component: DFramePageNotFoundPage },
   { id: "meeting-assistant", path: "/meeting-assistant", title: "Page not found", navKey: "new-session", kind: "settings", frame: "standalone", sourceChunk: "c4829262c-BTq0Z261.js", Component: PageNotFound },
   { id: "analytics", path: "/analytics", title: "Analytics", navKey: "settings", kind: "settings", frame: "standalone", sourceChunk: "ca768caa9-D20-r2DS.js", Component: AnalyticsPage, match: (pathname) => startsWithPath(pathname, "/analytics") },

@@ -34,6 +34,11 @@ export type EpitaxyTranscriptActionContextValue = {
   onNavigate: (path: string) => void;
   reload: (options?: { silent?: boolean }) => Promise<void>;
   sessionId?: string;
+  /**
+   * Official mc submitToChat residual (c119 Preview Set up / start-failed).
+   * Sends a user turn immediately — not composer-only attach.
+   */
+  submitToChat?: (text: string) => void | Promise<void>;
 };
 
 export const EpitaxyTranscriptActionContext = createContext<EpitaxyTranscriptActionContextValue | null>(null);

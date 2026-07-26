@@ -9,6 +9,7 @@ import {
   type CoworkSpaceSummary,
 } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
+import { useCurrentLocale, useI18nText } from "../../i18n/footerMenuMessages";
 import { OfficialButton } from "../shared/OfficialButton";
 import { ProjectsEmptyState } from "./ProjectsEmptyState";
 import {
@@ -20,6 +21,7 @@ import {
   ProjectsSortMenu,
   type ProjectSortBy,
 } from "./ProjectsListPrimitives";
+import { PROJECTS_MESSAGES } from "./projectsMessages";
 import { SpaceOnboardingModal } from "./SpaceOnboardingModal";
 
 type ProjectListItem = {
@@ -52,6 +54,8 @@ function spaceToItem(space: CoworkSpaceSummary): ProjectListItem {
 }
 
 export function ProjectsPage({ onNavigate }: RouteViewProps) {
+  const text = useI18nText(PROJECTS_MESSAGES);
+  const locale = useCurrentLocale();
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<ProjectSortBy>("recent");
   const [searchExpanded, setSearchExpanded] = useState(false);
@@ -111,12 +115,12 @@ export function ProjectsPage({ onNavigate }: RouteViewProps) {
   const emptyBody =
     !loading && items.length === 0 ? (
       hasQuery ? (
-        <div className="text-sm text-text-500 mt-4">No projects match your search.</div>
+        <div className="text-sm text-text-500 mt-4">{text.noMatchSearch}</div>
       ) : (
         <ProjectsEmptyState
-          ctaLabel="New project"
-          description="Point Claude at a folder on your machine and work on it together."
-          headline="Looking to start a project?"
+          ctaLabel={text.newProject}
+          description={text.emptyDescriptionDesktop}
+          headline={text.emptyHeadline}
           onCtaClick={openOnboarding}
         />
       )
@@ -127,7 +131,7 @@ export function ProjectsPage({ onNavigate }: RouteViewProps) {
       <ProjectsPageShell
         action={
           <OfficialButton onClick={openOnboarding} size="sm" variant="primary">
-            New project
+            {text.newProject}
           </OfficialButton>
         }
         tabsEnd={
@@ -141,17 +145,27 @@ export function ProjectsPage({ onNavigate }: RouteViewProps) {
                 .filter(Boolean)
                 .join(" ")}
             >
-              <ProjectsSortMenu onChange={setSortBy} value={sortBy} />
+              <ProjectsSortMenu
+                labels={{
+                  alphabetical: text.sortAlphabetical,
+                  created: text.sortCreated,
+                  recent: text.sortRecent,
+                  sortBy: text.sortBy,
+                }}
+                onChange={setSortBy}
+                value={sortBy}
+              />
             </div>
             <ProjectsExpandableSearch
+              clearLabel={text.clearFilter}
               onChange={setQuery}
               onExpandChange={setSearchExpanded}
-              placeholder="Search projects"
+              placeholder={text.searchPlaceholder}
               value={query}
             />
           </>
         }
-        title="项目"
+        title={text.title}
       >
         {emptyBody}
         {items.length > 0 ? (
@@ -162,7 +176,7 @@ export function ProjectsPage({ onNavigate }: RouteViewProps) {
                 description={item.description || undefined}
                 footer={
                   item.updatedAtMs > 0 ? (
-                    <span>{formatProjectRelativeTime(item.updatedAtMs)}</span>
+                    <span>{formatProjectRelativeTime(item.updatedAtMs, locale)}</span>
                   ) : undefined
                 }
                 href={item.href}

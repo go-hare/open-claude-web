@@ -145,6 +145,8 @@ type RawScheduledTasksBridge = {
   getAllScheduledTasks?: () => Promise<unknown[]>;
   getScheduledTaskFileContent?: (id: string) => Promise<unknown>;
   updateScheduledTaskStatus?: (id: string, status: string) => Promise<unknown>;
+  /** Host: updateScheduledTask(id, patch). Residual single-object form also accepted. */
+  updateScheduledTask?: (idOrInput: string | Record<string, unknown>, input?: Record<string, unknown>) => Promise<unknown>;
   createScheduledTask?: (input: CreateScheduledTaskInput) => Promise<unknown>;
   onScheduledTaskEvent?: RawEventSubscription;
   onOnScheduledTaskEvent?: RawEventSubscription;
@@ -152,9 +154,23 @@ type RawScheduledTasksBridge = {
 
 type RawCoworkSpacesBridge = {
   getAllSpaces?: () => Promise<unknown[]>;
+  getSpace?: (spaceId: string) => Promise<unknown>;
   createSpace?: (input: { name: string; instructions?: string }) => Promise<unknown>;
+  updateSpace?: (spaceId: string, input: Record<string, unknown>) => Promise<unknown>;
   createSpaceFolder?: (location: string, name: string) => Promise<unknown>;
   addFolderToSpace?: (spaceId: string, folderPath: string) => Promise<unknown>;
+  removeFolderFromSpace?: (spaceId: string, folderPath: string) => Promise<unknown>;
+  addLinkToSpace?: (spaceId: string, link: unknown) => Promise<unknown>;
+  removeLinkFromSpace?: (spaceId: string, link: unknown) => Promise<unknown>;
+  /** Official residual gT.copyFilesToSpaceFolder(spaceId, filePaths). */
+  copyFilesToSpaceFolder?: (spaceId: string, filePaths: string[]) => Promise<unknown>;
+  /** Official residual gT.getAutoMemoryDir(spaceId) — ce283 Aa. */
+  getAutoMemoryDir?: (spaceId: string) => Promise<unknown>;
+  /**
+   * Official residual gT.listFolderContents(spaceId, folderPath).
+   * Some hosts only take folderPath as the first arg.
+   */
+  listFolderContents?: (spaceIdOrPath: string, folderPath?: string) => Promise<unknown>;
   onOnSpaceEvent?: RawEventSubscription;
   onSpaceEvent?: RawEventSubscription;
 };
@@ -174,6 +190,8 @@ type RawCoworkFilePreviewBridge = {
 
 type RawFileSystemBridge = {
   browseFiles?: (options?: unknown) => Promise<unknown>;
+  browseFolder?: (options?: unknown, defaultPath?: unknown) => Promise<unknown>;
+  getSystemPath?: (name: string) => Promise<unknown>;
   listFilesInFolder?: (...args: unknown[]) => Promise<unknown>;
   openLocalFile?: (...args: unknown[]) => Promise<unknown>;
   readLocalFile?: (...args: unknown[]) => Promise<unknown>;
@@ -337,6 +355,16 @@ export function createDesktopBridgeFromOfficialNamespaces(
     CoworkFilePreview: createCoworkFilePreviewBridge(web.CoworkFilePreview),
     FileSystem: {
       browseFiles: async (options) => normalizeStringArray(await web.FileSystem?.browseFiles?.(options).catch(() => [])),
+      browseFolder: async (options, defaultPath) => {
+        const result = await web.FileSystem?.browseFolder?.(options, defaultPath).catch(() => null);
+        if (typeof result === "string" && result.length > 0) return result;
+        if (Array.isArray(result) && typeof result[0] === "string") return result[0];
+        return null;
+      },
+      getSystemPath: async (name) => {
+        const result = await web.FileSystem?.getSystemPath?.(name).catch(() => null);
+        return typeof result === "string" && result.length > 0 ? result : null;
+      },
       listFilesInFolder: async (sessionId, folderPath) => listFilesInFolder(web.FileSystem, sessionId, folderPath),
       // Official Gzt/a2e: openLocalFile(sessionId, encodeURIComponent(path), reveal?)
       openLocalFile: async (filePathOrSessionId, encodedFilePath, reveal) => {
@@ -813,7 +841,12 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     getDefaultPermissionMode: async (cwd) => stringValue(await raw?.getDefaultPermissionMode?.(cwd).catch(() => null)) ?? null,
     getDetectedProjects: async () => normalizeDetectedProjectList(await raw?.getDetectedProjects?.().catch(() => []), targetKind),
     getDiffFileContent: async (idOrCwd, mergeBase, filePath, previousFilePath) => normalizeDiffFileContentResult(await raw?.getDiffFileContent?.(idOrCwd, mergeBase, filePath, previousFilePath)),
-    getEffort: async (id) => String(await raw?.getEffort?.(id).catch(() => "medium") ?? "medium"),
+    getEffort: async (id) => normalizeEffortApplied(await raw?.getEffort?.(id).catch(() => null)),
+    getEffortCatalogDefaults: async (model) => {
+      const fn = (raw as unknown as { getEffortCatalogDefaults?: (model?: string) => Promise<unknown> } | undefined)?.getEffortCatalogDefaults;
+      if (!fn) return null;
+      return normalizeEffortApplied(await fn(model).catch(() => null));
+    },
     getGitInfo: async (idOrCwd) => raw?.getGitInfo?.(idOrCwd),
     getGitDiff: async (idOrCwd, base = "HEAD") => normalizeOfficialGitDiffComparison(await raw?.getGitDiff?.(idOrCwd, base)),
     getGitDiffStats: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiffStats?.(idOrCwd, base)),
@@ -1025,7 +1058,12 @@ function createCoworkQueryBridge(raw: RawLocalSessionsBridge | undefined): Cowor
     getDefaultPermissionMode: async (cwd) => stringValue(await raw?.getDefaultPermissionMode?.(cwd).catch(() => null)) ?? null,
     getDetectedProjects: async () => normalizeDetectedProjectList(await raw?.getDetectedProjects?.().catch(() => []), "epitaxy"),
     getDiffFileContent: async (idOrCwd, mergeBase, filePath, previousFilePath) => normalizeDiffFileContentResult(await raw?.getDiffFileContent?.(idOrCwd, mergeBase, filePath, previousFilePath)),
-    getEffort: async (id) => String(await raw?.getEffort?.(id).catch(() => "medium") ?? "medium"),
+    getEffort: async (id) => normalizeEffortApplied(await raw?.getEffort?.(id).catch(() => null)),
+    getEffortCatalogDefaults: async (model) => {
+      const fn = (raw as unknown as { getEffortCatalogDefaults?: (model?: string) => Promise<unknown> } | undefined)?.getEffortCatalogDefaults;
+      if (!fn) return null;
+      return normalizeEffortApplied(await fn(model).catch(() => null));
+    },
     getGitInfo: async (idOrCwd) => raw?.getGitInfo?.(idOrCwd),
     getGitDiff: async (idOrCwd, base = "HEAD") => normalizeOfficialGitDiffComparison(await raw?.getGitDiff?.(idOrCwd, base)),
     getGitDiffStats: async (idOrCwd, base = "HEAD") => normalizeGitCommandResult(await raw?.getGitDiffStats?.(idOrCwd, base)),
@@ -1180,12 +1218,25 @@ function createScheduledTasksBridge(raw: RawScheduledTasksBridge | undefined): D
   return {
     list: async () => normalizeScheduledTasks(await raw?.getAllScheduledTasks?.()),
     get: async (id) => {
+      // Prefer channel-scoped host getScheduledTask when present (code vs cowork separation).
+      const direct = await (raw as { getScheduledTask?: (id: string) => Promise<unknown> } | undefined)
+        ?.getScheduledTask?.(id)
+        .catch(() => null);
+      if (direct) return normalizeScheduledTask(direct);
       const tasks = normalizeScheduledTasks(await raw?.getAllScheduledTasks?.());
       return tasks.find((task) => task.id === id) ?? null;
     },
     create: async (input) => {
       const task = await raw?.createScheduledTask?.(input);
       return task ? normalizeScheduledTask(task) : null;
+    },
+    update: async (id, input) => {
+      // Host signature: updateScheduledTask(id, patch). Residual: {scheduledTaskId, ...}.
+      const patch = input as Record<string, unknown>;
+      const result =
+        (await raw?.updateScheduledTask?.(id, patch).catch(() => null)) ??
+        (await raw?.updateScheduledTask?.({ scheduledTaskId: id, ...patch }).catch(() => null));
+      return result ? normalizeScheduledTask(result) : null;
     },
     updateStatus: async (id, status) => {
       await raw?.updateScheduledTaskStatus?.(id, status);
@@ -1200,11 +1251,21 @@ function createScheduledTasksBridge(raw: RawScheduledTasksBridge | undefined): D
 function createCoworkSpacesBridge(raw: RawCoworkSpacesBridge | undefined): DesktopBridge["CoworkSpaces"] {
   return {
     list: async () => normalizeCoworkSpaces(await raw?.getAllSpaces?.()),
+    get: async (spaceId) => {
+      const space = await raw?.getSpace?.(spaceId);
+      if (!space) return null;
+      return normalizeCoworkSpaces([space])[0] ?? null;
+    },
     create: async (input) => {
       const created = await raw?.createSpace?.(input);
       if (!created) return null;
       const spaces = normalizeCoworkSpaces([created]);
       return spaces[0] ?? null;
+    },
+    update: async (spaceId, input) => {
+      const updated = await raw?.updateSpace?.(spaceId, input as Record<string, unknown>);
+      if (!updated) return null;
+      return normalizeCoworkSpaces([updated])[0] ?? null;
     },
     createSpaceFolder: async (location, name) => {
       const result = await raw?.createSpaceFolder?.(location, name);
@@ -1214,6 +1275,34 @@ function createCoworkSpacesBridge(raw: RawCoworkSpacesBridge | undefined): Deskt
     },
     addFolderToSpace: async (spaceId, folderPath) => {
       await raw?.addFolderToSpace?.(spaceId, folderPath);
+    },
+    removeFolderFromSpace: async (spaceId, folderPath) => {
+      await raw?.removeFolderFromSpace?.(spaceId, folderPath);
+    },
+    addLinkToSpace: async (spaceId, link) => {
+      await raw?.addLinkToSpace?.(spaceId, link);
+    },
+    removeLinkFromSpace: async (spaceId, link) => {
+      await raw?.removeLinkFromSpace?.(spaceId, typeof link === "string" ? { url: link } : link);
+    },
+    getAutoMemoryDir: async (spaceId) => {
+      const result = await raw?.getAutoMemoryDir?.(spaceId);
+      return typeof result === "string" && result.length > 0 ? result : null;
+    },
+    listFolderContents: async (spaceId, folderPath) => {
+      // Official residual Fe.listFolderContents(spaceId, folderPath) only.
+      // Do not fall back to single-arg path readdir — that mis-reads spaceId as a path
+      // and returns [] / wrong trees (breaks Ya memory + folder expand).
+      try {
+        const result = await raw?.listFolderContents?.(spaceId, folderPath);
+        return normalizeSpaceFolderEntries(result, folderPath);
+      } catch {
+        return [];
+      }
+    },
+    copyFilesToSpaceFolder: async (spaceId, filePaths) => {
+      const result = await raw?.copyFilesToSpaceFolder?.(spaceId, filePaths);
+      return normalizeStringArray(result);
     },
     onEvent: (listener) => {
       const subscribe = raw?.onSpaceEvent ?? raw?.onOnSpaceEvent;
@@ -1383,6 +1472,76 @@ function normalizeCoworkMessageEnvelopes(value: unknown): CoworkMessageEnvelope[
   });
 }
 
+function normalizeCoworkSpaceFolders(value: unknown): CoworkSpaceSummary["folders"] {
+  if (!Array.isArray(value)) return undefined;
+  const folders = value
+    .map((item) => {
+      if (typeof item === "string" && item.length > 0) return { path: item };
+      const raw = asRecord(item);
+      const folderPath = stringValue(raw.path) ?? stringValue(raw.folderPath) ?? stringValue(raw.folder);
+      return folderPath ? { path: folderPath } : null;
+    })
+    .filter((item): item is { path: string } => Boolean(item));
+  return folders.length > 0 ? folders : [];
+}
+
+/** Residual listFolderContents may return string[] (host readdir) or entry objects. */
+function normalizeSpaceFolderEntries(value: unknown, parentPath: string): import("./types").SpaceFolderEntry[] {
+  if (!Array.isArray(value)) return [];
+  const sep = parentPath.includes("\\") && !parentPath.includes("/") ? "\\" : "/";
+  const parent = parentPath.replace(/[\\/]+$/, "");
+  return value
+    .map((item) => {
+      if (typeof item === "string" && item.length > 0) {
+        const name = item.split(/[\\/]/).filter(Boolean).pop() ?? item;
+        const fullPath = item.includes("/") || item.includes("\\") ? item : `${parent}${sep}${name}`;
+        return { name, path: fullPath, isDirectory: !name.includes(".") };
+      }
+      const raw = asRecord(item);
+      const name = stringValue(raw.name) ?? stringValue(raw.displayName);
+      const entryPath =
+        stringValue(raw.path) ??
+        (name ? `${parent}${sep}${name}` : undefined);
+      if (!name || !entryPath) return null;
+      return {
+        name,
+        path: entryPath,
+        isDirectory: booleanValue(raw.isDirectory) ?? booleanValue(raw.isDir) ?? undefined,
+      };
+    })
+    .filter((item): item is import("./types").SpaceFolderEntry => Boolean(item));
+}
+
+function normalizeCoworkSpaceLinks(value: unknown): CoworkSpaceSummary["links"] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string" && item.length > 0) return { url: item };
+      const raw = asRecord(item);
+      const url = stringValue(raw.url) ?? stringValue(raw.href) ?? stringValue(raw.link);
+      if (!url) return null;
+      return {
+        url,
+        title: stringValue(raw.title) ?? stringValue(raw.name) ?? null,
+        provider: stringValue(raw.provider) ?? null,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+}
+
+function normalizeCoworkSpaceProjects(value: unknown): CoworkSpaceSummary["projects"] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string" && item.length > 0) return { uuid: item };
+      const raw = asRecord(item);
+      const uuid = stringValue(raw.uuid) ?? stringValue(raw.id);
+      if (!uuid) return null;
+      return { uuid, name: stringValue(raw.name) ?? undefined };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+}
+
 function normalizeCoworkSpaces(items: unknown): CoworkSpaceSummary[] {
   const spaces: CoworkSpaceSummary[] = [];
   for (const item of Array.isArray(items) ? items : []) {
@@ -1392,11 +1551,20 @@ function normalizeCoworkSpaces(items: unknown): CoworkSpaceSummary[] {
     spaces.push({
       id,
       name: stringValue(raw.name) ?? stringValue(raw.title) ?? "Untitled project",
-      description: stringValue(raw.description) ?? null,
+      description: stringValue(raw.description) ?? stringValue(raw.autoDescription) ?? null,
+      instructions: stringValue(raw.instructions) ?? null,
       createdAtMs: timestampValue(raw.createdAt) ?? timestampValue(raw.created_at) ?? undefined,
-      updatedAtMs: timestampValue(raw.updatedAt) ?? timestampValue(raw.updated_at) ?? Date.now(),
+      updatedAtMs:
+        timestampValue(raw.updatedAt) ??
+        timestampValue(raw.updated_at) ??
+        timestampValue(raw.createdAt) ??
+        timestampValue(raw.created_at) ??
+        Date.now(),
       isStarred: booleanValue(raw.isStarred) ?? booleanValue(raw.starred),
       sessionIds: normalizeStringArray(raw.sessionIds ?? raw.session_ids),
+      folders: normalizeCoworkSpaceFolders(raw.folders),
+      links: normalizeCoworkSpaceLinks(raw.links),
+      projects: normalizeCoworkSpaceProjects(raw.projects),
     });
   }
   return spaces.sort((left, right) => right.updatedAtMs - left.updatedAtMs);
@@ -1487,6 +1655,9 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
   const message = input.message ?? input.prompt;
   // Official start residual accepts images on first turn (CoworkStartSessionInput.images).
   const images = input.images?.filter((image) => typeof image?.base64 === "string" && image.base64.length > 0);
+  // Official UZe/Ks residual: space sessions associate only via spaceId (not cwd).
+  // Space detail onpage Bs / space_page Ys pass spaceId into LocalAgentModeSessions.start.
+  const spaceId = typeof input.spaceId === "string" && input.spaceId.length > 0 ? input.spaceId : undefined;
   return {
     kind: targetKind,
     message,
@@ -1501,6 +1672,7 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
     scheduledTaskId: input.scheduledTaskId,
     skipRedirect: input.skipRedirect,
     origin: input.origin,
+    spaceId,
     userSelectedFiles: input.userSelectedFiles?.length ? input.userSelectedFiles : undefined,
     userSelectedFolders: selectedFolders.length ? selectedFolders : undefined,
     mountedProjects: input.mountedProjects?.length ? input.mountedProjects : undefined,
@@ -1864,7 +2036,15 @@ function normalizeCodeStats(value: unknown): CodeStats | null {
 function normalizeOfficialContextUsageResult(value: unknown): ContextUsage | null {
   if (!value || typeof value !== "object") return null;
   const raw = value as Record<string, unknown>;
-  if (!("rawMaxTokens" in raw) && !("raw_max_tokens" in raw)) return null;
+  // CLI residual may emit rawMaxTokens and/or maxTokens (analyzeContextUsage return).
+  if (
+    !("rawMaxTokens" in raw)
+    && !("raw_max_tokens" in raw)
+    && !("maxTokens" in raw)
+    && !("max_tokens" in raw)
+  ) {
+    return null;
+  }
   return normalizeContextUsage(raw);
 }
 
@@ -1872,18 +2052,30 @@ function normalizeContextUsage(value: unknown): ContextUsage | null {
   if (!value) return null;
   const raw = asRecord(value);
   const totalTokens = numberValue(raw.totalTokens ?? raw.total_tokens);
+  // Prefer positive max from rawMaxTokens / maxTokens (CLI residual uses both).
+  const rawMaxTokens =
+    numberValue(raw.rawMaxTokens ?? raw.raw_max_tokens ?? raw.maxTokens ?? raw.max_tokens) || null;
+  const categories = ensureFreeSpaceContextCategories(normalizeContextCategories(raw.categories), rawMaxTokens, totalTokens);
+  const reportedPercentage = typeof raw.percentage === "number" && Number.isFinite(raw.percentage)
+    ? raw.percentage
+    : undefined;
+  const percentage = reportedPercentage !== undefined
+    ? reportedPercentage
+    : rawMaxTokens && totalTokens >= 0
+      ? Math.round(Math.max(0, Math.min(1, totalTokens / rawMaxTokens)) * 100)
+      : undefined;
   return {
     agents: normalizeContextAgentRows(raw.agents),
     cacheCreationInputTokens: numberValue(raw.cacheCreationInputTokens ?? raw.cache_creation_input_tokens),
     cacheReadInputTokens: numberValue(raw.cacheReadInputTokens ?? raw.cache_read_input_tokens),
-    categories: normalizeContextCategories(raw.categories),
+    categories,
     inputTokens: numberValue(raw.inputTokens ?? raw.input_tokens),
     mcpTools: normalizeContextMcpToolRows(raw.mcpTools ?? raw.mcp_tools),
     memoryFiles: normalizeContextMemoryRows(raw.memoryFiles ?? raw.memory_files),
     messages: numberValue(raw.messages),
     outputTokens: numberValue(raw.outputTokens ?? raw.output_tokens),
-    percentage: raw.percentage === null ? undefined : numberValue(raw.percentage),
-    rawMaxTokens: raw.rawMaxTokens === null || raw.raw_max_tokens === null ? null : numberValue(raw.rawMaxTokens ?? raw.raw_max_tokens) || null,
+    percentage,
+    rawMaxTokens,
     toolCallCount: numberValue(raw.toolCallCount ?? raw.tool_call_count),
     totalTokens,
   };
@@ -1897,7 +2089,30 @@ function normalizeContextCategories(value: unknown): ContextUsage["categories"] 
       name: stringValue(raw.name) ?? "Input",
       tokens: numberValue(raw.tokens),
     };
-  }).filter((item) => item.tokens > 0);
+  }).filter((item) => item.tokens > 0 || item.name === "Free space");
+}
+
+/** CLI / Ku residual: Free space last so the bar is used/max, not used-only full blue. */
+function ensureFreeSpaceContextCategories(
+  categories: ContextUsage["categories"],
+  rawMaxTokens: number | null | undefined,
+  totalTokens: number,
+): ContextUsage["categories"] {
+  if (!rawMaxTokens || rawMaxTokens <= 0) return categories?.filter((row) => row.name !== "Free space");
+  const rows = [...(categories ?? [])].filter((row) => row.name !== "Free space");
+  let actualUsage = 0;
+  let reserved = 0;
+  for (const row of rows) {
+    if (/\(deferred\)$/i.test(row.name)) continue;
+    if (row.name === "Autocompact buffer" || row.name === "Compact buffer") {
+      reserved += row.tokens;
+      continue;
+    }
+    actualUsage += row.tokens;
+  }
+  if (actualUsage <= 0 && totalTokens > 0) actualUsage = totalTokens;
+  const freeTokens = Math.max(0, rawMaxTokens - actualUsage - reserved);
+  return [...rows, { name: "Free space", tokens: freeTokens }];
 }
 
 function normalizeContextMcpToolRows(value: unknown): ContextUsage["mcpTools"] {
@@ -1938,6 +2153,21 @@ function normalizeEffort(value: unknown): "low" | "medium" | "high" | "xhigh" | 
   return value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "max" ? value : null;
 }
 
+/**
+ * Official get_settings.applied (CLI 2.7.16+): effort + effortLevels + ultracodeOfferable.
+ * Accepts legacy string returns ("high") and new object returns from the desktop handler.
+ */
+function normalizeEffortApplied(value: unknown): import("./types").EffortApplied {
+  const raw = asRecord(value);
+  if (typeof value === "string") return { effort: value, effortLevels: null, ultracodeOfferable: null };
+  const effort = stringValue(raw.effort) ?? "medium";
+  const effortLevels = Array.isArray(raw.effortLevels)
+    ? (raw.effortLevels as unknown[]).filter((v): v is string => typeof v === "string")
+    : null;
+  const ultracodeOfferable = typeof raw.ultracodeOfferable === "boolean" ? raw.ultracodeOfferable : null;
+  return { effort, effortLevels: effortLevels && effortLevels.length > 0 ? effortLevels : null, ultracodeOfferable };
+}
+
 function normalizeShellPtyStartResult(value: unknown, bufferValue: unknown): ShellPtyStartResult {
   const raw = asRecord(value);
   if (value === true || raw.ok === true || raw.success === true) {
@@ -1968,6 +2198,7 @@ function normalizeScheduledTask(item: unknown): ScheduledTaskSummary {
   const raw = asRecord(item);
   const id = stringValue(raw.id) ?? stringValue(raw.name) ?? `task_${Date.now()}`;
   const enabled = raw.enabled === true || raw.status === "enabled";
+  const spaceId = stringValue(raw.spaceId) ?? stringValue(raw.space_id);
   return {
     id,
     title: stringValue(raw.title) ?? stringValue(raw.name) ?? id,
@@ -1988,6 +2219,7 @@ function normalizeScheduledTask(item: unknown): ScheduledTaskSummary {
     chromeAllowedDomains: Array.isArray(raw.chromeAllowedDomains) ? raw.chromeAllowedDomains.filter((domain): domain is string => typeof domain === "string") : undefined,
     chromePermissionMode: stringValue(raw.chromePermissionMode),
     userSelectedFolders: Array.isArray(raw.userSelectedFolders) ? raw.userSelectedFolders.filter((path): path is string => typeof path === "string") : undefined,
+    spaceId: spaceId && spaceId.length > 0 ? spaceId : undefined,
     missedRuns: Array.isArray(raw.missedRuns)
       ? raw.missedRuns.filter((run): run is string | { time: string; reason?: string } => typeof run === "string" || Boolean(asRecord(run).time))
       : undefined,

@@ -143,12 +143,13 @@ const officialFreeSpaceContextCategory = "Free space";
 const officialAutocompactContextCategory = "Autocompact buffer";
 
 function normalizeOfficialContextUsageModel(usage: ContextUsage): OfficialContextUsageModel {
-  const rawMaxTokens = Math.max(1, usage.rawMaxTokens ?? 1);
+  // Official Ku requires a positive rawMax so Free space can participate in segment sum.
+  const rawMaxTokens = Math.max(1, usage.rawMaxTokens && usage.rawMaxTokens > 0 ? usage.rawMaxTokens : 1);
   const totalTokens = Math.max(0, usage.totalTokens);
   const percentage = typeof usage.percentage === "number" && Number.isFinite(usage.percentage)
     ? officialClampPercent(usage.percentage)
     : officialClampPercent(totalTokens / rawMaxTokens * 100);
-  const categories = usage.categories ?? [];
+  const categories = ensureOfficialFreeSpaceCategory(usage.categories ?? [], rawMaxTokens, totalTokens, usage.rawMaxTokens);
   return {
     agents: usage.agents ?? [],
     categories: sortOfficialContextCategories(categories).map((category, index) => ({
@@ -163,12 +164,43 @@ function normalizeOfficialContextUsageModel(usage: ContextUsage): OfficialContex
   };
 }
 
+/**
+ * Residual c65a6a59c / CLI analyzeContextUsage: Free space is part of the category list so
+ * bar width = tokens / sum(categories). Without it the used segments fill 100% of the bar.
+ * Only synthesize when host provided a real rawMax (>0); do not invent Free space from fallback 1.
+ */
+function ensureOfficialFreeSpaceCategory(
+  categories: Array<{ name: string; tokens: number }>,
+  _displayMaxTokens: number,
+  totalTokens: number,
+  hostRawMax: number | null | undefined,
+): Array<{ name: string; tokens: number }> {
+  if (!(typeof hostRawMax === "number" && hostRawMax > 0)) {
+    return categories.filter((row) => row.name !== officialFreeSpaceContextCategory);
+  }
+  const withoutFree = categories.filter((row) => row.name !== officialFreeSpaceContextCategory);
+  let actualUsage = 0;
+  let reserved = 0;
+  for (const row of withoutFree) {
+    if (isDeferredOfficialContextCategory(row.name)) continue;
+    if (row.name === officialAutocompactContextCategory || row.name === "Compact buffer") {
+      reserved += row.tokens;
+      continue;
+    }
+    actualUsage += row.tokens;
+  }
+  if (actualUsage <= 0 && totalTokens > 0) actualUsage = totalTokens;
+  const freeTokens = Math.max(0, hostRawMax - actualUsage - reserved);
+  return [...withoutFree, { name: officialFreeSpaceContextCategory, tokens: freeTokens }];
+}
+
 function sortOfficialContextCategories(categories: Array<{ name: string; tokens: number }>) {
   const visible = categories.filter((category) => category.name !== officialFreeSpaceContextCategory && category.name !== officialAutocompactContextCategory && !isDeferredOfficialContextCategory(category.name))
     .sort((left, right) => right.tokens - left.tokens);
   const deferred = categories.filter((category) => isDeferredOfficialContextCategory(category.name)).sort((left, right) => right.tokens - left.tokens);
   const autocompact = categories.find((category) => category.name === officialAutocompactContextCategory);
   const free = categories.find((category) => category.name === officialFreeSpaceContextCategory);
+  // Official keeps Free space even when small; hide only true zero-token rows except free if >0.
   return [...visible, ...deferred, ...(autocompact ? [autocompact] : []), ...(free ? [free] : [])].filter((category) => category.tokens > 0);
 }
 

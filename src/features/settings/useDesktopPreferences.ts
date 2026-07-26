@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { desktopBridge, type DesktopPreferences } from "../../adapters/desktopBridge";
 
+/**
+ * Pre-bridge flash defaults. Align with official SSA (app.asar) where keys exist:
+ *   launchEnabled: true, menuBarEnabled: true, quickEntryShortcut: double-tap-option, …
+ * Do not invent true for enterprise / raven-only arms.
+ */
 export const defaultDesktopPreferences: DesktopPreferences = {
   allowAllBrowserActions: false,
   autoCreatePullRequests: false,
@@ -15,7 +20,8 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   dockBounceEnabled: false,
   enabledCoworkMemory: true,
   keepAwakeEnabled: false,
-  launchEnabled: false,
+  // Official SSA launchEnabled: true (Preview default on when Ea residual available).
+  launchEnabled: true,
   launchPreviewPersistSession: false,
   menuBarEnabled: true,
   quickEntryDictationShortcut: "off",
@@ -62,6 +68,9 @@ export function useDesktopSupportedFeatures() {
         if (raw && typeof raw === "object") {
           setFeatures(normalizeSupportedFeatures(raw as Record<string, unknown>));
         } else {
+          // Official ms when le missing: native keys unavailable (never invent supported).
+          // customQuickEntryDictationShortcut is OW always-supported in pw(), but without
+          // a bridge there is no main process — keep unavailable (honest non-desktop).
           setFeatures({
             nativeQuickEntry: { status: "unavailable" },
             quickEntryDictation: { status: "unavailable" },

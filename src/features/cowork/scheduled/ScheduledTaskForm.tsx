@@ -1,7 +1,10 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
+import { OfficialButton } from "../../epitaxy/OfficialEpitaxyComponents";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
 import { Icon } from "../../../shell/icons";
 import { RoutineHeader, ScheduledRouteShell, subtleButtonClass } from "./ScheduledPrimitives";
+import { SCHEDULED_FORM_MESSAGES, type ScheduledFormText } from "./scheduledFormMessages";
 import { cronForSchedule, formatTime, normalizeTaskId, taskNameError, type ScheduleFrequency } from "./scheduleUtils";
 
 type FormProps = {
@@ -20,24 +23,26 @@ type CreateTaskInput = {
   setError: (value: string) => void;
   setIsSaving: (value: boolean) => void;
   onCreated: (id: string) => void;
+  creationUnavailable: string;
 };
 
-const frequencyLabels: Array<[ScheduleFrequency, string]> = [
-  ["once", "Manual"],
-  ["hourly", "Hourly"],
-  ["daily", "Daily"],
-  ["weekdays", "Weekdays"],
-  ["weekly", "Weekly"],
+const FREQUENCY_KEYS: Array<[ScheduleFrequency, keyof ScheduledFormText]> = [
+  ["once", "manual"],
+  ["hourly", "hourly"],
+  ["daily", "daily"],
+  ["weekdays", "weekdays"],
+  ["weekly", "weekly"],
 ];
 
 export function ScheduledTaskForm({ existingNames, onBack, onCreated }: FormProps) {
+  const text = useI18nText(SCHEDULED_FORM_MESSAGES);
   return (
     <ScheduledRouteShell>
       <div className="h-full min-w-0 flex flex-col pt-[8px] pl-[8px]">
-        <RoutineHeader onBack={onBack} title="New local routine" />
+        <RoutineHeader onBack={onBack} title={text.createTitle} />
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="max-w-[720px] mx-auto flex flex-col gap-[32px] px-p8 pt-[48px] pb-[32px]">
-            <LocalRoutineForm existingNames={existingNames} onBack={onBack} onCreated={onCreated} />
+            <LocalRoutineForm existingNames={existingNames} onBack={onBack} onCreated={onCreated} text={text} />
           </div>
         </div>
       </div>
@@ -45,25 +50,30 @@ export function ScheduledTaskForm({ existingNames, onBack, onCreated }: FormProp
   );
 }
 
-function LocalRoutineForm({ existingNames, onBack, onCreated }: FormProps) {
-  const form = useLocalRoutineForm(existingNames, onCreated);
+function LocalRoutineForm({ existingNames, onBack, onCreated, text }: FormProps & { text: ScheduledFormText }) {
+  const form = useLocalRoutineForm(existingNames, onCreated, text.creationUnavailable);
   return (
     <form onSubmit={form.submit} className="flex flex-col gap-[28px]">
-      <LocalAwakeBanner />
-      <TextField label="名称" required value={form.name} error={form.nameError} onChange={form.setName} placeholder="daily-code-review" />
-      <TextField label="Description" required value={form.description} onChange={form.setDescription} placeholder="Review yesterday's commits and flag anything concerning" />
-      <InstructionsField form={form} />
-      <ScheduleField frequency={form.frequency} setFrequency={form.setFrequency} time={form.time} setTime={form.setTime} />
+      <LocalAwakeBanner label={text.bannerLocalAwake} />
+      <TextField label={text.name} required value={form.name} error={form.nameError} onChange={form.setName} placeholder={text.namePlaceholder} />
+      <TextField label={text.description} required value={form.description} onChange={form.setDescription} placeholder={text.descriptionPlaceholder} />
+      <InstructionsField form={form} text={text} />
+      <ScheduleField frequency={form.frequency} setFrequency={form.setFrequency} time={form.time} setTime={form.setTime} text={text} />
       {form.error ? <p className="text-footnote text-danger-000">{form.error}</p> : null}
+      {/* Official c024 footer: Button variant contained + primary with btn-squish fill layer (c87b). */}
       <div className="flex justify-end gap-g4">
-        <button type="button" onClick={onBack} disabled={form.isSaving} className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-contained-default hover:text-contained-hover disabled:text-contained-disabled disabled:hover:text-contained-disabled busy:text-contained-busy pressed:text-contained-selected pressed:hover:text-contained-selected ring-focus h-base text-body rounded-base gap-g3 px-p6">Cancel</button>
-        <button type="submit" disabled={!form.isValid || form.isSaving} className="group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-primary-default hover:text-primary-hover disabled:text-primary-disabled disabled:hover:text-primary-disabled busy:text-primary-busy ring-focus-primary h-base text-body rounded-base gap-g3 px-p6">Create</button>
+        <OfficialButton disabled={form.isSaving} onClick={onBack} type="button" variant="contained">
+          {text.cancel}
+        </OfficialButton>
+        <OfficialButton disabled={!form.isValid || form.isSaving} type="submit" variant="primary">
+          {text.create}
+        </OfficialButton>
       </div>
     </form>
   );
 }
 
-function useLocalRoutineForm(existingNames: Set<string>, onCreated: (id: string) => void) {
+function useLocalRoutineForm(existingNames: Set<string>, onCreated: (id: string) => void, creationUnavailable: string) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -77,7 +87,7 @@ function useLocalRoutineForm(existingNames: Set<string>, onCreated: (id: string)
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!isValid || isSaving) return;
-    await createTask({ name, description, prompt, cwd, frequency, time, setError, setIsSaving, onCreated });
+    await createTask({ name, description, prompt, cwd, frequency, time, setError, setIsSaving, onCreated, creationUnavailable });
   };
   return { name, setName, description, setDescription, prompt, setPrompt, cwd, setCwd, frequency, setFrequency, time, setTime, isSaving, error, nameError, isValid, submit };
 }
@@ -97,7 +107,7 @@ async function createTask(input: CreateTaskInput) {
   });
   input.setIsSaving(false);
   if (created) input.onCreated(created.id);
-  else input.setError("Scheduled task creation isn't available. Restart the desktop app to enable this feature.");
+  else input.setError(input.creationUnavailable);
 }
 
 function TextField({ label, required, value, error, onChange, placeholder }: { label: string; required?: boolean; value: string; error?: string; placeholder: string; onChange: (value: string) => void }) {
@@ -112,7 +122,7 @@ function TextField({ label, required, value, error, onChange, placeholder }: { l
   );
 }
 
-function InstructionsField({ form }: { form: ReturnType<typeof useLocalRoutineForm> }) {
+function InstructionsField({ form, text }: { form: ReturnType<typeof useLocalRoutineForm>; text: ScheduledFormText }) {
   const chooseFolder = async () => {
     const paths = await desktopBridge.Preferences.getDirectoryPath?.(false).catch(() => null);
     if (paths?.[0]) {
@@ -124,54 +134,58 @@ function InstructionsField({ form }: { form: ReturnType<typeof useLocalRoutineFo
   };
   return (
     <div className="flex flex-col gap-g3">
-      <span className="text-footnote text-t6">Instructions</span>
+      <span className="text-footnote text-t6">{text.instructions}</span>
       <div className="flex flex-col rounded-r6 bg-fill-contained-default effect-contrast-stroke overflow-hidden">
-        <textarea value={form.prompt} onChange={(event) => form.setPrompt(event.target.value)} placeholder="Look at the commits from the last 24 hours. Summarize what changed, call out any risky patterns or missing tests, and note anything worth following up on." rows={5} className="epitaxy-textarea w-full min-h-[120px] !bg-transparent !shadow-none" />
+        <textarea value={form.prompt} onChange={(event) => form.setPrompt(event.target.value)} placeholder={text.promptPlaceholder} rows={5} className="epitaxy-textarea w-full min-h-[120px] !bg-transparent !shadow-none" />
         <div className="flex items-center gap-g2 px-p5 pb-p3">
-          <button type="button" className={subtleButtonClass}><Icon name="check" />询问权限</button>
+          <button type="button" className={subtleButtonClass}><Icon name="check" />{text.askPermissions}</button>
           <div className="flex-1" />
-          <button type="button" className={subtleButtonClass}>Default<Icon name="caretDown" /></button>
+          <button type="button" className={subtleButtonClass}>{text.defaultModel}<Icon name="caretDown" /></button>
         </div>
         <div className="flex flex-wrap items-center gap-g3 px-p5 py-p4 bg-t1">
-          <button type="button" onClick={chooseFolder} className={subtleButtonClass}><Icon name="project" />{form.cwd || "选择文件夹"}</button>
+          <button type="button" onClick={chooseFolder} className={subtleButtonClass}><Icon name="project" />{form.cwd || text.selectFolder}</button>
           <div className="flex-1" />
-          <button type="button" role="checkbox" aria-checked="false" className="group/cb inline-flex items-center border-0 outline-none hide-focus-ring ring-focus cursor-default text-footnote text-t6">Worktree</button>
+          <button type="button" role="checkbox" aria-checked="false" className="group/cb inline-flex items-center border-0 outline-none hide-focus-ring ring-focus cursor-default text-footnote text-t6">{text.worktree}</button>
         </div>
       </div>
     </div>
   );
 }
 
-function ScheduleField({ frequency, setFrequency, time, setTime }: { frequency: ScheduleFrequency; setFrequency: (value: ScheduleFrequency) => void; time: string; setTime: (value: string) => void }) {
+function ScheduleField({ frequency, setFrequency, time, setTime, text }: { frequency: ScheduleFrequency; setFrequency: (value: ScheduleFrequency) => void; time: string; setTime: (value: string) => void; text: ScheduledFormText }) {
   return (
     <div className="flex flex-col gap-g4">
-      <span className="text-body text-t6">Schedule</span>
+      <span className="text-body text-t6">{text.schedule}</span>
       <div className="flex flex-col gap-g4">
         <div className="flex gap-g2 p-p1 rounded-r6 bg-t1 self-start">
-          {frequencyLabels.map(([value, label]) => <button key={value} type="button" onClick={() => setFrequency(value)} className={`px-p4 py-p2 rounded-r4 text-footnote ${frequency === value ? "bg-t2 text-t9" : "text-t6 hover:text-t8 hover:bg-t2"}`}>{label}</button>)}
+          {FREQUENCY_KEYS.map(([value, key]) => (
+            <button key={value} type="button" onClick={() => setFrequency(value)} className={`px-p4 py-p2 rounded-r4 text-footnote ${frequency === value ? "bg-t2 text-t9" : "text-t6 hover:text-t8 hover:bg-t2"}`}>
+              {text[key]}
+            </button>
+          ))}
         </div>
-        {frequency !== "once" ? <TimeRow time={time} setTime={setTime} /> : null}
-        {frequency !== "once" ? <p className="text-footnote text-t5">Scheduled tasks use a randomized delay of several minutes for server performance.</p> : null}
+        {frequency !== "once" ? <TimeRow time={time} setTime={setTime} atLabel={text.atTime} /> : null}
+        {frequency !== "once" ? <p className="text-footnote text-t5">{text.staggerNote}</p> : null}
       </div>
     </div>
   );
 }
 
-function TimeRow({ time, setTime }: { time: string; setTime: (value: string) => void }) {
+function TimeRow({ time, setTime, atLabel }: { time: string; setTime: (value: string) => void; atLabel: string }) {
   const [hour, minute] = time.split(":").map(Number);
   return (
     <div className="flex items-center gap-g4 text-body text-t7">
-      <span>At</span>
+      <span>{atLabel}</span>
       <input type="time" value={formatTime(hour, minute)} onChange={(event) => setTime(event.target.value)} className="epitaxy-input w-[140px]" />
     </div>
   );
 }
 
-function LocalAwakeBanner() {
+function LocalAwakeBanner({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-g4 px-p6 py-p5 rounded-r6 bg-t1 text-body text-t7">
       <Icon name="check" />
-      <span>Local routines only run while your computer is awake.</span>
+      <span>{label}</span>
     </div>
   );
 }

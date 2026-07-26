@@ -5,10 +5,21 @@ export function useScheduledTasks() {
   const [tasks, setTasks] = useState<ScheduledTaskSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const reload = useMemo(() => {
+    return async () => {
+      try {
+        const items = await desktopBridge.CoworkScheduledTasks.list();
+        setTasks(items);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     let alive = true;
 
-    const reload = async () => {
+    const load = async () => {
       try {
         const items = await desktopBridge.CoworkScheduledTasks.list();
         if (alive) setTasks(items);
@@ -17,15 +28,12 @@ export function useScheduledTasks() {
       }
     };
 
-    void reload();
+    void load();
 
-    const unsubscribe =
-      desktopBridge.CoworkScheduledTasks.onEvent?.(() => {
-        void reload();
-      }) ??
-      desktopBridge.CCDScheduledTasks.onEvent?.(() => {
-        void reload();
-      });
+    // Residual CYt listens on jT (CoworkScheduledTasks) only — do not fall back to CCD/ST.
+    const unsubscribe = desktopBridge.CoworkScheduledTasks.onEvent?.(() => {
+      void load();
+    });
 
     return () => {
       alive = false;
@@ -52,5 +60,5 @@ export function useScheduledTasks() {
     return names;
   }, [tasks]);
 
-  return { tasks, existingNames, isLoading };
+  return { tasks, existingNames, isLoading, reload };
 }

@@ -54,6 +54,9 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
   const [model, setModel] = useState("default");
   const [permissionMode, setPermissionMode] = useState<PermissionMode>("default");
   const [effort, setEffort] = useState<EffortLevel>("medium");
+  /** Official get_settings.applied (CLI 2.7.16+) — per-model catalog ladder for the draft slider. */
+  const [effortLevels, setEffortLevels] = useState<string[] | null>(null);
+  const [ultracodeOfferable, setUltracodeOfferable] = useState<boolean | null>(null);
   const [composerWorkspace, setComposerWorkspace] = useState(workspace);
   const [sourceBranch, setSourceBranch] = useState(workspace.cwd ? workspace.branchName : "");
   const [useWorktree, setUseWorktree] = useState(false);
@@ -95,6 +98,26 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
       alive = false;
     };
   }, [composerWorkspace.cwd]);
+
+  /**
+   * Official get_settings → applied (CLI 2.7.16+) for the new-session draft:
+   * probe the CLI for the selected model's catalog ladder (effortLevels /
+   * ultracodeOfferable). Re-runs on model change. null → composer falls back to
+   * the hardcoded 5-stop ladder.
+   */
+  useEffect(() => {
+    let alive = true;
+    const fn = desktopBridge.LocalSessions.getEffortCatalogDefaults;
+    if (!fn) return;
+    void fn(model === "default" ? undefined : model).then((applied) => {
+      if (!alive || !applied) return;
+      setEffortLevels(applied.effortLevels ?? null);
+      setUltracodeOfferable(applied.ultracodeOfferable ?? null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [model]);
 
   const submit = useCallback(async () => {
     const normalized = prompt.trim();
@@ -146,6 +169,7 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
                 key={draftEpoch}
                 busy={busy}
                 effort={effort}
+                effortLevels={effortLevels}
                 model={model}
                 onEffortChange={setEffort}
                 onModelChange={setModel}
@@ -158,6 +182,7 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
                 prompt={prompt}
                 setPrompt={setPrompt}
                 sourceBranch={sourceBranch}
+                ultracodeOfferable={ultracodeOfferable}
                 useWorktree={useWorktree}
                 workspace={composerWorkspace}
               />

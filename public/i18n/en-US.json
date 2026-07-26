@@ -13488,5 +13488,20 @@
   "zz6ObK7ZEM": "Restore",
   "zzAr6WXkVb": "Mini Claude",
   "zzOZLy0ngS": "There was an error verifying your code. If the problem persists <link>contact support</link> for assistance.",
-  "zzp3aYxskJ": "Couldn't start that chat. You can try again."
+  "zzp3aYxskJ": "Couldn't start that chat. You can try again.",
+  "HECaGo5DrD": "Delete “{taskName}”? Any sessions from this task will be archived.",
+  "x3qvaC3GqD": "No runs yet",
+  "3yurtFS7JU": "Next run",
+  "4ml4dO3YcZ": "No scheduled tasks match your search.",
+  "wFRNQOXDcp": "Search scheduled tasks…",
+  "4aMay989nb": "Search scheduled tasks",
+  "__local.projectsDesktopEmptyDescription": "Point Claude at a folder on your machine and work on it together.",
+  "__local.projectsNoMatchSearch": "No projects match your search.",
+  "__local.projectsCreateFailed": "Failed to create project. You can try again.",
+  "__local.spaceNoSessions": "No sessions in this project yet.",
+  "__local.spaceSourcesOne": "1 source",
+  "__local.spaceSourcesOther": "{count} sources",
+  "__local.spaceSaveInstructionsFailed": "Failed to save instructions. You can try again.",
+  "__local.spaceAddFolderFailed": "Failed to add folder. You can try again.",
+  "__local.spaceRemoveFolderFailed": "Failed to remove folder. You can try again."
 }

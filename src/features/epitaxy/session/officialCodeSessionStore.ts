@@ -147,8 +147,17 @@ function liveMetaPreferCurrent(
   return { ...(folded ?? {}), ...(prev ?? {}) };
 }
 
+/**
+ * Content that can paint Ya (transcript entries / live Va). Session meta alone is NOT
+ * transcript content — Recents openSession(meta) must still leave Ja pending until
+ * getTranscript lands (official: Ja = sessionId && Ya.length===0 && (B||J)).
+ */
+function hasTranscriptContent(bucket: OfficialCodeSessionBucket) {
+  return bucket.messages.length > 0 || bucket.streamSnapshot !== null;
+}
+
 function hasRenderableContent(bucket: OfficialCodeSessionBucket) {
-  return bucket.messages.length > 0 || bucket.session !== null || bucket.streamSnapshot !== null;
+  return hasTranscriptContent(bucket) || bucket.session !== null;
 }
 
 type OfficialCodeSessionActions = {
@@ -214,9 +223,9 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 /**
- * Prefer content-block structure (tools/thinking/text) over plain text.length.
- * Official durable assistant rows carry full message.content arrays; collapsing by
- * text.length alone wiped tool_use envelopes and looked like "history overwrite".
+ * Structural richness for *reload* same-outer-uuid choice only.
+ * Live path never uses this — official same-uuid is pure replace (index-BELzQL5P).
+ * Multi-emit different outer uuids append; eke f() merges consecutive assistants.
  */
 function chatMessageRichness(message: ChatMessage): number {
   const raw = asRecord(message.raw);
@@ -238,8 +247,19 @@ function chatMessageRichness(message: ChatMessage): number {
   return message.text?.length ?? 0;
 }
 
-function preferRicherChatMessage(prev: ChatMessage, next: ChatMessage): ChatMessage {
-  return chatMessageRichness(next) >= chatMessageRichness(prev) ? next : prev;
+/**
+ * Reload/applyLoad only: same outer uuid → keep the richer whole envelope.
+ * Does NOT invent union content blocks (that was residual P1 drift from official replace).
+ * Incomplete getTranscript must not wipe a fuller in-memory row of the same uuid.
+ */
+function preferRicherOnReload(prev: ChatMessage, next: ChatMessage): ChatMessage {
+  if (prev === next) return prev;
+  const nextScore = chatMessageRichness(next);
+  const prevScore = chatMessageRichness(prev);
+  if (nextScore > prevScore) return next;
+  if (nextScore < prevScore) return prev;
+  // Tie-break: longer plain text wins (delta growth on same structure).
+  return (next.text?.length ?? 0) >= (prev.text?.length ?? 0) ? next : prev;
 }
 
 function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[] {
@@ -248,20 +268,10 @@ function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[
   if (index >= 0) {
     const existing = messages[index]!;
     if (existing === next) return messages;
-    // Official live path (index-BELzQL5P message handler): same-uuid assistant replaces in place.
-    // When comparing structural richness, never let a poorer text-only row wipe tools.
-    const chosen = preferRicherChatMessage(existing, next);
-    if (chosen === existing) {
-      // Still allow pure text growth on the same envelope when structure is equal-or-better next.
-      if (chatMessageRichness(next) === chatMessageRichness(existing) && (next.text?.length ?? 0) > (existing.text?.length ?? 0)) {
-        const copy = messages.slice();
-        copy[index] = next;
-        return copy;
-      }
-      return messages;
-    }
+    // Official live path (index-BELzQL5P): same outer-uuid assistant/user replaces in place.
+    // Multi-emit uses different outer uuids → append below; never mid-collapse here.
     const copy = messages.slice();
-    copy[index] = chosen;
+    copy[index] = next;
     return copy;
   }
   if (next.role === "user" && !isOptimisticLocalUser(next)) {
@@ -341,9 +351,9 @@ function compactionStatusFromMessage(raw: Record<string, unknown>): string | und
 }
 
 /**
- * Union-merge transcripts by identity. NEVER drops a previous row.
+ * Union-merge transcripts by outer-uuid identity. NEVER drops a previous row.
  * - Walk prev order first (stable history)
- * - Prefer richer content-block envelopes when the same identity appears in next
+ * - Same identity: prefer richer whole envelope (reload defense only — not live replace)
  * - Append identities that only exist in next
  *
  * Replacing prev wholesale with next was the "stream wipes old messages" bug:
@@ -364,7 +374,7 @@ function mergeTranscriptUnion(prev: ChatMessage[], next: ChatMessage[]) {
       out.push(message);
       continue;
     }
-    out.push(preferRicherChatMessage(message, incoming));
+    out.push(preferRicherOnReload(message, incoming));
   }
   for (const message of next) {
     const id = messageIdentity(message);
@@ -443,14 +453,21 @@ function createOfficialCodeSessionStore() {
       const baseSession = session
         ? { ...session, messages: nextMessages.length ? nextMessages : session.messages ?? nextMessages }
         : prev.session;
+      // Official openSession(meta): attach session, keep B (transcript pending) until messages
+      // are provided or applyLoad fills Ya. Recents only seeds meta — must not clear Ja.
+      const transcriptPending = messages !== undefined
+        ? false
+        : nextMessages.length > 0
+          ? false
+          : true;
       return {
         buckets: {
           ...state.buckets,
           [sessionId]: {
             ...prev,
             error: null,
-            isMetaPending: false,
-            isTranscriptPending: messages ? false : prev.isTranscriptPending && nextMessages.length === 0,
+            isMetaPending: session ? false : prev.isMetaPending,
+            isTranscriptPending: transcriptPending,
             isSessionNotFound: session === null && nextMessages.length === 0,
             liveMeta,
             messages: nextMessages,
@@ -567,7 +584,8 @@ function createOfficialCodeSessionStore() {
   markLoading: (sessionId, silent = false) => {
     const prev = get().buckets[sessionId] ?? emptyBucket(true);
     const generation = prev.loadGeneration + 1;
-    const hasContent = hasRenderableContent(prev);
+    const hasTranscript = hasTranscriptContent(prev);
+    const hasSessionMeta = prev.session !== null;
     set((state) => ({
       buckets: {
         ...state.buckets,
@@ -575,9 +593,11 @@ function createOfficialCodeSessionStore() {
           ...prev,
           error: null,
           loadGeneration: generation,
-          // Official: never blank a populated bucket while revalidating.
-          isTranscriptPending: silent || hasContent ? false : true,
-          isMetaPending: silent || hasContent ? false : true,
+          // Official Ja B: transcript pending only when Ya empty. Session meta alone must
+          // not suppress B (Recents openSession seeds session without messages).
+          // Silent revalidate never blanks an already-painted transcript.
+          isTranscriptPending: silent || hasTranscript ? false : true,
+          isMetaPending: silent || hasSessionMeta ? false : true,
         },
       },
     }));
@@ -809,8 +829,9 @@ function createOfficialCodeSessionStore() {
       const queuedIndex = prev.queuedMessages.findIndex((item) => messageIdentity(item) === identity);
       if (queuedIndex >= 0) {
         if (turnStillActive || prev.pendingQueuedSends > 0) {
+          // Official same-uuid: durable CLI echo replaces optimistic queued row in place.
           const nextQueued = prev.queuedMessages.slice();
-          nextQueued[queuedIndex] = preferRicherChatMessage(nextQueued[queuedIndex]!, message);
+          nextQueued[queuedIndex] = message;
           return {
             buckets: {
               ...state.buckets,
@@ -828,12 +849,12 @@ function createOfficialCodeSessionStore() {
         }
         // Settled: promote queued row into main transcript (official re-delivery path).
         if (prev.messages.every((item) => messageIdentity(item) !== identity)) {
-          const promoted = preferRicherChatMessage(prev.queuedMessages[queuedIndex]!, message);
           const nextQueued = [
             ...prev.queuedMessages.slice(0, queuedIndex),
             ...prev.queuedMessages.slice(queuedIndex + 1),
           ];
-          const messages = filterStreamEvents(upsertMessage(prev.messages, promoted));
+          // Live/settle promote: official replace semantics — use the durable echo as-is.
+          const messages = filterStreamEvents(upsertMessage(prev.messages, message));
           return {
             buckets: {
               ...state.buckets,

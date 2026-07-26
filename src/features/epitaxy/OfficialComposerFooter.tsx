@@ -1,10 +1,20 @@
+/**
+ * Official composer footer residual (c360a9e1c `Dne`).
+ * Models dropdown + separate Effort chip (`Ene` slider); Effort is not nested under Models.
+ */
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import type { LocalSessionsBridge } from "../../adapters/desktopBridge/types";
 import { OfficialButton, OfficialDropdownButton, type OfficialDropdownItem, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
 import { OfficialComposerUsageIndicator } from "./OfficialComposerUsageIndicator";
+import { OfficialEffortControl, type OfficialEffortItem } from "./composer/OfficialEffortControl";
 
-export type OfficialComposerDropdownItem = OfficialDropdownItem & { noQuickKey?: boolean };
+export type OfficialComposerDropdownItem = OfficialDropdownItem & {
+  accent?: boolean;
+  help?: { body?: ReactNode; title?: ReactNode };
+  noQuickKey?: boolean;
+  value?: string;
+};
 
 export type OfficialComposerExtraSection = {
   header?: ReactNode;
@@ -98,27 +108,60 @@ export function OfficialComposerFooter({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const effortSection = modelExtraSections?.find((section) => section.key === "effort");
   const effortItems = effortSection?.items ?? emptyComposerMenuItems;
+  const nonEffortSections = useMemo(
+    () => modelExtraSections?.filter((section) => section.key !== "effort"),
+    [modelExtraSections],
+  );
   const shortcutContext = useMemo(() => getComposerShortcutContext(), []);
-  const menu = useOfficialComposerFooterMenuState({ effortItems, isPanelActive, modeItems: permissionItems, modelItems, shortcutContext });
-  const selectedEffortLabel = effortSection?.items.find((item) => item.checked)?.label;
+  const menu = useOfficialComposerFooterMenuState({
+    effortItems,
+    isPanelActive,
+    modeItems: permissionItems,
+    modelItems,
+    modelPickerDisabled,
+    shortcutContext,
+  });
   const fastModeLabel = fastModeOn ? "Fast" : null;
-  const modelSections = useMemo(() => modelExtraSections?.map((section) => section.key === "effort" ? {
-    ...section,
-    items: menu.numberedEffortItems,
-    triggerKey: composerShortcutForCommand("openEffortMenu", shortcutContext),
-  } : section), [menu.numberedEffortItems, modelExtraSections, shortcutContext]);
   const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
-  const footerPlusItems = useMemo(() => composeOfficialPlusItems(onInsertSlashCommand, onAddFiles ? openFilePicker : undefined, supportsFileAttachments, plusMenuItems), [onAddFiles, onInsertSlashCommand, openFilePicker, plusMenuItems, supportsFileAttachments]);
+  const footerPlusItems = useMemo(
+    () => composeOfficialPlusItems(onInsertSlashCommand, onAddFiles ? openFilePicker : undefined, supportsFileAttachments, plusMenuItems),
+    [onAddFiles, onInsertSlashCommand, openFilePicker, plusMenuItems, supportsFileAttachments],
+  );
   const onFileInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     if (files.length > 0) onAddFiles?.(files);
     event.target.value = "";
   }, [onAddFiles]);
 
+  const effortControlItems: OfficialEffortItem[] = useMemo(
+    () => effortItems.map((item) => ({
+      accent: item.accent,
+      checked: item.checked,
+      disabled: item.disabled,
+      help: item.help,
+      label: item.label,
+      noQuickKey: item.noQuickKey,
+      onSelect: item.onSelect,
+      value: item.value,
+    })),
+    [effortItems],
+  );
+
   return (
     <div className="w-full flex items-center gap-g5 py-[4px]">
       <div className="flex items-center gap-g5 min-w-0">
-        <OfficialDropdownButton align="start" header="Mode" items={menu.numberedModeItems} label={permissionDanger ? <span className="text-extended-yellow">{permissionLabel}</span> : permissionLabel} onOpenChange={menu.onModeOpenChange} open={menu.modeOpen} revealChevron="never" side="top" size="small" triggerKey={composerShortcutForCommand("openModeMenu", shortcutContext)} />
+        <OfficialDropdownButton
+          align="start"
+          header="Mode"
+          items={menu.numberedModeItems}
+          label={permissionDanger ? <span className="text-extended-yellow">{permissionLabel}</span> : permissionLabel}
+          onOpenChange={menu.onModeOpenChange}
+          open={menu.modeOpen}
+          revealChevron="never"
+          side="top"
+          size="small"
+          triggerKey={composerShortcutForCommand("openModeMenu", shortcutContext)}
+        />
         {onCoordinatorModeChange ? <OfficialCoordinatorModeToggle onChange={onCoordinatorModeChange} value={coordinatorMode} /> : null}
         <OfficialDropdownButton align="start" ariaLabel="Add" className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} revealChevron="never" side="top" size="small" />
         <input ref={fileInputRef} type="file" multiple accept={supportsFileAttachments ? undefined : "image/png,image/jpeg,image/gif,image/webp"} className="hidden" onChange={onFileInputChange} />
@@ -126,20 +169,41 @@ export function OfficialComposerFooter({
         {loops?.length && onStopLoop ? <OfficialLoopIndicator loops={loops} onStopLoop={onStopLoop} /> : null}
       </div>
       <div className="ml-auto flex items-center gap-g4">
-        <OfficialDropdownButton align="end" disabled={modelItems.length === 0 || modelPickerDisabled} extraSections={modelSections} header="Models" items={menu.numberedModelItems} label={<OfficialModelFooterLabel effortLabel={selectedEffortLabel} fastModeLabel={fastModeLabel} modelLabel={modelLabel} />} onOpenChange={menu.onModelOpenChange} open={menu.modelOpen} revealChevron="never" side="top" size="small" triggerKey={composerShortcutForCommand("openModelMenu", shortcutContext)} />
+        <OfficialDropdownButton
+          align="end"
+          disabled={modelItems.length === 0 || modelPickerDisabled}
+          extraSections={nonEffortSections}
+          header="Models"
+          items={menu.numberedModelItems}
+          label={<OfficialModelFooterLabel fastModeLabel={fastModeLabel} modelLabel={modelLabel} />}
+          onOpenChange={menu.onModelOpenChange}
+          open={menu.modelOpen}
+          revealChevron="never"
+          side="top"
+          size="small"
+          triggerKey={composerShortcutForCommand("openModelMenu", shortcutContext)}
+        />
+        {effortControlItems.length > 0 ? (
+          <OfficialEffortControl
+            disabled={modelPickerDisabled}
+            items={menu.effortItemsForControl}
+            onOpenChange={menu.onEffortOpenChange}
+            open={menu.effortOpen}
+          />
+        ) : null}
         <OfficialComposerUsageIndicator bridge={bridge} session={session} sessionRef={sessionRef} />
       </div>
     </div>
   );
 }
 
-function OfficialModelFooterLabel({ effortLabel, fastModeLabel, modelLabel }: { effortLabel?: ReactNode; fastModeLabel?: ReactNode; modelLabel: ReactNode }) {
-  if (!effortLabel && !fastModeLabel) return <>{modelLabel}</>;
+/** Official model chip: model name + optional Fast only (effort is separate Ene chip). */
+function OfficialModelFooterLabel({ fastModeLabel, modelLabel }: { fastModeLabel?: ReactNode; modelLabel: ReactNode }) {
+  if (!fastModeLabel) return <>{modelLabel}</>;
   return (
     <span className="flex items-baseline gap-g3 min-w-0">
       <span className="truncate">{modelLabel}</span>
-      {effortLabel ? <span className="text-t6 shrink-0">· {effortLabel}</span> : null}
-      {fastModeLabel ? <span className="text-t6 shrink-0">· {fastModeLabel}</span> : null}
+      <span className="text-t6 shrink-0">· {fastModeLabel}</span>
     </span>
   );
 }
@@ -179,43 +243,111 @@ function composeOfficialPlusItems(onInsertSlashCommand: (() => void) | undefined
   return items.length > 0 ? items : emptyComposerMenuItems;
 }
 
-function useOfficialComposerFooterMenuState({ effortItems, isPanelActive, modeItems, modelItems, shortcutContext }: { effortItems: OfficialComposerDropdownItem[]; isPanelActive: boolean; modeItems: OfficialComposerDropdownItem[]; modelItems: OfficialComposerDropdownItem[]; shortcutContext: ComposerShortcutContext }) {
+function useOfficialComposerFooterMenuState({
+  effortItems,
+  isPanelActive,
+  modeItems,
+  modelItems,
+  modelPickerDisabled = false,
+  shortcutContext,
+}: {
+  effortItems: OfficialComposerDropdownItem[];
+  isPanelActive: boolean;
+  modeItems: OfficialComposerDropdownItem[];
+  modelItems: OfficialComposerDropdownItem[];
+  modelPickerDisabled?: boolean;
+  shortcutContext: ComposerShortcutContext;
+}) {
   const [openMenu, setOpenMenu] = useState<ComposerMenuTarget | null>(null);
   const closeMenu = useCallback(() => setOpenMenu(null), []);
   useEffect(() => { if (!isPanelActive) closeMenu(); }, [closeMenu, isPanelActive]);
+  useEffect(() => {
+    if (
+      (openMenu === "effort" && effortItems.length <= 1)
+      || (openMenu === "model" && modelItems.length === 0)
+      || (openMenu === "mode" && modeItems.length === 0)
+    ) {
+      closeMenu();
+    }
+  }, [closeMenu, effortItems.length, modeItems.length, modelItems.length, openMenu]);
+
   const selectableModeItems = useMemo(() => modeItems.filter(isQuickSelectableComposerItem), [modeItems]);
   const selectableModelItems = useMemo(() => modelItems.filter(isQuickSelectableComposerItem), [modelItems]);
   const selectableEffortItems = useMemo(() => effortItems.filter(isQuickSelectableComposerItem), [effortItems]);
+
   const onKeyDown = useCallback((event: KeyboardEvent) => {
-    handleComposerFooterKeyDown(event, { closeMenu, effortItems, isPanelActive, modeItems, modelItems, openMenu, selectableEffortItems, selectableModeItems, selectableModelItems, setOpenMenu, shortcutContext });
-  }, [closeMenu, effortItems, isPanelActive, modeItems, modelItems, openMenu, selectableEffortItems, selectableModeItems, selectableModelItems, shortcutContext]);
+    handleComposerFooterKeyDown(event, {
+      closeMenu,
+      effortItems,
+      isPanelActive,
+      modeItems,
+      modelItems,
+      modelPickerDisabled,
+      openMenu,
+      selectableEffortItems,
+      selectableModeItems,
+      selectableModelItems,
+      setOpenMenu,
+      shortcutContext,
+    });
+  }, [closeMenu, effortItems, isPanelActive, modeItems, modelItems, modelPickerDisabled, openMenu, selectableEffortItems, selectableModeItems, selectableModelItems, shortcutContext]);
+
   useEffect(() => {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [onKeyDown]);
+
   return {
+    effortItemsForControl: effortItems as OfficialEffortItem[],
+    effortOpen: openMenu === "effort",
     modeOpen: openMenu === "mode",
-    modelOpen: openMenu === "model" || openMenu === "effort",
-    numberedEffortItems: openMenu === "effort" ? numberComposerMenuItems(effortItems) : effortItems,
+    modelOpen: openMenu === "model",
     numberedModeItems: openMenu === "mode" ? numberComposerMenuItems(modeItems) : modeItems,
     numberedModelItems: openMenu === "model" ? numberComposerMenuItems(modelItems) : modelItems,
+    onEffortOpenChange: (open: boolean) => setOpenMenu(open ? "effort" : null),
     onModeOpenChange: (open: boolean) => setOpenMenu(open ? "mode" : null),
     onModelOpenChange: (open: boolean) => setOpenMenu(open ? "model" : null),
   };
 }
 
-function handleComposerFooterKeyDown(event: KeyboardEvent, state: { closeMenu: () => void; effortItems: OfficialComposerDropdownItem[]; isPanelActive: boolean; modeItems: OfficialComposerDropdownItem[]; modelItems: OfficialComposerDropdownItem[]; openMenu: ComposerMenuTarget | null; selectableEffortItems: OfficialComposerDropdownItem[]; selectableModeItems: OfficialComposerDropdownItem[]; selectableModelItems: OfficialComposerDropdownItem[]; setOpenMenu: (menu: ComposerMenuTarget | null) => void; shortcutContext: ComposerShortcutContext }) {
+function handleComposerFooterKeyDown(event: KeyboardEvent, state: {
+  closeMenu: () => void;
+  effortItems: OfficialComposerDropdownItem[];
+  isPanelActive: boolean;
+  modeItems: OfficialComposerDropdownItem[];
+  modelItems: OfficialComposerDropdownItem[];
+  modelPickerDisabled: boolean;
+  openMenu: ComposerMenuTarget | null;
+  selectableEffortItems: OfficialComposerDropdownItem[];
+  selectableModeItems: OfficialComposerDropdownItem[];
+  selectableModelItems: OfficialComposerDropdownItem[];
+  setOpenMenu: (menu: ComposerMenuTarget | null) => void;
+  shortcutContext: ComposerShortcutContext;
+}) {
   if (!state.isPanelActive || event.defaultPrevented) return;
   const menuIsOpen = state.openMenu !== null;
   const plainKey = !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey);
-  if (menuIsOpen && plainKey && event.key === "Escape") return event.preventDefault(), event.stopImmediatePropagation(), state.closeMenu();
-  if (menuIsOpen && plainKey && event.code.startsWith("Digit")) return selectNumberedComposerItem(event, state);
+  if (menuIsOpen && plainKey && event.key === "Escape") {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    state.closeMenu();
+    return;
+  }
+  if (menuIsOpen && plainKey && event.code.startsWith("Digit")) {
+    if (state.modelPickerDisabled && (state.openMenu === "model" || state.openMenu === "effort")) return;
+    return selectNumberedComposerItem(event, state);
+  }
   const command = composerCommandForKeyboardEvent(event, state.shortcutContext);
   const target = command ? composerMenuTargetByCommand[command as keyof typeof composerMenuTargetByCommand] : undefined;
-  if (!target || !composerMenuHasItems(target, state)) return;
+  if (!target) return;
+  if (state.modelPickerDisabled && (target === "model" || target === "effort")) return;
+  if (!composerMenuHasItems(target, state)) return;
   event.preventDefault();
   event.stopPropagation();
-  if (!menuIsOpen) state.setOpenMenu(target === "effort" && state.effortItems.length === 0 ? "model" : target);
+  if (!menuIsOpen) {
+    // Official: effort shortcut with <=1 item falls back to model menu.
+    state.setOpenMenu(target === "effort" && state.effortItems.length <= 1 ? "model" : target);
+  }
 }
 
 function selectNumberedComposerItem(event: KeyboardEvent, state: Parameters<typeof handleComposerFooterKeyDown>[1]) {
@@ -223,7 +355,11 @@ function selectNumberedComposerItem(event: KeyboardEvent, state: Parameters<type
   event.stopPropagation();
   const digit = Number(event.code.slice(5));
   if (digit < 1 || digit > 9) return;
-  const items = state.openMenu === "mode" ? state.selectableModeItems : state.openMenu === "effort" ? state.selectableEffortItems : state.selectableModelItems;
+  const items = state.openMenu === "mode"
+    ? state.selectableModeItems
+    : state.openMenu === "effort"
+      ? state.selectableEffortItems
+      : state.selectableModelItems;
   const item = items[digit - 1];
   if (!item?.onSelect) return;
   item.onSelect();
@@ -232,8 +368,9 @@ function selectNumberedComposerItem(event: KeyboardEvent, state: Parameters<type
 
 function composerMenuHasItems(target: ComposerMenuTarget, state: { effortItems: OfficialComposerDropdownItem[]; modeItems: OfficialComposerDropdownItem[]; modelItems: OfficialComposerDropdownItem[] }) {
   if (target === "mode") return state.modeItems.length > 0;
-  if (target === "effort") return state.effortItems.length > 0 || state.modelItems.length > 0;
-  return state.modelItems.length > 0 || state.effortItems.length > 0;
+  // Official openEffortMenu: effortItems.length > 1 OR modelItems
+  if (target === "effort") return state.effortItems.length > 1 || state.modelItems.length > 0;
+  return state.modelItems.length > 0;
 }
 
 function numberComposerMenuItems(items: OfficialComposerDropdownItem[]) {
