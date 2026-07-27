@@ -66,6 +66,11 @@ type RawLocalSessionsBridge = {
   mcpCallTool?: (serverName: string, toolName: string, input?: Record<string, unknown>) => Promise<unknown>;
   checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<unknown>;
   checkTrust?: (folder: string) => Promise<unknown>;
+  getSSHConfigs?: () => Promise<unknown>;
+  setSSHConfigs?: (configs: unknown[]) => Promise<unknown>;
+  listSSHDirectory?: (sshConfig: unknown, remotePath?: string) => Promise<unknown>;
+  testSSHConnection?: (hostOrConfig: unknown) => Promise<unknown>;
+  ensureSSHConnected?: (hostOrConfig: unknown) => Promise<unknown>;
   saveTrust?: (folder: string) => Promise<unknown>;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<unknown>;
@@ -875,6 +880,21 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     },
     checkRemoteTrust: async (sshConfig, folder) => normalizeTrustResult(await raw?.checkRemoteTrust?.(sshConfig, folder)),
     checkTrust: async (folder) => normalizeTrustResult(await raw?.checkTrust?.(folder)),
+    // Official ion residual (env pill tC / Hd): getSSHConfigs, listSSHDirectory, test/ensure SSH.
+    getSSHConfigs: async () => {
+      const configs = await raw?.getSSHConfigs?.().catch(() => []);
+      return Array.isArray(configs) ? configs : [];
+    },
+    setSSHConfigs: async (configs) => Boolean(await raw?.setSSHConfigs?.(configs).catch(() => false)),
+    listSSHDirectory: async (sshConfig, remotePath) => {
+      const result = await raw?.listSSHDirectory?.(sshConfig, remotePath).catch((error: unknown) => ({
+        entries: [],
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      return normalizeSshDirectoryListing(result);
+    },
+    testSSHConnection: async (hostOrConfig) => raw?.testSSHConnection?.(hostOrConfig),
+    ensureSSHConnected: async (hostOrConfig) => raw?.ensureSSHConnected?.(hostOrConfig),
     saveTrust: async (folder) => raw?.saveTrust?.(folder),
     openInEditor: async (target, editor, line, column) => raw?.openInEditor?.(target, editor, line, column),
     getPermissionMode: async (id) => String(await raw?.getPermissionMode?.(id).catch(() => "default") ?? "default"),
@@ -968,7 +988,10 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       }) ?? (() => {});
     },
     start: async (input) => {
-      const item = await raw?.start?.(toStartPayload(input, targetKind));
+      // Official zke: client-supplied messageUuid on first turn so CLI jsonl echo shares
+      // outer uuid with the host live-tail seed (prevents double user bubbles on home start).
+      const messageUuid = input?.messageUuid ?? createMessageUuid();
+      const item = await raw?.start?.(toStartPayload({ ...input, messageUuid }, targetKind));
       return enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw);
     },
     sendMessage: async (id, text, input) => {
@@ -1154,7 +1177,16 @@ function createCoworkLifecycleBridge(raw: RawLocalSessionsBridge | undefined): C
         if (normalized) listener(normalized);
       }) ?? (() => {});
     },
-    start: async (input) => normalizeSession(await raw?.start?.(toStartPayload(input, "epitaxy")), "epitaxy", false),
+    start: async (input) => {
+      // Official zke: client-supplied messageUuid on first turn so CLI jsonl echo shares
+      // outer uuid with the host live-tail seed (prevents double user bubbles).
+      const messageUuid = input?.messageUuid ?? createMessageUuid();
+      return normalizeSession(
+        await raw?.start?.(toStartPayload({ ...input, messageUuid }, "epitaxy")),
+        "epitaxy",
+        false,
+      );
+    },
     sendMessage: async (id, text, input) => {
       const messageUuid = input?.messageUuid ?? createMessageUuid();
       await raw?.sendMessage?.(...buildOfficialCoworkSendMessageArgs(id, text, input, messageUuid));
@@ -1649,7 +1681,9 @@ function titleFromStartPrompt(prompt: string, targetKind: SessionSummary["kind"]
 }
 
 function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["kind"]): Record<string, unknown> {
-  const cwd = input.workspace.cwd;
+  // Prefer explicit input.cwd (SSH remoteCwd) over workspace.cwd when both present.
+  const sshConfig = input.sshConfig ?? input.workspace?.sshConfig;
+  const cwd = input.cwd ?? input.workspace.cwd ?? sshConfig?.remoteCwd;
   const selectedFolders = input.userSelectedFolders?.length ? input.userSelectedFolders : cwd ? [cwd] : [];
   const permissionMode = input.permissionMode === "bypass" ? "bypassPermissions" : input.permissionMode ?? "default";
   const message = input.message ?? input.prompt;
@@ -1681,6 +1715,53 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
     title: input.title ?? titleFromStartPrompt(message, targetKind),
     useWorktree: input.useWorktree,
     worktreeName: input.worktreeName,
+    // Official Hd session.sshConfig — desktop extractStartSshConfig reads top-level + workspace.
+    ...(sshConfig
+      ? {
+          sshConfig,
+          workspace: {
+            mode: input.workspace?.mode === "ssh" || Boolean(sshConfig) ? "ssh" : input.workspace?.mode,
+            cwd,
+            sshConfig,
+            projectName: input.workspace?.projectName,
+            branchName: input.workspace?.branchName,
+            hasWorktree: input.workspace?.hasWorktree,
+            folders: selectedFolders.length ? selectedFolders : input.workspace?.folders,
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * Official listSSHDirectory result: { entries: [{ name, path, isDirectory }], error? }.
+ */
+function normalizeSshDirectoryListing(value: unknown): {
+  entries: Array<{ name: string; path: string; isDirectory: boolean; isFile?: boolean }>;
+  error?: string | null;
+} {
+  const raw = asRecord(value);
+  const entriesRaw = Array.isArray(raw.entries)
+    ? raw.entries
+    : Array.isArray(value)
+      ? value
+      : [];
+  const entries = entriesRaw.flatMap((entry) => {
+    const item = asRecord(entry);
+    const name = stringValue(item.name);
+    const path = stringValue(item.path) ?? stringValue(item.absPath);
+    if (!name || !path) return [];
+    const isDirectory = Boolean(item.isDirectory);
+    return [{
+      name,
+      path,
+      isDirectory,
+      isFile: item.isFile === undefined ? !isDirectory : Boolean(item.isFile),
+    }];
+  });
+  return {
+    entries,
+    error: stringValue(raw.error) ?? null,
   };
 }
 

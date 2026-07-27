@@ -706,8 +706,41 @@ async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMe
   const byOuter = new Map<string, ChatMessage>();
   const order: string[] = [];
   const anthropicIdsFromTranscript = new Set<string>();
+  const isOptimisticUser = (message: ChatMessage) => {
+    if (message.role !== "user") return false;
+    const raw = asRecord(message.raw);
+    if (raw.isLocalOptimistic === true) return true;
+    return message.id.startsWith("local-user-")
+      || String(raw.uuid ?? "").startsWith("local-user-");
+  };
+  const isPlainUser = (message: ChatMessage) => {
+    if (message.role !== "user") return false;
+    const raw = asRecord(message.raw);
+    if (raw.parent_tool_use_id || raw.isMeta === true || raw.isSynthetic === true) return false;
+    return (message.text?.trim().length ?? 0) > 0;
+  };
+  /** Outer-uuid map + promote optimistic plain-user seed when durable echo has another uuid. */
   const put = (message: ChatMessage) => {
     if (isStreamEvent(message)) return;
+    // Durable plain user: replace optimistic seed of same text (different outer uuid).
+    if (message.role === "user" && !isOptimisticUser(message) && isPlainUser(message)) {
+      const trimmed = message.text.trim();
+      for (const [key, existing] of byOuter) {
+        if (
+          isOptimisticUser(existing)
+          && isPlainUser(existing)
+          && existing.text.trim() === trimmed
+        ) {
+          byOuter.delete(key);
+          const ordIdx = order.indexOf(key);
+          const durableKey = outerUuidOf(message);
+          if (ordIdx >= 0) order[ordIdx] = durableKey;
+          else order.push(durableKey);
+          byOuter.set(durableKey, message);
+          return;
+        }
+      }
+    }
     const key = outerUuidOf(message);
     const existing = byOuter.get(key);
     if (!existing) {

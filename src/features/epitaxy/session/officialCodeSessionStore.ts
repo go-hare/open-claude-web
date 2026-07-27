@@ -262,6 +262,40 @@ function preferRicherOnReload(prev: ChatMessage, next: ChatMessage): ChatMessage
   return (next.text?.length ?? 0) >= (prev.text?.length ?? 0) ? next : prev;
 }
 
+function isPlainUserPrompt(message: ChatMessage): boolean {
+  if (message.role !== "user") return false;
+  const raw = asRecord(message.raw);
+  if (raw.parent_tool_use_id) return false;
+  if (raw.isMeta === true || raw.isSynthetic === true) return false;
+  const nested = asRecord(raw.message);
+  const content = nested.content ?? raw.content;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      const type = asRecord(block).type;
+      if (type === "tool_result" || type === "tool_use") return false;
+    }
+  }
+  return (message.text?.trim().length ?? 0) > 0;
+}
+
+/**
+ * Promote host/start optimistic user seed → durable CLI echo when outer uuid differs
+ * (same trimmed plain text). Intentional re-sends of the same text keep separate uuids
+ * and are NOT collapsed — only isLocalOptimistic / local-user-* rows promote.
+ */
+function findOptimisticPlainUserIndex(messages: ChatMessage[], text: string): number | undefined {
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+  return [...messages]
+    .map((message, i) => ({ message, i }))
+    .reverse()
+    .find(({ message }) => (
+      isOptimisticLocalUser(message)
+      && isPlainUserPrompt(message)
+      && message.text.trim() === trimmed
+    ))?.i;
+}
+
 function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[] {
   const identity = messageIdentity(next);
   const index = messages.findIndex((message) => messageIdentity(message) === identity);
@@ -274,11 +308,8 @@ function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[
     copy[index] = next;
     return copy;
   }
-  if (next.role === "user" && !isOptimisticLocalUser(next)) {
-    const optimisticIndex = [...messages]
-      .map((message, i) => ({ message, i }))
-      .reverse()
-      .find(({ message }) => isOptimisticLocalUser(message) && message.text.trim() === next.text.trim())?.i;
+  if (next.role === "user" && !isOptimisticLocalUser(next) && isPlainUserPrompt(next)) {
+    const optimisticIndex = findOptimisticPlainUserIndex(messages, next.text);
     if (optimisticIndex !== undefined) {
       const copy = messages.slice();
       copy[optimisticIndex] = next;
@@ -365,20 +396,69 @@ function mergeTranscriptUnion(prev: ChatMessage[], next: ChatMessage[]) {
   if (prev.length === 0) return next;
   const nextById = new Map(next.map((message) => [messageIdentity(message), message]));
   const seen = new Set<string>();
+  // Durable plain-user texts from next — used to promote prev optimistic seeds whose
+  // outer uuid never matched the CLI jsonl echo (same message body, different uuid).
+  const durablePlainByText = new Map<string, ChatMessage>();
+  for (const message of next) {
+    if (
+      message.role === "user"
+      && !isOptimisticLocalUser(message)
+      && isPlainUserPrompt(message)
+    ) {
+      const key = message.text.trim();
+      if (!key) continue;
+      const existing = durablePlainByText.get(key);
+      durablePlainByText.set(
+        key,
+        existing ? preferRicherOnReload(existing, message) : message,
+      );
+    }
+  }
+  const consumedDurableTexts = new Set<string>();
   const out: ChatMessage[] = [];
   for (const message of prev) {
     const id = messageIdentity(message);
     seen.add(id);
     const incoming = nextById.get(id);
-    if (!incoming) {
-      out.push(message);
+    if (incoming) {
+      out.push(preferRicherOnReload(message, incoming));
       continue;
     }
-    out.push(preferRicherOnReload(message, incoming));
+    // Prev optimistic/start seed + next durable echo (different outer uuid, same text).
+    if (isOptimisticLocalUser(message) && isPlainUserPrompt(message)) {
+      const durable = durablePlainByText.get(message.text.trim());
+      if (durable) {
+        const durableId = messageIdentity(durable);
+        seen.add(durableId);
+        consumedDurableTexts.add(message.text.trim());
+        out.push(preferRicherOnReload(message, durable));
+        continue;
+      }
+    }
+    out.push(message);
   }
   for (const message of next) {
     const id = messageIdentity(message);
     if (seen.has(id)) continue;
+    // Skip durable plain user already consumed via optimistic promote above.
+    if (
+      message.role === "user"
+      && !isOptimisticLocalUser(message)
+      && isPlainUserPrompt(message)
+      && consumedDurableTexts.has(message.text.trim())
+    ) {
+      continue;
+    }
+    // Next durable may still need to replace a prev optimistic that was already pushed
+    // only if promote missed (e.g. prev walk order). Defense: upsert-style replace.
+    if (message.role === "user" && !isOptimisticLocalUser(message) && isPlainUserPrompt(message)) {
+      const optimisticIndex = findOptimisticPlainUserIndex(out, message.text);
+      if (optimisticIndex !== undefined) {
+        out[optimisticIndex] = message;
+        seen.add(id);
+        continue;
+      }
+    }
     seen.add(id);
     out.push(message);
   }

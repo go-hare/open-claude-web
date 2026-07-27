@@ -504,6 +504,18 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   },
   checkTrust: async (folder) => ({ trusted: fakeTrustedFolders.has(folder), sources: [] }),
   checkRemoteTrust: async () => ({ trusted: false, remote: true, sources: [] }),
+  // Official env pill residual (getSSHConfigs / listSSHDirectory) — empty in browser fake.
+  getSSHConfigs: async () => [],
+  setSSHConfigs: async () => true,
+  listSSHDirectory: async (_sshConfig, remotePath = "~") => ({
+    entries: [
+      { name: "proj", path: `${String(remotePath).replace(/\/+$/, "") || "~"}/proj`, isDirectory: true, isFile: false },
+      { name: "README.md", path: `${String(remotePath).replace(/\/+$/, "") || "~"}/README.md`, isDirectory: false, isFile: true },
+    ],
+    error: null,
+  }),
+  testSSHConnection: async () => ({ ok: false, error: "fake bridge: no SSH" }),
+  ensureSSHConnected: async () => ({ ok: false, error: "fake bridge: no SSH" }),
   saveTrust: async (folder) => {
     fakeTrustedFolders.add(folder);
     return true;

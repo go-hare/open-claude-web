@@ -125,6 +125,7 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
     setBusy(true);
     try {
       const shouldUseGitControls = Boolean(composerWorkspace.cwd && sourceBranch);
+      const isSsh = composerWorkspace.mode === "ssh" && Boolean(composerWorkspace.sshConfig);
       const session = await desktopBridge.LocalSessions.start({
         kind: "code",
         effort,
@@ -132,11 +133,18 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
         prompt: normalized,
         sourceBranch: shouldUseGitControls ? sourceBranch : undefined,
         useWorktree: shouldUseGitControls ? useWorktree : undefined,
-        workspace: shouldUseGitControls ? composerWorkspace : {
+        workspace: shouldUseGitControls || isSsh ? composerWorkspace : {
           ...composerWorkspace,
           branchName: "",
           hasWorktree: false,
         },
+        // Official Hd session.sshConfig — desktop start normalizes host/sshHost shapes.
+        ...(isSsh && composerWorkspace.sshConfig
+          ? {
+              sshConfig: composerWorkspace.sshConfig,
+              cwd: composerWorkspace.cwd || composerWorkspace.sshConfig.remoteCwd,
+            }
+          : {}),
         permissionMode,
       });
       onNavigate(sessionPath(session));

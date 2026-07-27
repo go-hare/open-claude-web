@@ -254,8 +254,28 @@ export type DesktopPreferences = {
 
 export type PreferenceKey = keyof DesktopPreferences;
 
+/**
+ * Official residual shapes:
+ * - mode "local" | "ssh" (env pill tC) — product also keeps "remote" for cloud/pool.
+ * - sshConfig: official Hd { sshHost, sshPort?, sshIdentityFile?, remoteCwd? }
+ */
+export type WorkspaceSshConfig = {
+  host: string;
+  hostName?: string;
+  user?: string;
+  port?: number | string;
+  identityFile?: string;
+  proxyJump?: string;
+  remoteCwd?: string;
+  sshHost?: string;
+  sshPort?: number | string;
+  sshIdentityFile?: string;
+  name?: string;
+  id?: string;
+};
+
 export type WorkspaceContext = {
-  mode: "local" | "remote";
+  mode: "local" | "remote" | "ssh";
   projectName: string;
   branchName: string;
   branchPickerDisabled?: boolean;
@@ -267,6 +287,8 @@ export type WorkspaceContext = {
   sourceBranch?: string;
   worktree?: boolean;
   worktreeSupported?: boolean;
+  /** Official session.sshConfig when mode is ssh. */
+  sshConfig?: WorkspaceSshConfig;
 };
 
 export type WorkspaceTrustResult = {
@@ -314,6 +336,9 @@ export type StartSessionInput = {
   useWorktree?: boolean;
   worktreeName?: string;
   workspace: WorkspaceContext;
+  /** Official Hd session.sshConfig — host-pipe SSH Code sessions. */
+  sshConfig?: WorkspaceSshConfig;
+  cwd?: string;
 };
 
 export type CoworkImagePayload = {
@@ -545,6 +570,22 @@ export type LocalSessionsBridge = {
   checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<WorkspaceTrustResult>;
   checkTrust?: (folder: string) => Promise<WorkspaceTrustResult>;
   isFolderTrusted?: (folder: string) => Promise<WorkspaceTrustResult>;
+  /** Official getSSHConfigs — ssh_configs.json + ~/.ssh/config hosts. */
+  getSSHConfigs?: () => Promise<WorkspaceSshConfig[] | unknown[]>;
+  setSSHConfigs?: (configs: unknown[]) => Promise<boolean>;
+  /**
+   * Official listSSHDirectory(sshConfig, remotePath) → { entries, error }.
+   * Entries: { name, path, isDirectory }.
+   */
+  listSSHDirectory?: (
+    sshConfig: unknown,
+    remotePath?: string,
+  ) => Promise<{
+    entries?: Array<{ name: string; path: string; isDirectory?: boolean }>;
+    error?: string | null;
+  } | unknown>;
+  testSSHConnection?: (hostOrConfig: unknown) => Promise<unknown>;
+  ensureSSHConnected?: (hostOrConfig: unknown) => Promise<unknown>;
   respondToToolPermission?: (requestId: string, decision: "always" | "deny" | "once", updatedInput?: unknown) => Promise<unknown>;
   saveTrust?: (folder: string) => Promise<unknown>;
   addTrustedFolder?: (folder: string) => Promise<unknown>;

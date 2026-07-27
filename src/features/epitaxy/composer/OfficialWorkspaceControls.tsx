@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { desktopBridge, type WorkspaceContext } from "../../../adapters/desktopBridge";
+import { desktopBridge, type WorkspaceContext, type WorkspaceSshConfig } from "../../../adapters/desktopBridge";
 import {
   OfficialComposerFolderPill,
   OfficialComposerPill,
@@ -99,14 +99,37 @@ export function OfficialWorkspaceControls({
     };
   }, [onSourceBranchChange, onUseWorktreeChange, workspace.branchName, workspace.cwd]);
 
+  const isSsh = workspace.mode === "ssh" && Boolean(workspace.sshConfig);
+
   const applyWorkspacePath = useCallback(async (selectedPath: string) => {
+    if (workspace.mode === "ssh" && workspace.sshConfig) {
+      // Official Browse remote folder residual: path is remote; keep sshConfig.
+      const nextWorkspace: WorkspaceContext = {
+        mode: "ssh",
+        projectName: basename(selectedPath) ?? selectedPath,
+        branchName: "",
+        hasWorktree: false,
+        cwd: selectedPath,
+        sshConfig: {
+          ...workspace.sshConfig,
+          remoteCwd: selectedPath,
+        },
+      };
+      setIsGitRepo(false);
+      setBranches([]);
+      onWorkspaceChange(nextWorkspace);
+      onSourceBranchChange("");
+      onUseWorktreeChange(false);
+      setRecentFolders((current) => buildRecentFolders([], selectedPath, current));
+      return;
+    }
     const gitInfo = await desktopBridge.LocalSessions.getGitInfo?.(selectedPath).catch(() => null);
     const git = asRecord(gitInfo);
     const root = stringValue(git.root);
     const branch = stringValue(git.branch) ?? "";
     const nextIsGitRepo = Boolean(root || branch);
     const nextWorkspace = {
-      mode: "local",
+      mode: "local" as const,
       projectName: basename(root) ?? basename(selectedPath) ?? selectedPath,
       branchName: nextIsGitRepo ? branch : "",
       hasWorktree: hasWorktreeInfo(git),
@@ -118,13 +141,60 @@ export function OfficialWorkspaceControls({
     onSourceBranchChange(nextIsGitRepo ? branch : "");
     onUseWorktreeChange(false);
     setRecentFolders((current) => buildRecentFolders([], selectedPath, current));
-  }, [onSourceBranchChange, onUseWorktreeChange, onWorkspaceChange]);
+  }, [onSourceBranchChange, onUseWorktreeChange, onWorkspaceChange, workspace.mode, workspace.sshConfig]);
 
   const chooseWorkspace = useCallback(async () => {
+    if (isSsh && workspace.sshConfig) {
+      // Official listSSHDirectory(sshConfig, remoteCwd) — without a full remote
+      // folder browser modal, re-prompt remoteCwd via existing path or ~.
+      const remoteBase = workspace.cwd || workspace.sshConfig.remoteCwd || "~";
+      const listed = await desktopBridge.LocalSessions.listSSHDirectory?.(workspace.sshConfig, remoteBase).catch(() => null);
+      const entries = asRecord(listed).entries;
+      // Prefer first directory entry under remote base when browse modal is absent.
+      if (Array.isArray(entries) && entries.length > 0) {
+        const firstDir = entries.find((entry) => asRecord(entry).isDirectory) ?? entries[0];
+        const path = stringValue(asRecord(firstDir).path) ?? remoteBase;
+        await applyWorkspacePath(path);
+        return;
+      }
+      await applyWorkspacePath(remoteBase);
+      return;
+    }
     const selectedPaths = await desktopBridge.Preferences.getDirectoryPath?.(false);
     const selectedPath = selectedPaths?.[0];
     if (selectedPath) await applyWorkspacePath(selectedPath);
-  }, [applyWorkspacePath]);
+  }, [applyWorkspacePath, isSsh, workspace.cwd, workspace.sshConfig]);
+
+  const selectLocalEnv = useCallback(() => {
+    const next: WorkspaceContext = {
+      mode: "local",
+      projectName: workspace.projectName || "local",
+      branchName: workspace.branchName || "",
+      hasWorktree: false,
+      cwd: workspace.mode === "ssh" ? undefined : workspace.cwd,
+    };
+    onWorkspaceChange(next);
+    onSourceBranchChange(next.branchName);
+    onUseWorktreeChange(false);
+  }, [onSourceBranchChange, onUseWorktreeChange, onWorkspaceChange, workspace.branchName, workspace.cwd, workspace.mode, workspace.projectName]);
+
+  const selectSshEnv = useCallback((config: WorkspaceSshConfig) => {
+    const remoteCwd = config.remoteCwd || workspace.cwd || "~";
+    const next: WorkspaceContext = {
+      mode: "ssh",
+      projectName: config.name || config.host || config.sshHost || "SSH",
+      branchName: "",
+      hasWorktree: false,
+      cwd: remoteCwd,
+      sshConfig: {
+        ...config,
+        remoteCwd,
+      },
+    };
+    onWorkspaceChange(next);
+    onSourceBranchChange("");
+    onUseWorktreeChange(false);
+  }, [onSourceBranchChange, onUseWorktreeChange, onWorkspaceChange, workspace.cwd]);
 
   const selectBranch = useCallback((branch: string) => {
     const apply = () => onSourceBranchChange(branch);
@@ -149,11 +219,17 @@ export function OfficialWorkspaceControls({
 
   return (
     <div className="flex flex-wrap gap-g5 pb-p3 pr-[96px]">
-      <LocalEnvironmentPill disabled={disabled} />
+      <LocalEnvironmentPill
+        disabled={disabled}
+        onSelectLocal={selectLocalEnv}
+        onSelectSsh={selectSshEnv}
+        workspace={workspace}
+      />
       <OfficialComposerPillPulse>
         <OfficialComposerFolderPill
           browseDisabled={disabled}
           folder={workspace.cwd}
+          isSSH={isSsh}
           onBrowse={() => void chooseWorkspace()}
           onSelectFolder={(path) => void applyWorkspacePath(path)}
           recentFolders={recentFolders}
