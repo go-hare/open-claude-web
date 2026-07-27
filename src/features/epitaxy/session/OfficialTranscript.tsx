@@ -4,6 +4,7 @@
  */
 import {
   Fragment,
+  cloneElement,
   forwardRef,
   memo,
   useCallback,
@@ -22,11 +23,17 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
+import { createPortal } from "react-dom";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { SessionSummary } from "../../../adapters/desktopBridge";
 import type { ChatMessage } from "../../../adapters/desktopBridge/types";
 import { Icon } from "../../../shell/icons";
+import {
+  BaseContextMenuItem,
+  BaseContextMenuPopup,
+  ContextMenu,
+} from "../../../shell/BaseMenu";
 import { sessionPath } from "../../../shell/sessionPaths";
 import {
   canResetRateLimitsFromBootstrap,
@@ -1187,19 +1194,248 @@ function OfficialUserAttachments({
           })}
         </ul>
       ) : null}
-      {images.length > 0 ? (
-        <div className="flex flex-wrap items-end gap-g6 max-w-full p-[1px]" data-official-source="c11959232-h_zsw3wI.js:Sv images">
-          {images.map((image) => (
-            <img
-              alt=""
-              className="block max-w-[120px] max-h-[120px] rounded-r3 effect-contrast-stroke"
-              key={image.id}
-              src={`data:${image.mimeType};base64,${image.data}`}
-            />
-          ))}
-        </div>
+      {images.length > 0 ? <OfficialUserImageGallery images={images} /> : null}
+    </>
+  );
+}
+
+/**
+ * Official Sv image strip (c11959232): og context wrapper (Copy/Save image) +
+ * Rg multi-image lightbox. Thumb click opens Rg at that index; Rg portals to body,
+ * locks scroll, restores focus, and supports Arrow/Home/End/Escape navigation.
+ */
+function OfficialUserImageGallery({
+  images,
+}: {
+  images: Array<Extract<TranscriptEntryItem, { kind: "image" }>>;
+}) {
+  // Official: a = selected lightbox index (null = closed); i(t) opens at index / closes on null.
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  return (
+    <>
+      <div className="flex flex-wrap items-end gap-g6 max-w-full p-[1px]" data-official-source="c11959232-h_zsw3wI.js:Sv images">
+        {images.map((image, index) => (
+          <OfficialImageContextMenu key={image.id} src={`data:${image.mimeType};base64,${image.data}`}>
+            <button
+              aria-label={`View attached image ${index + 1}`}
+              className="shrink-0 cursor-zoom-in outline-none hide-focus-ring focus-visible:ring-focus rounded-r3"
+              onClick={() => setLightboxIndex(index)}
+              type="button"
+            >
+              <img
+                alt=""
+                className="block max-w-[120px] max-h-[120px] rounded-r3 effect-contrast-stroke"
+                src={`data:${image.mimeType};base64,${image.data}`}
+              />
+            </button>
+          </OfficialImageContextMenu>
+        ))}
+      </div>
+      {lightboxIndex !== null ? (
+        <OfficialImageLightbox
+          initialIndex={lightboxIndex}
+          items={images.map((image) => ({
+            alt: "Attached image",
+            id: image.id,
+            url: `data:${image.mimeType};base64,${image.data}`,
+          }))}
+          onClose={() => setLightboxIndex(null)}
+        />
       ) : null}
     </>
+  );
+}
+
+/**
+ * Official og (c11959232): right-click context menu on an image — Copy image / Save image.
+ * Cd.Root + Cd.Trigger(render=cloned child) + Cd.Popup with two items.
+ */
+function OfficialImageContextMenu({
+  children,
+  fileName,
+  src,
+}: {
+  children: ReactElement<{ onContextMenu?: (event: ReactMouseEvent) => void; style?: CSSProperties; tabIndex?: number }>;
+  fileName?: string;
+  src: string;
+}) {
+  const copyImage = useCallback(() => {
+    void (async () => {
+      const blob = await (await fetch(src)).blob();
+      const type = blob.type || "image/png";
+      await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
+    })().catch(() => undefined);
+  }, [src]);
+  const saveImage = useCallback(() => {
+    void (async () => {
+      const blob = await (await fetch(src)).blob();
+      const ext = (() => {
+        const t = blob.type.toLowerCase();
+        if (t.includes("png")) return "png";
+        if (t.includes("jpeg") || t.includes("jpg")) return "jpg";
+        if (t.includes("gif")) return "gif";
+        if (t.includes("webp")) return "webp";
+        if (t.includes("svg")) return "svg";
+        if (t.includes("avif")) return "avif";
+        if (t.includes("heic")) return "heic";
+        if (t.includes("bmp")) return "bmp";
+        return "png";
+      })();
+      const fallback = `image-${Date.now()}.${ext}`;
+      const name = fileName ?? fallback;
+      const file = /\.[a-z0-9]+$/i.test(name) ? name : `${name}.${ext}`;
+      const url = URL.createObjectURL(blob);
+      try {
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = file;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+      } finally {
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    })().catch(() => undefined);
+  }, [fileName, src]);
+
+  const childOnContextMenu = children.props.onContextMenu;
+  const childStyle = children.props.style;
+  const trigger = cloneElement(children, {
+    onContextMenu: (event: ReactMouseEvent) => {
+      event.stopPropagation();
+      childOnContextMenu?.(event);
+    },
+    style: { outline: "none", ...childStyle },
+    tabIndex: children.props.tabIndex ?? -1,
+  });
+
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger render={trigger as ReactElement<Record<string, unknown>>} />
+      <BaseContextMenuPopup>
+        <BaseContextMenuItem onClick={copyImage}>Copy image</BaseContextMenuItem>
+        <BaseContextMenuItem onClick={saveImage}>Save image</BaseContextMenuItem>
+      </BaseContextMenuPopup>
+    </ContextMenu.Root>
+  );
+}
+
+/**
+ * Official Rg (c11959232): multi-image lightbox. Portal to body, dialog role,
+ * body overflow lock + focus restore, Escape/ArrowLeft/ArrowRight/Home/End,
+ * horizontal slide track (75vw panels, 32px gap), prev/next + "n of total" pager.
+ */
+function OfficialImageLightbox({
+  initialIndex,
+  items,
+  onClose,
+}: {
+  initialIndex: number;
+  items: Array<{ alt: string; id: string; url: string }>;
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(initialIndex);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const restoreFocusRef = useRef<Element | null>(null);
+  const previous = useCallback(() => setIndex((value) => (value > 0 ? value - 1 : value)), []);
+  const next = useCallback(() => setIndex((value) => (value < items.length - 1 ? value + 1 : value)), [items.length]);
+
+  useEffect(() => {
+    restoreFocusRef.current = document.activeElement;
+    dialogRef.current?.focus();
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+      const previous2 = restoreFocusRef.current;
+      if (previous2 instanceof HTMLElement) previous2.focus();
+    };
+  }, []);
+
+  const current = items[index];
+  if (!current) return null;
+
+  return createPortal(
+    <div
+      aria-label="Image preview"
+      aria-modal="true"
+      className="epitaxy-lightbox fixed inset-0 z-50 bg-always-black/80 backdrop-blur-[40px] flex flex-col overflow-hidden draggable-none outline-none"
+      onClick={onClose}
+      onKeyDown={(event) => {
+        if (event.defaultPrevented) return;
+        if (event.key === "Escape") { event.stopPropagation(); onClose(); }
+        else if (event.key === "ArrowLeft") { event.preventDefault(); previous(); }
+        else if (event.key === "ArrowRight") { event.preventDefault(); next(); }
+        else if (event.key === "Home") { event.preventDefault(); setIndex(0); }
+        else if (event.key === "End") { event.preventDefault(); setIndex(items.length - 1); }
+      }}
+      ref={dialogRef}
+      role="dialog"
+      tabIndex={-1}
+    >
+      <div className="relative flex items-center justify-end p-4 z-10">
+        <button
+          aria-label="Close"
+          className="size-8 rounded-full flex items-center justify-center text-always-white/70 hover:text-always-white hover:bg-always-white/10"
+          onClick={(event) => { event.stopPropagation(); onClose(); }}
+          type="button"
+        >
+          <Icon customSize={16} name="XCrossCloseMedium" />
+        </button>
+      </div>
+      <div className="flex-1 relative overflow-clip">
+        <div
+          className="flex h-full items-center motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out"
+          style={{ gap: "32px", transform: `translateX(calc(12.5vw - ${75 * index}vw - ${32 * index}px))` }}
+        >
+          {items.map((item, itemIndex) => (
+            <div
+              className="h-full flex-shrink-0 flex items-center justify-center"
+              key={item.id}
+              onClick={(event) => { if (itemIndex !== index) { event.stopPropagation(); setIndex(itemIndex); } }}
+              style={{ width: "75vw" }}
+            >
+              <OfficialImageContextMenu src={item.url}>
+                <img
+                  alt={item.alt}
+                  className={`max-h-[70vh] max-w-full object-contain rounded-2xl motion-safe:transition-opacity motion-safe:duration-300 ${itemIndex === index ? "opacity-100" : "opacity-40 hover:opacity-70 cursor-pointer"}`}
+                  onClick={itemIndex === index ? (event) => event.stopPropagation() : undefined}
+                  src={item.url}
+                />
+              </OfficialImageContextMenu>
+            </div>
+          ))}
+        </div>
+        {items.length > 1 ? (
+          <div
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              aria-label="Previous image"
+              className="p-2 rounded-lg text-always-white disabled:text-always-white/30 enabled:hover:bg-always-white/10"
+              disabled={index === 0}
+              onClick={(event) => { event.stopPropagation(); previous(); }}
+              type="button"
+            >
+              <Icon customSize={20} name="CaretLeft" />
+            </button>
+            <span aria-live="polite" className="px-2 text-always-white/80 text-sm tabular-nums pointer-events-none select-none">
+              {index + 1} of {items.length}
+            </span>
+            <button
+              aria-label="Next image"
+              className="p-2 rounded-lg text-always-white disabled:text-always-white/30 enabled:hover:bg-always-white/10"
+              disabled={index === items.length - 1}
+              onClick={(event) => { event.stopPropagation(); next(); }}
+              type="button"
+            >
+              <Icon customSize={20} name="CaretRight" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>,
+    document.body,
   );
 }
 

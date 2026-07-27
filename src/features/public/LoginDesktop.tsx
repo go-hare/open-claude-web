@@ -31,10 +31,16 @@ export type LoginDesktop3pStatus = {
   provider: string | null;
   bootstrapHost: string | null;
   source?: { type?: string; remote?: boolean };
-  deploymentMode?: "1p" | "3p";
+  deploymentMode?: "1p" | "3p" | "dotClaude";
   thirdPartyActivated?: boolean;
   degraded?: boolean;
   detail?: string;
+  /** Product extension: ~/.claude/settings.json has usable routing env. */
+  dotClaude?: {
+    available: boolean;
+    host: string | null;
+    model?: string;
+  };
 };
 
 type BridgeCustom3p = {
@@ -184,11 +190,13 @@ export function LoginDesktopChooser({
   hide1p,
   onChoose1p,
   onChoose3p,
+  onChooseDotClaude,
 }: {
   status: LoginDesktop3pStatus;
   hide1p?: boolean;
   onChoose1p: () => void;
   onChoose3p: () => void;
+  onChooseDotClaude?: () => void;
 }) {
   const provider = status.provider ?? null;
   const short = providerShort(provider);
@@ -196,6 +204,7 @@ export function LoginDesktopChooser({
   const single = hide1p ?? !status.enabled;
   const continueTitle = `Continue with ${short}`;
   const managed = status.source?.type === "managed";
+  const dotClaude = status.dotClaude?.available ? status.dotClaude : null;
 
   return (
     <LoginDesktopShell>
@@ -225,6 +234,27 @@ export function LoginDesktopChooser({
               </div>
             </div>
           </ChoiceCard>
+          {/* Product extension: reuse the user's existing Claude Code CLI config
+              directly — zero migration for users who already run the CLI. */}
+          {dotClaude && onChooseDotClaude ? (
+            <ChoiceCard ariaLabel="Continue with ~/.claude" onClick={onChooseDotClaude}>
+              <div className="flex items-center gap-3.5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border-0.5 border-border-300 bg-bg-100 font-mono text-sm text-text-300">
+                  &gt;_
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-sm font-semibold text-text-100">Continue with ~/.claude</span>
+                  <span className="text-xs text-text-400">
+                    Use your existing Claude Code CLI configuration
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <SourcePill managed={false} bootstrapHost={dotClaude.host} />
+                  <Chevron />
+                </div>
+              </div>
+            </ChoiceCard>
+          ) : null}
           {!single ? (
             <>
               <ChoiceCard ariaLabel="Sign in to Anthropic" onClick={onChoose1p}>
@@ -417,22 +447,23 @@ export function LoginDesktopPage(_props: RouteViewProps) {
     window.dispatchEvent(new Event("app:navigation"));
   }, []);
 
-  const setMode = useCallback(async (mode: "1p" | "3p") => {
+  const setMode = useCallback(async (mode: "1p" | "3p" | "dotClaude") => {
     // Official M5t residual (index-BELzQL5P.js):
     //   whole S5t card onClick → NQt("3p") / NQt("1p") only.
     //   plain Gateway: no d2t "Applying…" (that is SSO needsAuth applying path).
     // Official NQt: await RW?.setDeploymentMode?.(e) — wait for write, then shell reload.
+    // Product extension: "dotClaude" follows the 3p soft-leave flow (no relaunch).
     const bridge = custom3pBridge();
 
-    if (mode === "3p") {
+    if (mode === "3p" || mode === "dotClaude") {
       // Official M5t → NQt("3p"): await setDeploymentMode then shell remount.
-      // Must finish jsA("3p") before leave: eMA synthesizes account only when
-      // persistedDeploymentMode === "3p". Leaving early → bootstrap account null →
-      // App gate paints LoginDesktop on /task/new (click "does nothing").
+      // Must finish jsA write before leave: eMA synthesizes account only when the
+      // persisted chooser mode is a 3p-shell mode. Leaving early → bootstrap
+      // account null → App gate paints LoginDesktop on /task/new (click "does nothing").
       try {
-        await Promise.resolve(bridge?.setDeploymentMode?.("3p"));
+        await Promise.resolve(bridge?.setDeploymentMode?.(mode));
       } catch {
-        /* still try leave if bag already 3p (publish residual must not block) */
+        /* still try leave if mode already persisted (publish residual must not block) */
       }
       // Confirm synthetic account is visible before soft SPA leave (no process relaunch).
       let hasAccount = false;
@@ -553,6 +584,9 @@ export function LoginDesktopPage(_props: RouteViewProps) {
         }}
         onChoose3p={() => {
           void setMode("3p");
+        }}
+        onChooseDotClaude={() => {
+          void setMode("dotClaude");
         }}
       />
     );

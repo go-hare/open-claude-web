@@ -89,7 +89,6 @@ export function SidebarFooter({ frame, mode, onNavigate }: SidebarFooterProps) {
               locale={locale}
               mode={mode}
               onLocaleChange={setLocale}
-              onOpenShortcuts={() => setShortcutsOpen(true)}
               onNavigate={onNavigate}
               showSignOut={showSignOut}
               text={menuText}
@@ -149,7 +148,6 @@ function UserMenu({
   locale,
   mode,
   onLocaleChange,
-  onOpenShortcuts,
   onNavigate,
   showSignOut,
   text,
@@ -159,7 +157,6 @@ function UserMenu({
   locale: string;
   mode: FrameStore["mode"];
   onLocaleChange: (locale: string) => void;
-  onOpenShortcuts: () => void;
   onNavigate: (path: string) => void;
   showSignOut: boolean;
   text: FooterMenuText;
@@ -169,23 +166,10 @@ function UserMenu({
   return (
     <>
       <BaseMenuHeader className="truncate"><span data-testid="user-menu-header">{displayName}</span></BaseMenuHeader>
+      {/* 用户要求先隐藏:Organization settings / Analytics / 了解更多(恢复时删除此注释) */}
       <BaseMenuItem icon="Settings" trailing={<FooterShortcut keys={["⌘", ","]} />} onClick={() => onNavigate(settingsTarget)}>{text.settings}</BaseMenuItem>
-      <BaseMenuItem icon="Wrench" onClick={() => onNavigate("/admin-settings/organization")}>{text.organizationSettings}</BaseMenuItem>
-      <BaseMenuItem icon="Chart" onClick={() => onNavigate("/analytics")}>{text.analytics}</BaseMenuItem>
       <BaseSubmenu icon="Globe" label={text.language}>
         {FOOTER_LANGUAGE_OPTIONS.map(language => <BaseMenuItem key={language.locale} checked={language.locale === locale} checkedRole="radio" lang={language.locale} onClick={() => onLocaleChange(language.locale)}><span className="capitalize">{language.localName}</span></BaseMenuItem>)}
-      </BaseSubmenu>
-      <BaseMenuSeparator />
-      <BaseSubmenu icon="Info" label={text.learnMore} popupClassName="min-w-[208px]">
-        <BaseMenuItem trailing={<Icon name="ArrowOutSquare" size="sm" />} onClick={() => onNavigate("/")}>{text.about}</BaseMenuItem>
-        <BaseMenuItem trailing={<Icon name="ArrowOutSquare" size="sm" />} onClick={() => openExternal("https://claude.com/resources/tutorials?open_in_browser=1")}>{text.tutorials}</BaseMenuItem>
-        <BaseMenuItem trailing={<Icon name="ArrowOutSquare" size="sm" />} onClick={() => openExternal("https://claude.com/resources/courses?open_in_browser=1")}>{text.courses}</BaseMenuItem>
-        <BaseMenuSeparator />
-        <BaseMenuItem trailing={<Icon name="ArrowOutSquare" size="sm" />} onClick={() => onNavigate("/legal/aup")}>{text.usagePolicy}</BaseMenuItem>
-        <BaseMenuItem trailing={<Icon name="ArrowOutSquare" size="sm" />} onClick={() => onNavigate("/legal/privacy")}>{text.privacyPolicy}</BaseMenuItem>
-        <BaseMenuItem onClick={() => openExternal("https://privacy.anthropic.com/policies")}>{text.privacyChoices}</BaseMenuItem>
-        <BaseMenuSeparator />
-        <BaseMenuItem onClick={onOpenShortcuts}>{text.keyboardShortcuts}</BaseMenuItem>
       </BaseSubmenu>
       {showSignOut ? (
         <>
