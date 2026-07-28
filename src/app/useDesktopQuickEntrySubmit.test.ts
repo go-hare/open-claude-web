@@ -118,4 +118,24 @@ describe("useDesktopQuickEntrySubmit residual helpers", () => {
     );
     expect(result).toBe("ignored-not-desktop");
   });
+
+  it("falls back to empty local workspace when getWorkspace returns null", async () => {
+    const navigate = vi.fn();
+    const startSession = vi.fn(async (input) => {
+      expect(input.workspace.mode).toBe("local");
+      return { id: "local_fallback" };
+    });
+    const result = await handleDesktopQuickEntrySubmit(
+      { text: "fallback workspace", images: [] },
+      {
+        isDesktop: true,
+        getWorkspace: async () => null,
+        startSession,
+        navigate,
+      },
+    );
+    expect(result).toBe("ok-new-session");
+    expect(startSession).toHaveBeenCalledOnce();
+    expect(navigate).toHaveBeenCalledWith("/local_sessions/local_fallback");
+  });
 });

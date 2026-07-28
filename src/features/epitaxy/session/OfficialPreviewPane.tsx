@@ -11,13 +11,17 @@
  * Config source is Launch.getConfiguredServices(cwd) → official .claude/launch.json
  * only (fm residual). Missing config is no-config, not package.json invent.
  */
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LocalSessionsBridge, SessionSummary } from "../../../adapters/desktopBridge";
 import { Icon } from "../../../shell/icons";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
 import { OfficialSpinner } from "./OfficialWorkingStatus";
 import { EpitaxyTranscriptActionContext } from "./epitaxyTranscriptActionContext";
 import { isHtmlPreviewPath, isPreviewImagePath, readPreviewText } from "./officialFilePreviewUtils";
+import {
+  OfficialPreviewAnnotateOverlay,
+  PREVIEW_ANNOTATION_CONTEXT_NOTE,
+} from "./OfficialPreviewSketch";
 
 export type OfficialPreviewTarget = {
   path: string;
@@ -60,7 +64,51 @@ type LaunchBridge = {
   ) => Promise<{ serverId?: string; error?: string } | null | undefined>;
   getPreviewUrl?: (serverId?: string) => Promise<string | null | undefined>;
   isAvailable?: () => boolean | Promise<boolean>;
+  /** Official MCP isEnabled residual — gi("launchEnabled"). */
+  isEnabled?: () => boolean | Promise<boolean>;
+  /**
+   * Official showPreview(serverId, bounds) residual — host WebContentsView overlay.
+   * When present, live server preview is host-owned (not iframe).
+   */
+  showPreview?: (
+    serverId: string,
+    bounds: { x: number; y: number; width: number; height: number },
+  ) => Promise<boolean | null | undefined> | boolean;
+  hidePreview?: (serverId?: string) => Promise<boolean | null | undefined> | boolean;
+  /** Official setPreviewColorScheme(serverId, scheme) residual. */
+  setPreviewColorScheme?: (
+    serverId: string,
+    scheme: "light" | "dark",
+  ) => Promise<boolean | null | undefined> | boolean;
+  /** Official setPreviewViewport(serverId, width, height) residual. */
+  setPreviewViewport?: (
+    serverId: string,
+    width: number,
+    height: number,
+  ) => Promise<boolean | null | undefined> | boolean;
+  /** Official clearPreviewViewport(serverId) residual — desktop native size. */
+  clearPreviewViewport?: (
+    serverId: string,
+  ) => Promise<boolean | null | undefined> | boolean;
+  /** Official toggleSelectionMode(serverId, enabled) residual. */
+  toggleSelectionMode?: (
+    serverId: string,
+    enabled: boolean,
+  ) => Promise<boolean | null | undefined> | boolean;
+  /**
+   * Official capturePreviewScreenshot(serverId) residual — raw base64 PNG (no data: prefix).
+   */
+  capturePreviewScreenshot?: (
+    serverId: string,
+  ) => Promise<string | null | undefined> | string | null | undefined;
+  refreshPreview?: (serverId: string) => Promise<boolean | null | undefined> | boolean;
 };
+
+/** Official kS residual — mobile 375×812; desktop clears viewport. */
+const PREVIEW_DEVICE_PRESETS = {
+  desktop: { w: 0, h: 0 },
+  mobile: { w: 375, h: 812 },
+} as const;
 
 function launchBridge(): LaunchBridge | null {
   const web = (window as Window & { "claude.web"?: { Launch?: LaunchBridge } })["claude.web"];
@@ -140,6 +188,19 @@ export function OfficialPreviewPane({
   const [startError, setStartError] = useState<LaunchStartError | null>(null);
   const [probeDone, setProbeDone] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  /** Official showPreview residual — host WebContentsView when bridge exposes it. */
+  const [liveServerId, setLiveServerId] = useState<string | null>(null);
+  const hostSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const liveServerIdRef = useRef<string | null>(null);
+  const [hostMode, setHostMode] = useState(false);
+  /** Official PreviewToolbar residual: colorScheme / deviceMode / selectionMode / sketchMode. */
+  const [colorScheme, setColorScheme] = useState<"light" | "dark">("light");
+  const [deviceMode, setDeviceMode] = useState<"desktop" | "mobile">("desktop");
+  const [selectionMode, setSelectionMode] = useState(false);
+  /** Official sketchMode residual — Annotate preview (Pencil). */
+  const [sketchMode, setSketchMode] = useState(false);
+  const [sketchBackdrop, setSketchBackdrop] = useState<string | null>(null);
+  const sketchGenRef = useRef(0);
 
   useEffect(() => {
     setSelectedTarget(previewTarget);
@@ -154,6 +215,8 @@ export function OfficialPreviewPane({
       setStartError({ kind: "no-config" });
       setProbeDone(true);
       setPreviewUrl(null);
+      setLiveServerId(null);
+      liveServerIdRef.current = null;
       return () => {
         alive = false;
       };
@@ -161,9 +224,31 @@ export function OfficialPreviewPane({
     setProbeDone(false);
     setStartError(null);
     setPreviewUrl(null);
+    setLiveServerId(null);
+    liveServerIdRef.current = null;
+    setSelectionMode(false);
+    setDeviceMode("desktop");
+    setSketchMode(false);
+    setSketchBackdrop(null);
+    sketchGenRef.current++;
     void (async () => {
       const launch = launchBridge();
       try {
+        // Official Ea residual: launchEnabled false → do not auto-start (isEnabled gate).
+        // Prefer Launch.isEnabled(); fall back to startFromConfig returning launch_disabled.
+        const enabledRaw = launch?.isEnabled?.();
+        const enabled =
+          typeof enabledRaw === "boolean"
+            ? enabledRaw
+            : enabledRaw
+              ? await enabledRaw
+              : true;
+        if (!alive) return;
+        if (enabled === false) {
+          setStartError({ kind: "no-config" });
+          setProbeDone(true);
+          return;
+        }
         const services = (await launch?.getConfiguredServices?.(cwd)) ?? [];
         if (!alive) return;
         if (!services.length) {
@@ -177,8 +262,14 @@ export function OfficialPreviewPane({
         if (started?.serverId) {
           const url = (await launch?.getPreviewUrl?.(started.serverId)) ?? null;
           if (!alive) return;
+          liveServerIdRef.current = started.serverId;
+          setLiveServerId(started.serverId);
           setPreviewUrl(url);
+          setHostMode(typeof launch?.showPreview === "function");
           setStartError(null);
+        } else if (started?.error === "launch_disabled") {
+          // Preference off — treat as inactive preview surface, not a start failure.
+          setStartError({ kind: "no-config" });
         } else if (started?.error) {
           setStartError({ kind: "start-failed", message: started.error });
           // Official: Error details were sent to Claude — forward message when submit available.
@@ -202,10 +293,188 @@ export function OfficialPreviewPane({
     })();
     return () => {
       alive = false;
+      // Official hidePreview + disable selection on unmount / session switch.
+      const launch = launchBridge();
+      const sid = liveServerIdRef.current;
+      try {
+        if (sid && typeof launch?.toggleSelectionMode === "function") {
+          void launch.toggleSelectionMode(sid, false);
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        void launch?.hidePreview?.(sid ?? undefined);
+      } catch {
+        /* ignore */
+      }
+      liveServerIdRef.current = null;
     };
     // session cwd / id drive re-probe; submitToChat identity not required each render
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.cwd, sessionRef?.id, sessionRef?.type]);
+
+  // Official showPreview(serverId, bounds) residual — host WebContentsView over pane rect.
+  // When sketchMode is on, hide host view so annotate overlay (screenshot) can receive pointer events
+  // (official Mi residual hides preview while overlay is active).
+  useLayoutEffect(() => {
+    if (!liveServerId || !hostMode || selectedTarget || startError || sketchMode) {
+      if (liveServerId && sketchMode) {
+        try {
+          void launchBridge()?.hidePreview?.(liveServerId);
+        } catch {
+          /* ignore */
+        }
+      }
+      return;
+    }
+    const el = hostSurfaceRef.current;
+    if (!el) return;
+    const launch = launchBridge();
+    if (typeof launch?.showPreview !== "function") return;
+
+    const pushBounds = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      void launch.showPreview?.(liveServerId, {
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height,
+      });
+    };
+    pushBounds();
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => pushBounds())
+        : null;
+    ro?.observe(el);
+    window.addEventListener("resize", pushBounds);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", pushBounds);
+      try {
+        void launch.hidePreview?.(liveServerId);
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [liveServerId, hostMode, selectedTarget, startError, sketchMode]);
+
+  // Official setPreviewColorScheme residual when scheme or server changes.
+  useEffect(() => {
+    if (!liveServerId) return;
+    const launch = launchBridge();
+    if (typeof launch?.setPreviewColorScheme !== "function") return;
+    void launch.setPreviewColorScheme(liveServerId, colorScheme);
+  }, [liveServerId, colorScheme]);
+
+  // Official device mode residual: mobile → setPreviewViewport(375,812); desktop → clear.
+  useEffect(() => {
+    if (!liveServerId) return;
+    const launch = launchBridge();
+    if (deviceMode === "desktop") {
+      if (typeof launch?.clearPreviewViewport === "function") {
+        void launch.clearPreviewViewport(liveServerId);
+      }
+      return;
+    }
+    const preset = PREVIEW_DEVICE_PRESETS.mobile;
+    if (typeof launch?.setPreviewViewport === "function") {
+      void launch.setPreviewViewport(liveServerId, preset.w, preset.h);
+    }
+  }, [liveServerId, deviceMode]);
+
+  // Official toggleSelectionMode residual + cmd+shift+s shortcut.
+  useEffect(() => {
+    if (!liveServerId) return;
+    const launch = launchBridge();
+    if (typeof launch?.toggleSelectionMode === "function") {
+      void launch.toggleSelectionMode(liveServerId, selectionMode);
+    }
+  }, [liveServerId, selectionMode]);
+
+  useEffect(() => {
+    if (!liveServerId || selectedTarget || startError) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat) return;
+      // Official ck("toggleSelectionMode"): cmd/ctrl+shift+s
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && event.shiftKey && !event.altKey && event.code === "KeyS") {
+        event.preventDefault();
+        setSelectionMode((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [liveServerId, selectedTarget, startError]);
+
+  const onToggleColorScheme = useCallback(() => {
+    setColorScheme((prev) => (prev === "light" ? "dark" : "light"));
+  }, []);
+
+  const onToggleDeviceMode = useCallback(() => {
+    setDeviceMode((prev) => (prev === "mobile" ? "desktop" : "mobile"));
+  }, []);
+
+  const onToggleSelectionMode = useCallback(() => {
+    // Official: entering selection while sketch is open cancels sketch first.
+    if (sketchMode) {
+      sketchGenRef.current++;
+      setSketchMode(false);
+      setSketchBackdrop(null);
+    }
+    setSelectionMode((prev) => !prev);
+  }, [sketchMode]);
+
+  /** Official onToggleSketchMode residual — capture screenshot then open annotate overlay. */
+  const onToggleSketchMode = useCallback(() => {
+    if (sketchMode) {
+      sketchGenRef.current++;
+      setSketchMode(false);
+      setSketchBackdrop(null);
+      return;
+    }
+    if (!liveServerId) return;
+    const gen = ++sketchGenRef.current;
+    setSelectionMode(false);
+    setSketchMode(true);
+    const launch = launchBridge();
+    void Promise.resolve(launch?.capturePreviewScreenshot?.(liveServerId)).then((raw) => {
+      if (sketchGenRef.current !== gen) return;
+      if (raw && typeof raw === "string") {
+        setSketchBackdrop(
+          raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`,
+        );
+      }
+    });
+  }, [liveServerId, sketchMode]);
+
+  const onSketchCancel = useCallback(() => {
+    sketchGenRef.current++;
+    setSketchMode(false);
+    setSketchBackdrop(null);
+  }, []);
+
+  const onSketchAttach = useCallback(
+    (dataUrl: string) => {
+      void actions?.attachPreviewAnnotation?.({
+        name: "preview-annotation.png",
+        dataUrl,
+        contextNote: PREVIEW_ANNOTATION_CONTEXT_NOTE,
+      });
+      sketchGenRef.current++;
+      setSketchMode(false);
+      setSketchBackdrop(null);
+    },
+    [actions],
+  );
+
+  const onRefreshPreview = useCallback(() => {
+    if (!liveServerId) return;
+    const launch = launchBridge();
+    void launch?.refreshPreview?.(liveServerId);
+  }, [liveServerId]);
 
   useEffect(() => {
     let alive = true;
@@ -308,13 +577,96 @@ export function OfficialPreviewPane({
     );
   }
 
-  // Live server iframe when Launch started a server with URL.
-  if (previewUrl && !startError) {
-    return (
-      <div className="h-full min-w-0 flex flex-col bg-bg-000">
-        <iframe className="h-full w-full border-0 bg-white" src={previewUrl} title="Preview" />
+  // Official live Preview: host WebContentsView via showPreview(bounds) when available;
+  // iframe fallback only when bridge lacks showPreview (non-desktop / tests).
+  // Official PreviewToolbar residual (CS): color / device / selection / sketch(Pencil) / refresh.
+  if ((previewUrl || liveServerId) && !startError) {
+    const toolbar = liveServerId ? (
+      <div className="flex items-center gap-g2 border-b border-border-300 px-p4 py-p2 shrink-0">
+        <OfficialButton
+          ariaLabel="Refresh"
+          icon="ArrowRotateClockwise"
+          onClick={onRefreshPreview}
+          size="base"
+          variant="uncontained"
+        />
+        <div className="flex-1 min-w-0" />
+        <OfficialButton
+          ariaLabel={colorScheme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+          icon={colorScheme === "light" ? "SunLight" : "MoonDark"}
+          onClick={onToggleColorScheme}
+          size="base"
+          variant="toggle"
+        />
+        <OfficialButton
+          ariaLabel="Toggle device toolbar"
+          icon="SystemComputerLaptopMacbook"
+          onClick={onToggleDeviceMode}
+          pressed={deviceMode === "mobile"}
+          size="base"
+          variant="toggle"
+        />
+        <OfficialButton
+          ariaLabel={selectionMode ? "Exit selection mode" : "Select element"}
+          icon="Cursor"
+          onClick={onToggleSelectionMode}
+          pressed={selectionMode}
+          size="base"
+          tooltipShortcut="⌘⇧S"
+          variant="toggle"
+        />
+        <OfficialButton
+          ariaLabel="Annotate preview"
+          icon="Pencil"
+          onClick={onToggleSketchMode}
+          pressed={sketchMode}
+          size="base"
+          variant="toggle"
+        />
       </div>
-    );
+    ) : null;
+
+    const annotateOverlay = sketchMode ? (
+      <OfficialPreviewAnnotateOverlay
+        backdropDataUrl={sketchBackdrop}
+        onAttach={onSketchAttach}
+        onCancel={onSketchCancel}
+      />
+    ) : null;
+
+    if (hostMode && liveServerId) {
+      return (
+        <div className="h-full min-w-0 flex flex-col bg-bg-000">
+          {toolbar}
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            <div
+              ref={hostSurfaceRef}
+              className="h-full w-full min-h-0 bg-white"
+              data-launch-preview-host={liveServerId}
+              data-device-mode={deviceMode}
+              data-selection-mode={selectionMode ? "1" : "0"}
+              data-sketch-mode={sketchMode ? "1" : "0"}
+              // Host paints WebContentsView over this rect; keep empty for layout.
+              // During sketchMode host view is hidden so overlay receives pointers.
+            />
+            {annotateOverlay}
+          </div>
+        </div>
+      );
+    }
+    if (previewUrl) {
+      return (
+        <div className="h-full min-w-0 flex flex-col bg-bg-000">
+          {toolbar}
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            {!sketchMode ? (
+              <iframe className="h-full w-full min-h-0 flex-1 border-0 bg-white" src={previewUrl} title="Preview" />
+            ) : null}
+            {annotateOverlay}
+          </div>
+        </div>
+      );
+    }
   }
 
   // Official cS feed: loading until probe finishes, then no-config / start-failed.

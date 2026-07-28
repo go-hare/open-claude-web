@@ -63,6 +63,22 @@ export function ClaudeCodeSettings() {
       // Keep desktop preference in sync for remote-session consumers that still read bridge prefs.
       setPreference("autoCreatePullRequests", next);
     }
+    // Official residual: BranchRows draft default reads account.settings; mirror for
+    // same-tab consumers that cannot re-fetch bootstrap immediately.
+    try {
+      if (key === "ccr_auto_create_pr_as_draft") {
+        window.sessionStorage?.setItem(
+          "claude.account.settings.ccr_auto_create_pr_as_draft",
+          next ? "true" : "false",
+        );
+        window.localStorage?.setItem(
+          "ccr_auto_create_pr_as_draft",
+          JSON.stringify(next),
+        );
+      }
+    } catch {
+      /* ignore */
+    }
   };
 
   return (

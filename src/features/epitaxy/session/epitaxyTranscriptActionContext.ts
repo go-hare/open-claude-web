@@ -19,9 +19,22 @@ export type OfficialSubagentTarget = {
   toolUseId: string;
 };
 
+export type PreviewAnnotationAttach = {
+  /** Official qy push residual fields. */
+  name: string;
+  dataUrl: string;
+  contextNote?: string;
+};
+
 export type EpitaxyTranscriptActionContextValue = {
   /** Official onAttachAsContext: insert message/selection text into the session composer. */
   attachAsContext?: (text: string) => void;
+  /**
+   * Official qy.push residual for preview-annotation.png.
+   * Stages into the session composer (ExistingSessionComposer drains → cn.images);
+   * does NOT send a turn — user must hit Send (with optional contextNote on submit).
+   */
+  attachPreviewAnnotation?: (payload: PreviewAnnotationAttach) => void | Promise<void>;
   bridge: LocalSessionsBridge;
   /** Official yt / Yr cancelQueued — drop mid-turn queued user bubble. */
   cancelQueuedMessage?: (uuid: string) => void;

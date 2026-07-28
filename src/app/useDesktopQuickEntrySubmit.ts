@@ -222,22 +222,34 @@ export async function handleDesktopQuickEntrySubmit(
       (async () => {
         try {
           const bridge = await getDesktopBridge();
-          return await bridge.Preferences.getWorkspaceContext();
+          const ws = await bridge.Preferences.getWorkspaceContext();
+          if (ws) return ws;
         } catch {
-          return null;
+          /* fall through to empty local residual */
         }
+        // Official empty bag still allows new chat; product needs a WorkspaceContext shape.
+        return {
+          mode: "local" as const,
+          projectName: "local",
+          branchName: "main",
+          hasWorktree: false,
+        };
       });
-    const workspace = await getWorkspace();
-    if (!workspace) {
-      log("error", "No workspace context for quick entry new session");
-      return "failed";
-    }
+    const workspace = (await getWorkspace()) ?? {
+      mode: "local" as const,
+      projectName: "local",
+      branchName: "main",
+      hasWorktree: false,
+    };
     const sessionId = createCoworkSessionId();
     const messageUuid = createMessageUuid();
     const start =
       deps.startSession ??
       (async (input) => {
         const bridge = await getDesktopBridge();
+        if (!bridge.LocalAgentModeSessions?.start) {
+          throw new Error("LocalAgentModeSessions.start unavailable");
+        }
         const session = await bridge.LocalAgentModeSessions.start({
           kind: "epitaxy",
           images: input.images,
@@ -248,7 +260,13 @@ export async function handleDesktopQuickEntrySubmit(
           userSelectedFolders: input.workspace.cwd ? [input.workspace.cwd] : undefined,
           workspace: input.workspace,
         });
-        return { id: session.id };
+        // Bridge may return SessionSummary.id or raw { sessionId } depending on path.
+        const id =
+          (session as { id?: string; sessionId?: string } | null)?.id
+          ?? (session as { id?: string; sessionId?: string } | null)?.sessionId
+          ?? input.sessionId;
+        if (!id) throw new Error("LocalAgentModeSessions.start returned no session id");
+        return { id };
       });
 
     const session = await start({
@@ -258,7 +276,9 @@ export async function handleDesktopQuickEntrySubmit(
       messageUuid,
       workspace,
     });
-    navigate(coworkSessionPath(session));
+    const id = session?.id ?? sessionId;
+    log("info", "Quick entry started session", { id, messageLen: message.length });
+    navigate(coworkSessionPath({ id }));
     return "ok-new-session";
   } catch (error) {
     log("error", "Failed to process quick entry", error);

@@ -73,6 +73,11 @@ type OfficialDropdownButtonProps = {
   extraSections?: Array<{ header?: ReactNode; items: OfficialDropdownItem[]; triggerKey?: ReactNode | string | string[] }>;
   header?: ReactNode;
   icon?: string;
+  /**
+   * Official Ou residual: icon slot can be a ReactNode (e.g. sketch tool glyph / color dot),
+   * not only a named Icon. When set, preferred over `icon` string in icon mode.
+   */
+  customIcon?: ReactNode;
   items?: OfficialDropdownItem[];
   label?: ReactNode;
   mode?: "text" | "icon" | "chevron";
@@ -585,6 +590,7 @@ export function OfficialDropdownButton({
   alignOffset,
   ariaLabel,
   className,
+  customIcon,
   disabled,
   extraSections,
   header,
@@ -604,12 +610,19 @@ export function OfficialDropdownButton({
   triggerKey,
   variant = "uncontained",
 }: OfficialDropdownButtonProps) {
-  const actualMode = mode ?? (icon ? "icon" : "text");
+  const actualMode = mode ?? (icon || customIcon ? "icon" : "text");
   const hasPopup = items.length > 0 || Boolean(extraSections?.some((section) => section.items.length > 0));
   const resolvedAlignOffset = alignOffset ?? (align === "end" ? 0 : actualMode === "text" ? -6 : -8);
   const resolvedSideOffset = sideOffset ?? 8;
   // Official Ce: M = text mode ? tooltip : (tooltip ?? aria-label); wrap when tooltip !== null && M
   const tooltipLabel = actualMode === "text" ? tooltip : (tooltip ?? ariaLabel);
+  const iconSlot =
+    actualMode === "icon"
+      ? customIcon ??
+        (icon ? (
+          <Icon name={icon} size={dropdownIconSize[size]} className={pressed ? "text-[var(--accent)]" : undefined} />
+        ) : null)
+      : null;
   const trigger = (
     <Menu.Trigger
       aria-label={ariaLabel}
@@ -623,11 +636,7 @@ export function OfficialDropdownButton({
       disabled={disabled}
     >
       <span aria-hidden="true" className={`absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none ${dropdownBgClasses[variant]}`} />
-      {actualMode === "icon" && icon ? (
-        <span className="relative inline-flex">
-          <Icon name={icon} size={dropdownIconSize[size]} className={pressed ? "text-[var(--accent)]" : undefined} />
-        </span>
-      ) : null}
+      {iconSlot ? <span className="relative inline-flex">{iconSlot}</span> : null}
       {actualMode === "text" ? <span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap">{label}</span> : null}
       {revealChevron !== "never" ? <Icon name="ChevronDownSmall" size="xs" className={revealChevron === "hover" ? "shrink-0 opacity-0 group-hover/dd:opacity-100 group-focus-visible/dd:opacity-100 group-aria-[expanded=true]/dd:opacity-100" : "shrink-0"} /> : null}
     </Menu.Trigger>

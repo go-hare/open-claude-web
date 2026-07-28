@@ -14,7 +14,6 @@ import {
 } from "../../cowork/composer/useCoworkModelOptions";
 import {
   permissionModeLabel,
-  permissionModeOptions,
   ULTRACODE_OPTION,
   effortOptions,
 } from "./options";
@@ -23,6 +22,7 @@ import { EpitaxyPermissionModeModal } from "./EpitaxyPermissionModeModal";
 import { OfficialEffortControl, type OfficialEffortItem } from "./OfficialEffortControl";
 import { OfficialWorkspaceControls } from "./OfficialWorkspaceControls";
 import { usePermissionModeConfirm } from "./usePermissionModeConfirm";
+import { useCodePermissionModeOptions } from "./useBypassPermissionsEnabled";
 
 type OfficialCodeComposerProps = {
   busy: boolean;
@@ -107,7 +107,9 @@ export function OfficialCodeComposer({
     if (normalized !== model) onModelChange(normalized);
   }, [allowedModelValues, codeModelOptions.ready, model, onModelChange]);
 
-  const permissionItems: OfficialDropdownItem[] = permissionModeOptions.map((option) => ({
+  // Official te() + Os residual: hide bypass when bypassPermissionsModeEnabled is off.
+  const codePermissionModeOptions = useCodePermissionModeOptions();
+  const permissionItems: OfficialDropdownItem[] = codePermissionModeOptions.map((option) => ({
     checked: option.value === permissionMode,
     label: option.label,
     onSelect: () => permissionModeConfirm.select(option.value),
@@ -121,18 +123,22 @@ export function OfficialCodeComposer({
     },
   }));
   const effortItems: OfficialEffortItem[] = useMemo(() => {
-    // Official get_settings.applied.effortLevels (CLI 2.7.16+): per-model catalog
-    // ladder — deepseek-v4-pro only offers high|max. null → hardcoded 5-stop fallback.
-    const allowed = effortLevels && effortLevels.length > 0 ? new Set(effortLevels) : null;
-    const ladder = allowed ? effortOptions.filter((o) => allowed.has(o.value)) : effortOptions;
+    // Official get_settings.applied.effortLevels: CLI always returns the ladder on
+    // success (grok → 3 stops; unknown model → CLI's own 5-stop). null = probe still
+    // pending/failed — do NOT invent Anthropic 5-stop (that fakes xhigh/max for grok).
+    const catalog = effortLevels && effortLevels.length > 0 ? effortLevels : null;
+    let ladder = catalog
+      ? effortOptions.filter((o) => catalog.includes(o.value))
+      : effortOptions.filter((o) => o.value === effortLevel);
+    if (ladder.length === 0) ladder = effortOptions.filter((o) => o.value === "medium");
     const items: OfficialEffortItem[] = ladder.map((option) => ({
       checked: !ultracode && option.value === effortLevel,
       label: option.label,
       value: option.value,
       onSelect: () => onEffortChange(option.value),
     }));
-    // Official $ gate: ultracodeOfferable=false → hide the Ultracode stop.
-    if (ultracodeOfferable !== false) {
+    // Ultracode only after CLI catalog is known; ultracodeOfferable===false hides it.
+    if (catalog && ultracodeOfferable !== false) {
       items.push({
         accent: true,
         checked: ultracode,

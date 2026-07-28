@@ -45,10 +45,41 @@ type OfficialEpitaxyBranchRowsProps = {
   sessionRef: OfficialBranchSessionRef | null;
 };
 
-/** Official ccr_auto_create_pr_as_draft (cc989143e / ClaudeCodeSettings). */
+/**
+ * Official ccr_auto_create_pr_as_draft residual (cc989143e _t):
+ *   h = settings.ccr_auto_create_pr_as_draft ?? true
+ * Source of truth is account.settings (bootstrap / mutate), not invent localStorage.
+ * localStorage is only a short-lived UI mirror when account bootstrap is not yet loaded.
+ */
 const CREATE_PR_AS_DRAFT_KEY = "ccr_auto_create_pr_as_draft";
 
+function readAccountCreateAsDraft(): boolean | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const web = (window as Window & {
+      __claudeSettingsAccount?: { settings?: Record<string, unknown> };
+    }).__claudeSettingsAccount;
+    const settings = web?.settings;
+    if (settings && typeof settings === "object" && "ccr_auto_create_pr_as_draft" in settings) {
+      return settings.ccr_auto_create_pr_as_draft !== false;
+    }
+  } catch {
+    /* ignore */
+  }
+  // Bootstrap account.settings may also live on conversation/bootstrap cache.
+  try {
+    const raw = window.sessionStorage?.getItem("claude.account.settings.ccr_auto_create_pr_as_draft");
+    if (raw === "true") return true;
+    if (raw === "false") return false;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 function readCreateAsDraft(): boolean {
+  const fromAccount = readAccountCreateAsDraft();
+  if (fromAccount !== null) return fromAccount;
   if (typeof window === "undefined") return true;
   const raw = window.localStorage.getItem(CREATE_PR_AS_DRAFT_KEY);
   if (raw === null) return true;
@@ -61,7 +92,17 @@ function readCreateAsDraft(): boolean {
 
 function writeCreateAsDraft(draft: boolean) {
   if (typeof window === "undefined") return;
+  // Mirror menu selection for this session; account mutate still owns durable flag
+  // via ClaudeCodeSettings setAccountFlag("ccr_auto_create_pr_as_draft").
   window.localStorage.setItem(CREATE_PR_AS_DRAFT_KEY, JSON.stringify(draft));
+  try {
+    window.sessionStorage?.setItem(
+      "claude.account.settings.ccr_auto_create_pr_as_draft",
+      draft ? "true" : "false",
+    );
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Official Yk / Xk PR icon map (c11959232). */

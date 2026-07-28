@@ -508,6 +508,8 @@ export type LocalSessionsBridge = {
   getContextUsage?: (id: string) => Promise<ContextUsage | null>;
   getDefaultEffort?: () => Promise<EffortLevel | null>;
   getDefaultPermissionMode?: (cwd?: string) => Promise<string | null>;
+  /** Official Os residual + bypassPermissionsModeEnabled gate. */
+  getAvailablePermissionModes?: () => Promise<string[]>;
   getDetectedProjects?: () => Promise<SessionSummary[]>;
   getDiffFileContent?: (idOrCwd: string, mergeBase: string, filePath: string, previousFilePath?: string) => Promise<DiffFileContentResult>;
   getEffort?: (id: string) => Promise<EffortApplied | string>;

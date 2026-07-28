@@ -29,10 +29,19 @@ import {
   buildOfficialEffortMenuItems,
   normalizeEffortValue,
   permissionModeLabel,
-  permissionModeOptions,
   type OfficialEffortLevel,
 } from "./officialComposerOptions";
+import { useCodePermissionModeOptions } from "../composer/useBypassPermissionsEnabled";
 import { setOfficialUltrareviewLaunching } from "./officialUltrareviewLaunch";
+import {
+  OfficialComposerStagedImages,
+  dataUrlToImagePayload,
+  type StagedComposerImage,
+} from "./OfficialComposerStagedImages";
+import {
+  previewAnnotationQueue,
+  usePreviewAnnotationPendingCount,
+} from "./previewAnnotationQueue";
 
 /** Plain text → TipTap doc (same shape as OfficialCodeComposer). */
 function tiptapDocFromPlainText(value: string) {
@@ -93,10 +102,20 @@ export function ExistingSessionComposer({
   const [ultracode, setUltracode] = useState(() => session?.effort === "ultracode");
   /**
    * Official get_settings.applied (CLI 2.7.16+): per-model catalog ladder + Ultracode gate.
-   * null → CLI has not reported (legacy CLI / probe timeout) → hardcoded 5-stop fallback.
+   * null → probe pending/failed → single current stop only (CLI owns fallback ladder).
    */
   const [effortLevels, setEffortLevels] = useState<string[] | null>(null);
   const [ultracodeOfferable, setUltracodeOfferable] = useState<boolean | null>(null);
+  /**
+   * Official cn.images residual — staged image attachments (max 5).
+   * Preview Annotate drains qy.pending into this list (not immediate send).
+   */
+  const [stagedImages, setStagedImages] = useState<StagedComposerImage[]>([]);
+  /** Official wn Map residual — filename → contextNote for preview-annotation. */
+  const contextNotesRef = useRef(new Map<string, string>());
+  const stagedImagesRef = useRef(stagedImages);
+  stagedImagesRef.current = stagedImages;
+  const pendingAnnotationCount = usePreviewAnnotationPendingCount(sessionRef?.id);
   /**
    * Official jR `N`/`R(L)` lock: after user picks effort via X, local b/H win over
    * session meta T until session id changes. Prevents silent reload / stale
@@ -119,7 +138,13 @@ export function ExistingSessionComposer({
   const isBashMode = text.trimStart().startsWith("!");
   const placeholder = "Type / for commands";
   const canStop = isResponding && Boolean(sessionRef && bridge.stop);
-  const canSubmit = text.trim().length > 0 && !disabled && !isSubmitting && !isResponding;
+  const readyImageCount = stagedImages.filter((image) => image.status === "ready" && image.base64).length;
+  // Official: allow send with images only (text optional when d.length > 0).
+  const canSubmit =
+    (text.trim().length > 0 || readyImageCount > 0)
+    && !disabled
+    && !isSubmitting
+    && !isResponding;
   const editor = useEditor({
     content: "",
     editable: !disabled && !isSubmitting && !isResponding,
@@ -244,7 +269,136 @@ export function ExistingSessionComposer({
   const clearComposer = useCallback(() => {
     editor?.commands.clearContent(true);
     setText("");
+    for (const image of stagedImagesRef.current) {
+      if (image.previewUrl.startsWith("blob:")) URL.revokeObjectURL(image.previewUrl);
+    }
+    setStagedImages([]);
+    contextNotesRef.current.clear();
   }, [editor]);
+
+  const removeStagedImage = useCallback((id: string) => {
+    setStagedImages((prev) => {
+      const hit = prev.find((item) => item.id === id);
+      if (hit) {
+        if (hit.previewUrl.startsWith("blob:")) URL.revokeObjectURL(hit.previewUrl);
+        contextNotesRef.current.delete(hit.name);
+      }
+      return prev.filter((item) => item.id !== id);
+    });
+  }, []);
+
+  /**
+   * Official un(File[]) residual — stage image Files (max 5; PNG/JPEG/GIF/WebP).
+   */
+  const addImageFiles = useCallback((files: File[]) => {
+    const allowed = files.filter((file) =>
+      ["image/png", "image/jpeg", "image/gif", "image/webp"].includes(file.type),
+    );
+    if (allowed.length === 0) return;
+    setStagedImages((prev) => {
+      const room = 5 - prev.length;
+      if (room <= 0) return prev;
+      const slice = allowed.slice(0, room);
+      const loading: StagedComposerImage[] = slice.map((file) => ({
+        id: crypto.randomUUID(),
+        name: file.name || "image.png",
+        previewUrl: URL.createObjectURL(file),
+        status: "loading",
+      }));
+      // Async decode each file → ready base64
+      slice.forEach((file, index) => {
+        const id = loading[index]!.id;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = typeof reader.result === "string" ? reader.result : "";
+          if (!dataUrl) {
+            setStagedImages((cur) => cur.filter((item) => item.id !== id));
+            return;
+          }
+          const payload = dataUrlToImagePayload(dataUrl, file.name || "image.png");
+          setStagedImages((cur) =>
+            cur.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    status: "ready",
+                    base64: payload.base64,
+                    mimeType: payload.mimeType,
+                    // keep blob previewUrl for strip; dataUrl also fine
+                  }
+                : item,
+            ),
+          );
+        };
+        reader.onerror = () => {
+          setStagedImages((cur) => {
+            const hit = cur.find((item) => item.id === id);
+            if (hit?.previewUrl.startsWith("blob:")) URL.revokeObjectURL(hit.previewUrl);
+            return cur.filter((item) => item.id !== id);
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+      return [...prev, ...loading];
+    });
+  }, []);
+
+  /**
+   * Official yn residual: on real session switch, clear local staged strip + previous
+   * session's qy pending. Do NOT clear the *current* session on mount — that races Mn
+   * drain and drops preview-annotation chips pushed before/while composer mounts.
+   * Declared BEFORE Mn drain so switch cleanup cannot wipe a same-commit drain into B.
+   */
+  const prevSessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const sessionId = sessionRef?.id ?? null;
+    const prev = prevSessionIdRef.current;
+    if (prev === sessionId) return;
+    if (prev !== null) {
+      // Sync ref immediately so same-commit Mn drain sees empty strip for the new session.
+      for (const image of stagedImagesRef.current) {
+        if (image.previewUrl.startsWith("blob:")) URL.revokeObjectURL(image.previewUrl);
+      }
+      stagedImagesRef.current = [];
+      setStagedImages([]);
+      contextNotesRef.current.clear();
+      previewAnnotationQueue.getState().clearSession(prev);
+    }
+    prevSessionIdRef.current = sessionId;
+  }, [sessionRef?.id]);
+
+  /**
+   * Official Mn drain residual: qy.take → File → un(addImages); wn.set contextNote.
+   * Must not race a mount-time clear of the *current* session queue (see prevSessionIdRef).
+   */
+  useEffect(() => {
+    const sessionId = sessionRef?.id;
+    if (!sessionId || pendingAnnotationCount === 0) return;
+    const room = 5 - stagedImagesRef.current.length;
+    if (room <= 0) return;
+    const items = previewAnnotationQueue.getState().take(sessionId, room);
+    if (items.length === 0) return;
+    const next: StagedComposerImage[] = [];
+    for (const item of items) {
+      const payload = dataUrlToImagePayload(item.dataUrl, item.name || "preview-annotation.png");
+      if (item.contextNote) contextNotesRef.current.set(payload.filename, item.contextNote);
+      next.push({
+        id: crypto.randomUUID(),
+        name: payload.filename,
+        previewUrl: payload.previewUrl,
+        status: "ready",
+        base64: payload.base64,
+        mimeType: payload.mimeType,
+      });
+    }
+    if (next.length > 0) {
+      setStagedImages((prev) => [...prev, ...next].slice(0, 5));
+      // Official residual after stage: focus composer so user can Send (not auto-submit).
+      queueMicrotask(() => {
+        tiptapEditorRef.current?.commands.focus("end");
+      });
+    }
+  }, [pendingAnnotationCount, sessionRef?.id]);
 
   const insertSlashCommand = useCallback(() => {
     editor?.chain().focus("start").insertContent("/").run();
@@ -295,7 +449,30 @@ export function ExistingSessionComposer({
     }
     setSubmitting(true);
     try {
-      await onSubmit(trimmed);
+      // Official f(): contextNotes for staged image names prepended to textWithFiles.
+      const ready = stagedImagesRef.current.filter(
+        (image) => image.status === "ready" && image.base64,
+      );
+      const noteNames = new Set(ready.map((image) => image.name));
+      const notes = Array.from(
+        new Set(
+          Array.from(contextNotesRef.current.entries())
+            .filter(([name]) => noteNames.has(name))
+            .map(([, note]) => note),
+        ),
+      ).join("\n\n");
+      const textWithNotes = notes ? `${notes}\n\n${trimmed}` : trimmed;
+      // Official allows image-only send; still require non-empty combined payload.
+      if (!textWithNotes.trim() && ready.length === 0) return;
+      const images =
+        ready.length > 0
+          ? ready.map((image) => ({
+              base64: image.base64!,
+              mimeType: image.mimeType ?? "image/png",
+              filename: image.name,
+            }))
+          : undefined;
+      await onSubmit(textWithNotes.trim() || " ", images ? { images } : undefined);
       clearComposer();
     } finally {
       setSubmitting(false);
@@ -419,7 +596,9 @@ export function ExistingSessionComposer({
     checked: option.value === selectedModel,
     onSelect: () => void applyModel(option.value),
   }));
-  const permissionItems = permissionModeOptions.map((option) => ({
+  // Official te() residual: Mode menu omits bypass unless pref enabled.
+  const codePermissionModeOptions = useCodePermissionModeOptions();
+  const permissionItems = codePermissionModeOptions.map((option) => ({
     label: option.label,
     checked: option.value === permissionMode,
     onSelect: () => permissionModeConfirm.select(option.value),
@@ -466,6 +645,7 @@ export function ExistingSessionComposer({
         {isBashMode ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-r7 shadow-[inset_0_0_0_1px_var(--extended-purple)]" /> : null}
         <span className="sr-only" role="status">{isBashMode ? "Bash mode. Press Escape to return to chat." : "Chat mode"}</span>
         <div aria-hidden="true" className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}><div className="min-h-0 overflow-hidden" /></div>
+        <OfficialComposerStagedImages images={stagedImages} onRemove={removeStagedImage} />
         <div className="relative flex w-full">
           {isBashMode ? <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
           <EditorContent
@@ -511,6 +691,7 @@ export function ExistingSessionComposer({
         plusMenuItems={plusMenuItems}
         session={session}
         sessionRef={sessionRef}
+        onAddFiles={addImageFiles}
         onInsertSlashCommand={insertSlashCommand}
       />
       <EpitaxyPermissionModeModal

@@ -463,6 +463,7 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   getCodeStats: async () => buildFakeCodeStats(),
   getDefaultEffort: async () => "medium",
   getDefaultPermissionMode: async () => null,
+  getAvailablePermissionModes: async () => ["default", "acceptEdits", "plan"],
   getDetectedProjects: async () => fakeDetectedProjects(targetKind),
   getDiffFileContent: async () => null,
   getEffort: async (id) => ({
