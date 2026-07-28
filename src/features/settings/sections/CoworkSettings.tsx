@@ -17,11 +17,6 @@ type CoworkMemoryBridge = {
   writeGlobalMemory?: (value: string) => Promise<boolean | void>;
 };
 
-type SessionsBridgeToggle = {
-  getSessionsBridgeEnabled?: () => Promise<boolean | null | undefined>;
-  setSessionsBridgeEnabled?: (enabled: boolean) => Promise<boolean | void>;
-};
-
 type MemoryFile = {
   content: string;
   path: string;
@@ -29,18 +24,18 @@ type MemoryFile = {
 
 /**
  * Official CoworkPage tn (cc989143e):
- * title + Dispatch Ht (Xe.get/setSessionsBridgeEnabled) + Global instructions Xt
- * (X.read/writeGlobalMemory) + Auto-organize $t (te.coworkSpaceContextEnabled) + Memory Vt.
+ * title + Dispatch Ht + Global instructions Xt + Auto-organize $t + Memory Vt.
+ *
+ * Product 2026-07-28: **Dispatch row hidden** (user: 派发隐藏吧) — bridge handlers
+ * remain for residual/API; UI does not surface phone-dispatch until full parity.
+ * Global/Memory use desktop CoworkMemory on-disk residual (CLAUDE.md + memory/*.md).
+ * Auto-organize: te.coworkSpaceContextEnabled preference residual.
  * Memory toggle: account.settings.enabled_cowork_memory via mutate J().
- * Memory list: X.listAccountMemories / deleteAccountMemory (gt/xt/Yt).
- * Copy via official message ids (settingsMessages COWORK_SETTINGS_MESSAGES).
  */
 export function CoworkSettings() {
   const text = useCoworkSettingsText();
   const [preferences, setPreference] = useDesktopPreferences();
   const { bootstrap, updateAccountSetting } = useSettingsBootstrap();
-  const [dispatchEnabled, setDispatchEnabled] = useState<boolean | null>(null);
-  const [dispatchPending, setDispatchPending] = useState(false);
   const [editingInstructions, setEditingInstructions] = useState(false);
   const [instructions, setInstructions] = useState("");
   const [instructionsLoading, setInstructionsLoading] = useState(false);
@@ -54,31 +49,6 @@ export function CoworkSettings() {
 
   // Official Qt: !1 !== account.settings.enabled_cowork_memory
   const memoryEnabled = bootstrap.account?.settings?.enabled_cowork_memory !== false;
-
-  useEffect(() => {
-    let alive = true;
-    const sessions = sessionsBridge();
-    if (!sessions?.getSessionsBridgeEnabled) {
-      // No bridge surface → leave Dispatch row hidden (official residual when Xe absent).
-      setDispatchEnabled(null);
-      return () => {
-        alive = false;
-      };
-    }
-    void sessions
-      .getSessionsBridgeEnabled()
-      .then((value) => {
-        if (!alive) return;
-        setDispatchEnabled(value !== false);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setDispatchEnabled(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!editingInstructions) return;
@@ -138,23 +108,6 @@ export function CoworkSettings() {
     };
   }, [memoryTick]);
 
-  const toggleDispatch = useCallback(async () => {
-    if (dispatchPending || dispatchEnabled === null) return;
-    const sessions = sessionsBridge();
-    if (!sessions?.setSessionsBridgeEnabled) return;
-    const previous = dispatchEnabled;
-    const next = !previous;
-    setDispatchPending(true);
-    setDispatchEnabled(next);
-    try {
-      await sessions.setSessionsBridgeEnabled(next);
-    } catch {
-      setDispatchEnabled(previous);
-    } finally {
-      setDispatchPending(false);
-    }
-  }, [dispatchEnabled, dispatchPending]);
-
   const saveInstructions = useCallback(async () => {
     if (instructionsSaving) return;
     const memory = memoryBridge();
@@ -197,37 +150,15 @@ export function CoworkSettings() {
   }, [text.couldntDeleteMemory]);
 
   const toggleMemoryEnabled = useCallback(() => {
+    // Official Qt: mutate account.settings.enabled_cowork_memory only (J()).
     void updateAccountSetting("enabled_cowork_memory", !memoryEnabled);
-    // Keep legacy desktop pref in sync for any residual local consumers.
-    setPreference("enabledCoworkMemory", !memoryEnabled);
-  }, [memoryEnabled, setPreference, updateAccountSetting]);
+  }, [memoryEnabled, updateAccountSetting]);
 
   return (
     <main className="flex flex-col gap-7">
       <h1 className="text-heading-semibold text-primary">{text.cowork}</h1>
       <SettingsSection>
-        {dispatchEnabled !== null ? (
-          <SettingsRow
-            label={
-              <span className="flex items-center gap-2">
-                {text.dispatch}{" "}
-                <span className="inline-flex rounded-full bg-bg-300 px-2 py-0.5 text-footnote text-secondary">
-                  {text.beta}
-                </span>
-              </span>
-            }
-            description={text.dispatchDescription}
-            control={
-              <Switch
-                checked={dispatchEnabled}
-                disabled={dispatchPending}
-                onCheckedChange={() => {
-                  void toggleDispatch();
-                }}
-              />
-            }
-          />
-        ) : null}
+        {/* Dispatch Ht intentionally not rendered — user 派发隐藏吧 (2026-07-28). */}
         <SettingsRow
           label={text.autoOrganizeSessions}
           description={text.autoOrganizeSessionsDescription}
@@ -441,16 +372,6 @@ function normalizeMemoryList(raw: unknown): MemoryFile[] {
     out.push({ path, content });
   }
   return out;
-}
-
-function sessionsBridge(): SessionsBridgeToggle | undefined {
-  const web = window["claude.web"] as
-    | {
-        LocalAgentModeSessions?: SessionsBridgeToggle;
-        LocalSessions?: SessionsBridgeToggle;
-      }
-    | undefined;
-  return web?.LocalAgentModeSessions ?? web?.LocalSessions;
 }
 
 function memoryBridge(): CoworkMemoryBridge | undefined {

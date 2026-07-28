@@ -56,6 +56,15 @@ export type InstalledExtensionState = {
 
 export type ExtensionsSettingsBridge = {
   deleteExtension?: (extensionId: string) => Promise<boolean>;
+  /** Official cf4f70727 advanced Detected tools residual. */
+  getAvailableExtensionRuntimes?: () => Promise<
+    Array<{
+      builtInVersion?: string | null;
+      name?: string;
+      versions?: string[];
+      [key: string]: unknown;
+    }>
+  >;
   getInstalledExtensionsWithState?: () => Promise<InstalledExtensionState[]>;
   handleDxtFile?: (dxtPath: string) => Promise<void>;
   installDxt?: (extensionId: string | null, dxtPath: string) => Promise<string | null>;

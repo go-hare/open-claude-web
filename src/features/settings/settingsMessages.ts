@@ -375,6 +375,44 @@ export const CLAUDE_CODE_SETTINGS_MESSAGES = {
     defaultMessage: "Open auto-created pull requests as drafts instead of ready for review.",
     id: "qpCNNJoawH",
   },
+  /**
+   * Official St (cc989143e): General · Classify session states.
+   * Gate: GrowthBook claudeai_session_state; account ccr_session_state_buckets.
+   */
+  general: { defaultMessage: "General", id: "1iEPTMDqmi" },
+  classifySessionStates: {
+    defaultMessage: "Classify session states",
+    id: "Ao1+HpCJOZ",
+  },
+  classifySessionStatesDescription: {
+    defaultMessage:
+      "Allow Claude to automatically classify sessions as blocked, ready for review, or done. Classifying sessions counts towards your plan usage. Applies to new sessions.",
+    id: "dASzGfiDEA",
+  },
+  /**
+   * Official _t autofix row uses Statsig dynamic copy 10wu7bs / qdsv98.
+   * Catalog residual for the same control elsewhere is pOrogLHpcW; keep EN body
+   * when Statsig ids are absent (same pattern as auto-archive 1wdvcl/1kh0255).
+   */
+  autofixOnPrCreate: {
+    defaultMessage: "Auto-fix CI & address comments",
+    id: "pOrogLHpcW",
+  },
+  autofixOnPrCreateDescription: {
+    defaultMessage:
+      "When Claude opens a pull request, automatically watch CI and review comments and push fixes. Applies to remote sessions and local sessions with autofix enabled.",
+    id: "10wu7bs",
+  },
+  /** Official Statsig 1wdvcl / 1kh0255 — not spa i18n; residual EN under those ids. */
+  autoArchiveClosedPrSessions: {
+    defaultMessage: "Auto-archive closed PR sessions",
+    id: "1wdvcl",
+  },
+  autoArchiveClosedPrSessionsDescription: {
+    defaultMessage:
+      "When an auto-created pull request is closed, automatically archive the matching local session.",
+    id: "1kh0255",
+  },
 } as const satisfies MessageDescriptors;
 
 export function useClaudeCodeSettingsText() {
@@ -614,6 +652,19 @@ export const EXTENSIONS_SETTINGS_MESSAGES = {
   configure: { defaultMessage: "Configure", id: "VyyoA+XMVN" },
   moreOptions: { defaultMessage: "More options", id: "WDBdrgEGU2" },
   details: { defaultMessage: "Details", id: "euu2s475KB" },
+  /** Official z NUX (c71860c77): VP4e+7wPv7 + /WjAw+SZxj until 2025-09-01 or dismissed. */
+  wantToBuildExtension: {
+    defaultMessage: "Want to build and share your own desktop extension?",
+    id: "VP4e+7wPv7",
+  },
+  learnMore: { defaultMessage: "Learn more", id: "/WjAw+SZxj" },
+  /** Official Pe (c71860c77-B8t): Enabled / Disabled status next to detail toggle. */
+  extensionEnabled: { defaultMessage: "Enabled", id: "cnxLJKBabd" },
+  extensionDisabled: { defaultMessage: "Disabled", id: "4PQSGeQCas" },
+  desktopExtensionEnabledToggle: {
+    defaultMessage: "Desktop extension enabled toggle",
+    id: "WJgYgSnFbD",
+  },
   failedToSaveAutoUpdate: {
     defaultMessage: "Failed to save auto-update setting",
     id: "01AM3gDtkx",

@@ -9,6 +9,7 @@ import { CoworkSettings } from "./sections/CoworkSettings";
 import { DesktopDeveloper } from "./sections/DesktopDeveloperSettings";
 import { DesktopSettings } from "./sections/DesktopSettings";
 import {
+  ExtensionDetail,
   ExtensionNotFound,
   ExtensionsAdvanced,
   ExtensionsDirectory,
@@ -209,7 +210,15 @@ function renderPersonalContent(pathname: string, onNavigate: RouteViewProps["onN
   if (pathname === "/settings/desktop/extensions") return <ExtensionsOverview onNavigate={onNavigate} />;
   if (pathname === "/settings/desktop/extensions/advanced") return <ExtensionsAdvanced onNavigate={onNavigate} />;
   if (pathname === "/settings/desktop/extensions/manage-directory") return <ExtensionsDirectory onNavigate={onNavigate} />;
-  if (pathname.startsWith("/settings/desktop/extensions/")) return <ExtensionNotFound onNavigate={onNavigate} />;
+  if (pathname.startsWith("/settings/desktop/extensions/")) {
+    const extensionId = decodeURIComponent(
+      pathname.slice("/settings/desktop/extensions/".length).split("/")[0] ?? "",
+    );
+    if (!extensionId || extensionId === "advanced" || extensionId === "manage-directory") {
+      return <ExtensionNotFound onNavigate={onNavigate} />;
+    }
+    return <ExtensionDetail extensionId={extensionId} onNavigate={onNavigate} />;
+  }
   if (pathname === "/settings/desktop/developer") return <DesktopDeveloper />;
   return <p>Not Found</p>;
 }
