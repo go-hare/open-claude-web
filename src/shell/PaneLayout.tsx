@@ -3,6 +3,14 @@ import type { AppRoute } from "../app/routes";
 import { EpitaxySessionTile } from "../features/epitaxy/EpitaxySessionTile";
 import { CoworkSessionTile } from "../features/cowork/session/CoworkSessionTile";
 import type { FrameMode } from "../stores/frameStore";
+import {
+  subscribeCodeSessionArchived,
+  subscribeCodeSessionDeleted,
+} from "../features/epitaxy/session/codeSessionDeletion";
+import {
+  subscribeCoworkSessionArchived,
+  subscribeCoworkSessionDeleted,
+} from "../features/cowork/session/coworkSessionDeletion";
 import { paneRefFromPath, paneRefKey, paneStore, usePaneStoreSnapshot, type PaneSlot } from "../stores/paneStore";
 import { PaneResizeHandles, useCommandHeldAttribute, usePaneDrag, usePaneKeyboard, usePaneSplitBounds } from "./PaneControls";
 import { PrimaryPaneMenu } from "./PaneHeaderActions";
@@ -49,7 +57,6 @@ export function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLay
     [isSessionRoute],
   );
   const focusPane = useCallback((paneIndex: number) => paneStore.setFocusedIndex(mode, paneIndex), [mode]);
-  const closePane = useCallback((paneIndex: number) => paneStore.closePane(mode, paneIndex), [mode]);
   const primaryDrag = usePaneDrag(0, mode, onNavigate);
 
   return (
@@ -84,7 +91,7 @@ export function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLay
             focused={focusedIndex === paneIndex}
             key={paneRefKey(pane.ref)}
             mode={mode}
-            onClose={() => closePane(paneIndex)}
+            onClose={() => paneStore.closePaneByRef(mode, pane.ref)}
             onFocus={() => focusPane(paneIndex)}
             isLonePane={snapshot.extraPanes.length === 1}
             onNavigate={onNavigate}
@@ -148,6 +155,34 @@ function usePaneStoreEvents(mode: FrameMode, currentKey: string) {
     window.addEventListener("dframe:open-pane", onOpenPane);
     return () => window.removeEventListener("dframe:open-pane", onOpenPane);
   }, [currentKey, mode]);
+
+  // Official ZR / KEe: delete or archive of a session still open in an extra pane
+  // removes that pane by stable ref — never navigates the primary route.
+  useEffect(() => {
+    if (mode === "code") {
+      const closeExtra = (sessionId: string) => {
+        paneStore.closePaneByRef(mode, { kind: "code", id: sessionId });
+      };
+      const unsubDeleted = subscribeCodeSessionDeleted(closeExtra);
+      const unsubArchived = subscribeCodeSessionArchived(closeExtra);
+      return () => {
+        unsubDeleted();
+        unsubArchived();
+      };
+    }
+    if (mode === "cowork") {
+      const closeExtra = (sessionId: string) => {
+        paneStore.closePaneByRef(mode, { kind: "cowork", id: sessionId });
+      };
+      const unsubDeleted = subscribeCoworkSessionDeleted(closeExtra);
+      const unsubArchived = subscribeCoworkSessionArchived(closeExtra);
+      return () => {
+        unsubDeleted();
+        unsubArchived();
+      };
+    }
+    return undefined;
+  }, [mode]);
 }
 
 function ExtraPane({ focused, isLonePane, mode, onClose, onFocus, onNavigate, paneIndex, refId, refKind, slot }: {

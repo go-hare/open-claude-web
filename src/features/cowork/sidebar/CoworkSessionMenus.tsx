@@ -12,10 +12,14 @@ import {
   CoworkTrashGlyph,
   CoworkUnpinGlyph,
 } from "../ui/CoworkOfficialGlyphs";
-import { coworkSessionPinKey, isCoworkSessionPinned, pinCoworkSession, unpinCoworkSession } from "./coworkSessionPinning";
+import { isCoworkSessionPinned, pinCoworkSession, unpinCoworkSession } from "./coworkSessionPinning";
 
 export type CoworkRowAction = "pin" | "unpin" | "rename" | "archive" | "delete" | "toggleDone";
 
+/**
+ * Row actions except delete/archive — those are owned by CoworkRecentsSection so
+ * navigation fallback + sidebar meta clear can run after shared mutation success.
+ */
 export function useCoworkSessionRowActions(frame: FrameStore, setSessions: Dispatch<SetStateAction<SessionSummary[]>>) {
   return useCallback((session: SessionSummary, action: CoworkRowAction) => {
     if (action === "pin") {
@@ -34,14 +38,7 @@ export function useCoworkSessionRowActions(frame: FrameStore, setSessions: Dispa
       updateCoworkSession(setSessions, session, { isAgentCompleted: !session.isAgentCompleted });
       return;
     }
-    if (action === "archive") {
-      setSessions((current) => current.map((item) => item.id === session.id ? { ...item, isArchived: true } : item));
-      void desktopBridge.LocalAgentModeSessions.archive(session.id);
-      return;
-    }
-    setSessions((current) => current.filter((item) => item.id !== session.id));
-    frame.removeFromPinnedOrder(coworkSessionPinKey(session));
-    void desktopBridge.LocalAgentModeSessions.delete(session.id);
+    // archive / delete: handled by CoworkRecentsSection (await shared command + nav/meta).
   }, [frame, setSessions]);
 }
 

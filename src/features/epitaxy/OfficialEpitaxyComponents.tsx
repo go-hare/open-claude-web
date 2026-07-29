@@ -13,7 +13,9 @@ import {
 import { createPortal } from "react-dom";
 import { desktopBridge, type SessionSummary } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
+import { selectedSessionIdFromPath, sessionHomePath } from "../../shell/sessionPaths";
 import { OfficialTooltip } from "../shared/OfficialTooltip";
+import { archiveCodeSession, deleteCodeSession, replaceAppNavigation } from "./session/codeSessionDeletion";
 import { officialCodeSessionStore } from "./session/officialCodeSessionStore";
 import { copyOfficialMessageRich } from "./session/officialMessageClipboard";
 
@@ -1311,22 +1313,34 @@ function OfficialSessionTitle({
     [commitRename, title],
   );
 
+  /**
+   * Official titlebar archive residual:
+   * shared archiveCodeSession → onSessionRemoved / leave /code/:id.
+   * Sidebar archive additionally does next/prev; header leaves current session (same as delete).
+   */
   const archiveSession = useCallback(async () => {
-    try {
-      await desktopBridge.LocalSessions.archive(sessionId);
-      officialCodeSessionStore.getState().patchSession(sessionId, { isArchived: true });
-      onSessionRemoved?.();
-    } catch {
-      /* bridge residual */
+    const ok = await archiveCodeSession(sessionId);
+    if (!ok) return;
+    if (onSessionRemoved) {
+      onSessionRemoved();
+      return;
+    }
+    if (selectedSessionIdFromPath(window.location.pathname) === sessionId) {
+      replaceAppNavigation(sessionHomePath("code"));
     }
   }, [onSessionRemoved, sessionId]);
 
   const deleteSession = useCallback(async () => {
-    try {
-      await desktopBridge.LocalSessions.delete(sessionId);
-      onSessionRemoved?.();
-    } catch {
-      /* bridge residual */
+    // Shared delete: bridge + cache clear + notify. Navigation/pane close stays in caller.
+    const ok = await deleteCodeSession(sessionId);
+    if (!ok) return;
+    if (onSessionRemoved) {
+      onSessionRemoved();
+      return;
+    }
+    // Primary without callback: only leave if URL still points at this session.
+    if (selectedSessionIdFromPath(window.location.pathname) === sessionId) {
+      replaceAppNavigation(sessionHomePath("code"));
     }
   }, [onSessionRemoved, sessionId]);
 

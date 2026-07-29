@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { desktopBridge, type SessionSummary } from "../../adapters/desktopBridge";
 import type { ChatMessage } from "../../adapters/desktopBridge/types";
-import { sessionHomePath } from "../../shell/sessionPaths";
+import { selectedSessionIdFromPath, sessionHomePath } from "../../shell/sessionPaths";
 import type { PaneSlot } from "../../stores/paneStore";
 import { EpitaxyTileLayout } from "./EpitaxyFrameSurface";
 import {
@@ -38,6 +38,7 @@ import {
   useEpitaxySessionType,
   useFocusedSession,
 } from "./session/useEpitaxySessionData";
+import { replaceAppNavigation } from "./session/codeSessionDeletion";
 import { previewAnnotationQueue } from "./session/previewAnnotationQueue";
 import {
   loadOfficialThinkingSparkAnimation,
@@ -85,6 +86,7 @@ const draftPersistKey = "epitaxy-draft";
 export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, onNavigate, sessionId }: EpitaxyFramePageProps) {
   const activeSessionId = sessionId || undefined;
   const sessionType = useEpitaxySessionType(activeSessionId);
+  const fallbackHome = sessionHomePath("code");
 
   useEffect(() => {
     void loadOfficialThinkingSparkAnimation();
@@ -92,6 +94,17 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
   const sessionRef = useMemo(() => activeSessionId ? { id: activeSessionId, type: sessionType } : null, [activeSessionId, sessionType]);
 
   useFocusedSession(activeSessionId);
+
+  /**
+   * Official primary titlebar delete residual:
+   * after successful delete, leave /code/:id — prefer replace home.
+   * Only act if URL still points at this session (user may have navigated away).
+   */
+  const onSessionRemoved = useCallback(() => {
+    if (!activeSessionId) return;
+    if (selectedSessionIdFromPath(window.location.pathname) !== activeSessionId) return;
+    replaceAppNavigation(fallbackHome);
+  }, [activeSessionId, fallbackHome]);
 
   // Official tile layout (c11959232 KI/YI): topLeftId marks the primary pane tile isTopLeft.
   // EpitaxyFramePage is always the dframe-pane-primary chat tile, so isTopLeft must be true.
@@ -109,11 +122,12 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
         landingActions={landingActions}
         landingBody={landingBody}
         onNavigate={onNavigate}
+        onSessionRemoved={activeSessionId ? onSessionRemoved : undefined}
         sessionRef={sessionRef}
         sessionType={activeSessionId ? sessionType : undefined}
       />
     </OfficialChatTileShell>
-  ), [activeSessionId, hideComposer, landingActions, landingBody, onNavigate, sessionRef, sessionType]);
+  ), [activeSessionId, hideComposer, landingActions, landingBody, onNavigate, onSessionRemoved, sessionRef, sessionType]);
 
   return (
     <div className="epitaxy-root select-none h-full w-full flex flex-col">
@@ -141,7 +155,8 @@ export function EpitaxySessionTile({ isLonePane = false, onClose, onMovePane, on
 function EpitaxySecondPane({ isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, slot }: EpitaxySessionTileProps) {
   const sessionType = useEpitaxySessionType(sessionId);
   const sessionRef = useMemo(() => ({ id: sessionId, type: sessionType }), [sessionId, sessionType]);
-  const fallbackHome = sessionHomePath("code");
+  // Official ZR residual: secondary delete/close only removes the pane by stable ref.
+  // Never fall back to onNavigate(home) — that would steal the primary route.
   const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft?: boolean, dragHandle?: ReactNode) => (
     <OfficialChatTileShell>
       <EpitaxyChatPanel
@@ -154,14 +169,14 @@ function EpitaxySecondPane({ isLonePane, onClose, onMovePane, onNavigate, paneIn
         onClose={onClose}
         onNavigate={onNavigate}
         onMovePane={onMovePane}
-        onSessionRemoved={onClose ?? (() => onNavigate(fallbackHome))}
+        onSessionRemoved={onClose}
         paneIndex={paneIndex}
         sessionRef={sessionRef}
         sessionType={sessionType}
         slot={slot}
       />
     </OfficialChatTileShell>
-  ), [fallbackHome, isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, sessionRef, sessionType, slot]);
+  ), [isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, sessionRef, sessionType, slot]);
 
   return (
     <div className="epitaxy-root select-none flex-1 min-h-0 flex flex-col overflow-hidden">

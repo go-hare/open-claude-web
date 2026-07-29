@@ -212,6 +212,11 @@ type OfficialCodeSessionActions = {
     },
   ) => void;
   clearStream: (sessionId: string, markSessionSettled?: boolean) => void;
+  /**
+   * Drop a session bucket after host delete (official Lve residual).
+   * Idempotent — missing id is a no-op.
+   */
+  removeSession: (sessionId: string) => void;
   getBucket: (sessionId: string) => OfficialCodeSessionBucket | undefined;
   ensureBucket: (sessionId: string) => OfficialCodeSessionBucket;
 };
@@ -1147,6 +1152,15 @@ function createOfficialCodeSessionStore() {
       emitResponseCompletion({ title: "Claude", body: "Response complete" });
     }
   },
+
+  removeSession: (sessionId) => {
+    if (!sessionId) return;
+    set((state) => {
+      if (!state.buckets[sessionId]) return state;
+      const { [sessionId]: _removed, ...remaining } = state.buckets;
+      return { buckets: remaining };
+    });
+  },
 }));
 }
 
@@ -1176,7 +1190,7 @@ function migrateBucketsWithQueueDefaults(
  * Bump when queue pipeline action bodies change so HMR rebinds implementations
  * without wiping transcript buckets (zustand keeps old closures otherwise).
  */
-const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 5;
+const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 6;
 const OFFICIAL_CODE_SESSION_STORE_REV_KEY = "__hareOfficialCodeSessionStoreQueueRev__";
 
 function resolveOfficialCodeSessionStore() {
@@ -1188,8 +1202,10 @@ function resolveOfficialCodeSessionStore() {
   if (existing) {
     const state = existing.getState() as OfficialCodeSessionStore & {
       noteQueuedSend?: unknown;
+      removeSession?: unknown;
     };
-    const hasQueueActions = typeof state.noteQueuedSend === "function";
+    const hasQueueActions = typeof state.noteQueuedSend === "function"
+      && typeof state.removeSession === "function";
     if (hasQueueActions && prevRev === OFFICIAL_CODE_SESSION_STORE_QUEUE_REV) {
       return existing;
     }

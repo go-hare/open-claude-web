@@ -21,7 +21,13 @@ import { ConfirmDialog } from "../../shell/ConfirmDialog";
 import { Icon } from "../../shell/icons";
 import { useFrameContext } from "../../stores/frameContext";
 import { OfficialButton } from "../shared/OfficialButton";
+import {
+  archiveCoworkSession,
+  deleteCoworkSession,
+  replaceAppNavigation,
+} from "../cowork/session/coworkSessionDeletion";
 import { coworkSessionPath } from "../cowork/sessionPaths";
+import { selectedSessionIdFromPath, sessionHomePath } from "../../shell/sessionPaths";
 import {
   ProjectsExpandableSearch,
   ProjectsPageShell,
@@ -253,8 +259,14 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
     setDeleteOpen(false);
     setDeleteIds([]);
     if (ids.length === 0) return;
-    await Promise.all(ids.map((id) => desktopBridge.LocalAgentModeSessions.delete(id).catch(() => undefined)));
-    setSessions((current) => current.filter((session) => !ids.includes(session.id)));
+    const results = await Promise.all(ids.map((id) => deleteCoworkSession(id)));
+    const removed = new Set(ids.filter((_, index) => results[index]));
+    if (removed.size === 0) return;
+    setSessions((current) => current.filter((session) => !removed.has(session.id)));
+    const openId = selectedSessionIdFromPath(window.location.pathname);
+    if (openId && removed.has(openId)) {
+      replaceAppNavigation(sessionHomePath("cowork"));
+    }
     exitSelection();
   }, [deleteIds, exitSelection]);
 
@@ -263,16 +275,16 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
     setArchiveOpen(false);
     setArchiveIds([]);
     if (ids.length === 0) return;
-    await Promise.all(
-      ids.map((id) =>
-        desktopBridge.LocalAgentModeSessions.archive?.(id).catch(() =>
-          desktopBridge.LocalAgentModeSessions.updateSession?.(id, { isArchived: true }),
-        ),
-      ),
-    );
+    const results = await Promise.all(ids.map((id) => archiveCoworkSession(id)));
+    const archived = new Set(ids.filter((_, index) => results[index]));
+    if (archived.size === 0) return;
     setSessions((current) =>
-      current.map((session) => (ids.includes(session.id) ? { ...session, isArchived: true } : session)),
+      current.map((session) => (archived.has(session.id) ? { ...session, isArchived: true } : session)),
     );
+    const openId = selectedSessionIdFromPath(window.location.pathname);
+    if (openId && archived.has(openId)) {
+      replaceAppNavigation(sessionHomePath("cowork"));
+    }
     exitSelection();
   }, [archiveIds, exitSelection]);
 

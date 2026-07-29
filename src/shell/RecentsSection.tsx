@@ -9,11 +9,19 @@ import { GroupNameDialog } from "./GroupNameDialog";
 import { OfficialSidebarStatusGlyph } from "./OfficialSidebarStatusGlyph";
 import { PinnedSection, readSessionDragKey, writeSessionDragKey } from "./PinnedSection";
 import { buildRecentsGroups, defaultRecentsFilter, RecentsControls, type RecentsFilterState } from "./RecentsControls";
-import { isPinnedSession, sessionPinKey } from "./sessionPinning";
+import { isPinnedSession, orderPinnedSessions, sessionPinKey } from "./sessionPinning";
 import { SessionRowActions, useSessionRowActions } from "./SessionRowActions";
 import { SessionRowMenuContent, type RowAction } from "./SessionRowMenus";
 import { SidebarSectionHeader } from "./SidebarSectionHeader";
 import { canOpenSessionInSplit, selectedSessionIdFromPath, sessionPath } from "./sessionPaths";
+import {
+  archiveCodeSession,
+  deleteCodeSession,
+  replaceAppNavigation,
+  resolveDeletedCodeSessionFallback,
+  subscribeCodeSessionArchived,
+  subscribeCodeSessionDeleted,
+} from "../features/epitaxy/session/codeSessionDeletion";
 import { officialCodeSessionStore } from "../features/epitaxy/session/officialCodeSessionStore";
 
 type RecentsSectionProps = {
@@ -85,7 +93,39 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
     : buildRecentsGroups(recentsSessions, filter, text), [filter, frame, recentsSessions, text]);
   // Official recents sidebar is not hard-capped at 20; keep full filtered/grouped list (scroll in section).
   const rows = useMemo(() => groups.flatMap((group) => group.sessions), [groups]);
+  /**
+   * Official sidebar visible order for delete fallback:
+   * pinned (explicit order) then filtered/grouped recents rows, de-duped.
+   */
+  const visibleNavigationOrder = useMemo(() => {
+    const pinned = orderPinnedSessions(sessions, frame.pinnedOrder);
+    const seen = new Set(pinned.map((session) => session.id));
+    const rest = rows.filter((session) => {
+      if (seen.has(session.id)) return false;
+      seen.add(session.id);
+      return true;
+    });
+    return [...pinned, ...rest];
+  }, [frame.pinnedOrder, rows, sessions]);
   const rawActions = useSessionRowActions(frame, setSessions);
+  /**
+   * Official sidebar archive residual (ue):
+   * await archive → de(next/prev/home) if current → KEe pane ref clear.
+   * Archived rows stay in sessions with isArchived; default filter hides them.
+   */
+  const archiveSession = useCallback(async (session: SessionSummary) => {
+    const ordered = visibleNavigationOrder;
+    const fallbackPath = resolveDeletedCodeSessionFallback(ordered, session.id);
+    const ok = await archiveCodeSession(session.id);
+    if (!ok) return;
+    setSessions((current) => current.map((item) => (
+      item.id === session.id ? { ...item, isArchived: true } : item
+    )));
+    frame.clearSessionSidebarMeta(sessionPinKey(session));
+    if (selectedSessionIdFromPath(window.location.pathname) === session.id) {
+      replaceAppNavigation(fallbackPath);
+    }
+  }, [frame, visibleNavigationOrder]);
   const actions = useCallback((session: SessionSummary, action: RowAction) => {
     if (action === "rename") {
       setRenameTarget(session);
@@ -95,8 +135,53 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
       setDeleteTarget(session);
       return;
     }
+    if (action === "archive") {
+      void archiveSession(session);
+      return;
+    }
     rawActions(session, action);
-  }, [rawActions]);
+  }, [archiveSession, rawActions]);
+  const confirmDelete = useCallback(async () => {
+    const target = deleteTarget;
+    if (!target) return;
+    setDeleteTarget(null);
+    // Freeze visible order before await so next/previous matches what the user saw.
+    const ordered = visibleNavigationOrder;
+    const fallbackPath = resolveDeletedCodeSessionFallback(ordered, target.id);
+    const ok = await deleteCodeSession(target.id);
+    if (!ok) return;
+    setSessions((current) => current.filter((item) => item.id !== target.id));
+    // Official: drop pin + custom-group assignment/order (orphan keys).
+    frame.clearSessionSidebarMeta(sessionPinKey(target));
+    // Only leave the route if still viewing the deleted session (race-safe).
+    if (selectedSessionIdFromPath(window.location.pathname) === target.id) {
+      replaceAppNavigation(fallbackPath);
+    }
+  }, [deleteTarget, frame, visibleNavigationOrder]);
+
+  // Header/other-window deletes also drop the sidebar row + pin/group meta.
+  useEffect(() => {
+    return subscribeCodeSessionDeleted((sessionId) => {
+      setSessions((current) => {
+        const target = current.find((item) => item.id === sessionId);
+        if (target) frame.clearSessionSidebarMeta(sessionPinKey(target));
+        return current.filter((item) => item.id !== sessionId);
+      });
+    });
+  }, [frame]);
+
+  // Header archive: mark isArchived + clear pin/group meta (list stays, default filter hides).
+  useEffect(() => {
+    return subscribeCodeSessionArchived((sessionId) => {
+      setSessions((current) => {
+        const target = current.find((item) => item.id === sessionId);
+        if (target) frame.clearSessionSidebarMeta(sessionPinKey(target));
+        return current.map((item) => (
+          item.id === sessionId ? { ...item, isArchived: true } : item
+        ));
+      });
+    });
+  }, [frame]);
   const createGroupForSession = useCallback((session: SessionSummary, name: string) => {
     const group = frame.addCustomGroup(name);
     frame.assignToCustomGroup(sessionPinKey(session), group.id);
@@ -164,7 +249,7 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
         isOpen={deleteTarget !== null}
         message={<>{text.deleteSessionPrefix} “{deleteTarget?.title}”? {text.deleteSessionSuffix}</>}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => { if (deleteTarget) rawActions(deleteTarget, "delete"); }}
+        onConfirm={() => { void confirmDelete(); }}
         title={text.deleteSession}
         variant="danger"
       />

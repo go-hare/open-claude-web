@@ -73,6 +73,35 @@ export function assignToCustomGroupState(current: FrameState, sessionKey: string
   return { ...current, customGroupAssignments, customGroupOrder };
 }
 
+/**
+ * Official residual after session delete/archive: drop pin + custom-group assignment/order
+ * for a session key so sidebar meta does not keep orphan keys.
+ */
+export function clearSessionSidebarMetaState(current: FrameState, sessionKey: string): FrameState {
+  if (!sessionKey) return current;
+  const pinnedOrder = current.pinnedOrder.includes(sessionKey)
+    ? current.pinnedOrder.filter((item) => item !== sessionKey)
+    : current.pinnedOrder;
+  const hadAssignment = Object.prototype.hasOwnProperty.call(current.customGroupAssignments, sessionKey);
+  const customGroupAssignments = hadAssignment
+    ? Object.fromEntries(Object.entries(current.customGroupAssignments).filter(([key]) => key !== sessionKey))
+    : current.customGroupAssignments;
+  let orderChanged = false;
+  const customGroupOrder: Record<string, string[]> = {};
+  for (const [groupId, order] of Object.entries(current.customGroupOrder)) {
+    if (!order.includes(sessionKey)) {
+      customGroupOrder[groupId] = order;
+      continue;
+    }
+    orderChanged = true;
+    const next = order.filter((item) => item !== sessionKey);
+    if (next.length > 0) customGroupOrder[groupId] = next;
+  }
+  if (pinnedOrder === current.pinnedOrder && !hadAssignment && !orderChanged) return current;
+  persistDFrameState({ pinnedOrder, customGroupAssignments, customGroupOrder });
+  return { ...current, pinnedOrder, customGroupAssignments, customGroupOrder };
+}
+
 export function deleteCustomGroupState(current: FrameState, id: string): FrameState {
   const customGroupAssignments = Object.fromEntries(Object.entries(current.customGroupAssignments).filter(([, groupId]) => groupId !== id));
   const { [id]: _deleted, ...customGroupOrder } = current.customGroupOrder;

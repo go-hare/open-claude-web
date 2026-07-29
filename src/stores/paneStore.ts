@@ -50,6 +50,7 @@ let paneState: PaneStoreState = createInitialPaneState();
 export const paneStore = {
   addPane,
   closePane,
+  closePaneByRef,
   getState: () => paneState,
   movePane,
   openInPane,
@@ -147,6 +148,23 @@ function closePane(mode: FrameMode, paneIndex: number) {
     const targetIndex = paneIndex - 1;
     const panes = getPanes(state, mode);
     if (targetIndex < 0 || targetIndex >= panes.length) return state;
+    const removed = panes[targetIndex];
+    const nextPanes = normalizeRemainingPanes(panes.filter((_, index) => index !== targetIndex), removed.slot);
+    const focusedIndex = paneIndex < state.focusedIndex ? state.focusedIndex - 1 : Math.min(state.focusedIndex, nextPanes.length);
+    return withPanes(state, mode, nextPanes, focusedIndex);
+  });
+}
+
+/**
+ * Official ZR residual: remove extra pane by stable session ref, not captured index.
+ * Safe after async delete where pane order may have shifted.
+ */
+function closePaneByRef(mode: FrameMode, ref: PaneRef) {
+  updatePaneState((state) => {
+    const panes = getPanes(state, mode);
+    const targetIndex = findPaneIndex(panes, ref);
+    if (targetIndex === -1) return state;
+    const paneIndex = targetIndex + 1;
     const removed = panes[targetIndex];
     const nextPanes = normalizeRemainingPanes(panes.filter((_, index) => index !== targetIndex), removed.slot);
     const focusedIndex = paneIndex < state.focusedIndex ? state.focusedIndex - 1 : Math.min(state.focusedIndex, nextPanes.length);

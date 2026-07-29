@@ -11,6 +11,7 @@ import {
 } from "../../../shell/LegacyDropdown";
 import { officialButtonClass } from "../../shared/buttonClasses";
 import { OfficialButton } from "../../shared/OfficialButton";
+import { selectedSessionIdFromPath, sessionHomePath } from "../../../shell/sessionPaths";
 import {
   executeCoworkSessionSkill,
   prefillCoworkSessionComposer,
@@ -25,6 +26,11 @@ import {
   CoworkTrashGlyph,
   CoworkUnpinGlyph,
 } from "../ui/CoworkOfficialGlyphs";
+import {
+  archiveCoworkSession,
+  deleteCoworkSession,
+  replaceAppNavigation,
+} from "./coworkSessionDeletion";
 import { coworkSessionsBridge } from "./coworkSessionBridge";
 
 /**
@@ -154,16 +160,29 @@ function CoworkSessionTitleControl({
     void coworkSessionsBridge.updateSession?.(sessionId, { isPinned: next });
   }, [isPinned, onSessionPatched, sessionId]);
 
-  const onArchive = useCallback(() => {
+  /**
+   * Official titlebar archive residual:
+   * shared archiveCoworkSession → leave current session (/task/new).
+   * Sidebar archive additionally does next/prev; header leaves current session.
+   */
+  const onArchive = useCallback(async () => {
+    const ok = await archiveCoworkSession(sessionId);
+    if (!ok) return;
     onSessionPatched?.({ isArchived: true });
-    void coworkSessionsBridge.archive(sessionId);
-    onNavigate("/task/new");
-  }, [onNavigate, onSessionPatched, sessionId]);
+    // Primary header: only leave if URL still points at this session.
+    // Extra panes close via PaneLayout subscription (stable ref), not primary route.
+    if (selectedSessionIdFromPath(window.location.pathname) === sessionId) {
+      replaceAppNavigation(sessionHomePath("cowork"));
+    }
+  }, [onSessionPatched, sessionId]);
 
   const onDelete = useCallback(async () => {
-    await coworkSessionsBridge.delete(sessionId);
-    onNavigate("/task/new");
-  }, [onNavigate, sessionId]);
+    const ok = await deleteCoworkSession(sessionId);
+    if (!ok) return;
+    if (selectedSessionIdFromPath(window.location.pathname) === sessionId) {
+      replaceAppNavigation(sessionHomePath("cowork"));
+    }
+  }, [sessionId]);
 
   // Official Ze: executeSkill(schedule). Slash residual always injects schedule skill.
   const onSchedule = useCallback(() => {

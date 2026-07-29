@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   assignToCustomGroupState,
   clampSidebarWidth,
+  clearSessionSidebarMetaState,
   createInitialFrameState,
   deleteCustomGroupState,
   moveCustomGroupState,
@@ -41,6 +42,8 @@ export type FrameState = {
 export type FrameActions = {
   addCustomGroup: (name: string) => DFrameCustomGroup;
   assignToCustomGroup: (sessionKey: string, groupId: string | null, nextOrder?: string[]) => void;
+  /** Drop pin + custom-group assignment/order for a deleted/archived session key. */
+  clearSessionSidebarMeta: (sessionKey: string) => void;
   commitSidebarWidth: (width: number) => void;
   deleteCustomGroup: (id: string) => void;
   markDragPinHintSeen: () => void;
@@ -82,6 +85,7 @@ export function useFrameStore(): FrameStore {
       return group;
     },
     assignToCustomGroup: (sessionKey, groupId, nextOrder) => setState((current) => assignToCustomGroupState(current, sessionKey, groupId, nextOrder)),
+    clearSessionSidebarMeta: (sessionKey) => setState((current) => clearSessionSidebarMetaState(current, sessionKey)),
     commitSidebarWidth: (width) => setState((current) => {
       const sidebarWidth = clampSidebarWidth(width);
       persistDFrameState({ sidebarWidth });

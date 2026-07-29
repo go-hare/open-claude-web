@@ -19,14 +19,17 @@ export function useSessionRowActions(frame: FrameStore, setSessions: Dispatch<Se
     }
     if (action === "rename") return;
     if (action === "archive") {
+      // Code archive is owned by RecentsSection (await bridge + next/prev/home +
+      // clearSessionSidebarMeta). Keep fire-and-forget only for non-code kinds.
+      if (session.kind === "code") return;
       setSessions((current) => current.map((item) => item.id === session.id ? { ...item, isArchived: true } : item));
       void sessionSource(session).archive(session.id);
       return;
     }
     if (action === "delete") {
-      setSessions((current) => current.filter((item) => item.id !== session.id));
-      frame.removeFromPinnedOrder(sessionPinKey(session));
-      void sessionSource(session).delete(session.id);
+      // Destructive delete is owned by RecentsSection (confirm + shared
+      // deleteCodeSession + next/previous/home). Do not fire-and-forget here.
+      return;
     }
   }, [frame, setSessions]);
 }
