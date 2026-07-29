@@ -123,22 +123,17 @@ export function OfficialCodeComposer({
     },
   }));
   const effortItems: OfficialEffortItem[] = useMemo(() => {
-    // Official get_settings.applied.effortLevels: CLI always returns the ladder on
-    // success (grok → 3 stops; unknown model → CLI's own 5-stop). null = probe still
-    // pending/failed — do NOT invent Anthropic 5-stop (that fakes xhigh/max for grok).
-    const catalog = effortLevels && effortLevels.length > 0 ? effortLevels : null;
-    let ladder = catalog
-      ? effortOptions.filter((o) => catalog.includes(o.value))
-      : effortOptions.filter((o) => o.value === effortLevel);
-    if (ladder.length === 0) ladder = effortOptions.filter((o) => o.value === "medium");
+    // 5f75ff4: per-model catalog when present; null → full residual 5-stop ladder.
+    const allowed = effortLevels && effortLevels.length > 0 ? new Set(effortLevels) : null;
+    const ladder = allowed ? effortOptions.filter((o) => allowed.has(o.value)) : effortOptions;
     const items: OfficialEffortItem[] = ladder.map((option) => ({
       checked: !ultracode && option.value === effortLevel,
       label: option.label,
       value: option.value,
       onSelect: () => onEffortChange(option.value),
     }));
-    // Ultracode only after CLI catalog is known; ultracodeOfferable===false hides it.
-    if (catalog && ultracodeOfferable !== false) {
+    // Official $ gate: ultracodeOfferable=false → hide Ultracode; null keeps it.
+    if (ultracodeOfferable !== false) {
       items.push({
         accent: true,
         checked: ultracode,

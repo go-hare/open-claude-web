@@ -79,26 +79,20 @@ export function buildOfficialEffortMenuItems(options: {
   showUltracode?: boolean;
   /**
    * Official get_settings.applied.effortLevels (CLI 2.7.16+): per-model catalog ladder
-   * (e.g. grok-4.5 → ["low","medium","high"]; unknown model → CLI's own 5-stop fallback).
-   * CLI always returns effortLevels on successful get_settings — product must NOT invent
-   * a second Anthropic 5-stop ladder when this is null (probe pending / failed).
+   * (e.g. grok-4.5 → ["low","medium","high"]). When provided, only those stops render.
+   * When null/empty (probe pending or cold-session miss): keep the full residual ladder
+   * so Effort stays openable — never lock to a single stop (106e129 regression).
    */
   effortLevels?: readonly string[] | null;
 }): OfficialEffortMenuItem[] {
-  const catalog = options.effortLevels && options.effortLevels.length > 0
-    ? options.effortLevels
+  const showUltracode = options.showUltracode !== false;
+  const allowed = options.effortLevels && options.effortLevels.length > 0
+    ? new Set(options.effortLevels)
     : null;
-  // null catalog = not yet from CLI. Single current stop only (slider needs >1 to open).
-  // Never expand to hardcoded low…max — that invents xhigh/max for grok etc.
-  const ladder = catalog
-    ? effortLevelOptions.filter((o) => catalog.includes(o.value))
-    : (() => {
-        const current = normalizeEffortValue(options.current);
-        const hit = effortLevelOptions.find((o) => o.value === current);
-        return hit ? [hit] : [effortLevelOptions[1]]; // medium
-      })();
-  // Ultracode only once catalog is known (CLI sets ultracodeOfferable). Pending null ≠ true.
-  const showUltracode = catalog != null && options.showUltracode !== false;
+  // null catalog → full residual ladder (5f75ff4). Catalog present → filter only.
+  const ladder = allowed
+    ? effortLevelOptions.filter((o) => allowed.has(o.value))
+    : [...effortLevelOptions];
   // Explicit OfficialEffortMenuItem[] — Ultracode is residual value "ultra" (not a ladder id).
   const items: OfficialEffortMenuItem[] = ladder.map((option) => ({
     label: option.label,
@@ -107,15 +101,14 @@ export function buildOfficialEffortMenuItems(options: {
     onSelect: () => options.onSelect(option.value, false),
   }));
   if (showUltracode) {
-    // Top of THIS catalog (CLI resolves ultracode wire from same ladder).
-    const top = (ladder[ladder.length - 1]?.value ?? "max") as OfficialEffortLevel;
     items.push({
       label: "Ultracode",
       value: "ultra",
       accent: true,
       help: { title: ULTRACODE_HELP.title, body: ULTRACODE_HELP.body },
       checked: options.ultracode,
-      onSelect: () => options.onSelect(top, true),
+      // 5f75ff4 residual: Ultracode wires xhigh + workflows; CLI resolves catalog top.
+      onSelect: () => options.onSelect("xhigh", true),
     });
   }
   return items;

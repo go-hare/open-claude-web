@@ -1,9 +1,9 @@
 {
-  "name": "claude-deepseek-react-shell",
+  "name": "claudex-web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Clean React/TypeScript shell rebuilt from Claude-Deepseek ion-dist architecture notes.",
+  "description": "Claudex web shell rebuilt from Claude Desktop ion-dist architecture notes.",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5176",
     "build": "tsc -b && vite build",

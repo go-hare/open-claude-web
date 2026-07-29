@@ -401,16 +401,17 @@ function composerShortcutMatches(event: KeyboardEvent, spec: string, mac: boolea
   return event.metaKey === (mac && wantsCmd) && event.ctrlKey === (wantsCtrl || (!mac && wantsCmd)) && event.shiftKey === parts.includes("shift") && event.altKey === parts.includes("alt");
 }
 
+/**
+ * OfficialCodeComposer residual: triggerKey is the raw binding spec
+ * (`"cmd+shift+i"`), not pre-split glyphs. OfficialTriggerShortcut /
+ * shortcutChordParts render platform labels from `+`-joined chords.
+ * Pre-mapping to `["Ctrl","Shift","I"]` then joining with spaces made
+ * shortcutChordParts treat each word as a bare chord and Array.from() it
+ * into single-letter kbd chips (C t r l then S h i f t …).
+ */
 function composerShortcutForCommand(command: ComposerShortcutCommand, context: ComposerShortcutContext) {
   const binding = composerShortcutBindings.find((item) => item.command === command && composerShortcutConditionMatches("when" in item ? item.when : undefined, context.isClaudeApp));
-  return binding ? renderShortcutGlyphs(binding.key, context.mac) : undefined;
-}
-
-function renderShortcutGlyphs(spec: string, mac: boolean) {
-  const keyMap: Record<string, string> = mac
-    ? { alt: "⌥", cmd: "⌘", ctrl: "⌃", shift: "⇧" }
-    : { alt: "Alt", cmd: "Ctrl", ctrl: "Ctrl", shift: "Shift" };
-  return spec.split("+").map((part) => keyMap[part] ?? part.toUpperCase());
+  return binding?.key;
 }
 
 function getComposerShortcutContext(): ComposerShortcutContext {

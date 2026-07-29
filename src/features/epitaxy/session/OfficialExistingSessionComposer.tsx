@@ -102,7 +102,8 @@ export function ExistingSessionComposer({
   const [ultracode, setUltracode] = useState(() => session?.effort === "ultracode");
   /**
    * Official get_settings.applied (CLI 2.7.16+): per-model catalog ladder + Ultracode gate.
-   * null → probe pending/failed → single current stop only (CLI owns fallback ladder).
+   * null/empty → buildOfficialEffortMenuItems keeps full residual ladder (5f75ff4);
+   * never lock to a single stop (106e129 regression). Catalog present → filter only.
    */
   const [effortLevels, setEffortLevels] = useState<string[] | null>(null);
   const [ultracodeOfferable, setUltracodeOfferable] = useState<boolean | null>(null);
@@ -219,24 +220,51 @@ export function ExistingSessionComposer({
    * our own apply. effort applied syncs through host store → session_updated → the
    * session?.effort effect above; here we only lift the ladder/gate + reconcile
    * effort when there is no local lock (CLI is authoritative).
+   *
+   * Cold existing sessions often return effortLevels:null from getEffort (resume
+   * probe miss) while the new-chat path uses getEffortCatalogDefaults and works.
+   * Align: when session bag has no ladder, fall back to the same catalog probe as
+   * EpitaxyHome — still CLI-sourced, never invent low…max.
    */
   useEffect(() => {
     const sessionId = sessionRef?.id;
     if (!sessionId || !bridge.getEffort) return;
     let cancelled = false;
-    void bridge.getEffort(sessionId).then((applied) => {
-      if (cancelled || !applied || typeof applied === "string") return;
-      setEffortLevels(applied.effortLevels ?? null);
-      setUltracodeOfferable(applied.ultracodeOfferable ?? null);
-      if (effortLocalLockRef.current === sessionId) return;
-      if (applied.effort === "ultracode") {
-        setEffort("xhigh");
-        setUltracode(true);
-      } else if (applied.effort) {
-        setEffort(normalizeEffortValue(applied.effort));
-        setUltracode(false);
+    void (async () => {
+      try {
+        const applied = await bridge.getEffort(sessionId);
+        if (cancelled || !applied || typeof applied === "string") return;
+        let levels = applied.effortLevels ?? null;
+        let ultracode = applied.ultracodeOfferable ?? null;
+        if ((!levels || levels.length === 0) && bridge.getEffortCatalogDefaults) {
+          const catalog = await bridge.getEffortCatalogDefaults(
+            selectedModel === "default" ? undefined : selectedModel,
+          ).catch(() => null);
+          if (cancelled) return;
+          if (catalog && typeof catalog !== "string") {
+            if (catalog.effortLevels && catalog.effortLevels.length > 0) {
+              levels = catalog.effortLevels;
+            }
+            if (ultracode == null && catalog.ultracodeOfferable != null) {
+              ultracode = catalog.ultracodeOfferable;
+            }
+          }
+        }
+        if (cancelled) return;
+        setEffortLevels(levels);
+        setUltracodeOfferable(ultracode);
+        if (effortLocalLockRef.current === sessionId) return;
+        if (applied.effort === "ultracode") {
+          setEffort("xhigh");
+          setUltracode(true);
+        } else if (applied.effort) {
+          setEffort(normalizeEffortValue(applied.effort));
+          setUltracode(false);
+        }
+      } catch {
+        // ignore — leave null; UI uses full residual ladder (5f75ff4) until retry
       }
-    }).catch(() => undefined);
+    })();
     return () => { cancelled = true; };
   }, [bridge, sessionRef?.id, selectedModel]);
 

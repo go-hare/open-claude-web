@@ -102,8 +102,8 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
   /**
    * Official get_settings → applied (CLI 2.7.16+) for the new-session draft:
    * probe the CLI for the selected model's catalog ladder (effortLevels /
-   * ultracodeOfferable). Re-runs on model change. null → single current stop
-   * only (CLI always returns levels on success; do not invent 5-stop).
+   * ultracodeOfferable). Re-runs on model change. null → composer falls back to
+   * full residual ladder (5f75ff4); never lock single-stop.
    */
   useEffect(() => {
     let alive = true;
