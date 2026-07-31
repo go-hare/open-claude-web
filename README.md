@@ -171,3 +171,7 @@ npm run package:open
 | [`docs/official-alignment-map.md`](docs/official-alignment-map.md) | 官方 ↔ 产品 DOM/class 对照 |
 | [`../open-claude-desktop/README.md`](../open-claude-desktop/README.md) | 桌面壳、打包、部署模式 |
 | [`../open-claude-desktop/docs/package-and-test.md`](../open-claude-desktop/docs/package-and-test.md) | dual-root 与 smoke 规范 |
+
+
+## 链接
+- [((https://linux.do/))](https://linux.do/) — linux.do 社区
