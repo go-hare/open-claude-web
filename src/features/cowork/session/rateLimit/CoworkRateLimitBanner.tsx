@@ -50,35 +50,41 @@ function useCoworkMessageLimit(store: CoworkRateLimitStore = coworkRateLimitStor
   );
 }
 
-type ConfigHealthState = string;
+/** Residual of ConfigHealth degraded states (yW / AQt) — not healthy/not_testable. */
+const DEGRADED_CONFIG_HEALTH = new Set([
+  "invalid_config",
+  "auth_failed",
+  "unreachable",
+  "provider_error",
+  "bootstrap_error",
+  "config_model_rejected",
+]);
 
-function readConfigDegraded(): boolean {
+type Custom3pSetupBridge = {
+  getConfigHealth?: () => Promise<{ state?: string } | null>;
+  openSetupWindow?: () => Promise<unknown>;
+};
+
+function custom3pSetupBridge(): Custom3pSetupBridge | undefined {
   try {
-    const settings = (
+    return (
       window as unknown as {
-        "claude.settings"?: {
-          Custom3pSetup?: { getConfigHealth?: () => Promise<{ state?: string } | null> };
-        };
+        "claude.settings"?: { Custom3pSetup?: Custom3pSetupBridge };
       }
-    )["claude.settings"];
-    // Sync residual: prefer last known bootstrap flag if present; Setup open is best-effort.
-    void settings;
+    )["claude.settings"]?.Custom3pSetup;
   } catch {
-    /* ignore */
+    return undefined;
   }
-  return false;
+}
+
+function isConfigHealthDegraded(state: string | undefined | null): boolean {
+  if (!state) return false;
+  return DEGRADED_CONFIG_HEALTH.has(state);
 }
 
 function openCustom3pSetup(): void {
   try {
-    const setup = (
-      window as unknown as {
-        "claude.settings"?: {
-          Custom3pSetup?: { openSetupWindow?: () => Promise<unknown> };
-        };
-      }
-    )["claude.settings"]?.Custom3pSetup;
-    void setup?.openSetupWindow?.();
+    void custom3pSetupBridge()?.openSetupWindow?.();
   } catch {
     /* ignore */
   }
@@ -157,7 +163,9 @@ export function CoworkRateLimitBanner({
   const [resetState, setResetState] = useState<"idle" | "pending" | "done" | "error">(
     "idle",
   );
-  const [configDegraded] = useState<boolean>(() => readConfigDegraded());
+  // 3p residual: async getConfigHealth (same bridge as CoworkConfigHealthBanner).
+  // Must not stay hard-false — open-setup CTA is residual of billing/account fix.
+  const [configDegraded, setConfigDegraded] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -168,6 +176,27 @@ export function CoworkRateLimitBanner({
       // Official GrowthBook can_reset_rate_limits; product fails closed if no org.
       setCanReset(Boolean(uuid) && canResetRateLimitsFromBootstrap(bootstrap));
     });
+    return () => {
+      alive = false;
+    };
+  }, [limit?.type]);
+
+  useEffect(() => {
+    let alive = true;
+    const bridge = custom3pSetupBridge();
+    if (!bridge?.getConfigHealth) {
+      setConfigDegraded(false);
+      return;
+    }
+    void bridge
+      .getConfigHealth()
+      .then((health) => {
+        if (!alive) return;
+        setConfigDegraded(isConfigHealthDegraded(health?.state));
+      })
+      .catch(() => {
+        if (alive) setConfigDegraded(false);
+      });
     return () => {
       alive = false;
     };
@@ -275,5 +304,4 @@ export function CoworkRateLimitBanner({
   );
 }
 
-// silence unused ConfigHealthState if tree-shaken later
-export type { ConfigHealthState };
+export { isConfigHealthDegraded };

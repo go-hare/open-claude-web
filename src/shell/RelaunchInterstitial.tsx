@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CoworkClaudeAvatar } from "../features/cowork/session/transcript/CoworkClaudeAvatar";
 
@@ -87,24 +87,49 @@ export function RelaunchInterstitialBody({
 }: RelaunchInterstitialBodyProps) {
   const [seconds, setSeconds] = useState(3);
   const sub = COPY[variant]?.sub ?? COPY.apply.sub;
+  // Product: prevent double onDone when parent recreates callback identity after
+  // seconds hit 0 (effect deps re-fire). Official d2t also calls t() once at 0.
+  // Cancel must win over a late/hanging onDone (stuck "Relaunching in 1").
+  const finishedRef = useRef(false);
+  const onDoneRef = useRef(onDone);
+  const onCancelRef = useRef(onCancel);
+  onDoneRef.current = onDone;
+  onCancelRef.current = onCancel;
+
+  const finishCancel = () => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    onCancelRef.current();
+  };
+
+  const finishDone = () => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    onDoneRef.current();
+  };
 
   useEffect(() => {
     if (!handleEscape) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCancel();
+      if (event.key === "Escape") finishCancel();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [handleEscape, onCancel]);
+    // finishCancel is stable over mount (refs); only handleEscape gates the listener.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional once-per-mount cancel path
+  }, [handleEscape]);
 
   useEffect(() => {
+    if (finishedRef.current) return;
     if (seconds <= 0) {
-      onDone();
+      finishDone();
       return;
     }
     const timer = window.setTimeout(() => setSeconds((n) => n - 1), 1000);
     return () => window.clearTimeout(timer);
-  }, [seconds, onDone]);
+    // Do not depend on onDone identity — use ref so countdown cannot re-arm after 0.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seconds-only tick residual
+  }, [seconds]);
 
   const display = Math.max(seconds, 1);
 
@@ -160,7 +185,7 @@ export function RelaunchInterstitialBody({
         <p className="mt-1.5 max-w-xs text-balance text-sm text-text-400">{sub}</p>
         <button
           type="button"
-          onClick={onCancel}
+          onClick={finishCancel}
           autoFocus
           className="mt-1 rounded-md px-2.5 py-1.5 text-sm text-text-400 hover:text-text-100"
         >

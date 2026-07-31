@@ -191,7 +191,11 @@ export function ProjectsNoPermissionPage({ onNavigate }: RouteViewProps) {
  * - aliases: `/artifacts`, `/artifacts/my` (nav chrome) → same library page
  * - settings Visuals off → disabled message (preview_feature_uses_artifacts)
  * - host IPC: claude.web.CoworkArtifacts (not cloud studio Coming soon)
+ *
+ * `ArtifactsComingSoonPage` kept as deprecated alias only (name is historical).
  */
+export { ArtifactsLibraryPage } from "./ArtifactsLibraryPage";
+/** @deprecated Use ArtifactsLibraryPage — residual library is live, not Coming Soon. */
 export { ArtifactsLibraryPage as ArtifactsComingSoonPage } from "./ArtifactsLibraryPage";
 
 export function BlankProjectPage() {

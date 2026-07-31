@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import type { RouteViewProps } from "../../app/routes";
 import { accountDetailsFromBootstrap } from "../../app/useDesktopCoworkAccountSync";
+import { RelaunchInterstitialBody } from "../../shell/RelaunchInterstitial";
 import { persistDFrameState } from "../../stores/frameStoreHelpers";
 import { CoworkClaudeAvatar } from "../cowork/session/transcript/CoworkClaudeAvatar";
 import { primaryButtonClass, secondaryButtonClass } from "../shared/buttonClasses";
@@ -351,18 +352,6 @@ function LoginDesktopAnthropicEntry({
   );
 }
 
-/** Official d2t-lite relaunch interstitial (signin variant copy). */
-function RelaunchInterstitial({ message }: { message: string }) {
-  return (
-    <LoginDesktopShell>
-      <div className="flex h-full w-full flex-col items-center justify-center gap-5 px-14 text-center">
-        <CoworkClaudeAvatar state="thinking" className="!w-12" isInteractive={false} />
-        <p className="max-w-sm text-balance text-sm leading-normal text-text-400">{message}</p>
-      </div>
-    </LoginDesktopShell>
-  );
-}
-
 /**
  * Official LoginRoute jn residual:
  *   electronWindowControl.resize(600, 600, { center: true })
@@ -415,7 +404,10 @@ function useLoginWindowSize() {
 /** Route: /login — official LoginDesktop residual for product shell. */
 export function LoginDesktopPage(_props: RouteViewProps) {
   const [status, setStatus] = useState<LoginDesktop3pStatus | null | undefined>(undefined);
-  // Official M5t: only 1p uses d2t signin interstitial; plain 3p is NQt("3p") with no apply overlay.
+  // Official M5t residual (index-BELzQL5P.js):
+  //   Sign in to Anthropic → u("relaunching") → d2t variant "signin"
+  //   onDone → NQt("1p"); onCancel → u("idle")
+  //   plain Gateway 3p: NQt("3p") with no apply overlay.
   const [phase, setPhase] = useState<"idle" | "relaunching-1p">("idle");
 
   useLoginWindowSize();
@@ -474,8 +466,8 @@ export function LoginDesktopPage(_props: RouteViewProps) {
 
   const setMode = useCallback(async (mode: "1p" | "3p" | "dotClaude") => {
     // Official M5t residual (index-BELzQL5P.js):
-    //   whole S5t card onClick → NQt("3p") / NQt("1p") only.
-    //   plain Gateway: no d2t "Applying…" (that is SSO needsAuth applying path).
+    //   whole S5t card onClick → NQt("3p") only for 3p card.
+    //   1p card → local phase "relaunching" first (d2t), NQt("1p") only onDone.
     // Official NQt: await RW?.setDeploymentMode?.(e) — wait for write, then shell reload.
     // Product extension: "dotClaude" follows the 3p soft-leave flow (no relaunch).
     const bridge = custom3pBridge();
@@ -541,20 +533,31 @@ export function LoginDesktopPage(_props: RouteViewProps) {
       return;
     }
 
+    // Official M5t: Sign in card only enters d2t — does NOT call NQt until countdown onDone.
     setPhase("relaunching-1p");
-    try {
-      await bridge?.setDeploymentMode?.("1p");
-    } catch {
-      /* continue with soft residual below */
-    }
-
-    // 1p: main setDeploymentMode("1p") already schedules relaunch; keep interstitial while exiting.
-    // If process does not exit (dev host), soft-open Anthropic host honestly (no fake OAuth).
-    void bridge?.relaunchApp?.().catch(() => {});
-    window.setTimeout(() => {
-      window.location.assign("https://claude.ai/login");
-    }, 2500);
   }, [leaveLoginForShell]);
+
+  /**
+   * Official M5t d2t onDone for signin: NQt("1p") only.
+   * Official got("1p"): jsA write + resetMainWindowBounds + process relaunch — no
+   * soft loadURL and no pre-resize of the live chooser (that double-paints Sign In).
+   * Keep interstitial until process exits (same as official d2t still mounted).
+   */
+  const onSignInRelaunchDone = useCallback(() => {
+    const bridge = custom3pBridge();
+    void (async () => {
+      try {
+        await Promise.resolve(bridge?.setDeploymentMode?.("1p"));
+      } catch {
+        /* main may still relaunch; keep interstitial */
+      }
+    })();
+  }, []);
+
+  const onSignInRelaunchCancel = useCallback(() => {
+    // Official M5t: onCancel → u("idle") — return to dual cards without writing 1p.
+    setPhase("idle");
+  }, []);
 
   // If chooser already has krA==="3p" account (bootstrap uuid), do not keep dual cards —
   // official Pos would already be past /login. Covers remount after soft write without click.
@@ -586,15 +589,27 @@ export function LoginDesktopPage(_props: RouteViewProps) {
     void custom3pBridge()?.openSetupWindow?.();
   }, []);
 
-  if (status === undefined || phase !== "idle") {
+  if (status === undefined) {
     return (
-      <RelaunchInterstitial
-        message={
-          phase === "relaunching-1p"
-            ? "Claude is restarting to sign in."
-            : "Loading…"
-        }
-      />
+      <LoginDesktopShell>
+        <div className="flex h-full w-full flex-col items-center justify-center gap-5 px-14 text-center">
+          <CoworkClaudeAvatar state="thinking" className="!w-12" isInteractive={false} />
+          <p className="max-w-sm text-balance text-sm leading-normal text-text-400">Loading…</p>
+        </div>
+      </LoginDesktopShell>
+    );
+  }
+
+  // Official M5t: "relaunching" → sVt + d2t(variant:"signin", onDone:NQt("1p"), onCancel:idle)
+  if (phase === "relaunching-1p") {
+    return (
+      <LoginDesktopShell>
+        <RelaunchInterstitialBody
+          variant="signin"
+          onDone={onSignInRelaunchDone}
+          onCancel={onSignInRelaunchCancel}
+        />
+      </LoginDesktopShell>
     );
   }
 

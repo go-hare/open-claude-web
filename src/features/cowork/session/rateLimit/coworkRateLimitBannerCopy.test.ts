@@ -43,6 +43,15 @@ describe("selectCoworkRateLimitActionType", () => {
   it("maps approaching default to none", () => {
     expect(selectCoworkRateLimitActionType("approaching", {})).toBe("none");
   });
+
+  it("prefers open-setup over reset when config degraded", () => {
+    expect(
+      selectCoworkRateLimitActionType("exceeded", {
+        canResetRateLimits: true,
+        configDegraded: true,
+      }),
+    ).toBe("open-setup");
+  });
 });
 
 describe("buildCoworkRateLimitBannerModel actions", () => {

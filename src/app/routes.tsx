@@ -20,7 +20,7 @@ import { SettingsPage } from "../features/settings/SettingsPage";
 import { PageNotFound } from "../features/shared/PageNotFound";
 import { TasksPage } from "../features/tasks/TasksPage";
 import {
-  ArtifactsComingSoonPage,
+  ArtifactsLibraryPage,
   BlankProjectPage,
   DFramePageNotFoundPage,
   ProjectCreatePage,
@@ -398,7 +398,7 @@ export const routes: AppRoute[] = [
     navKey: "artifacts",
     kind: "epitaxy",
     sourceChunk: "index-BELzQL5P.js qQt/UQt/kGt",
-    Component: ArtifactsComingSoonPage,
+    Component: ArtifactsLibraryPage,
     match: (pathname) => /^\/cowork-artifact\/[^/]+/.test(pathname),
   },
   {
@@ -408,7 +408,7 @@ export const routes: AppRoute[] = [
     navKey: "artifacts",
     kind: "epitaxy",
     sourceChunk: "index-BELzQL5P.js qQt _K",
-    Component: ArtifactsComingSoonPage,
+    Component: ArtifactsLibraryPage,
     match: (pathname) => pathname === "/cowork-artifact",
   },
   {
@@ -418,7 +418,7 @@ export const routes: AppRoute[] = [
     navKey: "artifacts",
     kind: "epitaxy",
     sourceChunk: "index-BELzQL5P.js nav href /artifacts/my → desktop _K",
-    Component: ArtifactsComingSoonPage,
+    Component: ArtifactsLibraryPage,
     match: (pathname) => pathname === "/artifacts/my" || pathname === "/artifacts/my/",
   },
   {
@@ -428,7 +428,7 @@ export const routes: AppRoute[] = [
     navKey: "artifacts",
     kind: "epitaxy",
     sourceChunk: "c1b9abf13-BWGqUBhA.js cloud studio; desktop uses CoworkArtifacts residual",
-    Component: ArtifactsComingSoonPage,
+    Component: ArtifactsLibraryPage,
     match: (pathname) => startsWithPath(pathname, "/artifacts"),
   },
   { id: "space", path: "/space", title: "项目", navKey: "projects", kind: "epitaxy", sourceChunk: "ce28369f9-C9QQvDN-.js", Component: SpaceIndexPage },
