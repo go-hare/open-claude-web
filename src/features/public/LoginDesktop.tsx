@@ -191,20 +191,34 @@ export function LoginDesktopChooser({
   onChoose1p,
   onChoose3p,
   onChooseDotClaude,
+  onOpenSetup,
 }: {
   status: LoginDesktop3pStatus;
   hide1p?: boolean;
   onChoose1p: () => void;
   onChoose3p: () => void;
   onChooseDotClaude?: () => void;
+  /** Product: open setup-desktop-3p when no configLibrary bag yet (not official M5t footer). */
+  onOpenSetup?: () => void;
 }) {
   const provider = status.provider ?? null;
   const short = providerShort(provider);
+  // Official M5t: provider / bootstrapHost card only when bag/enterprise is active.
+  // Product extension: ~/.claude may be the only local option on a fresh userData —
+  // do not invent a "Continue with your provider" card without a real bag.
+  const hasProviderCard = Boolean(
+    status.provider || status.bootstrapHost || status.thirdPartyActivated,
+  );
+  const dotClaude = status.dotClaude?.available ? status.dotClaude : null;
   // Official: i = hide1p ?? !status.enabled
-  const single = hide1p ?? !status.enabled;
+  // Product: detected ~/.claude is a real local choice even when chooser mode is void
+  // (enabled stays false until user picks dotClaude / 3p). Keep Anthropic dual card.
+  const single = hide1p ?? !(status.enabled || Boolean(dotClaude));
   const continueTitle = `Continue with ${short}`;
   const managed = status.source?.type === "managed";
-  const dotClaude = status.dotClaude?.available ? status.dotClaude : null;
+  // Product: AnthropicEntry had "Configure third-party…". Entering chooser only because
+  // ~/.claude was found must not remove that path — Setup still creates configLibrary bag.
+  const showConfigureSetup = Boolean(onOpenSetup) && !hasProviderCard;
 
   return (
     <LoginDesktopShell>
@@ -220,20 +234,22 @@ export function LoginDesktopChooser({
               : "A configuration was found on this device."}
           </p>
         </div>
-        <div className="flex w-full max-w-md flex-col gap-3">
-          <ChoiceCard ariaLabel={continueTitle} onClick={onChoose3p}>
-            <div className="flex items-center gap-3.5">
-              <ProviderGlyph />
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="text-sm font-semibold text-text-100">{continueTitle}</span>
-                <span className="text-xs text-text-400">No Anthropic account needed</span>
+        <div className="flex w-full max-w-md flex-col gap-3 pb-2">
+          {hasProviderCard ? (
+            <ChoiceCard ariaLabel={continueTitle} onClick={onChoose3p}>
+              <div className="flex items-center gap-3.5">
+                <ProviderGlyph />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-sm font-semibold text-text-100">{continueTitle}</span>
+                  <span className="text-xs text-text-400">No Anthropic account needed</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <SourcePill managed={managed} bootstrapHost={null} />
+                  <Chevron />
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <SourcePill managed={managed} bootstrapHost={null} />
-                <Chevron />
-              </div>
-            </div>
-          </ChoiceCard>
+            </ChoiceCard>
+          ) : null}
           {/* Product extension: reuse the user's existing Claude Code CLI config
               directly — zero migration for users who already run the CLI. */}
           {dotClaude && onChooseDotClaude ? (
@@ -256,23 +272,32 @@ export function LoginDesktopChooser({
             </ChoiceCard>
           ) : null}
           {!single ? (
-            <>
-              <ChoiceCard ariaLabel="Sign in to Anthropic" onClick={onChoose1p}>
-                <div className="flex items-center gap-3.5">
-                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border-0.5 border-border-300 bg-bg-100">
-                    <ClaudeMark className="size-5 shrink-0 text-accent-brand" />
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="text-sm font-semibold text-text-100">Sign in to Anthropic</span>
-                    <span className="text-xs text-text-400">Use your Claude account</span>
-                  </div>
-                  <Chevron />
+            <ChoiceCard ariaLabel="Sign in to Anthropic" onClick={onChoose1p}>
+              <div className="flex items-center gap-3.5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border-0.5 border-border-300 bg-bg-100">
+                  <ClaudeMark className="size-5 shrink-0 text-accent-brand" />
                 </div>
-              </ChoiceCard>
-              <p className="mt-1.5 text-center text-xs text-text-400">
-                You can change this later by signing out.
-              </p>
-            </>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-sm font-semibold text-text-100">Sign in to Anthropic</span>
+                  <span className="text-xs text-text-400">Use your Claude account</span>
+                </div>
+                <Chevron />
+              </div>
+            </ChoiceCard>
+          ) : null}
+          {showConfigureSetup ? (
+            <button
+              type="button"
+              className={`${secondaryButtonClass} h-10 w-full rounded-[0.6rem] text-sm`}
+              onClick={onOpenSetup}
+            >
+              Configure third-party inference…
+            </button>
+          ) : null}
+          {!single ? (
+            <p className="mt-0.5 text-center text-xs text-text-400">
+              You can change this later by signing out.
+            </p>
           ) : null}
         </div>
       </div>
@@ -574,9 +599,18 @@ export function LoginDesktopPage(_props: RouteViewProps) {
   }
 
   // Official LoginRoute: status && (provider || bootstrapHost) → M5t dual/single
+  // Product extension: detected ~/.claude alone must also enter chooser (not AnthropicEntry).
+  // Prior bug: hasChooser ignored status.dotClaude → fresh package userData with a live
+  // ~/.claude/settings.json still painted only "Sign in to Anthropic" + Configure.
   const hasChooser =
     Boolean(status)
-    && Boolean(status?.provider || status?.bootstrapHost || status?.thirdPartyActivated || status?.enabled);
+    && Boolean(
+      status?.provider
+      || status?.bootstrapHost
+      || status?.thirdPartyActivated
+      || status?.enabled
+      || status?.dotClaude?.available,
+    );
 
   if (hasChooser && status) {
     return (
@@ -592,6 +626,7 @@ export function LoginDesktopPage(_props: RouteViewProps) {
         onChooseDotClaude={() => {
           void setMode("dotClaude");
         }}
+        onOpenSetup={openSetup}
       />
     );
   }
