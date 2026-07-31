@@ -10,6 +10,10 @@ import { EpitaxyActionCenter } from "./EpitaxyActionCenter";
 import { useEpitaxyActionCenterState } from "./epitaxyActionCenterState";
 import { OfficialCodeComposer } from "./composer/OfficialCodeComposer";
 import { normalizePermissionMode } from "./composer/options";
+import {
+  clampEffortToCatalog,
+  cliEffortLevelsForModel,
+} from "./session/officialComposerOptions";
 
 export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
@@ -108,19 +112,27 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
   }, [composerWorkspace.cwd]);
 
   /**
-   * Official get_settings → applied (CLI 2.7.16+) for the new-session draft:
-   * probe the CLI for the selected model's catalog ladder (effortLevels /
-   * ultracodeOfferable). Re-runs on model change. null → composer falls back to
-   * full residual ladder (5f75ff4); never lock single-stop.
+   * Effort ladder = CLI only.
+   * 1) Immediately seed from CLI catalog residual for model (no invent 5-stop flash).
+   * 2) Replace with get_settings.applied.effortLevels when host probe returns.
    */
   useEffect(() => {
     let alive = true;
+    const modelKey = model === "default" ? undefined : model;
+    const provisional = cliEffortLevelsForModel(modelKey ?? model);
+    setEffortLevels(provisional);
+    setEffort((prev) => clampEffortToCatalog(prev, provisional));
     const fn = desktopBridge.LocalSessions.getEffortCatalogDefaults;
     if (!fn) return;
-    void fn(model === "default" ? undefined : model).then((applied) => {
+    void fn(modelKey).then((applied) => {
       if (!alive || !applied) return;
-      setEffortLevels(applied.effortLevels ?? null);
+      const levels =
+        applied.effortLevels && applied.effortLevels.length > 0
+          ? applied.effortLevels
+          : provisional;
+      setEffortLevels(levels);
       setUltracodeOfferable(applied.ultracodeOfferable ?? null);
+      setEffort((prev) => clampEffortToCatalog(prev, levels));
     });
     return () => {
       alive = false;

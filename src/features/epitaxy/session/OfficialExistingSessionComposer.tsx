@@ -27,6 +27,9 @@ import {
 } from "../../cowork/composer/useCoworkModelOptions";
 import {
   buildOfficialEffortMenuItems,
+  catalogTopEffort,
+  clampEffortToCatalog,
+  cliEffortLevelsForModel,
   normalizeEffortValue,
   permissionModeLabel,
   type OfficialEffortLevel,
@@ -97,7 +100,12 @@ export function ExistingSessionComposer({
   const [isSubmitting, setSubmitting] = useState(false);
   const [model, setModel] = useState(() => normalizeSelectorModelValue(session?.model, []));
   const [permissionMode, setPermissionMode] = useState(session?.permissionMode ?? "default");
-  const [effort, setEffort] = useState(() => normalizeEffortValue(session?.effort === "ultracode" ? "xhigh" : session?.effort));
+  const [effort, setEffort] = useState(() =>
+    clampEffortToCatalog(
+      session?.effort === "ultracode" ? catalogTopEffort(null) : session?.effort,
+      null,
+    ),
+  );
   /** Official yR session ultracode map — session-only; new chats start without it. */
   const [ultracode, setUltracode] = useState(() => session?.effort === "ultracode");
   /**
@@ -201,13 +209,14 @@ export function ExistingSessionComposer({
       return;
     }
     if (session?.effort === "ultracode") {
-      setEffort("xhigh");
+      // Prefer catalog top when ladder already known; else residual normalize until probe.
+      setEffort(clampEffortToCatalog(catalogTopEffort(effortLevels), effortLevels));
       setUltracode(true);
     } else {
-      setEffort(normalizeEffortValue(session?.effort));
+      setEffort(clampEffortToCatalog(session?.effort, effortLevels));
       setUltracode(false);
     }
-  }, [allowedModelValues, session?.effort, session?.model, session?.permissionMode, sessionRef?.id]);
+  }, [allowedModelValues, effortLevels, session?.effort, session?.model, session?.permissionMode, sessionRef?.id]);
 
   // New session id: drop official N lock so meta T can seed again.
   useEffect(() => {
@@ -233,6 +242,14 @@ export function ExistingSessionComposer({
     const getEffortCatalogDefaults = bridge.getEffortCatalogDefaults;
     if (!sessionId || !getEffort) return;
     let cancelled = false;
+    // Immediate CLI-catalog residual for model — never flash invent 5-stop while probing.
+    const provisional = cliEffortLevelsForModel(
+      selectedModel === "default" ? undefined : selectedModel,
+    );
+    setEffortLevels(provisional);
+    if (effortLocalLockRef.current !== sessionId) {
+      setEffort((prev) => clampEffortToCatalog(prev, provisional));
+    }
     void (async () => {
       try {
         const applied = await getEffort(sessionId);
@@ -254,18 +271,23 @@ export function ExistingSessionComposer({
           }
         }
         if (cancelled) return;
-        setEffortLevels(levels);
+        // CLI wins; if still empty keep provisional (CLI catalog residual for model).
+        const resolved =
+          levels && levels.length > 0 ? levels : provisional;
+        setEffortLevels(resolved);
         setUltracodeOfferable(ultracode);
         if (effortLocalLockRef.current === sessionId) return;
         if (applied.effort === "ultracode") {
-          setEffort("xhigh");
+          setEffort(clampEffortToCatalog(catalogTopEffort(resolved), resolved));
           setUltracode(true);
         } else if (applied.effort) {
-          setEffort(normalizeEffortValue(applied.effort));
+          setEffort(clampEffortToCatalog(applied.effort, resolved));
           setUltracode(false);
+        } else {
+          setEffort((prev) => clampEffortToCatalog(prev, resolved));
         }
       } catch {
-        // ignore — leave null; UI uses full residual ladder (5f75ff4) until retry
+        // keep provisional model ladder — never invent residual 5-stop
       }
     })();
     return () => { cancelled = true; };
@@ -641,6 +663,7 @@ export function ExistingSessionComposer({
     // (model catalog / workflows latch off). null (not reported) → keep residual default on.
     showUltracode: Boolean(bridge.setEffort) && ultracodeOfferable !== false,
     effortLevels,
+    model: selectedModel,
     onSelect: (level, nextUltracode) => void applyEffort(level, nextUltracode),
   });
   const modelExtraSections = bridge.setEffort ? [{ key: "effort", header: "Effort", items: effortItems }] : undefined;

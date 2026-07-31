@@ -15,11 +15,7 @@ import {
   normalizeSelectorModelValue,
   useCodeModelOptions,
 } from "../../cowork/composer/useCoworkModelOptions";
-import {
-  permissionModeLabel,
-  ULTRACODE_OPTION,
-  effortOptions,
-} from "./options";
+import { permissionModeLabel } from "./options";
 import { numberComposerMenuItems } from "./composerMenuItems";
 import { EpitaxyPermissionModeModal } from "./EpitaxyPermissionModeModal";
 import { OfficialEffortControl, type OfficialEffortItem } from "./OfficialEffortControl";
@@ -27,6 +23,10 @@ import { OfficialWorkspaceControls } from "./OfficialWorkspaceControls";
 import { usePermissionModeConfirm } from "./usePermissionModeConfirm";
 import { useCodePermissionModeOptions } from "./useBypassPermissionsEnabled";
 import { useClaudeCodeGitAvailable } from "./useClaudeCodeGitAvailable";
+import {
+  buildOfficialEffortMenuItems,
+  clampEffortToCatalog,
+} from "../session/officialComposerOptions";
 
 type OfficialCodeComposerProps = {
   busy: boolean;
@@ -138,30 +138,16 @@ export function OfficialCodeComposer({
     },
   }));
   const effortItems: OfficialEffortItem[] = useMemo(() => {
-    // 5f75ff4: per-model catalog when present; null → full residual 5-stop ladder.
-    const allowed = effortLevels && effortLevels.length > 0 ? new Set(effortLevels) : null;
-    const ladder = allowed ? effortOptions.filter((o) => allowed.has(o.value)) : effortOptions;
-    const items: OfficialEffortItem[] = ladder.map((option) => ({
-      checked: !ultracode && option.value === effort,
-      label: option.label,
-      value: option.value,
-      // Ladder pick clears Ultracode flag (official X(level, false)).
-      onSelect: () => onEffortChange(option.value, false),
-    }));
-    // Official $ gate: ultracodeOfferable=false → hide Ultracode; null keeps it.
-    if (ultracodeOfferable !== false) {
-      items.push({
-        accent: true,
-        checked: ultracode,
-        help: ULTRACODE_OPTION.help,
-        label: ULTRACODE_OPTION.label,
-        value: ULTRACODE_OPTION.value,
-        // Residual: Ultracode = xhigh + workflows flag (not a ladder id).
-        onSelect: () => onEffortChange("xhigh", true),
-      });
-    }
-    return items;
-  }, [effort, effortLevels, onEffortChange, ultracode, ultracodeOfferable]);
+    // CLI applied.effortLevels when present; else model residual of CLI catalog (no 5-stop flash).
+    return buildOfficialEffortMenuItems({
+      current: effort,
+      effortLevels,
+      model: selectedModel,
+      ultracode,
+      showUltracode: ultracodeOfferable !== false,
+      onSelect: (level, nextUltracode) => onEffortChange(level, nextUltracode),
+    });
+  }, [effort, effortLevels, onEffortChange, selectedModel, ultracode, ultracodeOfferable]);
   const numberedPermissionItems = useMemo(() => (
     openFooterMenu === "mode" ? numberComposerMenuItems(permissionItems) : permissionItems
   ), [openFooterMenu, permissionItems]);
