@@ -64,4 +64,28 @@ describe("clearSessionSidebarMetaState", () => {
     const next = clearSessionSidebarMetaState(current, "code:missing");
     expect(next).toBe(current);
   });
+
+  it("drops legacy epitaxy:id when clearing cowork:id (and reverse)", () => {
+    const current = baseState({
+      pinnedOrder: ["epitaxy:x", "code:other"],
+      customGroupAssignments: { "epitaxy:x": "g1", "code:other": "g1" },
+      customGroupOrder: { g1: ["epitaxy:x", "code:other"] },
+    });
+    const next = clearSessionSidebarMetaState(current, "cowork:x");
+    expect(next.pinnedOrder).toEqual(["code:other"]);
+    expect(next.customGroupAssignments).toEqual({ "code:other": "g1" });
+    expect(next.customGroupOrder).toEqual({ g1: ["code:other"] });
+
+    const reverse = clearSessionSidebarMetaState(
+      baseState({
+        pinnedOrder: ["cowork:y", "code:z"],
+        customGroupAssignments: { "cowork:y": "g2" },
+        customGroupOrder: { g2: ["cowork:y"] },
+      }),
+      "epitaxy:y",
+    );
+    expect(reverse.pinnedOrder).toEqual(["code:z"]);
+    expect(reverse.customGroupAssignments).toEqual({});
+    expect(reverse.customGroupOrder).toEqual({});
+  });
 });

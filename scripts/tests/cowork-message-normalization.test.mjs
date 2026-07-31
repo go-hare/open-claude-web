@@ -232,3 +232,34 @@ test("marks MCP Apps through the official registry and creates one reconnect sug
   });
   assert.equal(payload.connectors[0].name, "Canvas");
 });
+
+test("drops meta-only task-notification human tails (official The residual)", () => {
+  const messages = normalizeSdkMessages([
+    {
+      message: { content: "hello path" },
+      type: "user",
+      uuid: "user-1",
+    },
+    {
+      message: {
+        content: [{ text: "assistant reply", type: "text" }],
+        id: "api-1",
+      },
+      type: "assistant",
+      uuid: "assistant-1",
+    },
+    {
+      message: {
+        content:
+          "<task-notification>\n<task-id>a33bdc890794f6682</task-id>\n<tool-use-id>call_00</tool-use-id>\n</task-notification>",
+      },
+      type: "user",
+      uuid: "user-task-notification",
+    },
+  ]);
+
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0].sender, "human");
+  assert.equal(messages[1].sender, "assistant");
+  assert.equal(messages.some((message) => message.uuid === "user-task-notification"), false);
+});

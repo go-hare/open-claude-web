@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Tabs } from "@base-ui-components/react/tabs";
 import { desktopBridge, type CodeStats } from "../../adapters/desktopBridge";
-import { modelLabel } from "./composer/options";
+import { formatCoworkModelDisplayName } from "../cowork/composer/useCoworkModelOptions";
 import {
   buildCodeStatsDisplay,
   buildHeatmapDates,
@@ -115,7 +115,7 @@ function Heatmap({ dailyActivity }: { dailyActivity: CodeStats["dailyActivity"] 
 
 function ModelUsagePanel({ modelUsage }: { modelUsage: ModelUsageDisplay }) {
   if (modelUsage.length === 0) return <div className="flex min-h-[128px] items-center justify-center rounded-r4 bg-t2 text-body text-t6">No model usage yet.</div>;
-  return <div className="flex flex-col gap-g3">{modelUsage.map((usage) => <div className="grid grid-cols-[1fr_auto] gap-g4 rounded-r4 bg-t2 p-p3" key={usage.model}><span className="truncate text-body text-t9">{modelLabel(usage.model)}</span><span className="tabular-nums text-body-semibold text-t9">{usage.tokens}</span><span className="text-footnote text-t6">Input {usage.input}</span><span className="text-footnote text-t6">Output {usage.output}</span></div>)}</div>;
+  return <div className="flex flex-col gap-g3">{modelUsage.map((usage) => <div className="grid grid-cols-[1fr_auto] gap-g4 rounded-r4 bg-t2 p-p3" key={usage.model}><span className="truncate text-body text-t9">{formatCoworkModelDisplayName(usage.model)}</span><span className="tabular-nums text-body-semibold text-t9">{usage.tokens}</span><span className="text-footnote text-t6">Input {usage.input}</span><span className="text-footnote text-t6">Output {usage.output}</span></div>)}</div>;
 }
 
 function TokenReferenceText({ totalTokens }: { totalTokens: number }) {

@@ -1,6 +1,102 @@
-import { useEffect, useReducer, useRef, useState } from "react";
+/**
+ * Official Ace residual (index-BELzQL5P ~53018) + session avatar Et (~228013).
+ * Asset: c6a992d55-D5kpo8DQ.js (thinking/writing/shimmer/waiting/…).
+ * Status row g$t mounts Ace with currentAvatarState, not a CSS ring spinner.
+ *
+ * Tickle tooltip: official Ace wraps Xp (index export `T as Xp` ← c5f4e1303 `vC as T`).
+ * Product mounts the same residual via shared OfficialTooltip (not a second inline Xp).
+ * DOM order matches Ace: outer `aria-hidden` → Xp → interactive `w-8` mark (not Xp outside shell).
+ */
+import { useEffect, useReducer, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { OfficialTooltip } from "../../../shared/OfficialTooltip";
 
-export type CoworkClaudeAvatarState = "entrance" | "exit" | "static" | "thinking" | "tickle" | "waiting" | "writing";
+export type CoworkClaudeAvatarState =
+  | "entrance"
+  | "exit"
+  | "orbiting"
+  | "shimmer"
+  | "static"
+  | "thinking"
+  | "tickle"
+  | "waiting"
+  | "writing";
+
+/**
+ * Official v$t Et residual:
+ *   wt ? "thinking" : kt || Nt || (ee && l) ? "shimmer" : l ? "writing" : "static"
+ * wt = streaming with empty last assistant path; kt = last block tool_use/tool_result;
+ * ee = isSession (Cowork local_session path true); l = isStreaming; Nt = research pending.
+ */
+export function resolveCoworkSessionAvatarState(input: {
+  isEmptyStream?: boolean;
+  isResearchPending?: boolean;
+  isSession?: boolean;
+  isStreaming: boolean;
+  isToolActive?: boolean;
+}): CoworkClaudeAvatarState {
+  const streaming = input.isStreaming;
+  const isSession = input.isSession ?? true;
+  const emptyStream = Boolean(streaming && input.isEmptyStream);
+  const toolActive = Boolean(input.isToolActive);
+  const researchPending = Boolean(input.isResearchPending);
+  if (emptyStream) return "thinking";
+  if (toolActive || researchPending || (isSession && streaming)) return "shimmer";
+  if (streaming) return "writing";
+  return "static";
+}
+
+export type CoworkPathAvatarMessage = {
+  attachments?: readonly unknown[];
+  content?: ReadonlyArray<{ type?: string } | null | undefined> | null;
+  files?: readonly unknown[];
+  files_v2?: readonly unknown[];
+  sender?: string;
+};
+
+/**
+ * Official v$t path-derived Et inputs (index-BELzQL5P ~227990–228016):
+ *   ge = last path message
+ *   Ct = isSession && path.length === 1 && ge.sender === "human"
+ *   wt = streaming && (!ge || Ct || empty content/attachments/files)
+ *   vt = streaming ? last content block : undefined
+ *   kt = vt is tool_use | tool_result
+ */
+export function resolveCoworkPathAvatarState(input: {
+  isResearchPending?: boolean;
+  isSession?: boolean;
+  isStreaming: boolean;
+  pathMessages: readonly CoworkPathAvatarMessage[];
+}): CoworkClaudeAvatarState {
+  const streaming = input.isStreaming;
+  const isSession = input.isSession ?? true;
+  const path = input.pathMessages;
+  const last = path.length > 0 ? path[path.length - 1] : undefined;
+  const singleHumanSession =
+    isSession && path.length === 1 && last?.sender === "human";
+  const emptyLast =
+    !last
+    || (
+      !last.content?.[0]
+      && (last.attachments?.length ?? 0) === 0
+      && (last.files_v2?.length ?? 0) === 0
+      && (last.files?.length ?? 0) === 0
+    );
+  const emptyStream = Boolean(streaming && (!last || singleHumanSession || emptyLast));
+  const lastBlock = streaming && last?.content?.length
+    ? last.content[last.content.length - 1]
+    : undefined;
+  const toolActive = Boolean(
+    lastBlock
+    && (lastBlock.type === "tool_use" || lastBlock.type === "tool_result"),
+  );
+  return resolveCoworkSessionAvatarState({
+    isEmptyStream: emptyStream,
+    isResearchPending: input.isResearchPending,
+    isSession,
+    isStreaming: streaming,
+    isToolActive: toolActive,
+  });
+}
 
 type AvatarAnimation = {
   frameCount: number;
@@ -22,7 +118,7 @@ export function CoworkClaudeAvatar({ className, isInteractive = true, state = "s
   const [displayState, setDisplayState] = useState(state);
   const previousStateRef = useRef(state);
   const animationRef = useRef<HTMLDivElement | null>(null);
-  const [, bumpTickleCount] = useReducer((value) => value + 1, 0);
+  const [tickleCount, bumpTickleCount] = useReducer((value) => value + 1, 0);
   const reducedMotion = useReducedMotion();
 
   useEffect(() => { setDisplayState(state); }, [state]);
@@ -36,18 +132,82 @@ export function CoworkClaudeAvatar({ className, isInteractive = true, state = "s
   useAvatarAnimation(animationRef, animations?.[displayState], displayState, previousStateRef, reducedMotion, setDisplayState);
 
   const tickle = () => {
+    // Official Ace: block tickle while writing/thinking/tickle (shimmer may tickle).
     if (!isInteractive || ["thinking", "tickle", "writing"].includes(displayState)) return;
     setDisplayState("tickle");
     bumpTickleCount();
   };
+  // Official Ace: hide tooltip while non-interactive or writing/thinking (opacity-0 on Xp, not unmount).
+  const hideTooltip = !isInteractive || displayState === "writing" || displayState === "thinking";
+  const tooltipContent = resolveCoworkAceTickleTooltip(tickleCount);
   if (displayState === "static" || reducedMotion || !animations?.[displayState]) {
-    return <AvatarShell className={className} onMouseDown={tickle}><ClaudeMark className="w-full fill-current" /></AvatarShell>;
+    return (
+      <div aria-hidden="true">
+        <AceTooltip hide={hideTooltip} tooltipContent={tooltipContent}>
+          <div
+            className={classes(className, "w-8 text-accent-brand inline-block select-none")}
+            onMouseDown={tickle}
+          >
+            <ClaudeMark className="w-full fill-current" />
+          </div>
+        </AceTooltip>
+      </div>
+    );
   }
   const animation = animations[displayState];
   return (
-    <AvatarShell className={classes(className, "overflow-hidden [@media(max-resolution:1.99dppx)]:[clip-path:inset(1px_0)]")} onMouseDown={tickle} style={{ aspectRatio: animation.width / animation.height }}>
-      <div className="[&>svg]:block [&>svg]:w-full [&>svg]:fill-current" dangerouslySetInnerHTML={{ __html: animation.svg }} ref={animationRef} />
-    </AvatarShell>
+    <div aria-hidden="true">
+      <AceTooltip hide={hideTooltip} tooltipContent={tooltipContent}>
+        <div
+          className={classes(
+            className,
+            "w-8 text-accent-brand inline-block select-none overflow-hidden [@media(max-resolution:1.99dppx)]:[clip-path:inset(1px_0)]",
+          )}
+          onMouseDown={tickle}
+          style={{ aspectRatio: animation.width / animation.height }}
+        >
+          <div
+            className="[&>svg]:block [&>svg]:w-full [&>svg]:fill-current"
+            dangerouslySetInnerHTML={{ __html: animation.svg }}
+            ref={animationRef}
+          />
+        </div>
+      </AceTooltip>
+    </div>
+  );
+}
+
+/**
+ * Official Ace tickle copy ladder (index-BELzQL5P ~53054):
+ * default → (>5) → (>12) → (>18) → (>24)
+ */
+export function resolveCoworkAceTickleTooltip(tickleCount: number): string {
+  if (tickleCount < 32 && tickleCount > 24) return "Ugh, well you can’t do that forever";
+  if (tickleCount <= 24 && tickleCount > 18) return "Alright, alright, you have my attention!";
+  if (tickleCount <= 18 && tickleCount > 12) return "Are you still doing that?";
+  if (tickleCount <= 12 && tickleCount > 5) return "Yes, yes. What can I do for you?";
+  return "Hi, I’m Claude. How can I help you today?";
+}
+
+function AceTooltip({
+  children,
+  hide,
+  tooltipContent,
+}: {
+  children: ReactElement;
+  hide: boolean;
+  tooltipContent: ReactNode;
+}) {
+  // Official Ace → Xp (c5f4e1303 vC): className font-claude-response max-w-none italic,
+  // side:"right", hide via opacity-0 (not showTooltip:false). Shared OfficialTooltip is Xp residual.
+  return (
+    <OfficialTooltip
+      className={classes("font-claude-response max-w-none italic", hide && "opacity-0")}
+      side="right"
+      tooltipContent={tooltipContent}
+    >
+      {children}
+    </OfficialTooltip>
   );
 }
 
@@ -77,10 +237,6 @@ function parseOfficialAnimations(source: string) {
   }
   if (Object.keys(animations).length === 0) throw new Error("Claude avatar animation asset is empty");
   return animations;
-}
-
-function AvatarShell({ children, className, onMouseDown, style }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div aria-hidden="true"><div className={classes(className, "w-8 text-accent-brand inline-block select-none")} onMouseDown={onMouseDown} style={style}>{children}</div></div>;
 }
 
 function useAvatarAnimation(

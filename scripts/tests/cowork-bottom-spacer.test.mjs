@@ -13,6 +13,9 @@ const {
   COWORK_ONBOARDING_SPACER_ADDITIONAL_BUFFER_PX,
   COWORK_SPACER_DEFAULT_BUFFER_PX,
   computeCoworkBottomSpacerHeight,
+  resolveCoworkBottomSpacerContainerHeight,
+  resolveCoworkChatInputHeight,
+  resolveCoworkLastMessageHeights,
 } = await vite.ssrLoadModule(
   "/src/features/cowork/session/transcript/CoworkConversationBottomSpacer.tsx",
 );
@@ -111,4 +114,100 @@ test("includes pubsec banner height (ALt 2.25rem) when enabled", () => {
   });
   assert.equal(without - withBanner, 36);
   assert.equal(withBanner, 1000 - 100 - 100 - 0 - 100 - 36 - 98);
+});
+
+test("LUt last message heights are ref clientHeights only (official)", () => {
+  const human = { clientHeight: 48 };
+  const assistant = { clientHeight: 120 };
+  assert.deepEqual(
+    resolveCoworkLastMessageHeights({
+      assistantRef: { current: assistant },
+      humanRef: { current: human },
+    }),
+    { assistantHeight: 120, humanHeight: 48 },
+  );
+  // No painted-cell fallback — empty refs measure 0 (Cat must mount ref shell).
+  assert.deepEqual(
+    resolveCoworkLastMessageHeights({
+      assistantRef: { current: null },
+      humanRef: { current: null },
+      scrollRoot: {
+        querySelectorAll: () => [human, assistant],
+      },
+    }),
+    { assistantHeight: 0, humanHeight: 0 },
+  );
+});
+
+test("LUt chatInput height is composer ref only (official)", () => {
+  assert.equal(
+    resolveCoworkChatInputHeight({
+      composerRef: { current: { clientHeight: 160 } },
+      scrollRoot: {
+        querySelector: () => ({ clientHeight: 158 }),
+      },
+    }),
+    160,
+  );
+  // No DOM query fallback when ref empty.
+  assert.equal(
+    resolveCoworkChatInputHeight({
+      composerRef: { current: null },
+      scrollRoot: {
+        querySelector: () => ({ clientHeight: 158 }),
+      },
+    }),
+    0,
+  );
+});
+
+test("prefers parent/scrollport height over window so spacer cannot oversize", () => {
+  assert.equal(
+    resolveCoworkBottomSpacerContainerHeight({
+      parentHeight: 720,
+      scrollClientHeight: 720,
+      scrollScrollHeight: 720,
+      windowHeight: 1080,
+    }),
+    720,
+  );
+  assert.equal(
+    resolveCoworkBottomSpacerContainerHeight({
+      parentHeight: 0,
+      scrollClientHeight: 680,
+      scrollScrollHeight: 2400,
+      windowHeight: 1080,
+    }),
+    680,
+  );
+  assert.equal(
+    resolveCoworkBottomSpacerContainerHeight({
+      parentHeight: null,
+      scrollClientHeight: null,
+      windowHeight: 900,
+    }),
+    900,
+  );
+  // Unbounded flex child: clientHeight grows with content (≫ window) → window fallback.
+  assert.equal(
+    resolveCoworkBottomSpacerContainerHeight({
+      parentHeight: 4200,
+      scrollClientHeight: 4200,
+      scrollScrollHeight: 4200,
+      windowHeight: 1080,
+    }),
+    1080,
+  );
+  // Scrollport-sized container + no Qg double-count.
+  assert.equal(
+    computeCoworkBottomSpacerHeight({
+      assistantHeight: 40,
+      chatInputHeight: 96,
+      containerHeight: 720,
+      extrasHeight: 0,
+      hasDesktopTopBar: false,
+      humanHeight: 48,
+    }),
+    720 - 48 - 40 - 0 - 96 - 98,
+  );
 });

@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import type { EffortLevel, PermissionMode, WorkspaceContext } from "../../../adapters/desktopBridge";
-import { Icon } from "../../../shell/icons";
+import {
+  desktopBridge,
+  type EffortLevel,
+  type PermissionMode,
+  type WorkspaceContext,
+} from "../../../adapters/desktopBridge";
 import {
   OfficialDropdownButton,
   type OfficialDropdownItem,
 } from "../OfficialEpitaxyComponents";
+import { OfficialPromptEditor } from "../OfficialPromptEditor";
 import { useWorkspaceTrustGate } from "../trust/useWorkspaceTrustGate";
 import {
   normalizeSelectorModelValue,
@@ -23,14 +26,20 @@ import { OfficialEffortControl, type OfficialEffortItem } from "./OfficialEffort
 import { OfficialWorkspaceControls } from "./OfficialWorkspaceControls";
 import { usePermissionModeConfirm } from "./usePermissionModeConfirm";
 import { useCodePermissionModeOptions } from "./useBypassPermissionsEnabled";
+import { useClaudeCodeGitAvailable } from "./useClaudeCodeGitAvailable";
 
 type OfficialCodeComposerProps = {
   busy: boolean;
+  /** Ladder stop only — Ultracode is a separate session flag (official jR / 5f75ff4). */
   effort: EffortLevel;
   /** Official get_settings.applied (CLI 2.7.16+) for the new-session draft ladder. */
   effortLevels?: string[] | null;
   model: string;
-  onEffortChange: (value: EffortLevel) => void;
+  /**
+   * Official X(level, ultracode): ladder id + session flag.
+   * Ultracode selects xhigh + ultracode=true (not a ladder value).
+   */
+  onEffortChange: (level: EffortLevel, ultracode: boolean) => void;
   onModelChange: (value: string) => void;
   onPermissionModeChange: (value: PermissionMode) => void;
   onSourceBranchChange: (branch: string) => void;
@@ -41,6 +50,8 @@ type OfficialCodeComposerProps = {
   prompt: string;
   setPrompt: (value: string) => void;
   sourceBranch: string;
+  /** Official yR — session-only Ultracode; new drafts start false. */
+  ultracode?: boolean;
   ultracodeOfferable?: boolean | null;
   useWorktree: boolean;
   workspace: WorkspaceContext;
@@ -64,19 +75,24 @@ export function OfficialCodeComposer({
   prompt,
   setPrompt,
   sourceBranch,
+  ultracode = false,
   ultracodeOfferable = null,
   useWorktree,
   workspace,
 }: OfficialCodeComposerProps) {
   const { ensureTrusted, modal } = useWorkspaceTrustGate(workspace.cwd);
   const codeModelOptions = useCodeModelOptions();
+  // Official s7t/Xr — only gate when probe returns false (null = unknown/missing host API).
+  const gitAvailable = useClaudeCodeGitAvailable();
+  // Official bi: draft local non-ssh && !1===_s. Home composer is always the draft path.
+  const showGitRequired =
+    workspace.mode === "local"
+    && !workspace.sshConfig
+    && gitAvailable === false;
   const submitStateRef = useRef({ busy, ensureTrusted, hasPrompt: false, onSubmit, workspaceCwd: workspace.cwd });
-  const promptSetterRef = useRef(setPrompt);
   const [replayKey, setReplayKey] = useState(0);
   const [openFooterMenu, setOpenFooterMenu] = useState<"effort" | "mode" | "model" | null>(null);
   const hasPrompt = prompt.trim().length > 0;
-  const ultracode = effort === "ultracode";
-  const effortLevel: EffortLevel = ultracode ? "xhigh" : (effort as EffortLevel);
   const allowedModelValues = useMemo(
     () => codeModelOptions.items.map((item) => item.value),
     [codeModelOptions.items],
@@ -84,7 +100,6 @@ export function OfficialCodeComposer({
   const selectedModel = normalizeSelectorModelValue(model, allowedModelValues);
 
   submitStateRef.current = { busy, ensureTrusted, hasPrompt, onSubmit, workspaceCwd: workspace.cwd };
-  promptSetterRef.current = setPrompt;
 
   // Official Sm + EpitaxyPermissionModeModal for first bypass/auto selection.
   const permissionModeConfirm = usePermissionModeConfirm(
@@ -127,10 +142,11 @@ export function OfficialCodeComposer({
     const allowed = effortLevels && effortLevels.length > 0 ? new Set(effortLevels) : null;
     const ladder = allowed ? effortOptions.filter((o) => allowed.has(o.value)) : effortOptions;
     const items: OfficialEffortItem[] = ladder.map((option) => ({
-      checked: !ultracode && option.value === effortLevel,
+      checked: !ultracode && option.value === effort,
       label: option.label,
       value: option.value,
-      onSelect: () => onEffortChange(option.value),
+      // Ladder pick clears Ultracode flag (official X(level, false)).
+      onSelect: () => onEffortChange(option.value, false),
     }));
     // Official $ gate: ultracodeOfferable=false → hide Ultracode; null keeps it.
     if (ultracodeOfferable !== false) {
@@ -140,11 +156,12 @@ export function OfficialCodeComposer({
         help: ULTRACODE_OPTION.help,
         label: ULTRACODE_OPTION.label,
         value: ULTRACODE_OPTION.value,
-        onSelect: () => onEffortChange("ultracode"),
+        // Residual: Ultracode = xhigh + workflows flag (not a ladder id).
+        onSelect: () => onEffortChange("xhigh", true),
       });
     }
     return items;
-  }, [effortLevel, effortLevels, onEffortChange, ultracode, ultracodeOfferable]);
+  }, [effort, effortLevels, onEffortChange, ultracode, ultracodeOfferable]);
   const numberedPermissionItems = useMemo(() => (
     openFooterMenu === "mode" ? numberComposerMenuItems(permissionItems) : permissionItems
   ), [openFooterMenu, permissionItems]);
@@ -202,51 +219,6 @@ export function OfficialCodeComposer({
     void state.ensureTrusted(state.workspaceCwd, state.onSubmit);
   }, []);
 
-  const editor = useEditor({
-    content: "",
-    editable: !busy,
-    editorProps: {
-      attributes: {
-        "aria-label": "描述一个任务，或提一个问题",
-        class: "tiptap",
-      },
-      handleKeyDown: (_view, event) => {
-        if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.isComposing) {
-          event.preventDefault();
-          submitWithTrust();
-          return true;
-        }
-        return false;
-      },
-    },
-    extensions: [
-      StarterKit.configure({
-        blockquote: false,
-        bulletList: false,
-        code: false,
-        heading: false,
-        horizontalRule: false,
-        listItem: false,
-        orderedList: false,
-      }),
-    ],
-    onUpdate: ({ editor: nextEditor }) => {
-      const current = getOfficialEditorText(nextEditor);
-      if (current !== null) promptSetterRef.current(current);
-    },
-  }, [submitWithTrust]);
-
-  useEffect(() => {
-    if (!editor || editor.isDestroyed) return;
-    editor.setEditable(!busy);
-  }, [busy, editor]);
-
-  useEffect(() => {
-    const current = getOfficialEditorText(editor);
-    if (current === null) return;
-    if (current !== prompt) editor?.commands.setContent(tiptapDocFromPlainText(prompt), { emitUpdate: false });
-  }, [editor, prompt]);
-
   return (
     <div className="flex flex-col gap-g5">
       <OfficialWorkspaceControls
@@ -271,33 +243,26 @@ export function OfficialCodeComposer({
           <img alt="" className="h-full w-full" draggable={false} key={replayKey} src="/assets/v1/clawd-laptop-official.gif" />
         </button>
       </div>
-      <div
-        className="epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300"
-        onClick={(event) => {
-          if (event.target instanceof HTMLElement && event.target.closest("button")) return;
-          if (editor && !editor.isDestroyed) editor.commands.focus("end");
-        }}
-        style={{ boxShadow: "var(--df-shadow-card)" }}
-      >
-        <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" />
-        <span className="sr-only" role="status" />
-        <div className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}>
-          <div className="min-h-0 overflow-hidden" />
-        </div>
-        <div className="relative flex w-full">
-          <EditorContent
-            className="epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0"
-            editor={editor}
-          />
-          {!hasPrompt ? <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5">描述一个任务，或提一个问题</span> : null}
-          <div className="flex self-end p-p7 pl-p3">
-            <button className={composerIconButtonClass} disabled={busy || !hasPrompt} onClick={submitWithTrust} type="button" aria-label="Send">
-              <span aria-hidden="true" className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)] group-hover/btn:bg-[var(--fill-uncontained-hover)]" />
-              <Icon name={busy ? "Stop" : "ArrowReturn"} customSize={16} />
-            </button>
-          </div>
-        </div>
+      <div style={{ boxShadow: "var(--df-shadow-card)" }}>
+        <OfficialPromptEditor
+          bridge={desktopBridge.LocalSessions}
+          busy={busy}
+          onChange={setPrompt}
+          onSubmit={submitWithTrust}
+          placeholder="描述一个任务，或提一个问题"
+          slashCwd={workspace.cwd || undefined}
+          value={prompt}
+        />
       </div>
+      {/* Official c119 bi residual (CHsqi6o1Li) above mode footer when git probe false. */}
+      {showGitRequired ? (
+        <div
+          className="text-footnote text-extended-pink select-text"
+          data-official-source="c11959232-h_zsw3wI.js:CHsqi6o1Li"
+        >
+          Git is required for local sessions.
+        </div>
+      ) : null}
       <div className="w-full flex items-center gap-g5 py-[4px]">
         <div className="flex items-center gap-g5 min-w-0">
           <OfficialDropdownButton
@@ -356,22 +321,4 @@ export function OfficialCodeComposer({
       />
     </div>
   );
-}
-
-
-function getOfficialEditorText(editor: ReturnType<typeof useEditor>) {
-  if (!editor || editor.isDestroyed) return null;
-  const doc = editor.state.doc;
-  return doc.textBetween(0, doc.content.size, "\n");
-}
-
-function tiptapDocFromPlainText(value: string) {
-  if (!value) return { type: "doc", content: [] };
-  return {
-    type: "doc",
-    content: value.split("\n").map((line) => ({
-      type: "paragraph",
-      content: line ? [{ type: "text", text: line }] : [],
-    })),
-  };
 }

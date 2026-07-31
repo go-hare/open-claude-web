@@ -35,6 +35,7 @@ export function PinnedSection({ canOpenSplit, collapsed, onCloseDragPinHint, onC
   return (
     <section
       className="group/section flex flex-col gap-px"
+      data-kind="code"
       data-over={dragOver || undefined}
       onDragEnter={(event) => {
         if (hasSessionDrag(event)) setDragOver(true);

@@ -86,6 +86,36 @@ export function ServiceStatusPage({ route }: RouteViewProps) {
   );
 }
 
+/**
+ * Official ion-dist residual Yrs (index-BELzQL5P bootstrapFailed):
+ *   testId bootstrap-connection-error
+ *   headline "Can't reach Claude" / "Claude is temporarily unavailable" (5xx)
+ *   subheading "Check your connection." / status link
+ *   primary Try again → reload
+ * Product: App loginGate "unknown" when /api/bootstrap yields no payload.
+ * Standalone full-window page — do not mount DesktopFrame with null account.
+ */
+export function BootstrapConnectionErrorPage() {
+  return (
+    <div
+      className="draggable flex h-screen flex-col items-center justify-center px-4 py-10 text-center"
+      data-testid="bootstrap-connection-error"
+      style={{ transform: "translateY(-6px)" }}
+    >
+      <div className="flex flex-1 select-text flex-col items-center justify-center gap-2 pb-14">
+        <ClaudeWordmark small />
+        <h1 className="font-ui-serif text-2xl font-medium sm:text-[2rem]">Can&apos;t reach Claude</h1>
+        <p className="text-text-200 max-w-xl sm:text-lg">Check your connection.</p>
+        <div className="mt-4 flex gap-2">
+          <button className={ghostButtonClass} onClick={() => window.location.reload()} type="button">
+            Try again
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function OAuthDevicePage() {
   const [code, setCode] = useState("");
   const normalized = code.toUpperCase().replace(/[^A-Z0-9-]/g, "");

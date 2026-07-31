@@ -1,7 +1,10 @@
 /**
- * Official rVe + NVe subset for Local Cowork (index-BELzQL5P ~96073 / ~96524).
+ * Official rVe + NVe + pVe/hVe structure residual for Local Cowork
+ * (index-BELzQL5P ~96073 / ~96524 / pVe·hVe).
  * Reads local coworkRateLimitStore messageLimits — not full account hc()/react-query bootstrap.
- * Action buttons (pVe upgrade/overage/admin request) intentionally residual.
+ *
+ * 3p honesty wall (product choice): never invent Anthropic subscribe / AddCredits / contact-sales
+ * OAuth CTAs. Action types map to residual-honest product paths only.
  */
 
 import type {
@@ -98,6 +101,28 @@ export function pickCoworkRateLimitWindow(
 
 export type CoworkRateLimitBannerKind = "exceeded" | "approaching" | null;
 
+/**
+ * Residual of official pVe `limitActionButtonType` for 3p product:
+ * - none: no action row (approaching default; logged-out residual)
+ * - dismiss: clear local banner (wait until resets_at is already in body copy)
+ * - reset: POST reset_rate_limits when bootstrap exposes can_reset_rate_limits
+ * - open-setup: Custom3pSetup when config is degraded (not "Subscribe to Claude")
+ *
+ * Official branches contact-sales / subscribe / overages intentionally unmapped.
+ */
+export type CoworkRateLimitActionType =
+  | "none"
+  | "dismiss"
+  | "reset"
+  | "open-setup";
+
+export type CoworkRateLimitActionContext = {
+  canResetRateLimits?: boolean;
+  configDegraded?: boolean;
+  /** Official allowSelfUpgrade gate — product keeps true for structure; CTAs still 3p-honest. */
+  allowSelfUpgrade?: boolean;
+};
+
 export type CoworkRateLimitBannerModel = {
   kind: Exclude<CoworkRateLimitBannerKind, null>;
   messageLimit: Exclude<CoworkMappedRateLimit, { type: "within_limit" }>;
@@ -108,6 +133,8 @@ export type CoworkRateLimitBannerModel = {
   body: string;
   dangerText: boolean;
   minimalUi: boolean;
+  /** Residual pVe limitActionButtonType (3p-honest mapping). */
+  actionType: CoworkRateLimitActionType;
 };
 
 function formatTimeSimple(resetsAtSec: number): string {
@@ -199,14 +226,34 @@ function approachingBody(
 }
 
 /**
+ * Residual of official hVe / pVe action selection for 3p.
+ * Structure matches limitActionButtonType switch; values stay product-honest.
+ */
+export function selectCoworkRateLimitActionType(
+  kind: Exclude<CoworkRateLimitBannerKind, null>,
+  context: CoworkRateLimitActionContext = {},
+): CoworkRateLimitActionType {
+  // Config degraded → open Setup (3p residual of "fix billing/account"), never Subscribe.
+  if (context.configDegraded) return "open-setup";
+  if (kind === "exceeded") {
+    if (context.canResetRateLimits) return "reset";
+    // Body already says "Resets at …"; dismiss is residual wait/clear CTA.
+    return "dismiss";
+  }
+  // approaching: official may show upgrade; 3p shows body only unless degraded (handled above).
+  return "none";
+}
+
+/**
  * Official NVe branch subset for LocalAgentMode:
- * - exceeded_limit → EVe-style body (no pVe action invent)
+ * - exceeded_limit → EVe-style body + residual action slot
  * - approaching_limit → IVe-style body
- * Skips overage admin / seat / chicory_no_free_tier / full hc() gates.
+ * Skips overage admin / seat / chicory_no_free_tier / full hc() gates and Anthropic billing CTAs.
  */
 export function buildCoworkRateLimitBannerModel(
   limit: CoworkMappedRateLimit | undefined | null,
   nowSec: number = Date.now() / 1000,
+  actionContext: CoworkRateLimitActionContext = {},
 ): CoworkRateLimitBannerModel | null {
   if (!limit || limit.type === "within_limit") return null;
   // Official NVe auto-clear gate (~96541): expired resetsAt → no banner.
@@ -240,6 +287,7 @@ export function buildCoworkRateLimitBannerModel(
       body: exceededBody(pick.windowName, resetsAt),
       dangerText: true,
       minimalUi: true,
+      actionType: selectCoworkRateLimitActionType("exceeded", actionContext),
     };
   }
   // approaching_limit
@@ -252,6 +300,7 @@ export function buildCoworkRateLimitBannerModel(
     body: approachingBody(pick.windowName, resetsAt, pick.surpassedThreshold),
     dangerText: false,
     minimalUi: true,
+    actionType: selectCoworkRateLimitActionType("approaching", actionContext),
   };
 }
 

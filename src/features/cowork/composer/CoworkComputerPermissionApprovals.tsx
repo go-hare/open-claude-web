@@ -90,7 +90,11 @@ export function CoworkComputerEnableApproval(props: ApprovalProps) {
   return (
     <div ref={rootRef}>
       {reason ? <p className="text-text-100 mb-3">{reason}</p> : null}
-      <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4">
+      <div
+        className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4"
+        data-official-source="index-BELzQL5P:Uge"
+        data-permission-kind="computer-enable"
+      >
         <div className="p-3">
           <div className="flex items-start gap-2 mb-3">
             <CoworkComputerAccessGlyph className="text-text-300 flex-shrink-0" size={20} />
@@ -203,7 +207,11 @@ export function CoworkComputerTccApproval(props: ApprovalProps) {
 
   return (
     <div ref={rootRef}>
-      <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4">
+      <div
+        className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4"
+        data-official-source="index-BELzQL5P:Fge"
+        data-permission-kind="computer-tcc"
+      >
         <div className="p-3">
           <div className="flex items-start gap-2 mb-1">
             <CoworkComputerAccessGlyph className="text-text-300 flex-shrink-0" size={20} />
@@ -268,7 +276,11 @@ export function CoworkComputerAccessApproval(props: ApprovalProps) {
   const flagCount = [flags.clipboardRead, flags.clipboardWrite, flags.systemKeyCombos].filter(Boolean).length;
   return (
     <div ref={rootRef}>
-      <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4">
+      <div
+        className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4"
+        data-official-source="index-BELzQL5P:Oge"
+        data-permission-kind="computer-access"
+      >
         <div className="p-3">
           <div className="flex items-start gap-2 mb-1"><CoworkComputerAccessGlyph className="text-text-300 flex-shrink-0" size={20} /><span className="text-sm text-text-200 font-semibold">{computerTitle(apps, flagCount > 0)}</span></div>
           {apps.length || flagCount ? <ComputerAccessRows apps={apps} flags={flags} /> : null}
@@ -291,7 +303,11 @@ export function CoworkComputerTeachApproval(props: ApprovalProps) {
   useComputerShortcuts(props.busy || props.disableKeyboardShortcuts === true, () => props.onDecide("deny"), allow);
   return (
     <div ref={rootRef}>
-      <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4">
+      <div
+        className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4"
+        data-official-source="index-BELzQL5P:Vge"
+        data-permission-kind="computer-teach"
+      >
         <div className="p-3">
           <div className="flex items-start gap-2 mb-1"><CoworkComputerAccessGlyph className="text-text-300 flex-shrink-0" size={20} /><span className="text-sm text-text-200 font-semibold">Let Claude guide you step by step?</span></div>
           <p className="text-sm text-text-300 ml-7 mb-2">{text(props.request.input.reason)}</p>
@@ -309,9 +325,13 @@ export function CoworkComputerTeachApproval(props: ApprovalProps) {
   );
 }
 
-/** Official qge row: label + description + granted check / action button. */
+/**
+ * Official qge ComputerUseTccRow residual (index-BELzQL5P ~62141):
+ * label row + Granted/Not granted badge (Check / X icons), description, Enable/Request button when not granted.
+ */
 function ComputerPermissionToggleRow({
-  buttonLabel = "Enable",
+  // Official qge default buttonLabel = "Request"; Uge Computer use passes "Enable".
+  buttonLabel = "Request",
   description,
   granted,
   label,
@@ -324,15 +344,26 @@ function ComputerPermissionToggleRow({
   onRequest: () => void;
 }) {
   return (
-    <div className="p-3 flex items-start justify-between gap-3">
+    <div className="p-3 flex items-start justify-between gap-3" data-official-source="index-BELzQL5P:qge">
       <div className="flex flex-col gap-0.5 min-w-0">
-        <span className="text-sm text-text-200 font-medium">{label}</span>
-        <span className="text-xs text-text-400">{description}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-text-200 font-medium">{label}</span>
+          {granted ? (
+            <span className="inline-flex items-center gap-1 text-xs text-text-400">
+              <Icon className="text-success-000 flex-shrink-0" customSize={14} name="Check" />
+              Granted
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs text-text-400">
+              <Icon className="text-text-400 flex-shrink-0" customSize={14} name="X" />
+              Not granted
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-text-400 m-0">{description}</p>
       </div>
-      {granted ? (
-        <span className="text-xs text-text-400 flex-shrink-0 pt-0.5">On</span>
-      ) : (
-        <CoworkComposerButton className="!font-semibold !text-xs !h-8 shrink-0" onClick={onRequest} variant="secondary">
+      {granted ? null : (
+        <CoworkComposerButton className="flex-shrink-0" onClick={onRequest} size="sm" variant="secondary">
           {buttonLabel}
         </CoworkComposerButton>
       )}

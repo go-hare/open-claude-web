@@ -1,12 +1,26 @@
 /**
- * Official _Be / wBe shell subset for Local Cowork rate_limit banner
- * (index-BELzQL5P ~94308 / ~94342 / EVe·IVe).
- * Driven by local messageLimits store — no pVe upgrade/admin action invent.
+ * Official _Be / wBe shell for Local Cowork rate_limit banner
+ * (index-BELzQL5P EVe·IVe + pVe action slot).
+ * Driven by local messageLimits store.
+ *
+ * 3p honesty: action row matches official layout (actionButton slot) but CTAs are
+ * residual-honest — dismiss / reset_rate_limits / open Setup — never Subscribe / AddCredits.
  */
+import { useCallback, useEffect, useState } from "react";
 import { useSyncExternalStore } from "react";
 import { Icon } from "../../../../shell/icons";
-import { organizationUuidFromBootstrap } from "../../../settings/accountSettingsApi";
-import { buildCoworkRateLimitBannerModel } from "./coworkRateLimitBannerCopy";
+import { OfficialButton } from "../../../shared/OfficialButton";
+import {
+  canResetRateLimitsFromBootstrap,
+  fetchBootstrapPayload,
+  organizationUuidFromBootstrap,
+  postOrganizationResetRateLimits,
+} from "../../../settings/accountSettingsApi";
+import {
+  buildCoworkRateLimitBannerModel,
+  type CoworkRateLimitActionType,
+  type CoworkRateLimitBannerModel,
+} from "./coworkRateLimitBannerCopy";
 import {
   coworkRateLimitStore,
   type CoworkRateLimitStore,
@@ -36,56 +50,230 @@ function useCoworkMessageLimit(store: CoworkRateLimitStore = coworkRateLimitStor
   );
 }
 
+type ConfigHealthState = string;
+
+function readConfigDegraded(): boolean {
+  try {
+    const settings = (
+      window as unknown as {
+        "claude.settings"?: {
+          Custom3pSetup?: { getConfigHealth?: () => Promise<{ state?: string } | null> };
+        };
+      }
+    )["claude.settings"];
+    // Sync residual: prefer last known bootstrap flag if present; Setup open is best-effort.
+    void settings;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+function openCustom3pSetup(): void {
+  try {
+    const setup = (
+      window as unknown as {
+        "claude.settings"?: {
+          Custom3pSetup?: { openSetupWindow?: () => Promise<unknown> };
+        };
+      }
+    )["claude.settings"]?.Custom3pSetup;
+    void setup?.openSetupWindow?.();
+  } catch {
+    /* ignore */
+  }
+}
+
+function actionLabel(type: CoworkRateLimitActionType, resetState: string): string {
+  switch (type) {
+    case "reset":
+      if (resetState === "pending") return "Resetting…";
+      if (resetState === "done") return "Limits reset";
+      if (resetState === "error") return "Reset failed";
+      return "Reset limits";
+    case "open-setup":
+      return "Open Setup";
+    case "dismiss":
+      return "Dismiss";
+    default:
+      return "";
+  }
+}
+
+/**
+ * Official _Be shell: body row + optional actionButton column.
+ * data-official-source: index-BELzQL5P:_Be
+ */
+function RateLimitBeShell({
+  actionButton,
+  dangerText,
+  minimalUi,
+  children,
+}: {
+  actionButton: React.ReactNode | null;
+  dangerText: boolean;
+  minimalUi: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="w-full" data-official-source="index-BELzQL5P:_Be">
+      <div className="flex w-full flex-col items-center md:flex-row gap-2">
+        <div
+          className={
+            dangerText
+              ? "flex flex-row items-center gap-2 md:w-full text-danger-000"
+              : minimalUi
+                ? "flex flex-row items-center gap-2 md:w-full text-text-300"
+                : "flex flex-row items-center gap-2 md:w-full text-danger-000"
+          }
+        >
+          {minimalUi ? null : (
+            <Icon
+              aria-label="Warning"
+              className="h-4 w-4 shrink-0"
+              customSize={16}
+              name="Warning"
+            />
+          )}
+          <div className="text-sm">{children}</div>
+        </div>
+        {actionButton ? (
+          <div className="-mt-px w-full whitespace-nowrap md:w-fit">{actionButton}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function CoworkRateLimitBanner({
   store = coworkRateLimitStore,
 }: {
   store?: CoworkRateLimitStore;
 }) {
   const limit = useCoworkMessageLimit(store);
-  const model = buildCoworkRateLimitBannerModel(limit);
+  const orgUuid = resolveOrgUuid();
+  const [canReset, setCanReset] = useState(false);
+  const [resetOrgUuid, setResetOrgUuid] = useState<string | null>(null);
+  const [resetState, setResetState] = useState<"idle" | "pending" | "done" | "error">(
+    "idle",
+  );
+  const [configDegraded] = useState<boolean>(() => readConfigDegraded());
+
+  useEffect(() => {
+    let alive = true;
+    void fetchBootstrapPayload().then((bootstrap) => {
+      if (!alive) return;
+      const uuid = organizationUuidFromBootstrap(bootstrap);
+      setResetOrgUuid(uuid);
+      // Official GrowthBook can_reset_rate_limits; product fails closed if no org.
+      setCanReset(Boolean(uuid) && canResetRateLimitsFromBootstrap(bootstrap));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [limit?.type]);
+
+  const model: CoworkRateLimitBannerModel | null = buildCoworkRateLimitBannerModel(
+    limit,
+    Date.now() / 1000,
+    {
+      canResetRateLimits: canReset,
+      configDegraded,
+      allowSelfUpgrade: true,
+    },
+  );
+
+  const dismiss = useCallback(() => {
+    store.getState().dismissMessageLimit(orgUuid);
+  }, [orgUuid, store]);
+
+  const runReset = useCallback(async () => {
+    if (!resetOrgUuid || resetState === "pending" || resetState === "done") return;
+    setResetState("pending");
+    const result = await postOrganizationResetRateLimits(resetOrgUuid);
+    if (result.ok) {
+      setResetState("done");
+      store.getState().dismissMessageLimit(orgUuid);
+    } else {
+      setResetState("error");
+    }
+  }, [orgUuid, resetOrgUuid, resetState, store]);
+
   if (!model) return null;
 
-  // Official _Be: minimalUi skips Warning icon; dangerText uses text-danger-000.
+  const actionType = model.actionType;
+  let actionButton: React.ReactNode | null = null;
+  if (actionType !== "none") {
+    // Official gVe/v3 uses primary sm button; product uses OfficialButton (Dc residual).
+    // text-sm link style for dismiss matches JC className:"text-sm" residual when not primary upgrade.
+    if (actionType === "dismiss") {
+      actionButton = (
+        <button
+          className="text-sm text-text-300 hover:text-text-200 underline-offset-2 hover:underline"
+          data-rate-limit-action="dismiss"
+          onClick={dismiss}
+          type="button"
+        >
+          {actionLabel("dismiss", resetState)}
+        </button>
+      );
+    } else {
+      actionButton = (
+        <OfficialButton
+          data-rate-limit-action={actionType}
+          disabled={
+            actionType === "reset" &&
+            (resetState === "pending" || resetState === "done" || !resetOrgUuid)
+          }
+          onClick={() => {
+            if (actionType === "reset") void runReset();
+            else if (actionType === "open-setup") openCustom3pSetup();
+          }}
+          size="sm"
+          variant={actionType === "reset" ? "primary" : "secondary"}
+        >
+          {actionLabel(actionType, resetState)}
+        </OfficialButton>
+      );
+    }
+  }
+
+  // g$t-adjacent slot: only emit outer spacing when a limit model is live (no empty mb wrapper).
   if (model.kind === "exceeded") {
     return (
-      <div
-        className="w-full"
-        data-official-source="index-BELzQL5P:EVe/_Be"
-        data-rate-limit-kind="exceeded"
-        role="status"
-      >
-        <div className="flex w-full flex-col items-center md:flex-row gap-2">
-          <div
-            className={
-              model.minimalUi
-                ? "flex flex-row items-center gap-2 md:w-full text-text-300"
-                : "flex flex-row items-center gap-2 md:w-full text-danger-000"
-            }
+      <div className="ml-1 mb-1.5 w-full max-w-xl">
+        <div
+          data-official-source="index-BELzQL5P:EVe/_Be/pVe"
+          data-rate-limit-kind="exceeded"
+          role="status"
+        >
+          <RateLimitBeShell
+            actionButton={actionButton}
+            dangerText={model.dangerText}
+            minimalUi={model.minimalUi}
           >
-            {model.minimalUi ? null : (
-              <Icon
-                aria-label="Warning"
-                className="h-4 w-4 shrink-0"
-                customSize={16}
-                name="Warning"
-              />
-            )}
-            <div className="text-sm">{model.body}</div>
-          </div>
+            {model.body}
+          </RateLimitBeShell>
         </div>
       </div>
     );
   }
 
-  // Official IVe → wBe warning row.
+  // Official IVe → wBe warning row (+ optional action).
   return (
-    <div
-      className="font-normal text-[0.65rem] sm:text-xs w-full flex gap-1.5 items-center justify-between"
-      data-official-source="index-BELzQL5P:IVe/wBe"
-      data-rate-limit-kind="approaching"
-      role="status"
-    >
-      <span className="text-text-300 text-sm">{model.body}</span>
+    <div className="ml-1 mb-1.5 w-full max-w-xl">
+      <div
+        className="font-normal text-[0.65rem] sm:text-xs w-full flex gap-1.5 items-center justify-between"
+        data-official-source="index-BELzQL5P:IVe/wBe/pVe"
+        data-rate-limit-kind="approaching"
+        role="status"
+      >
+        <span className="text-text-300 text-sm">{model.body}</span>
+        {actionButton}
+      </div>
     </div>
   );
 }
+
+// silence unused ConfigHealthState if tree-shaken later
+export type { ConfigHealthState };

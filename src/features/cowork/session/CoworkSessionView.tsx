@@ -32,6 +32,7 @@ import {
   scrollCoworkSessionOpenToBottom,
   shouldScrollCoworkSessionOpen,
 } from "./transcript/coworkAutoscroll";
+import { resolveCoworkConversationIsStreaming } from "./transcript/coworkConversationStreaming";
 import type { CoworkChatMessage } from "./transcript/coworkMessageModel";
 import { coworkMessagePathStore } from "./transcript/coworkMessagePathStore";
 import { CoworkTranscriptActions } from "./transcript/CoworkTranscriptActions";
@@ -89,18 +90,28 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
     }
     scrollToBottom("auto");
   }, [scrollToBottom]);
-  // Official t$t: while streaming on session and button not visible (near bottom), re-pin + instant scroll.
-  // Do not force pin when user has scrolled up (showScrollButton).
+  // Official t$t (index-BELzQL5P ~226504): isSession path.
+  //   if streaming: isSession && !showScrollButton → setPinToBottom(true) + scrollToBottom("instant")
+  //   else: !isSession → setPinToBottom(false)  (session path never unpins on stream end)
+  // Cowork session is always isSession=true. showScrollButton is sentinel-only (official `l`).
+  // Streaming flag must match v$t `l` (streamingMessageId || isResponding), not isResponding alone.
+  const conversationIsStreaming = resolveCoworkConversationIsStreaming({
+    isResponding: data.isResponding,
+    streamingMessageId: data.streamingMessageId,
+  });
   useEffect(() => {
-    if (!data.isResponding || scrollState.showScrollButton) return;
+    if (!conversationIsStreaming) return;
+    if (scrollState.showScrollButton) return;
     const handle = autoscrollRef.current;
     if (!handle) return;
     handle.setPinToBottom(true);
     handle.scrollToBottom("instant");
-  }, [data.isResponding, scrollState.showScrollButton, sessionId]);
+  }, [conversationIsStreaming, scrollState.showScrollButton, sessionId]);
   // Official z3t (index-BELzQL5P.pretty.js function z3t):
   // if (isLoading) return; if (!hasMessages) return; if (d.current === sessionId) return;
-  // d.current = sessionId; rAF → [data-autoscroll-container].scrollTop = scrollHeight.
+  // d.current = sessionId; single rAF → [data-autoscroll-container].scrollTop = scrollHeight.
+  // Product: only commit d.current after the container exists (Conversation mounted). Marking
+  // early while still on the loading shell permanently skips open-at-bottom for short sessions.
   const sessionOpenScrolledRef = useRef<string | null>(null);
   const isLoading = data.isLoading;
   const hasMessages = (data.messages.length ?? 0) > 0 || data.messageUuids.length > 0;
@@ -111,12 +122,21 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
       lastScrolledSessionId: sessionOpenScrolledRef.current,
       sessionId,
     })) return;
-    sessionOpenScrolledRef.current = sessionId;
+    // Official z3t commits d.current = sessionId before rAF. Product only commits after the
+    // IYe container exists so the loading shell cannot permanently skip open-at-bottom.
     const frame = requestAnimationFrame(() => {
       const node = document.querySelector("[data-autoscroll-container]");
-      if (node instanceof HTMLElement) scrollCoworkSessionOpenToBottom(node);
+      if (!(node instanceof HTMLElement)) return;
+      // Measure-era residual: LUt may still grow after this frame; pin first so IYe RO resticks.
+      const handle = autoscrollRef.current;
+      handle?.setPinToBottom(true);
+      scrollCoworkSessionOpenToBottom(node);
+      handle?.scrollToBottom("instant");
+      sessionOpenScrolledRef.current = sessionId;
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+    };
   }, [hasMessages, isLoading, sessionId]);
   useCoworkScrollShortcuts(sessionId, transcriptScrollRef, scrollToBottom);
   const actions = useMemo(
@@ -174,7 +194,9 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
           drawer={drawer}
           isDrawerOpen={isDrawerOpen}
           main={
-            <div className="relative flex h-full min-w-0 flex-1 flex-col">
+            // Official yUt main column children: gUt header + IYe. min-h-0 keeps flex-1
+            // overflow-y-auto (IYe) bounded so pin-to-bottom can actually scroll.
+            <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <CoworkSessionHeader
                 isTitleLoading={data.isLoading && !data.session}
                 onNavigate={onNavigate}
@@ -223,6 +245,11 @@ function CoworkChatBody({ autoscrollRef, composerRef, data, onNavigate, scrollSt
     requests: data.toolPermissionRequests,
     setRequests: data.setPermissionRequests,
   };
+  // Official v$t `l` — same boolean as Renderer pin + Conversation Et/g$t/t$t.
+  const conversationIsStreaming = resolveCoworkConversationIsStreaming({
+    isResponding: data.isResponding,
+    streamingMessageId: data.streamingMessageId,
+  });
   const onToolDecision = useCallback(async (requestId: string, _toolUseId: string, input: Record<string, unknown>, decision: "always" | "deny" | "once") => {
     const request = data.toolPermissionRequests.find((candidate) => candidate.requestId === requestId);
     data.setPermissionRequests((current) => current.filter((candidate) => candidate.requestId !== requestId));
@@ -244,26 +271,46 @@ function CoworkChatBody({ autoscrollRef, composerRef, data, onNavigate, scrollSt
       retryingRef.current = false;
     }
   }, [data.submitMessage, lastUserText]);
+  // Official kAt onRetryNow — product has no ensureConnected/retryNow bridge method;
+  // reload rehydrates session + connectionState from host (showRetryButton residual path).
+  const onRetryConnection = useCallback(() => {
+    void data.reload();
+  }, [data.reload]);
   const conversationStatus = parseCoworkConversationStatus(
     data.messages,
     data.session,
     data.agentActivity,
-    data.isResponding,
+    conversationIsStreaming,
     data.initializationStatus,
     {
+      // Live reducer state for kAt; session snapshot may lag host reconnect fields.
+      connectionState: data.connectionState,
       // Official ns uses path message count `p.length` (display chains ≈ uuid path).
       messageCount: data.messageUuids.length || data.messages.length,
       retryCount: 0,
     },
   );
-  if (data.isSessionNotFound) return <CoworkSessionMessage action={() => onNavigate("/task/new")} actionLabel="Back to Cowork" message="Session not found." />;
+  // Official bw residual eePQiZiD6b — Conversation not found. (not product "Session not found.")
+  if (data.isSessionNotFound) {
+    return (
+      <CoworkSessionMessage
+        action={() => onNavigate("/task/new")}
+        actionLabel="Start a new task"
+        message="Conversation not found."
+      />
+    );
+  }
   if (data.isLoading && !data.messageUuids.length) return <CoworkLoading />;
   const composer = (
     <CoworkSessionComposer
+      connectionState={conversationStatus.connectionState}
       containerRef={composerRef}
       disabled={data.isLoading || Boolean(data.error)}
       isResponding={data.isResponding}
+      isStreaming={conversationIsStreaming}
+      nextReconnectTime={conversationStatus.nextReconnectTime}
       onNavigate={onNavigate}
+      onRetryConnection={onRetryConnection}
       onScrollToBottom={scrollToBottomAndPin}
       onSubmit={data.submitMessage}
       reload={data.reload}
@@ -288,6 +335,7 @@ function CoworkChatBody({ autoscrollRef, composerRef, data, onNavigate, scrollSt
       permissionApprovals={<CoworkPermissionApprovals controller={permissionController} />}
       permissionRequests={permissionController.requests}
       scrollRef={transcriptScrollRef}
+      sessionId={sessionId}
       status={conversationStatus}
       streamingMessageId={data.streamingMessageId}
     />
@@ -308,9 +356,53 @@ function useCoworkScrollShortcuts(sessionId: string, scrollRef: React.MutableRef
   }, [scrollRef, scrollToBottom, sessionId]);
 }
 
-function CoworkLoading() { return <div className="flex flex-1 items-center justify-center pt-14 text-text-400" role="status"><span className="size-5 animate-spin rounded-full border-2 border-t-transparent" /><span className="sr-only">Loading conversation</span></div>; }
-function CoworkSessionMessage({ action, actionLabel, message }: { action: () => void; actionLabel: string; message: string }) { return <div className="flex flex-1 flex-col items-center justify-center gap-4 pt-14 text-sm text-text-300"><p>{message}</p><button className="rounded-md bg-bg-300 px-3 py-2 text-text-100" onClick={action} type="button">{actionLabel}</button></div>; }
-function coworkSessionTitle(title?: string) { return !title?.trim() || title === "Untitled" || /^\d+$/.test(title) ? "新任务" : title; }
+function CoworkLoading() {
+  return (
+    <div className="flex flex-1 items-center justify-center pt-14 text-text-400" role="status">
+      <span className="size-5 animate-spin rounded-full border-2 border-t-transparent" />
+      <span className="sr-only">Loading conversation</span>
+    </div>
+  );
+}
+
+/**
+ * Cowork missing-session residual (index-BELzQL5P bw / eePQiZiD6b).
+ * Structure mirrors Code SessionNotFound residual: centered gap + primary CTA to home.
+ */
+function CoworkSessionMessage({
+  action,
+  actionLabel,
+  message,
+}: {
+  action: () => void;
+  actionLabel: string;
+  message: string;
+}) {
+  return (
+    <div
+      className="flex flex-1 flex-col items-center justify-center gap-g5 pt-14 text-t6"
+      data-official-source="index-BELzQL5P.js:bw-eePQiZiD6b"
+    >
+      <p className="text-sm text-text-300 m-0">{message}</p>
+      <button
+        className="rounded-md bg-bg-300 px-3 py-2 text-sm text-text-100 border-0 cursor-pointer"
+        onClick={action}
+        type="button"
+      >
+        {actionLabel}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Official header empty residual (3kbIhS7KZS): Untitled.
+ * Numeric-only titles are still placeholders → Untitled (not product 新任务 invent).
+ */
+function coworkSessionTitle(title?: string) {
+  if (!title?.trim() || title === "Untitled" || /^\d+$/.test(title)) return "Untitled";
+  return title;
+}
 
 function lastVisibleUserText(messageUuids: string[]) {
   const messages = coworkMessagePathStore.getState().messageByUuid;

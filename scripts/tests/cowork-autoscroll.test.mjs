@@ -13,6 +13,7 @@ const {
   COWORK_AUTOSCROLL_NEAR_BOTTOM_PX,
   isCoworkNearBottom,
   resolveCoworkScrollBehavior,
+  resolveCoworkShowScrollButton,
   scrollCoworkSessionOpenToBottom,
   shouldScrollCoworkSessionOpen,
   updateCoworkAutoscrollPin,
@@ -30,6 +31,16 @@ test("IYe near-bottom floor is Math.floor(distance) < 8", () => {
   assert.equal(isCoworkNearBottom({ clientHeight: 100, scrollHeight: 200, scrollTop: 93 }), true);
   assert.equal(isCoworkNearBottom({ clientHeight: 100, scrollHeight: 200, scrollTop: 92 }), false);
   assert.equal(isCoworkNearBottom({ clientHeight: 100, scrollHeight: 200, scrollTop: 91 }), false);
+});
+
+test("t$t showScrollButton is sentinel-only (official l)", () => {
+  // Official: c(!e.isIntersecting) — no near-bottom rewrite.
+  assert.equal(resolveCoworkShowScrollButton(true), true);
+  assert.equal(resolveCoworkShowScrollButton(false), false);
+  // nearBottom arg is ignored if still passed.
+  assert.equal(resolveCoworkShowScrollButton(true, true), true);
+  assert.equal(resolveCoworkShowScrollButton(true, false), true);
+  assert.equal(resolveCoworkShowScrollButton(false, true), false);
 });
 
 test("IYe unpins only when scrolledUp && !nearBottom && !heightShrank", () => {

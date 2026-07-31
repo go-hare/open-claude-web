@@ -30,15 +30,20 @@ export function CoworkMessageCell({ chain, conversationIsStreaming, isLastHumanM
   const message = conversationIsStreaming && isLastMessage
     ? (activeChain.messages[activeChain.messages.length - 1] ?? activeChain.messages[0])
     : (activeChain.displayMessage ?? activeChain.messages[0]);
-  if (!message) return null;
+  // Official Cat (index-BELzQL5P wat/Cat): always mount the outer div with
+  // ref = isLastHuman ? lastHuman : isLastMessage ? lastAssistant : null.
+  // Returning null when !message drops the LUt measure target → spacer uses 0
+  // heights → nearly full-viewport spacer → pin-to-bottom parks status mid-empty.
   return (
     <div
       data-test-render-count={renderCount}
       ref={isLastHumanMessage ? lastHumanMessageRef : isLastMessage ? lastAssistantMessageRef : undefined}
     >
-      {message.sender === "human"
-        ? <CoworkHumanMessage chain={activeChain} conversationIsStreaming={conversationIsStreaming} isLastMessage={isLastMessage} />
-        : <CoworkAssistantMessage chain={activeChain} conversationIsStreaming={conversationIsStreaming} isLastMessage={isLastMessage} />}
+      {!message
+        ? null
+        : message.sender === "human"
+          ? <CoworkHumanMessage chain={activeChain} conversationIsStreaming={conversationIsStreaming} isLastMessage={isLastMessage} />
+          : <CoworkAssistantMessage chain={activeChain} conversationIsStreaming={conversationIsStreaming} isLastMessage={isLastMessage} />}
     </div>
   );
 }

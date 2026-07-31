@@ -1,5 +1,5 @@
 import type { CodeStats } from "../../adapters/desktopBridge";
-import { modelLabel } from "./composer/options";
+import { formatCoworkModelDisplayName } from "../cowork/composer/useCoworkModelOptions";
 
 export type CodeStatsRange = "all" | "30d" | "7d";
 export type ModelUsageDisplay = Array<{ input: string; model: string; output: string; tokens: string; totalTokens: number }>;
@@ -24,7 +24,9 @@ export function buildCodeStatsDisplay(stats: CodeStats | null, range: CodeStatsR
     .sort((left, right) => right.totalTokens - left.totalTokens);
   const fallbackTotalTokens = modelUsage.reduce((total, usage) => total + usage.totalTokens, 0);
   const totalTokens = sumRecordValues(modelTotals) || fallbackTotalTokens;
-  const favoriteModel = topModelLabel(modelTotals) ?? modelLabel(modelUsage[0]?.model ?? "-");
+  // Official residual uses st(modelId) display (Fee/Hee), not selector normalize→Default.
+  const favoriteModel =
+    topModelLabel(modelTotals) ?? statsModelLabel(modelUsage[0]?.model);
 
   return {
     activeDays: formatNumber(dailyActivity.length),
@@ -103,9 +105,14 @@ function modelTokensFromDaily(items: CodeStats["dailyModelTokens"]): Record<stri
   return totals;
 }
 
+function statsModelLabel(model: string | undefined): string {
+  if (!model) return "—";
+  return formatCoworkModelDisplayName(model);
+}
+
 function topModelLabel(modelTotals: Record<string, number>) {
   const top = Object.entries(modelTotals).sort((left, right) => right[1] - left[1])[0]?.[0];
-  return top ? modelLabel(top) : null;
+  return top ? statsModelLabel(top) : null;
 }
 
 function sumRecordValues(record: Record<string, number>) {

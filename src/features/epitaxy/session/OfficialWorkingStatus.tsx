@@ -87,7 +87,8 @@ export function OfficialWorkingStatus({
   tokenEstimate?: number;
 }) {
   // Official d_e(t): bucket.compactionStatus for this session.
-  const compactionStatus = useOfficialCodeSessionBucket(sessionId)?.compactionStatus ?? null;
+  const bucket = useOfficialCodeSessionBucket(sessionId);
+  const compactionStatus = bucket?.compactionStatus ?? null;
   // Official je(t): stable turn start for this sessionId.
   const startedAt = sessionId
     ? (officialGetTurnStartedAt(sessionId) ?? (isWorking ? officialMarkTurnStarted(sessionId) : null))
@@ -113,8 +114,12 @@ export function OfficialWorkingStatus({
     return () => window.clearInterval(timer);
   }, [sessionId, startedAt, tokenEstimate]);
 
-  // Official Gv: l = isWorking && !suppressed; d=elapsed>=2; f=compacting; p=n||d||f; opacity = p && l
-  const sparkWorking = isWorking; // suppress not wired locally (js(sessionId) always false for now)
+  // Official Gv: o = js(sessionId) = Jve/Efe — true while any tool permission is pending
+  // (index Efe: requestsBySession[id] has status==="pending"). Product stores the pending
+  // queue on session.pendingToolPermissions (resolved items are removed).
+  // l = isWorking && !suppressed; d=elapsed>=2; f=compacting; p=n||d||f; opacity = p && l
+  const permissionSuppressed = (bucket?.session?.pendingToolPermissions?.length ?? 0) > 0;
+  const sparkWorking = isWorking && !permissionSuppressed;
   const showElapsedGate = elapsedSeconds >= 2;
   const showTokens = showElapsedGate && tokens > 0;
   const compacting = compactionStatus === "compacting";

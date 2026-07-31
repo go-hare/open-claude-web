@@ -72,7 +72,26 @@ export const CAPABILITIES_MESSAGES = {
     id: "2quuFTad/n",
   },
   loadToolsWhenNeeded: { defaultMessage: "Load tools when needed", id: "TQakOWx/s6" },
+  /** Official we item subtitle (zNp8ouRi1z). */
+  loadToolsWhenNeededDescription: {
+    defaultMessage: "Chats compact less since tools aren't pre-loaded.",
+    id: "zNp8ouRi1z",
+  },
   toolsAlreadyLoaded: { defaultMessage: "Tools already loaded", id: "2L6XHrHX3B" },
+  /** Official we item subtitle (hLphZYtEL1). */
+  toolsAlreadyLoadedDescription: {
+    defaultMessage: "Chats compact more often since tools are always there.",
+    id: "hLphZYtEL1",
+  },
+  /** Official we onChange toast (85KZpHlmsC / qKO0VhKHu5). */
+  toolAccessSetLoadWhenNeeded: {
+    defaultMessage: "Tool access set to load when needed",
+    id: "85KZpHlmsC",
+  },
+  toolAccessSetAlreadyLoaded: {
+    defaultMessage: "Tool access set to already loaded",
+    id: "qKO0VhKHu5",
+  },
   csvChatSuggestions: { defaultMessage: "CSV chat suggestions", id: "cnTFjGjv3s" },
   csvChatSuggestionsDescription: {
     defaultMessage: "Claude will suggest responses when you upload CSVs to your conversation.",
@@ -165,6 +184,34 @@ export const GENERAL_SETTINGS_MESSAGES = {
   anthropicSans: { defaultMessage: "Anthropic Sans", id: "4EAtPWhM42" },
   dyslexicFriendly: { defaultMessage: "Dyslexic friendly", id: "twBGxrOFSV" },
   select: { defaultMessage: "Select", id: "kQAf2d9u+x" },
+  /**
+   * Official j4t work-function labels (index-BELzQL5P) — value stays English residual
+   * ("Product Management", …); display string comes from /i18n/{locale}.json
+   * merged with /i18n/{locale}.overrides.json (product ZH补 for official EN residual).
+   */
+  workFunctionProductManagement: {
+    defaultMessage: "Product management",
+    id: "vln2MGiyKI",
+  },
+  workFunctionEngineering: {
+    defaultMessage: "Engineering",
+    id: "kSRFHzFBQd",
+  },
+  workFunctionHumanResources: {
+    defaultMessage: "Human resources",
+    id: "wS3zGbpw8j",
+  },
+  workFunctionFinance: { defaultMessage: "Finance", id: "oKM81YPrmV" },
+  workFunctionMarketing: { defaultMessage: "Marketing", id: "I2d1vG35dZ" },
+  workFunctionSales: { defaultMessage: "Sales", id: "voMCi6ZyXS" },
+  workFunctionOperations: { defaultMessage: "Operations", id: "HqBcYorHBN" },
+  workFunctionDataScience: {
+    defaultMessage: "Data science",
+    id: "62vTr2CsqN",
+  },
+  workFunctionDesign: { defaultMessage: "Design", id: "ZW+myQkZ/P" },
+  workFunctionLegal: { defaultMessage: "Legal", id: "/QQeHodk3M" },
+  workFunctionOther: { defaultMessage: "Other", id: "GtS7t7VHaE" },
   responseCompletions: { defaultMessage: "Response completions", id: "9rL+46Sd/5" },
   responseCompletionsDescription: {
     defaultMessage:

@@ -254,7 +254,8 @@ function SpaceFileDropArea({
 /**
  * Official residual Mkt (index-BELzQL5P):
  * hse = account.settings.enabled_cowork_memory !== false.
- * Product maps desktop preference `enabledCoworkMemory` (default true).
+ * Product: preference `enabledCoworkMemory` is mirrored from account.settings
+ * (useSettingsBootstrap sync + Qt toggle write) so Space status matches Settings.
  */
 function SpaceMemoryStatus({ text }: { text: ProjectsText }) {
   // useDesktopPreferences returns [preferences, setPreference] tuple (not object).

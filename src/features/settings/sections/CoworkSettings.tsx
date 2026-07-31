@@ -4,7 +4,6 @@ import {
   formatDeleteMemoryLabel,
   useCoworkSettingsText,
 } from "../settingsMessages";
-import { useDesktopPreferences } from "../useDesktopPreferences";
 import { useSettingsBootstrap } from "../useSettingsBootstrap";
 
 type CoworkMemoryBridge = {
@@ -26,16 +25,22 @@ type MemoryFile = {
  * Official CoworkPage tn (cc989143e):
  * title + Dispatch Ht + Global instructions Xt + Auto-organize $t + Memory Vt.
  *
- * Product 2026-07-28: **Dispatch row hidden** (user: 派发隐藏吧) — bridge handlers
- * remain for residual/API; UI does not surface phone-dispatch until full parity.
- * Global/Memory use desktop CoworkMemory on-disk residual (CLAUDE.md + memory/*.md).
- * Auto-organize: te.coworkSpaceContextEnabled preference residual.
- * Memory toggle: account.settings.enabled_cowork_memory via mutate J().
+ * Product honesty (same family as Capabilities / Connectors):
+ * - Dispatch Ht: hidden (user 派发隐藏吧) — no phone-dispatch parity.
+ * - Auto-organize $t: official preference coworkSpaceContextEnabled, but product
+ *   has no session-grouping / project-surface consumer → hide (do not invent).
+ * - Global instructions Xt: CoworkMemory write/read CLAUDE.md on disk (wired).
+ * - Memory Vt: list/delete account memory files + Qt toggle enabled_cowork_memory.
+ *   Toggle → account-settings.json + startSession.memoryEnabled (auto-memory mount)
+ *   + preference mirror `enabledCoworkMemory` for Space UI residual.
+ *   No invent cloud memory API.
  */
 export function CoworkSettings() {
   const text = useCoworkSettingsText();
-  const [preferences, setPreference] = useDesktopPreferences();
   const { bootstrap, updateAccountSetting } = useSettingsBootstrap();
+  // Official $t: te.coworkSpaceContextEnabled. Product has no auto-group consumer → hide.
+  // Keep residual branch dead-code path out of render; no preferences hook needed.
+  const showAutoOrganize = false;
   const [editingInstructions, setEditingInstructions] = useState(false);
   const [instructions, setInstructions] = useState("");
   const [instructionsLoading, setInstructionsLoading] = useState(false);
@@ -159,16 +164,15 @@ export function CoworkSettings() {
       <h1 className="text-heading-semibold text-primary">{text.cowork}</h1>
       <SettingsSection>
         {/* Dispatch Ht intentionally not rendered — user 派发隐藏吧 (2026-07-28). */}
-        <SettingsRow
-          label={text.autoOrganizeSessions}
-          description={text.autoOrganizeSessionsDescription}
-          control={
-            <Switch
-              checked={!!preferences.coworkSpaceContextEnabled}
-              onCheckedChange={(checked) => setPreference("coworkSpaceContextEnabled", checked)}
-            />
-          }
-        />
+        {showAutoOrganize ? (
+          // Residual $t branch retained for ion-dist parity; product hides until a
+          // session-grouping consumer exists (do not invent store-only toggle).
+          <SettingsRow
+            label={text.autoOrganizeSessions}
+            description={text.autoOrganizeSessionsDescription}
+            control={<Switch checked={false} onCheckedChange={() => undefined} />}
+          />
+        ) : null}
         {editingInstructions ? (
           <div className="flex flex-col gap-3 py-md">
             <p className="text-sm text-text-500">{text.globalInstructionsDescription}</p>

@@ -4,11 +4,11 @@
  * Progressive path uses official Le/Oe line chunker (not AST frontier).
  */
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { AlluviumMarkdown } from "./AlluviumMarkdown";
 import {
   CoworkMarkdownTree,
   hasCoworkMarkdownNode,
   parseCoworkMarkdown,
-  partitionCoworkMarkdown,
 } from "./CoworkMarkdown";
 import { computeCoworkProgressiveMarkdownChunks } from "./coworkProgressiveMarkdown";
 
@@ -69,17 +69,17 @@ export function CoworkAssistantMarkdown(props: CoworkAssistantMarkdownProps) {
   }, [onCodeDetected, root]);
 
   if (alluviumEnabled) {
-    // Residual: full official AlluviumMarkDown (ae incremental) not ported; keep class + AST frontier stand-in.
-    const parts = isStreaming ? partitionCoworkMarkdown(root, text) : { committed: [root], frontier: null };
+    // Official ProgressiveStandardMarkDown → AlluviumMarkDown (`be` / `ae` / `ve`).
     return (
-      <div className={classes("alluvium-markdown", className)}>
-        {parts.committed.map((chunk, index) => (
-          <CoworkMarkdownTree {...treeProps(props, headingLevelOffset)} key={`committed-${index}`} profile="assistant" root={chunk} source={text} />
-        ))}
-        {parts.frontier ? (
-          <CoworkMarkdownTree {...treeProps(props, headingLevelOffset)} profile="assistant" root={parts.frontier} source={text} />
-        ) : null}
-      </div>
+      <AlluviumMarkdown
+        className={className}
+        headingLevelOffset={headingLevelOffset}
+        isStreaming={isStreaming}
+        onCodeDetected={onCodeDetected}
+        onLinkClick={props.onLinkClick}
+        onLinkDetected={props.onLinkDetected}
+        text={text}
+      />
     );
   }
 
@@ -142,7 +142,16 @@ function treeProps(props: CoworkAssistantMarkdownProps, headingLevelOffset: numb
   };
 }
 
-function evaluateCoworkMarkdownFeature(feature: CoworkMarkdownFeature) {
+/**
+ * Official ProgressiveStandardMarkDown gates:
+ *   v("claude_ai_alluvium_main") each render
+ *   useState(() => ud("claudeai_streaming_fade_in_main")) latch
+ * Product residual order (honest, no static invent defaults):
+ *   1) inject evaluator  2) query gb_gate_*  3) localStorage gb_local_overrides
+ *   4) bootstrap GrowthBook / feature_flags via readBootstrapFeatureFlag
+ */
+/** Exported for residual gate tests + CDP verification (no static invent defaults). */
+export function evaluateCoworkMarkdownFeature(feature: CoworkMarkdownFeature) {
   const configured = configuredFeatureEvaluator?.(feature);
   if (configured !== undefined) return configured;
   if (typeof window === "undefined") return undefined;
@@ -152,12 +161,61 @@ function evaluateCoworkMarkdownFeature(feature: CoworkMarkdownFeature) {
   try {
     const stored = window.localStorage.getItem("gb_local_overrides");
     const overrides = stored ? JSON.parse(stored) : null;
-    return overrides && typeof overrides === "object" && typeof overrides[feature] === "boolean"
-      ? overrides[feature]
-      : undefined;
+    if (overrides && typeof overrides === "object" && typeof overrides[feature] === "boolean") {
+      return overrides[feature] as boolean;
+    }
+  } catch {
+    /* fall through to bootstrap */
+  }
+  return readBootstrapMarkdownFeature(feature);
+}
+
+function readBootstrapMarkdownFeature(feature: CoworkMarkdownFeature): boolean | undefined {
+  try {
+    const w = window as unknown as {
+      __CLAUDE_BOOTSTRAP__?: Record<string, unknown>;
+      __bootstrap?: Record<string, unknown>;
+    };
+    // Lazy import-free residual: same bag as notificationRowGates.readBootstrapFeatureFlag.
+    return readBootstrapFeatureFlagLocal(w.__CLAUDE_BOOTSTRAP__ ?? w.__bootstrap, feature);
   } catch {
     return undefined;
   }
+}
+
+function readBootstrapFeatureFlagLocal(
+  bootstrap: Record<string, unknown> | null | undefined,
+  key: string,
+): boolean | undefined {
+  if (!bootstrap) return undefined;
+  const roots: Array<Record<string, unknown> | null | undefined> = [
+    asRecord(bootstrap.feature_flags),
+    asRecord(bootstrap.featureFlags),
+    asRecord(bootstrap.flags),
+    asRecord(asRecord(bootstrap.growthbook)?.features),
+    asRecord(asRecord(bootstrap.growthbook)?.feature_flags),
+    asRecord(asRecord(bootstrap.statsig)?.values),
+  ];
+  for (const root of roots) {
+    if (!root || !(key in root)) continue;
+    const raw = root[key];
+    if (typeof raw === "boolean") return raw;
+    if (raw === 1 || raw === "true" || raw === "on" || raw === "enabled") return true;
+    if (raw === 0 || raw === "false" || raw === "off" || raw === "disabled") return false;
+    const nested = asRecord(raw);
+    if (nested && "defaultValue" in nested) {
+      const dv = nested.defaultValue;
+      if (typeof dv === "boolean") return dv;
+    }
+    if (nested && typeof nested.isAvailable === "boolean") return nested.isAvailable;
+  }
+  return undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function booleanGateValue(value: string | null) {

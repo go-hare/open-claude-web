@@ -25,6 +25,17 @@ export function DesktopFrame({ children, currentRoute, onNavigate }: DesktopFram
   const desktopFrame = isDesktopFrame();
   const openSearch = useCallback(() => setSearchOpen(true), []);
 
+  /**
+   * Sync frame.mode before child navigation paints.
+   * Search / cross-mode open used to call onNavigate alone — mode only flipped in the
+   * path effect after re-render, so sidebar could briefly show the wrong recents tree.
+   */
+  const navigateWithMode = useCallback((path: string) => {
+    const nextMode = modeFromPath(path);
+    if (nextMode && frame.mode !== nextMode) frame.setMode(nextMode);
+    onNavigate(path);
+  }, [frame, onNavigate]);
+
   useEffect(() => {
     const routeMode = modeFromPath(window.location.pathname);
     if (routeMode && frame.mode !== routeMode) frame.setMode(routeMode);
@@ -32,7 +43,7 @@ export function DesktopFrame({ children, currentRoute, onNavigate }: DesktopFram
 
   // Official ion-dist `q6t`: File→New Conversation / Cmd+N arrives as main→renderer
   // binding `cmdK` (asar `gKA` → webContents.send("cmdK")), then navigates mode home.
-  useOfficialNewConversationBinding(frame.mode, onNavigate);
+  useOfficialNewConversationBinding(frame.mode, navigateWithMode);
 
   const frameStyle = {
     "--df-sidebar-width": `${frame.sidebarWidth}px`,
@@ -60,13 +71,13 @@ export function DesktopFrame({ children, currentRoute, onNavigate }: DesktopFram
       >
         <FrameContext.Provider value={frame}>
           {windowsFrame ? <WindowsChromeBar frame={frame} onSearch={openSearch} /> : null}
-          <FrameSidebar currentRoute={currentRoute} frame={frame} onNavigate={onNavigate} onSearch={openSearch} />
+          <FrameSidebar currentRoute={currentRoute} frame={frame} onNavigate={navigateWithMode} onSearch={openSearch} />
           <main id="dframe-main" tabIndex={-1} className="dframe-content">
             <div className="dframe-content-inner">
-              <PaneLayout currentRoute={currentRoute} mode={frame.mode} onNavigate={onNavigate}>{children}</PaneLayout>
+              <PaneLayout currentRoute={currentRoute} mode={frame.mode} onNavigate={navigateWithMode}>{children}</PaneLayout>
             </div>
           </main>
-          <SearchCommandPalette isOpen={searchOpen} mode={frame.mode} onClose={() => setSearchOpen(false)} onNavigate={onNavigate} />
+          <SearchCommandPalette isOpen={searchOpen} mode={frame.mode} onClose={() => setSearchOpen(false)} onNavigate={navigateWithMode} />
         </FrameContext.Provider>
       </div>
     </div>
@@ -330,6 +341,9 @@ function modeFromPath(pathname: string) {
     pathname === "/space" ||
     pathname.startsWith("/space/") ||
     pathname.startsWith("/cowork-artifact") ||
+    // Nav/chrome aliases before rewrite to `_K=/cowork-artifact`.
+    pathname === "/artifacts" ||
+    pathname.startsWith("/artifacts/") ||
     pathname.startsWith("/scheduled-task") ||
     pathname.startsWith("/cowork/agent")
   ) return "cowork";

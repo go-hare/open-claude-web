@@ -1,5 +1,6 @@
 import { asRecord, stringValue } from "../recordUtils";
 import type { CoworkContentBlock, CoworkFile } from "./coworkMessageTypes";
+import { officialCoworkMessageText } from "./coworkMessageText";
 
 const restartNudgePattern = /^\s*Read the output file to retrieve the result:\s/;
 
@@ -36,7 +37,15 @@ export function normalizeHumanMessage(message: Record<string, unknown>, pluginsE
       : undefined;
   if (singleText && restartNudgePattern.test(singleText)) return null;
   const parsed = parseHumanContent(message);
-  if (parsed.content.length === 0) return null;
+  // After The residual strip, meta-only text vanishes. Keep humans that still have
+  // painted text/images or attachment/sync bags (uploaded_files residual).
+  if (
+    parsed.content.length === 0
+    && parsed.files.length === 0
+    && parsed.syncSources.length === 0
+  ) {
+    return null;
+  }
   return parsed;
 }
 
@@ -45,13 +54,23 @@ export function parseHumanContent(message: Record<string, unknown>) {
   const content = Array.isArray(raw)
     ? raw.map(contentBlock).filter((block) => block.type === "text" || block.type === "image")
     : [{ type: "text", text: typeof raw === "string" ? raw : "" }];
+  // Files/sync tags are parsed from raw text before The residual strip.
   const text = content.find((block) => block.type === "text")?.text ?? "";
   const files = parseUploadedFiles(text);
   const syncSources = parseSyncSources(text);
+  // Official The (index-BELzQL5P Nhe/The): strip system-reminder / task-notification / …
+  // before human paint. Meta-only tails (e.g. <task-notification>) must not become a
+  // path-store human chain — empty shells steal Cat lastHuman/lastAssistant refs and
+  // LUt measures H≈60 A=0 → full-viewport spacer → pin parks star mid-empty.
+  const stripped = content.flatMap((block) => {
+    if (block.type !== "text" || typeof block.text !== "string") return [block];
+    // Command residual reads <command-name>/<command-args> before The strip
+    // (Nhe removes command-message/command-args tags).
+    const next = officialCoworkMessageText(normalizeCommandText(block.text));
+    return next ? [{ ...block, text: next }] : [];
+  });
   return {
-    content: content.map((block) => block.type === "text" && block.text
-      ? { ...block, text: normalizeCommandText(stripSystemTags(block.text)) }
-      : block),
+    content: stripped,
     files,
     syncSources,
   };
@@ -73,15 +92,6 @@ export function messageUuid(message: Record<string, unknown>, fallback: string) 
 
 export function apiMessageId(message: Record<string, unknown>) {
   return stringValue(asRecord(message.message).id);
-}
-
-function stripSystemTags(value: string) {
-  return value
-    .replace(/<uploaded_files>[\s\S]*?<\/uploaded_files>\s*/g, "")
-    .replace(/\s*<cu_window_hints>[\s\S]*?<\/cu_window_hints>/g, "")
-    .replace(/\s*<widget_context_hint>[\s\S]*?<\/widget_context_hint>/g, "")
-    .replace(/\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, "")
-    .replace(/<sync_sources>[\s\S]*?<\/sync_sources>\s*/g, "");
 }
 
 function normalizeCommandText(value: string) {

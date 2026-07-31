@@ -76,30 +76,45 @@ export function assignToCustomGroupState(current: FrameState, sessionKey: string
 /**
  * Official residual after session delete/archive: drop pin + custom-group assignment/order
  * for a session key so sidebar meta does not keep orphan keys.
+ * Also drops legacy `epitaxy:${id}` when clearing `cowork:${id}` (and reverse) so the
+ * shared pinnedOrder migration does not leave ghosts.
  */
 export function clearSessionSidebarMetaState(current: FrameState, sessionKey: string): FrameState {
   if (!sessionKey) return current;
-  const pinnedOrder = current.pinnedOrder.includes(sessionKey)
-    ? current.pinnedOrder.filter((item) => item !== sessionKey)
+  const dropKeys = sessionSidebarMetaKeyAliases(sessionKey);
+  const pinnedOrder = current.pinnedOrder.some((item) => dropKeys.has(item))
+    ? current.pinnedOrder.filter((item) => !dropKeys.has(item))
     : current.pinnedOrder;
-  const hadAssignment = Object.prototype.hasOwnProperty.call(current.customGroupAssignments, sessionKey);
+  const hadAssignment = Object.keys(current.customGroupAssignments).some((key) => dropKeys.has(key));
   const customGroupAssignments = hadAssignment
-    ? Object.fromEntries(Object.entries(current.customGroupAssignments).filter(([key]) => key !== sessionKey))
+    ? Object.fromEntries(Object.entries(current.customGroupAssignments).filter(([key]) => !dropKeys.has(key)))
     : current.customGroupAssignments;
   let orderChanged = false;
   const customGroupOrder: Record<string, string[]> = {};
   for (const [groupId, order] of Object.entries(current.customGroupOrder)) {
-    if (!order.includes(sessionKey)) {
+    if (!order.some((item) => dropKeys.has(item))) {
       customGroupOrder[groupId] = order;
       continue;
     }
     orderChanged = true;
-    const next = order.filter((item) => item !== sessionKey);
+    const next = order.filter((item) => !dropKeys.has(item));
     if (next.length > 0) customGroupOrder[groupId] = next;
   }
   if (pinnedOrder === current.pinnedOrder && !hadAssignment && !orderChanged) return current;
   persistDFrameState({ pinnedOrder, customGroupAssignments, customGroupOrder });
   return { ...current, pinnedOrder, customGroupAssignments, customGroupOrder };
+}
+
+function sessionSidebarMetaKeyAliases(sessionKey: string) {
+  const keys = new Set<string>([sessionKey]);
+  const colon = sessionKey.indexOf(":");
+  if (colon <= 0) return keys;
+  const kind = sessionKey.slice(0, colon);
+  const id = sessionKey.slice(colon + 1);
+  if (!id) return keys;
+  if (kind === "cowork") keys.add(`epitaxy:${id}`);
+  if (kind === "epitaxy") keys.add(`cowork:${id}`);
+  return keys;
 }
 
 export function deleteCustomGroupState(current: FrameState, id: string): FrameState {

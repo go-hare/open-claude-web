@@ -18,7 +18,11 @@ import { useSettingsBootstrap } from "../useSettingsBootstrap";
  *   Bypass: key present && feature !== false && !raven
  *   Preview: Launch.isAvailable (cadc35a07 P) — never invent true
  * Autofix: ccr_autofix_ui === true → account ccr_autofix_on_pr_create
+ *   Product: seeds session.autoFixEnabled on createLocalPr success (engine consumer).
  * Auto-archive: ccr_velvet_broom === true → prefs ccAutoArchiveOnPrClose
+ * Auto-create PR on push: official remote-only; product has no CCR remote push
+ *   auto-PR consumer → hide (do not invent store-only toggle). Nested draft stays
+ *   controllable via PR menu + account/localStorage residual.
  * Classify: claudeai_session_state === true only → account ccr_session_state_buckets
  * (Official Qp: missing flag hides. 3p turns flags on via custom3p FEATURE_FLAGS.)
  */
@@ -58,6 +62,9 @@ export function ClaudeCodeSettings() {
   // Official St: c("claudeai_session_state"); if (!t) return null — missing → hide.
   const showClassifyRow =
     readBootstrapFeatureFlag(payload, "claudeai_session_state") === true;
+  // Official _t auto-create: remote sessions only. Product has no remote CCR
+  // push → PR pipeline; hide rather than store-only fake (same honesty family).
+  const showAutoCreatePrRow = false;
 
   const setAccountFlag = (
     key:
@@ -179,63 +186,69 @@ export function ClaudeCodeSettings() {
           />
         ) : null}
       </SettingsSection>
-      <SettingsSection title={text.pullRequests}>
-        <SettingsRow
-          label={text.createPullRequestsAutomatically}
-          description={text.createPullRequestsAutomaticallyDescription}
-          control={
-            <Switch
-              checked={autoCreatePr}
-              onCheckedChange={(checked) =>
-                setAccountFlag("ccr_auto_create_pr_on_push", checked)
+      {showAutoCreatePrRow || showAutofixRow || showAutoArchiveRow ? (
+        <SettingsSection title={text.pullRequests}>
+          {showAutoCreatePrRow ? (
+            <>
+              <SettingsRow
+                label={text.createPullRequestsAutomatically}
+                description={text.createPullRequestsAutomaticallyDescription}
+                control={
+                  <Switch
+                    checked={autoCreatePr}
+                    onCheckedChange={(checked) =>
+                      setAccountFlag("ccr_auto_create_pr_on_push", checked)
+                    }
+                  />
+                }
+              />
+              {autoCreatePr ? (
+                <SettingsRow
+                  className="pl-6"
+                  label={text.createAsDraft}
+                  description={text.createAsDraftDescription}
+                  control={
+                    <Switch
+                      checked={createAsDraft}
+                      onCheckedChange={(checked) =>
+                        setAccountFlag("ccr_auto_create_pr_as_draft", checked)
+                      }
+                    />
+                  }
+                />
+              ) : null}
+            </>
+          ) : null}
+          {showAutofixRow ? (
+            <SettingsRow
+              label={text.autofixOnPrCreate}
+              description={text.autofixOnPrCreateDescription}
+              control={
+                <Switch
+                  checked={autofixOnPrCreate}
+                  onCheckedChange={(checked) =>
+                    setAccountFlag("ccr_autofix_on_pr_create", checked)
+                  }
+                />
               }
             />
-          }
-        />
-        {autoCreatePr ? (
-          <SettingsRow
-            className="pl-6"
-            label={text.createAsDraft}
-            description={text.createAsDraftDescription}
-            control={
-              <Switch
-                checked={createAsDraft}
-                onCheckedChange={(checked) =>
-                  setAccountFlag("ccr_auto_create_pr_as_draft", checked)
-                }
-              />
-            }
-          />
-        ) : null}
-        {showAutofixRow ? (
-          <SettingsRow
-            label={text.autofixOnPrCreate}
-            description={text.autofixOnPrCreateDescription}
-            control={
-              <Switch
-                checked={autofixOnPrCreate}
-                onCheckedChange={(checked) =>
-                  setAccountFlag("ccr_autofix_on_pr_create", checked)
-                }
-              />
-            }
-          />
-        ) : null}
-        {showAutoArchiveRow ? (
-          <SettingsRow
-            label={text.autoArchiveClosedPrSessions}
-            description={text.autoArchiveClosedPrSessionsDescription}
-            control={
-              <Switch
-                checked={!!preferences.ccAutoArchiveOnPrClose}
-                onCheckedChange={(checked) =>
-                  setPreference("ccAutoArchiveOnPrClose", checked)
-                }
-              />
-            }
-          />
-        ) : null}
-      </SettingsSection>
+          ) : null}
+          {showAutoArchiveRow ? (
+            <SettingsRow
+              label={text.autoArchiveClosedPrSessions}
+              description={text.autoArchiveClosedPrSessionsDescription}
+              control={
+                <Switch
+                  checked={!!preferences.ccAutoArchiveOnPrClose}
+                  onCheckedChange={(checked) =>
+                    setPreference("ccAutoArchiveOnPrClose", checked)
+                  }
+                />
+              }
+            />
+          ) : null}
+        </SettingsSection>
+      ) : null}
     </main>
   );
 }

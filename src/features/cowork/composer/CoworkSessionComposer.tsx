@@ -11,6 +11,8 @@ import { stopCoworkSession } from "../session/coworkSessionStop";
 import type { CoworkDropdownItem } from "../ui/CoworkMenuTypes";
 import { createCoworkComposerSubmission } from "./coworkComposerSubmission";
 import { registerCoworkSessionComposerActions } from "./coworkSessionComposerActions";
+import type { CoworkClaudeAvatarState } from "../session/transcript/CoworkClaudeAvatar";
+import { useCoworkConversationAvatar } from "../session/transcript/CoworkConversationAvatarContext";
 import { CoworkSessionComposerSurface } from "./CoworkSessionComposerSurface";
 import { CoworkAskUserQuestionBanner } from "./CoworkAskUserQuestionBanner";
 import { useCoworkAskUserQuestion } from "./CoworkAskUserQuestionContext";
@@ -22,10 +24,26 @@ import { coworkSlashSkillChipContent } from "./slash/CoworkSlashTypes";
 import { useCoworkModelOptions } from "./useCoworkModelOptions";
 
 type CoworkSessionComposerProps = {
+  /**
+   * Official t$t avatarState (v$t Et). Optional override; default comes from
+   * CoworkConversationAvatarProvider (path Et residual).
+   */
+  avatarState?: CoworkClaudeAvatarState;
+  /** Official kAt connectionState. */
+  connectionState?: string | null;
   disabled: boolean;
   images?: CoworkImagePayload[];
   isResponding: boolean;
+  /**
+   * Official t$t isStreaming (`l`). SessionView passes conversationIsStreaming;
+   * Conversation provider also exposes the same flag as residual fallback.
+   */
+  isStreaming?: boolean;
+  /** Official kAt nextReconnectTime. */
+  nextReconnectTime?: number | null;
   onNavigate: (path: string) => void;
+  /** Official kAt onRetryNow — session path mounts banner when set. */
+  onRetryConnection?: () => void;
   onScrollToBottom: () => void;
   onSubmit: (text: string, input?: SendMessageInput) => Promise<void>;
   reload: () => Promise<void>;
@@ -38,7 +56,46 @@ type CoworkSessionComposerProps = {
 
 export function CoworkSessionComposer(props: CoworkSessionComposerProps) {
   const controller = useCoworkComposerController(props);
-  return <CoworkSessionComposerSurface canStop={controller.canStop} canSubmit={controller.canSubmit} childrenAbove={controller.questionBanner} containerRef={props.containerRef} disabled={props.disabled || controller.isConfigBusy} editor={controller.editor} isStreaming={props.isResponding} isSubmitting={controller.isSubmitting} modelItems={controller.modelItems} modelLabel={controller.modelLabel} onContainerClick={(event) => { if (!(event.target instanceof HTMLElement && event.target.closest("button"))) controller.editor?.commands.focus("end"); }} onKeyDownCapture={controller.onKeyDownCapture} onRemoveFile={controller.removeFile} onScrollToBottom={props.onScrollToBottom} onStop={() => void controller.stop()} onSubmit={() => void controller.submit()} placeholder={controller.placeholder} plusMenuItems={controller.plusMenuItems} selectedFiles={controller.selectedFiles} showScrollButton={props.showScrollButton} text={controller.text} />;
+  // Official Et + `l` from Conversation path (Provider); props override when present.
+  const conversationAvatar = useCoworkConversationAvatar();
+  // Official t$t Ace blur uses v$t `l` (streamingMessageId || isResponding), not stop-button-only isResponding.
+  const isStreaming = props.isStreaming
+    ?? conversationAvatar?.isStreaming
+    ?? props.isResponding;
+  const avatarState = props.avatarState ?? conversationAvatar?.avatarState;
+  return (
+    <CoworkSessionComposerSurface
+      avatarState={avatarState}
+      canStop={controller.canStop}
+      canSubmit={controller.canSubmit}
+      childrenAbove={controller.questionBanner}
+      connectionState={props.connectionState}
+      containerRef={props.containerRef}
+      disabled={props.disabled || controller.isConfigBusy}
+      editor={controller.editor}
+      isStreaming={isStreaming}
+      isSubmitting={controller.isSubmitting}
+      modelItems={controller.modelItems}
+      modelLabel={controller.modelLabel}
+      nextReconnectTime={props.nextReconnectTime}
+      onContainerClick={(event) => {
+        if (!(event.target instanceof HTMLElement && event.target.closest("button"))) {
+          controller.editor?.commands.focus("end");
+        }
+      }}
+      onKeyDownCapture={controller.onKeyDownCapture}
+      onRemoveFile={controller.removeFile}
+      onRetryConnection={props.onRetryConnection}
+      onScrollToBottom={props.onScrollToBottom}
+      onStop={() => void controller.stop()}
+      onSubmit={() => void controller.submit()}
+      placeholder={controller.placeholder}
+      plusMenuItems={controller.plusMenuItems}
+      selectedFiles={controller.selectedFiles}
+      showScrollButton={props.showScrollButton}
+      text={controller.text}
+    />
+  );
 }
 
 function useCoworkComposerController(props: CoworkSessionComposerProps) {

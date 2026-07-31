@@ -1,7 +1,9 @@
 /**
- * Official tooltip (_Component7 / Xp) from c5f4e1303.
- * Default content _C classes; keyboardShortcut via hC/mC (cmd+f → ⌘F / Ctrl+F).
+ * Official tooltip residual = c5f4e1303 `vC` exported as `T`, re-exported by index as `Xp`.
+ * Ace / composer / settings all share this module (not per-call-site inline Xp clones).
+ * Default content `_C` classes; keyboardShortcut via hC/mC (cmd+f → ⌘F / Ctrl+F).
  * gYt collapsed filter: tooltipContent=placeholder, keyboardShortcut="cmd+f", side="top".
+ * Product uses Base UI Tooltip for the same surface; official vC is Radix-era j/P/M/D/F.
  */
 import { cloneElement, isValidElement, useMemo, type ReactElement, type ReactNode } from "react";
 import { Tooltip } from "@base-ui-components/react/tooltip";
@@ -79,7 +81,7 @@ export type OfficialTooltipProps = {
   tooltipContent?: ReactNode;
 };
 
-/** Official _Component7 / Xp */
+/** Official c5f4e1303 vC / index Xp residual. */
 export function OfficialTooltip({
   children,
   className,

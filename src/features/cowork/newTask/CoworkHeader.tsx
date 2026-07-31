@@ -1,5 +1,5 @@
+import { openCoworkAgentFeedback } from "../session/activity/openCoworkAgentFeedback";
 import {
-  COWORK_FEEDBACK_URL,
   COWORK_SUPPORT_URL,
   DEFAULT_COWORK_HEADER_VARIANT,
   resolveCoworkHeaderTitle,
@@ -7,21 +7,8 @@ import {
   type CoworkHeaderVariant,
 } from "./coworkNewTaskMessages";
 
-type AgentModeFeedbackBridge = {
-  openFeedbackWindow?: (payload: {
-    source: "agent_new_page";
-    url: string;
-  }) => Promise<unknown>;
-};
-
 function openCoworkFeedback() {
-  const feedbackBridge = (window["claude.web"] as { AgentModeFeedback?: AgentModeFeedbackBridge } | undefined)
-    ?.AgentModeFeedback;
-  if (feedbackBridge?.openFeedbackWindow) {
-    void feedbackBridge.openFeedbackWindow({ source: "agent_new_page", url: COWORK_FEEDBACK_URL });
-    return;
-  }
-  window.open(COWORK_FEEDBACK_URL, "_blank", "noopener,noreferrer");
+  openCoworkAgentFeedback({ source: "agent_new_page" });
 }
 
 /**

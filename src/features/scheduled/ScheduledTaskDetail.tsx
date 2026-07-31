@@ -70,8 +70,9 @@ function DetailLoading() {
   );
 }
 
-function ScheduledTaskDetailView({ task, onBack, onNavigate }: { task: ScheduledTaskSummary; onBack: () => void; onNavigate: (path: string) => void }) {
-  const [enabled, setEnabled] = useState(task.enabled);
+function ScheduledTaskDetailView({ task: initialTask, onBack, onNavigate }: { task: ScheduledTaskSummary; onBack: () => void; onNavigate: (path: string) => void }) {
+  const [task, setTask] = useState(initialTask);
+  const [enabled, setEnabled] = useState(initialTask.enabled);
   const [isRunning, setIsRunning] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -81,10 +82,31 @@ function ScheduledTaskDetailView({ task, onBack, onNavigate }: { task: Scheduled
   const { ensureTrusted, modal: trustModal } = useWorkspaceTrustGate(task.cwd ?? undefined);
   const detailText = useI18nText(SCHEDULED_DETAIL_MESSAGES);
   const title = taskDisplayName(task);
+
+  useEffect(() => {
+    setTask(initialTask);
+    setEnabled(initialTask.enabled);
+  }, [initialTask]);
+
+  const refreshTask = useCallback(async () => {
+    const next = await desktopBridge.CCDScheduledTasks.get(task.id);
+    if (next) setTask(next);
+  }, [task.id]);
+
   const toggle = async () => {
     const next = !enabled;
     setEnabled(next);
     await desktopBridge.CCDScheduledTasks.updateStatus?.(task.id, next ? "enabled" : "disabled");
+  };
+
+  // Residual jT removeApprovedPermission / clearChromePermissions (code CCD channel).
+  const removeApprovedPermission = async (toolName: string) => {
+    await desktopBridge.CCDScheduledTasks.removeApprovedPermission?.(task.id, toolName);
+    await refreshTask();
+  };
+  const clearChromePermissions = async () => {
+    await desktopBridge.CCDScheduledTasks.clearChromePermissions?.(task.id);
+    await refreshTask();
   };
   const executeRunNow = useCallback(async () => {
     if (isRunning || !task.cwd || !task.prompt) return;
@@ -126,7 +148,13 @@ function ScheduledTaskDetailView({ task, onBack, onNavigate }: { task: Scheduled
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="epitaxy-chat-column epitaxy-chat-size flex flex-col gap-g8 pt-[48px] pb-[32px]">
             <div className="grid grid-cols-1 md:grid-cols-[1fr_1.4fr] gap-g8">
-              <DetailLeftColumn task={task} enabled={enabled} onToggle={toggle} />
+              <DetailLeftColumn
+                enabled={enabled}
+                onClearChromePermissions={() => void clearChromePermissions()}
+                onRemoveApprovedPermission={(toolName) => void removeApprovedPermission(toolName)}
+                onToggle={toggle}
+                task={task}
+              />
               <DetailRightColumn
                 runs={runs}
                 runsLoading={runsLoading}

@@ -228,16 +228,19 @@ export function ExistingSessionComposer({
    */
   useEffect(() => {
     const sessionId = sessionRef?.id;
-    if (!sessionId || !bridge.getEffort) return;
+    // Capture optional bridge methods — TS does not narrow object props into async closures.
+    const getEffort = bridge.getEffort;
+    const getEffortCatalogDefaults = bridge.getEffortCatalogDefaults;
+    if (!sessionId || !getEffort) return;
     let cancelled = false;
     void (async () => {
       try {
-        const applied = await bridge.getEffort(sessionId);
+        const applied = await getEffort(sessionId);
         if (cancelled || !applied || typeof applied === "string") return;
         let levels = applied.effortLevels ?? null;
         let ultracode = applied.ultracodeOfferable ?? null;
-        if ((!levels || levels.length === 0) && bridge.getEffortCatalogDefaults) {
-          const catalog = await bridge.getEffortCatalogDefaults(
+        if ((!levels || levels.length === 0) && getEffortCatalogDefaults) {
+          const catalog = await getEffortCatalogDefaults(
             selectedModel === "default" ? undefined : selectedModel,
           ).catch(() => null);
           if (cancelled) return;

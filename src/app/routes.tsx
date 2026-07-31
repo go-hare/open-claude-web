@@ -384,13 +384,50 @@ export const routes: AppRoute[] = [
     sourceChunk: "c1b9abf13-BWGqUBhA.js",
     Component: ProjectsPage,
   },
+  /**
+   * Official desktop Artifacts residual (index-BELzQL5P):
+   *   _K = "/cowork-artifact"
+   *   withSidebar: path "cowork-artifact" → qQt list; "cowork-artifact/$id" → UQt/kGt
+   * Nav chrome still links "/artifacts/my" in places — product keeps aliases that
+   * rewrite to the desktop residual path (not cloud studio Coming soon).
+   */
+  {
+    id: "cowork-artifact-detail",
+    path: "/cowork-artifact/:id",
+    title: "Live artifacts",
+    navKey: "artifacts",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js qQt/UQt/kGt",
+    Component: ArtifactsComingSoonPage,
+    match: (pathname) => /^\/cowork-artifact\/[^/]+/.test(pathname),
+  },
+  {
+    id: "cowork-artifact",
+    path: "/cowork-artifact",
+    title: "Live artifacts",
+    navKey: "artifacts",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js qQt _K",
+    Component: ArtifactsComingSoonPage,
+    match: (pathname) => pathname === "/cowork-artifact",
+  },
+  {
+    id: "artifacts-my-alias",
+    path: "/artifacts/my",
+    title: "Live artifacts",
+    navKey: "artifacts",
+    kind: "epitaxy",
+    sourceChunk: "index-BELzQL5P.js nav href /artifacts/my → desktop _K",
+    Component: ArtifactsComingSoonPage,
+    match: (pathname) => pathname === "/artifacts/my" || pathname === "/artifacts/my/",
+  },
   {
     id: "artifacts",
     path: "/artifacts",
-    title: "Artifacts",
+    title: "Live artifacts",
     navKey: "artifacts",
     kind: "epitaxy",
-    sourceChunk: "c1b9abf13-BWGqUBhA.js",
+    sourceChunk: "c1b9abf13-BWGqUBhA.js cloud studio; desktop uses CoworkArtifacts residual",
     Component: ArtifactsComingSoonPage,
     match: (pathname) => startsWithPath(pathname, "/artifacts"),
   },

@@ -1,9 +1,23 @@
 /**
- * Official bottom spacer (pretty LUt).
+ * Official bottom spacer (pretty LUt ~221587).
  * height = max(container - lastHuman - lastAssistant - extras - chatInput - pubsecBanner - buffer, 0)
  * buffer = (additionalBuffer || 98) + (hasDesktopTopBar ? Qg : 0)
  * Qg = 45 (vendor c5f4e1303 Gd); ALt pubsec banner = 2.25rem when TUt enabled.
+ *
+ * Official LUt API:
+ * - measures lastAssistant / lastHuman / chatInput / extras refs only
+ * - container = parentContainerRef?.clientHeight || window.innerHeight
+ * - RO deps official `[scrollRefs, m, messageCount]`; no observeEpoch in ion
+ * - does NOT setPin / restick — pin is IYe RO + t$t only
  * Source: index-BELzQL5P.js LUt ~221588–221678.
+ *
+ * Desktop-shell residuals (keep; do not delete as “approx”):
+ * 1) parentContainerRef — LUt accepts it, but official v$t call site omits it → window.
+ *    Product IYe lives in a flex min-h-0 dframe column shorter than window; pass scrollport.
+ * 2) observeEpoch — official rebinds RO only on messageCount; product path hydrates /
+ *    streams in-place (uuid list length stable) so Cat lastAssistant can attach late.
+ * 3) sync updateHeight() after RO rebind — official relies on async RO delivery only;
+ *    product sync m() prevents A=0 → spacer≈viewport mid stick.
  */
 import { useCallback, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import type { CoworkAutoscrollHandle } from "./coworkAutoscroll";
@@ -36,7 +50,7 @@ export type CoworkConversationBottomSpacerProps = {
   disableInitialScrollToBottom?: boolean;
   disablePinToTop?: boolean;
   extrasRef: RefObject<HTMLDivElement | null>;
-  /** Official A5() — desktopTopBar capability. Cowork desktop shell defaults true. */
+  /** Official A5() — desktopTopBar capability. */
   hasDesktopTopBar?: boolean;
   /** Official TUt()/IUt().enabled — currently always false in official; kept for parity. */
   hasPubsecBanner?: boolean;
@@ -44,6 +58,12 @@ export type CoworkConversationBottomSpacerProps = {
   initialPrevMessageCount?: number;
   lastHumanMessageRef: RefObject<HTMLDivElement | null>;
   messageCount: number;
+  /**
+   * Product residual: rebind LUt ResizeObserver when painted last chain / stream id changes
+   * without messageCount changing (official path rows update in-place; Cat ref targets move).
+   * Official LUt RO deps [scrollRefs, m, messageCount] — observeEpoch extends that honestly.
+   */
+  observeEpoch?: string;
   parentContainerRef?: RefObject<HTMLElement | null>;
   scrollRef: RefObject<HTMLDivElement | null>;
 };
@@ -81,13 +101,72 @@ export function animateCoworkScrollToBottom(container: HTMLElement, duration: nu
   requestAnimationFrame(step);
 }
 
+/**
+ * Official LUt container: parentContainerRef?.clientHeight || window.innerHeight.
+ * Product conversation passes IYe scrollport as parent (dframe column shorter than window).
+ * Reject content-sized parent (client ≫ window) so unbounded flex cannot oversize spacer.
+ */
+export function resolveCoworkBottomSpacerContainerHeight(input: {
+  parentHeight?: number | null;
+  scrollClientHeight?: number | null;
+  scrollScrollHeight?: number | null;
+  /** @deprecated alias of scrollClientHeight */
+  scrollHeight?: number | null;
+  windowHeight?: number;
+}): number {
+  const win =
+    input.windowHeight
+    ?? (typeof window !== "undefined" ? window.innerHeight : 0);
+  const parent = positiveHeight(input.parentHeight);
+  // Official: parent?.clientHeight || window.innerHeight
+  if (parent && (!win || parent <= win + 1)) return parent;
+  // Product dframe: if parent missing, prefer bounded IYe clientHeight when provided.
+  const client = positiveHeight(input.scrollClientHeight ?? input.scrollHeight);
+  if (client && (!win || client <= win + 1)) return client;
+  if (win > 0) return win;
+  return parent ?? client ?? 0;
+}
+
+function positiveHeight(value?: number | null): number | null {
+  return typeof value === "number" && value > 0 ? value : null;
+}
+
+/**
+ * Official LUt: e.chatInput?.current?.clientHeight || 0.
+ * No DOM query fallback — composerRef must be attached (data-chat-input-container residual).
+ */
+export function resolveCoworkChatInputHeight(input: {
+  composerRef?: RefObject<HTMLDivElement | null> | { current: HTMLDivElement | null };
+  scrollRoot?: HTMLElement | null;
+}): number {
+  return input.composerRef?.current?.clientHeight ?? 0;
+}
+
+/**
+ * Official LUt: lastHuman/lastAssistant ref clientHeights only.
+ * Cat always mounts the ref shell (official wat/Cat); no painted-cell max() patch.
+ */
+export function resolveCoworkLastMessageHeights(input: {
+  assistantRef?: RefObject<HTMLDivElement | null> | { current: HTMLDivElement | null };
+  humanRef?: RefObject<HTMLDivElement | null> | { current: HTMLDivElement | null };
+  scrollRoot?: HTMLElement | null;
+}): { assistantHeight: number; humanHeight: number } {
+  return {
+    assistantHeight: input.assistantRef?.current?.clientHeight ?? 0,
+    humanHeight: input.humanRef?.current?.clientHeight ?? 0,
+  };
+}
+
 export function CoworkConversationBottomSpacer(props: CoworkConversationBottomSpacerProps) {
   const extraSpaceRef = useRef<HTMLDivElement | null>(null);
   const previousMessageCount = useRef(props.initialPrevMessageCount ?? props.messageCount);
-  // Official A5 default for this desktop Cowork surface.
-  const hasDesktopTopBar = props.hasDesktopTopBar ?? true;
+  // Official A5() when measuring against window.innerHeight. When parent/scrollport is
+  // the IYe container, chrome is already outside — do not add Qg a second time.
+  const measuredAgainstScrollport = Boolean(props.parentContainerRef || props.scrollRef);
+  const hasDesktopTopBar = props.hasDesktopTopBar ?? !measuredAgainstScrollport;
   const hasPubsecBanner = props.hasPubsecBanner ?? false;
 
+  // Official m(): assign style.height only. Pin/restick is IYe + t$t, not LUt.
   const updateHeight = useCallback(() => {
     const target = extraSpaceRef.current;
     if (!target) return;
@@ -95,15 +174,27 @@ export function CoworkConversationBottomSpacer(props: CoworkConversationBottomSp
       typeof document !== "undefined"
         ? parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
         : 16;
+    const measured = resolveCoworkLastMessageHeights({
+      assistantRef: props.lastAssistantMessageRef,
+      humanRef: props.lastHumanMessageRef,
+    });
+    const chatInputHeight = resolveCoworkChatInputHeight({
+      composerRef: props.composerRef,
+    });
     const height = computeCoworkBottomSpacerHeight({
       additionalBuffer: props.additionalBuffer,
-      assistantHeight: props.lastAssistantMessageRef.current?.clientHeight ?? 0,
-      chatInputHeight: props.composerRef.current?.clientHeight ?? 0,
-      containerHeight: props.parentContainerRef?.current?.clientHeight || window.innerHeight,
+      assistantHeight: measured.assistantHeight,
+      chatInputHeight,
+      containerHeight: resolveCoworkBottomSpacerContainerHeight({
+        parentHeight: props.parentContainerRef?.current?.clientHeight,
+        scrollClientHeight: props.scrollRef.current?.clientHeight,
+        scrollScrollHeight: props.scrollRef.current?.scrollHeight,
+        windowHeight: typeof window !== "undefined" ? window.innerHeight : 0,
+      }),
       extrasHeight: props.extrasRef.current?.clientHeight ?? 0,
       hasDesktopTopBar,
       hasPubsecBanner,
-      humanHeight: props.lastHumanMessageRef.current?.clientHeight ?? 0,
+      humanHeight: measured.humanHeight,
       rootFontSizePx,
     });
     target.style.height = `${height}px`;
@@ -116,8 +207,15 @@ export function CoworkConversationBottomSpacer(props: CoworkConversationBottomSp
     props.lastAssistantMessageRef,
     props.lastHumanMessageRef,
     props.parentContainerRef,
+    props.scrollRef,
   ]);
 
+  // Official LUt effect order (index-BELzQL5P LUt):
+  // (1) messageCount > prev → m() + optional scroll
+  // (2) RO observe lastAssistant/lastHuman/chatInput/extras + resize (no sync m on mount)
+  // (3) initial scrollToBottom("instant") unless disableInitial / initialPrev set
+  // Product keeps a sync m() immediately before initial scroll so short sessions include
+  // the LUt band in scrollHeight in the same commit (official RO m() is async-only).
   useLayoutEffect(() => {
     if (props.messageCount > previousMessageCount.current) {
       updateHeight();
@@ -138,14 +236,10 @@ export function CoworkConversationBottomSpacer(props: CoworkConversationBottomSp
     previousMessageCount.current = props.messageCount;
   }, [props.autoScrollRef, props.disablePinToTop, props.initialPrevMessageCount, props.messageCount, updateHeight]);
 
+  // Official LUt RO: observe lastAssistant, lastHuman, chatInput, extras (+ window resize).
+  // messageCount + observeEpoch rebind when path length OR painted last chain changes so
+  // late-attached Cat refs are actually observed (live stream A≠0).
   useLayoutEffect(() => {
-    if (props.disableInitialScrollToBottom || props.initialPrevMessageCount !== undefined) return;
-    if (props.autoScrollRef?.current) props.autoScrollRef.current.scrollToBottom("instant");
-    else requestAnimationFrame(() => props.autoScrollRef?.current?.scrollToBottom("instant"));
-  }, [props.autoScrollRef, props.disableInitialScrollToBottom, props.initialPrevMessageCount]);
-
-  useLayoutEffect(() => {
-    // Official observes lastAssistant, lastHuman, chatInput, extras only (+ window resize).
     const observer = new ResizeObserver(() => {
       updateHeight();
     });
@@ -159,6 +253,8 @@ export function CoworkConversationBottomSpacer(props: CoworkConversationBottomSp
       if (target) observer.observe(target);
     });
     window.addEventListener("resize", updateHeight);
+    // Sync m() after rebind — official relies on RO delivery; product path can attach
+    // lastAssistant after the previous observe pass saw null (A stuck at 0 → spacer ~viewport).
     updateHeight();
     return () => {
       observer.disconnect();
@@ -170,8 +266,22 @@ export function CoworkConversationBottomSpacer(props: CoworkConversationBottomSp
     props.lastAssistantMessageRef,
     props.lastHumanMessageRef,
     props.messageCount,
+    props.observeEpoch,
     updateHeight,
   ]);
+
+  // Official third layout effect deps: [autoScrollRef, disableInitial, initialPrev].
+  // Measure once then scroll — handle must already be assigned (IYe imperative timing).
+  useLayoutEffect(() => {
+    if (props.disableInitialScrollToBottom || props.initialPrevMessageCount !== undefined) return;
+    updateHeight();
+    if (props.autoScrollRef?.current) {
+      props.autoScrollRef.current.scrollToBottom("instant");
+    } else {
+      requestAnimationFrame(() => props.autoScrollRef?.current?.scrollToBottom("instant"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- official deps omit m(); updateHeight is stable enough per measure refs
+  }, [props.autoScrollRef, props.disableInitialScrollToBottom, props.initialPrevMessageCount]);
 
   return <div aria-hidden="true" data-testid="cowork-bottom-spacer" ref={extraSpaceRef} />;
 }

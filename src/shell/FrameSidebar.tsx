@@ -517,9 +517,8 @@ function sidebarRowDirection(event: KeyboardEvent) {
 }
 
 function focusAdjacentSidebarRow(mode: FrameStore["mode"], direction: number, onNavigate: (path: string) => void) {
-  const section = document.querySelector(`[data-kind="${mode}"]`);
-  if (!section) return;
-  const rows = Array.from(section.querySelectorAll<HTMLElement>("[data-row-main-button]"));
+  // Walk every sidebar section tagged for this mode (pinned + recents; not only the first data-kind).
+  const rows = Array.from(document.querySelectorAll<HTMLElement>(`[data-kind="${mode}"] [data-row-main-button]`));
   if (rows.length === 0) return;
   let selectedIndex = rows.findIndex((row) => row.getAttribute("data-selected") === "focused");
   if (selectedIndex === -1) {

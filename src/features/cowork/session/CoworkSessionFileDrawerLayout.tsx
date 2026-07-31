@@ -12,6 +12,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -137,15 +138,18 @@ export function CoworkSessionFileDrawerLayout({
     const drawerNode = drawerRef.current;
     if (!mainNode || !drawerNode) return;
     const clamped = Math.max(0, Math.min(COWORK_DRAWER_FLEX_TOTAL, drawerFlex));
-    // Official yUt mutates flex via refs only. Never put flex in React style props —
-    // re-renders would overwrite the spring terminal value back to the JSX initial 0.
-    mainNode.style.flex = String(COWORK_DRAWER_FLEX_TOTAL - clamped);
-    drawerNode.style.flex = String(clamped);
+    // Official yUt: style.flex = "100 0" / "0 0" (grow + shrink 0). Never bare "100" —
+    // without shrink/basis the main column can grow with transcript content, IYe stops
+    // being a bounded scrollport, LUt measures content-sized height, and pin-to-bottom
+    // parks the viewport in empty spacer ("scroll up to see messages").
+    mainNode.style.flex = `${COWORK_DRAWER_FLEX_TOTAL - clamped} 0`;
+    drawerNode.style.flex = `${clamped} 0`;
     intendedDrawerFlexRef.current = clamped;
   }, []);
 
   // Seed official first-paint flex: main 100 / drawer 0 (style { flex: "100 0" } / { flex: "0 0" }).
-  useEffect(() => {
+  // useLayoutEffect so the main column is height-bounded before IYe measures / LUt paints.
+  useLayoutEffect(() => {
     applyFlex(0);
   }, [applyFlex]);
 
@@ -172,8 +176,9 @@ export function CoworkSessionFileDrawerLayout({
     const controls = animateCoworkDrawerSpring(current, target, {
       ...COWORK_DRAWER_SPRING,
       onUpdate: (value) => {
-        mainNode.style.flex = String(COWORK_DRAWER_FLEX_TOTAL - value);
-        drawerNode.style.flex = String(value);
+        // Keep official "N 0" flex shorthand while springing (see applyFlex).
+        mainNode.style.flex = `${COWORK_DRAWER_FLEX_TOTAL - value} 0`;
+        drawerNode.style.flex = `${value} 0`;
         // Keep intended in sync so ResizeObserver clamp cannot snap back to 0 mid-spring.
         intendedDrawerFlexRef.current = value;
       },
@@ -199,8 +204,8 @@ export function CoworkSessionFileDrawerLayout({
       const width = containerNode.getBoundingClientRect().width;
       if (!width) return;
       const drawerFlex = clampCoworkDrawerFlex(intendedDrawerFlexRef.current, width);
-      mainNode.style.flex = String(COWORK_DRAWER_FLEX_TOTAL - drawerFlex);
-      drawerNode.style.flex = String(drawerFlex);
+      mainNode.style.flex = `${COWORK_DRAWER_FLEX_TOTAL - drawerFlex} 0`;
+      drawerNode.style.flex = `${drawerFlex} 0`;
     };
     let frame: number | undefined;
     const scheduleClamp = () => {
@@ -234,6 +239,7 @@ export function CoworkSessionFileDrawerLayout({
     const { containerPx, leftPx } = resizeOriginRef.current;
     const nextLeft = Math.min(Math.max(leftPx + deltaPx, COWORK_MAIN_MIN_PX), containerPx - COWORK_DRAWER_MIN_PX);
     const mainFlex = (nextLeft / containerPx) * COWORK_DRAWER_FLEX_TOTAL;
+    // applyFlex expects drawer flex (official bUt - mainFlex).
     applyFlex(COWORK_DRAWER_FLEX_TOTAL - mainFlex);
   }, [applyFlex]);
 
@@ -248,7 +254,7 @@ export function CoworkSessionFileDrawerLayout({
       ref={containerRef}
     >
       <div
-        className="h-full flex flex-col overflow-hidden md:pt-[var(--df-header-h,0px)]"
+        className="h-full min-h-0 flex flex-col overflow-hidden md:pt-[var(--df-header-h,0px)]"
         data-official-source="index-BELzQL5P.js:yUt main column"
         ref={mainRef}
       >

@@ -1,11 +1,23 @@
+/**
+ * Official GenericToolUseCell approval residual (yue + nue + RTe).
+ * Shell: xde expanded card (border-0.5, bg-bg-000 shadow-sm when expanded).
+ * Footer: nue — risk notice only when coworkWriteToolWarning; CTA matrix residual-honest.
+ * data-official-source: index-BELzQL5P:yue/nue/RTe/xde
+ */
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Icon } from "../../../shell/icons";
 import type { CoworkPermissionDecision, CoworkPermissionRequest } from "../session/coworkPermissionTypes";
 import {
   CoworkFavicon,
   CoworkIntegrationLetterIcon,
   CoworkToolCodeBlock,
 } from "../session/transcript/CoworkToolPresentation";
+import {
+  resolveCoworkGenericPermissionCtaMode,
+  resolveCoworkGenericPermissionPrimaryDecision,
+} from "./coworkGenericPermissionCta";
+import { coworkWriteToolWarningFromRequest } from "./coworkPermissionApprovalModel";
 import { CoworkComposerButton, CoworkPermissionSplitButton } from "./CoworkComposerPrimitives";
 import { useCoworkPermissionKeyboard } from "./useCoworkPermissionKeyboard";
 
@@ -19,6 +31,8 @@ type GenericPermissionProps = {
 
 type ApprovalActionProps = Pick<GenericPermissionProps, "busy" | "onDecide"> & {
   allowAlways: boolean;
+  /** Official nue coworkWriteToolWarning residual. */
+  coworkWriteToolWarning: boolean;
   disableKeyboardShortcuts: boolean;
   isScheduledTask: boolean;
 };
@@ -26,11 +40,16 @@ type ApprovalActionProps = Pick<GenericPermissionProps, "busy" | "onDecide"> & {
 export function CoworkGenericPermissionApproval(props: GenericPermissionProps) {
   const presentation = useMemo(() => permissionPresentation(props.request), [props.request]);
   const allowAlways = genericAlwaysAllow(props.request);
-  useGenericPermissionKeyboard(props, allowAlways);
+  // Official: mode is cowork on this surface; write warning when readOnlyHint !== true.
+  const coworkWriteToolWarning = coworkWriteToolWarningFromRequest(props.request);
+  useGenericPermissionKeyboard(props, allowAlways, coworkWriteToolWarning);
   return (
     <motion.div
       animate={{ opacity: 1 }}
+      // Official xde expanded residual (approval force-expanded): border + bg-bg-000 shadow-sm.
       className="ease-out transition-all flex flex-col font-ui leading-normal my-3 min-h-[2.625rem] overflow-hidden border-0.5 border-border-300 rounded-lg mt-3 mb-3 bg-bg-000 shadow-sm"
+      data-official-source="index-BELzQL5P:yue/xde"
+      data-permission-kind="generic"
       initial={{ opacity: 1 }}
       transition={{ duration: 0.5, ease: "easeIn" }}
     >
@@ -39,6 +58,7 @@ export function CoworkGenericPermissionApproval(props: GenericPermissionProps) {
         <GenericApprovalActions
           allowAlways={allowAlways}
           busy={props.busy}
+          coworkWriteToolWarning={coworkWriteToolWarning}
           disableKeyboardShortcuts={props.disableKeyboardShortcuts === true}
           isScheduledTask={props.isScheduledTask === true}
           onDecide={props.onDecide}
@@ -116,11 +136,23 @@ function CoworkPermissionScrollArea({ children, className, style }: {
   );
 }
 
+/**
+ * Official nue residual (index-BELzQL5P ~54625).
+ * Risk notice only when coworkWriteToolWarning.
+ * Primary CTA matrix:
+ *   write warning → Allow for this task (once residual) [+ Always allow in split when allowAlways]
+ *                 + Allow once standalone secondary
+ *   scheduled     → Allow for all scheduled runs split + Allow once in menu
+ *   default always→ Always allow split + Allow once in menu
+ *   else          → Allow once primary
+ * Deny always secondary + esc.
+ */
 function GenericApprovalActions(props: ApprovalActionProps) {
   return (
-    <div className="flex flex-col gap-3 p-3 pt-0">
+    <div className="flex flex-col gap-3 p-3 pt-0" data-official-source="index-BELzQL5P:nue">
+      {props.coworkWriteToolWarning ? <CoworkWriteRiskNotice /> : null}
       <div className="flex gap-2">
-        {props.allowAlways ? <AlwaysAllowSplitButton {...props} /> : <AllowOnceButton {...props} />}
+        <PrimaryAllowControls {...props} />
         <CoworkComposerButton disabled={props.busy} onClick={() => props.onDecide("deny")} variant="secondary">
           Deny{props.disableKeyboardShortcuts ? null : <ApprovalKey>esc</ApprovalKey>}
         </CoworkComposerButton>
@@ -129,13 +161,135 @@ function GenericApprovalActions(props: ApprovalActionProps) {
   );
 }
 
-function AlwaysAllowSplitButton(props: ApprovalActionProps) {
-  const label = props.isScheduledTask ? "Allow for all scheduled runs" : "Always allow";
+/** Official ps3MQ4ugIl — icon + text-sm residual (not bare <p text-xs>). */
+function CoworkWriteRiskNotice() {
+  return (
+    <div
+      className="flex gap-2 text-sm text-text-300"
+      data-official-source="index-BELzQL5P:ps3MQ4ugIl"
+      data-permission-risk-notice="cowork-write"
+    >
+      <Icon className="shrink-0 mt-0.5 text-text-300" customSize={16} name="Warning" />
+      <span>
+        Allowing this action comes with risks. Malicious instructions in files, emails, and web content could trick Claude into unintended actions.{" "}
+        <a
+          className="underline hover:text-text-100"
+          href="https://support.claude.com/en/articles/13364135-use-cowork-safely#h_66ba46aa5e"
+          rel="noreferrer"
+          target="_blank"
+        >
+          Learn more
+        </a>
+      </span>
+    </div>
+  );
+}
+
+function PrimaryAllowControls(props: ApprovalActionProps) {
+  // Official: onAllowForThisTask when write warning && !scheduledTask.
+  const mode = resolveCoworkGenericPermissionCtaMode({
+    allowAlways: props.allowAlways,
+    coworkWriteToolWarning: props.coworkWriteToolWarning,
+    isScheduledTask: props.isScheduledTask,
+  });
+  switch (mode) {
+    case "write-this-task-split":
+    case "write-this-task-solo":
+      return <WriteToolAllowControls {...props} />;
+    case "scheduled-always-split":
+      return <ScheduledAllowSplitButton {...props} />;
+    case "always-split":
+      return <AlwaysAllowSplitButton {...props} />;
+    default:
+      return <AllowOnceButton {...props} />;
+  }
+}
+
+/**
+ * Official write path: main "Allow for this task" (perChat/once), optional Always allow
+ * in dropdown when showAlwaysAllowed, plus standalone Allow once secondary.
+ */
+function WriteToolAllowControls(props: ApprovalActionProps) {
+  const alwaysLabel = "Allow for all tasks";
+  const thisTaskLabel = (
+    <span className="flex items-center">
+      Allow for this task
+      {props.disableKeyboardShortcuts ? null : <ApprovalKey>⏎</ApprovalKey>}
+    </span>
+  );
+  if (props.allowAlways) {
+    return (
+      <>
+        <CoworkPermissionSplitButton
+          disabled={props.busy}
+          items={[{
+            label: alwaysLabel,
+            onSelect: () => props.onDecide("always"),
+          }]}
+          mainButtonText={thisTaskLabel}
+          onMainClick={() => props.onDecide("once")}
+        />
+        <AllowOnceStandaloneButton {...props} />
+      </>
+    );
+  }
+  return (
+    <>
+      <CoworkComposerButton disabled={props.busy} onClick={() => props.onDecide("once")}>
+        {thisTaskLabel}
+      </CoworkComposerButton>
+      <AllowOnceStandaloneButton {...props} />
+    </>
+  );
+}
+
+function AllowOnceStandaloneButton(props: ApprovalActionProps) {
+  return (
+    <CoworkComposerButton disabled={props.busy} onClick={() => props.onDecide("once")} variant="secondary">
+      Allow once
+      {props.disableKeyboardShortcuts ? null : (
+        <ApprovalKey className="ml-1.5">{modifierEnter()}</ApprovalKey>
+      )}
+    </CoworkComposerButton>
+  );
+}
+
+function ScheduledAllowSplitButton(props: ApprovalActionProps) {
   return (
     <CoworkPermissionSplitButton
       disabled={props.busy}
       items={[{
-        label: <span className="flex items-center justify-between w-full">Allow once{props.disableKeyboardShortcuts ? null : <ApprovalKey className="ml-2">{modifierEnter()}</ApprovalKey>}</span>,
+        label: (
+          <span className="flex items-center justify-between w-full">
+            Allow once
+            {props.disableKeyboardShortcuts ? null : <ApprovalKey className="ml-2">{modifierEnter()}</ApprovalKey>}
+          </span>
+        ),
+        onSelect: () => props.onDecide("once"),
+      }]}
+      mainButtonText={(
+        <span className="flex items-center">
+          Allow for all scheduled runs
+          {props.disableKeyboardShortcuts ? null : <ApprovalKey>⏎</ApprovalKey>}
+        </span>
+      )}
+      onMainClick={() => props.onDecide("always")}
+    />
+  );
+}
+
+function AlwaysAllowSplitButton(props: ApprovalActionProps) {
+  const label = props.coworkWriteToolWarning ? "Allow for all tasks" : "Always allow";
+  return (
+    <CoworkPermissionSplitButton
+      disabled={props.busy}
+      items={[{
+        label: (
+          <span className="flex items-center justify-between w-full">
+            Allow once
+            {props.disableKeyboardShortcuts ? null : <ApprovalKey className="ml-2">{modifierEnter()}</ApprovalKey>}
+          </span>
+        ),
         onSelect: () => props.onDecide("once"),
       }]}
       mainButtonText={<span className="flex items-center">{label}{props.disableKeyboardShortcuts ? null : <ApprovalKey>⏎</ApprovalKey>}</span>}
@@ -156,11 +310,29 @@ function ApprovalKey({ children, className = "ml-1.5" }: { children: ReactNode; 
   return <kbd className={`${className} font-small text-text-500`}>{children}</kbd>;
 }
 
-function useGenericPermissionKeyboard(props: GenericPermissionProps, allowAlways: boolean) {
+/**
+ * Official nue keyboard residual:
+ * Escape → deny
+ * Enter (no mod) → primary CTA (this-task once on write path; always when always-allow main; else once)
+ * meta/ctrl+Enter → once
+ */
+function useGenericPermissionKeyboard(
+  props: GenericPermissionProps,
+  allowAlways: boolean,
+  coworkWriteToolWarning: boolean,
+) {
   useCoworkPermissionKeyboard({
     enabled: !props.busy && !props.disableKeyboardShortcuts,
     onDeny: () => props.onDecide("deny"),
-    onEnter: () => props.onDecide(allowAlways ? "always" : "once"),
+    onEnter: () => {
+      props.onDecide(
+        resolveCoworkGenericPermissionPrimaryDecision({
+          allowAlways,
+          coworkWriteToolWarning,
+          isScheduledTask: props.isScheduledTask === true,
+        }),
+      );
+    },
     onModifiedEnter: () => props.onDecide("once"),
   });
 }

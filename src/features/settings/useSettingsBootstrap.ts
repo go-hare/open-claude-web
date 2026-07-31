@@ -13,8 +13,26 @@ import {
   type NotificationFeaturePreference,
   type NotificationPreferencesPayload,
 } from "./accountSettingsApi";
+import { desktopBridge } from "../../adapters/desktopBridge";
 import { syncPreviewFeatureUsesArtifactsFromSettings, writePreviewFeatureUsesArtifacts } from "./artifactsPreference";
 import { syncResponseCompletionsPrefMirror } from "./responseCompletionNotify";
+import {
+  syncToolSearchModeFromSettings,
+  writeToolSearchMode,
+} from "./toolAccessPreference";
+
+/**
+ * Official Qt residual: account.settings.enabled_cowork_memory !== false.
+ * Space UI (Mkt / SpaceDetail) still reads desktop preference `enabledCoworkMemory`;
+ * keep that preference mirrored so Settings toggle and Space status stay one source.
+ */
+function syncEnabledCoworkMemoryPreferenceFromSettings(
+  settings: Record<string, unknown> | null | undefined,
+) {
+  if (!settings) return;
+  const enabled = settings.enabled_cowork_memory !== false;
+  void desktopBridge.Preferences.setPreference?.("enabledCoworkMemory", enabled);
+}
 
 /**
  * Bootstrap + account slice for personal settings (official Zn gates, Privacy gateway,
@@ -145,6 +163,10 @@ async function loadSlice(): Promise<{
       : null;
   // Artifacts residual: keep conversation showArtifacts mirror aligned with account.settings.
   syncPreviewFeatureUsesArtifactsFromSettings(account?.settings);
+  // Tool access residual (we / S7): mirror tool_search_mode for desktop MCP eager/defer.
+  syncToolSearchModeFromSettings(account?.settings);
+  // Cowork memory Qt: mirror to preference for Space UI residual consumers.
+  syncEnabledCoworkMemoryPreferenceFromSettings(account?.settings);
   return {
     notifications,
     slice: {
@@ -241,6 +263,17 @@ export function useSettingsBootstrap() {
     if ("preview_feature_uses_artifacts" in patch) {
       // Official Visuals `_e` writes this key; conversation path reads showArtifacts from it.
       writePreviewFeatureUsesArtifacts(patch.preview_feature_uses_artifacts !== false);
+    }
+    if ("tool_search_mode" in patch) {
+      // Official we() / sticky S7 key; desktop host-loop reads eager vs defer MCP apply.
+      writeToolSearchMode(String(patch.tool_search_mode ?? "on"));
+    }
+    if ("enabled_cowork_memory" in patch) {
+      // Official Qt; Space UI reads preference enabledCoworkMemory — keep in lockstep.
+      void desktopBridge.Preferences.setPreference?.(
+        "enabledCoworkMemory",
+        patch.enabled_cowork_memory !== false,
+      );
     }
     setSlice((current) => ({
       ...current,

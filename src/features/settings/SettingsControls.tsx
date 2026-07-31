@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { Combobox } from "@base-ui-components/react/combobox";
+import { Popover } from "@base-ui-components/react/popover";
 import { AnimatePresence, motion } from "motion/react";
 import { desktopBridge, type DesktopPreferences } from "../../adapters/desktopBridge";
 import { OfficialTooltip, OfficialTooltipWrap } from "../shared/OfficialTooltip";
@@ -261,10 +262,13 @@ export function SegmentedControl({
 type SelectOption = {
   value: string;
   label: ReactNode;
+  /** Official tool-access residual: footnote under label in popup item. */
+  description?: ReactNode;
   fontFamily?: string;
 };
 
 type GhostSelectItem = {
+  description?: ReactNode;
   fontFamily?: string;
   label: ReactNode;
   value: string;
@@ -359,6 +363,7 @@ export function GhostSelect({
       options.map((option) => ({
         value: option.value,
         label: option.label,
+        description: option.description,
         fontFamily: option.fontFamily,
       })),
     [options],
@@ -481,6 +486,11 @@ export function GhostSelect({
                           >
                             {item.label}
                           </span>
+                          {item.description ? (
+                            <span className="whitespace-normal text-footnote text-muted">
+                              {item.description}
+                            </span>
+                          ) : null}
                         </div>
                         <Combobox.ItemIndicator className="shrink-0 text-accent">
                           <Icon name="Check" size="sm" />
@@ -499,10 +509,17 @@ export function GhostSelect({
 }
 
 /**
- * Official se Chat font (c0db37792): Menu k.Root/Trigger/Popup — not Combobox.
- * Trigger: ghost h-control + sample fontFamily var(K[value].claude)
- * Popup: w-56 listbox; item highlight via hover/focus; Check size md when selected.
+ * Official se Chat font (c0db37792):
+ *   k = FD = Popover (hP), NOT Menu (tO / BaseMenu).
+ *   k.Root/open + Trigger(render button) + Popup align end className w-56
+ *   Popup chrome PD: max-w-[320px] p-lg + sl("popover") + cds-reset…
+ *   listbox: -m-pad-lg flex flex-col p-1 (cancels p-lg)
+ *   options: native button role=option; hover/focus highlight state f;
+ *   selected Check size md text-accent; sample fontFamily var(K[e].claude)
  */
+const chatFontPopoverClassName =
+  "max-w-[320px] p-lg rounded-card bg-surface-3 backdrop-blur-[12px] shadow-panel cds-reset text-body text-primary outline-none w-56";
+
 export function ChatFontSelect({
   labels,
   onChange,
@@ -513,9 +530,60 @@ export function ChatFontSelect({
   value: ChatFontSetting;
 }) {
   const selected = CHAT_FONT_ORDER.includes(value) ? value : "default";
+  const [open, setOpen] = useState(false);
+  const [highlighted, setHighlighted] = useState<ChatFontSetting | null>(null);
+  const itemRefs = useRef<Partial<Record<ChatFontSetting, HTMLButtonElement | null>>>({});
+  const active = highlighted ?? selected;
+
+  const focusFont = useCallback((font: ChatFontSetting) => {
+    setHighlighted(font);
+    itemRefs.current[font]?.focus();
+  }, []);
+
+  const onListKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const index = CHAT_FONT_ORDER.indexOf(active);
+      switch (event.key) {
+        case "ArrowDown":
+          event.preventDefault();
+          focusFont(CHAT_FONT_ORDER[(index + 1) % CHAT_FONT_ORDER.length]!);
+          return;
+        case "ArrowUp":
+          event.preventDefault();
+          focusFont(
+            CHAT_FONT_ORDER[(index - 1 + CHAT_FONT_ORDER.length) % CHAT_FONT_ORDER.length]!,
+          );
+          return;
+        case "Home":
+          event.preventDefault();
+          focusFont(CHAT_FONT_ORDER[0]!);
+          return;
+        case "End":
+          event.preventDefault();
+          focusFont(CHAT_FONT_ORDER[CHAT_FONT_ORDER.length - 1]!);
+          return;
+        case "Enter":
+        case " ":
+          event.preventDefault();
+          onChange(active);
+          setOpen(false);
+          return;
+        default:
+          return;
+      }
+    },
+    [active, focusFont, onChange],
+  );
+
   return (
-    <Menu.Root>
-      <Menu.Trigger
+    <Popover.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setHighlighted(null);
+      }}
+    >
+      <Popover.Trigger
         className="cds-reset inline-flex h-control min-w-0 cursor-default items-center gap-1.5 rounded bg-transparent pl-sm pr-0.5 text-body text-primary outline-none transition duration-fast hover:bg-fill-ghost-hover focus-visible:shadow-focus"
         type="button"
       >
@@ -531,36 +599,69 @@ export function ChatFontSelect({
         >
           <Icon name="CaretDown" size="sm" />
         </span>
-      </Menu.Trigger>
-      <BaseMenuPopup align="end" className="w-56" side="bottom" sideOffset={6}>
-        <div
-          aria-label="Chat font"
-          className="-m-pad-lg flex flex-col p-1"
-          role="listbox"
-        >
-          {CHAT_FONT_ORDER.map((font) => {
-            const active = font === selected;
-            return (
-              <Menu.Item
-                key={font}
-                className="cds-reset flex min-h-control w-full cursor-default select-none items-center gap-2 rounded px-md py-1 text-left text-body text-primary outline-none data-[highlighted]:bg-fill-ghost-hover"
-                onClick={() => onChange(font)}
+      </Popover.Trigger>
+      <Popover.Portal>
+        <CdsPortalRoot>
+          <Popover.Positioner
+            align="end"
+            className="z-popover"
+            side="bottom"
+            sideOffset={6}
+          >
+            <Popover.Popup
+              className={chatFontPopoverClassName}
+              data-cds="Popover"
+              data-official-source="c0db37792:se FD Popover"
+            >
+              <div
+                aria-label="Chat font"
+                className="-m-pad-lg flex flex-col p-1"
+                onKeyDown={onListKeyDown}
+                onMouseLeave={() => setHighlighted(null)}
+                role="listbox"
               >
-                <span
-                  className="min-w-0 flex-1 truncate"
-                  style={{ fontFamily: `var(${CHAT_FONT_CSS_VAR[font]})` }}
-                >
-                  {labels[font]}
-                </span>
-                {active ? (
-                  <Icon name="Check" size="md" className="shrink-0 text-accent" />
-                ) : null}
-              </Menu.Item>
-            );
-          })}
-        </div>
-      </BaseMenuPopup>
-    </Menu.Root>
+                {CHAT_FONT_ORDER.map((font) => {
+                  const isSelected = font === selected;
+                  const isHighlighted = font === highlighted;
+                  return (
+                    <button
+                      key={font}
+                      ref={(node) => {
+                        itemRefs.current[font] = node;
+                      }}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      tabIndex={font === active ? 0 : -1}
+                      onMouseEnter={() => setHighlighted(font)}
+                      onFocus={() => setHighlighted(font)}
+                      onClick={() => {
+                        onChange(font);
+                        setOpen(false);
+                      }}
+                      className={
+                        "cds-reset flex min-h-control w-full cursor-default select-none items-center gap-2 rounded px-md py-1 text-left text-body text-primary outline-none"
+                        + (isHighlighted ? " bg-fill-ghost-hover" : "")
+                      }
+                    >
+                      <span
+                        className="min-w-0 flex-1 truncate"
+                        style={{ fontFamily: `var(${CHAT_FONT_CSS_VAR[font]})` }}
+                      >
+                        {labels[font]}
+                      </span>
+                      {isSelected ? (
+                        <Icon name="Check" size="md" className="shrink-0 text-accent" />
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </Popover.Popup>
+          </Popover.Positioner>
+        </CdsPortalRoot>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 

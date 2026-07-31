@@ -61,6 +61,20 @@ export function coworkPermissionApprovalKindFromRequest(
   return coworkPermissionApprovalKind(request.toolName);
 }
 
+/**
+ * Official getToolApprovalState residual (index-BELzQL5P ~40191):
+ *   coworkWriteToolWarning = mode === "cowork" && annotations.readOnlyHint !== true
+ * Generic approval is only mounted on the Cowork session path (mode residual = cowork).
+ * Undefined readOnlyHint → true (same as official `!0 !== undefined`).
+ */
+export function coworkWriteToolWarningFromRequest(
+  request: Pick<CoworkPermissionRequest, "annotations" | "readOnlyHint">,
+): boolean {
+  if (request.readOnlyHint === true) return false;
+  if (request.annotations?.readOnlyHint === true) return false;
+  return true;
+}
+
 export function visibleCoworkPermissions(requests: CoworkPermissionRequest[]): VisibleCoworkPermission[] {
   const browserRequestByDomain = new Map<string, VisibleCoworkPermission>();
   const visible: VisibleCoworkPermission[] = [];

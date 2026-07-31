@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as R
 import { desktopBridge } from "../../../../adapters/desktopBridge";
 import type { LocalFileEntry } from "../../../../adapters/desktopBridge/types";
 import { Icon } from "../../../../shell/icons";
-import { CoworkButton } from "../../ui/CoworkButton";
 import { CoworkModal } from "../../ui/CoworkModal";
+import { CoworkExplorerFilePreview } from "../CoworkExplorerFilePreview";
 import type { CoworkOpenFileTarget } from "./coworkActivityTypes";
 import { basename } from "./coworkResourcePaths";
 
@@ -75,7 +75,13 @@ export function CoworkFileExplorerModal({ folders, isOpen, onClose, onOpenFile, 
               ) : null}
             </div>
           </section>
-          <CoworkFilePreviewPane onOpenFile={onOpenFile} selectedPath={selectedPath} />
+          {/* Official AZt → TZt({ filePath, sessionId, hideTaskLink: true }) */}
+          <CoworkExplorerFilePreview
+            hideTaskLink
+            onOpenFile={onOpenFile}
+            selectedPath={selectedPath}
+            sessionId={sessionId}
+          />
         </div>
       </div>
     </CoworkModal>
@@ -172,28 +178,6 @@ function CoworkFileTreeNode({ entry, onLoadChildren, onSelectFile, selectedPath 
     <button className={`flex w-full items-center gap-1.5 rounded-sm py-1 pl-2 pr-2 text-left transition-colors ${selected ? "bg-brand-100 text-oncolor-100" : "text-text-300 hover:bg-bg-300 hover:text-text-100"}`} onClick={() => onSelectFile(entry.path)} title={entry.name} type="button">
       <span className="truncate text-xs">{entry.name}</span>
     </button>
-  );
-}
-
-function CoworkFilePreviewPane({ onOpenFile, selectedPath }: { onOpenFile: (target: CoworkOpenFileTarget) => void; selectedPath: string | null }) {
-  if (!selectedPath) {
-    return (
-      <section className="flex min-w-0 flex-1 items-center justify-center rounded-lg border border-border-300 bg-bg-100 px-4 text-center text-sm text-text-500">
-        Select a file to preview it.
-      </section>
-    );
-  }
-  return (
-    <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-300 bg-bg-100">
-      <div className="flex items-center gap-2 border-b border-border-300 px-3 py-2">
-        <Icon className="text-text-400" name="NoteSquareLines" size="xs" />
-        <span className="truncate text-sm font-medium text-text-100">{basename(selectedPath) ?? selectedPath}</span>
-      </div>
-      <div className="flex flex-1 flex-col items-start justify-center gap-3 px-4 text-sm text-text-500">
-        <p className="max-w-full truncate" title={selectedPath}>{selectedPath}</p>
-        <CoworkButton onClick={() => onOpenFile({ path: selectedPath })} variant="contained">Open file</CoworkButton>
-      </div>
-    </section>
   );
 }
 

@@ -1,6 +1,10 @@
 import { forwardRef, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import type { CoworkSessionSnapshot } from "../../../../adapters/desktopBridge/types";
-import { CoworkClaudeAvatar } from "../transcript/CoworkClaudeAvatar";
+import {
+  CoworkClaudeAvatar,
+  resolveCoworkSessionAvatarState,
+  type CoworkClaudeAvatarState,
+} from "../transcript/CoworkClaudeAvatar";
 import { useCoworkTimelineStatusVisibility } from "../transcript/CoworkTimelineStatusVisibility";
 import type { CoworkAgentActivity, CoworkInitializationStatus, CoworkRawMessage } from "../types";
 import { coworkToolActivityLabel } from "../transcript/coworkToolActivityLabel";
@@ -27,6 +31,10 @@ export type CoworkConversationStatusState = {
   apiRetryStatus?: CoworkApiRetryStatus;
   compactionStatus?: string;
   connectionState?: string;
+  /** Official kAt nextReconnectTime (ms epoch) for countdown. */
+  nextReconnectTime?: number | null;
+  /** Official LAt sessionHostLoopMode for HL/VM chip. */
+  hostLoopMode?: boolean | null;
   contentLength?: number;
   isWaitingState?: boolean;
   /** Official m$t channel — tool loading_messages while streaming. */
@@ -44,7 +52,12 @@ export function parseCoworkConversationStatus(
   activity?: CoworkAgentActivity | null,
   isWorking = false,
   initialization?: CoworkInitializationStatus | null,
-  options?: { messageCount?: number; retryCount?: number },
+  options?: {
+    /** Live reducer connectionState wins over stale session snapshot when set. */
+    connectionState?: string | null;
+    messageCount?: number;
+    retryCount?: number;
+  },
 ): CoworkConversationStatusState {
   const statusMessage = initialization
     ? initialization.isComplete ? activityText(activity, isWorking) : initialization.message
@@ -55,7 +68,9 @@ export function parseCoworkConversationStatus(
     activityStartTime: initialization && !initialization.isComplete ? initialization.startTime : activity?.lastActivityTime,
     apiRetryStatus,
     compactionStatus,
-    connectionState: session?.connectionState,
+    connectionState: options?.connectionState ?? session?.connectionState,
+    nextReconnectTime: typeof session?.nextReconnectTime === "number" ? session.nextReconnectTime : null,
+    hostLoopMode: typeof session?.hostLoopMode === "boolean" ? session.hostLoopMode : null,
     contentLength: activity?.contentLength,
     isWaitingState: !activity || activity.activity === "thinking",
     loadingMessages: isWorking ? extractCoworkLoadingMessagesFromMessages(messages) : undefined,
@@ -66,17 +81,26 @@ export function parseCoworkConversationStatus(
 }
 
 export const CoworkConversationStatus = forwardRef<HTMLDivElement, {
+  /**
+   * Official g$t currentAvatarState (v$t Et). Prefer path-derived state from Conversation;
+   * falls back to status-bag heuristic when omitted.
+   */
+  avatarState?: CoworkClaudeAvatarState;
   error?: Error | null;
   errorCategory?: string | null;
   isWorking: boolean;
   onTryAgain?: () => Promise<void> | void;
+  /** Official error-banner feedback meta sessionId. */
+  sessionId?: string | null;
   startedAt?: number | null;
   status: CoworkConversationStatusState | null;
 }>(function CoworkConversationStatus({
+  avatarState,
   error,
   errorCategory,
   isWorking,
   onTryAgain,
+  sessionId,
   startedAt,
   status,
 }, ref) {
@@ -95,22 +119,44 @@ export const CoworkConversationStatus = forwardRef<HTMLDivElement, {
     messageCount: status?.messageCount ?? 0,
     retryCount: status?.retryCount,
   });
+  const connectionState = status?.connectionState;
+  // Official g$t one-liner only when disconnected (kAt banner lives above sticky composer).
+  const showDisconnectedLine = connectionState === "disconnected" && !error;
   return (
     <div ref={ref}>
-      {/* Official NVe banner sits above status row; local store only (no full account invent). */}
-      <div className="ml-1 mb-1.5 w-full max-w-xl">
-        <CoworkRateLimitBanner />
-      </div>
+      {/*
+        Official rate-limit surface (EVe/IVe via NVe store) sits above g$t row.
+        Banner returns null when no limit — do not keep empty mb wrapper (layout delta).
+        Wrapper lives inside CoworkRateLimitBanner when model is present.
+      */}
+      <CoworkRateLimitBanner />
       <div className={`ml-1 flex items-center transition-transform duration-300 ease-out ${isWorking ? "mt-2 -translate-y-2.5" : "mt-6"}`}>
-        {error ? <CoworkSessionErrorBanner errorCategory={errorCategory} errorMessage={error.message} onTryAgain={onTryAgain} /> : <>
+        {error ? (
+          <CoworkSessionErrorBanner
+            errorCategory={errorCategory}
+            errorMessage={error.message}
+            hostLoopMode={status?.hostLoopMode}
+            onTryAgain={onTryAgain}
+            sessionId={sessionId}
+          />
+        ) : <>
           <div className={`p-1 -translate-x-px ${timelineStatusVisible ? "invisible" : ""}`}>
-            <CoworkSparkSpinner isWorking={isWorking || compacting} />
+            {/* Official g$t Ace: currentAvatarState Et; isInteractive: !isCompacting */}
+            <CoworkSparkSpinner
+              avatarState={avatarState}
+              isCompacting={compacting}
+              isWorking={isWorking}
+              status={status}
+            />
           </div>
           {/* Official s$t: sessionStatusMessage when present and not hidden by k/compacting/apiRetry */}
           {!status?.statusMessage || timelineStatusVisible || compacting || status?.apiRetryStatus
             ? null
             : <CoworkSessionStatusText startedAt={startedAt} status={status} />}
-          {status?.connectionState === "disconnected" ? <div className="text-text-400 ml-2 pb-1.5 text-xs">Reconnecting...</div> : null}
+          {/* Official g$t: "disconnected" === x → text-text-400 ml-2 pb-1.5 text-xs Reconnecting... */}
+          {showDisconnectedLine ? (
+            <div className="text-text-400 ml-2 pb-1.5 text-xs">Reconnecting...</div>
+          ) : null}
         </>}
         {/* Official dual residual: m$t loading_messages wins over h$t when M && j */}
         {showLoadingMessages && status?.loadingMessages !== undefined
@@ -210,8 +256,68 @@ function CoworkCompactionProgress({ status }: { status: string }) {
   );
 }
 
-function CoworkSparkSpinner({ isWorking }: { isWorking: boolean }) {
-  return <CoworkClaudeAvatar state={isWorking ? "writing" : "static"} />;
+/**
+ * Official g$t Ace mount (index-BELzQL5P ~227403):
+ * Ace({ state: currentAvatarState, isInteractive: !isCompacting }).
+ * Prefer path-derived Et from Conversation; status-bag residual only as fallback.
+ */
+function CoworkSparkSpinner({
+  avatarState,
+  isCompacting,
+  isWorking,
+  status,
+}: {
+  avatarState?: CoworkClaudeAvatarState;
+  isCompacting: boolean;
+  isWorking: boolean;
+  status: CoworkConversationStatusState | null;
+}) {
+  const state = avatarState ?? resolveCoworkStatusAvatarState({
+    isCompacting,
+    isWorking,
+    status,
+  });
+  return <CoworkClaudeAvatar isInteractive={!isCompacting} state={state} />;
+}
+
+/**
+ * Map product status bag → official Et inputs.
+ * wt ≈ isWaitingState && no loading_messages && not tool-shaped status (empty stream).
+ * ee = true on Cowork session path → non-empty stream uses shimmer (not writing).
+ * kt is only needed for non-session writing path; session streaming already shimmers.
+ */
+export function resolveCoworkStatusAvatarState(input: {
+  isCompacting: boolean;
+  isWorking: boolean;
+  status: CoworkConversationStatusState | null;
+}): CoworkClaudeAvatarState {
+  const streaming = input.isWorking || input.isCompacting;
+  const loadingMessages = input.status?.loadingMessages !== undefined;
+  const statusMessage = input.status?.statusMessage ?? "";
+  // Official wt: streaming with no real assistant content yet.
+  // Product isWaitingState covers thinking/idle; exclude tool loading channel / tool labels.
+  const emptyStream =
+    Boolean(input.isWorking)
+    && Boolean(input.status?.isWaitingState ?? true)
+    && !loadingMessages
+    && !isCoworkToolStatusMessage(statusMessage);
+  return resolveCoworkSessionAvatarState({
+    isEmptyStream: emptyStream,
+    isSession: true,
+    isStreaming: streaming,
+  });
+}
+
+function isCoworkToolStatusMessage(message: string) {
+  const text = message.trim();
+  if (!text) return false;
+  if (
+    /^(Thinking|Working on it|Writing|Starting up)\.\.\.?$/i.test(text)
+  ) {
+    return false;
+  }
+  // activityText residual: "Using X..." / "Reading file..." / "Running agent..." etc.
+  return /^(Using |Reading |Writing file|Editing |Searching |Finding |Running |Viewing |Creating |Opening |Updating |Closing |Deleting |Presenting )/i.test(text);
 }
 
 function activityText(activity: CoworkAgentActivity | null | undefined, isWorking: boolean) {

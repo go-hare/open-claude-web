@@ -36,7 +36,24 @@ function ConnectorCard({ items, keyword, loading }: { items: SuggestionItem[]; k
       <div className="flex items-center justify-between px-4 py-3 border-b-0.5 border-border-300">
         <div className="flex items-center gap-3 min-w-0"><Icon className="text-text-300 flex-shrink-0" customSize={20} name="Connectors" />{loading ? <Skeleton height={16} width={160} /> : <div className="text-sm text-text-100 truncate">{keyword && items.length ? `For your ${keyword}` : "Connectors that could help"}</div>}</div>
       </div>
-      {loading ? <ConnectorSkeletonRows /> : items.length ? <div className="max-h-96 overflow-y-auto">{items.map((item) => <SuggestionRow icon="Connectors" item={item} key={item.name} />)}</div> : <div className="px-4 py-3 text-sm text-text-400">I didn't find a matching connector, but you can browse all connectors.</div>}
+      {loading ? <ConnectorSkeletonRows /> : items.length ? <div className="max-h-96 overflow-y-auto">{items.map((item) => <SuggestionRow icon="Connectors" item={item} key={item.name} />)}</div> : (
+        <div className="px-4 py-3 text-sm text-text-400">
+          {/* Official index-BELzQL5P OBvNfVIt7i — <link> → DK=/customize/connectors */}
+          I didn&apos;t find a matching connector, but you can{" "}
+          <a
+            className="underline underline-offset-2 hover:text-text-300"
+            href="/customize/connectors"
+            onClick={(event) => {
+              event.preventDefault();
+              window.history.pushState({}, "", "/customize/connectors");
+              window.dispatchEvent(new Event("app:navigation"));
+            }}
+          >
+            browse all connectors
+          </a>
+          .
+        </div>
+      )}
     </div>
   );
 }

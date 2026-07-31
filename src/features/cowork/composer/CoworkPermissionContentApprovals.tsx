@@ -32,8 +32,10 @@ export function CoworkScheduledTaskApproval({ busy, disableKeyboardShortcuts, on
       actions={<><CoworkComposerButton disabled={busy} onClick={() => onDecide("once")} shortcut={shortcut(disableKeyboardShortcuts, "enter")}>{update ? "Update" : "Schedule"}</CoworkComposerButton><CoworkComposerButton disabled={busy} onClick={() => onDecide("deny")} shortcut={shortcut(disableKeyboardShortcuts, "escape")} variant="secondary">Cancel</CoworkComposerButton></>}
       description={description}
       icon={<CoworkScheduledTaskClockGlyph className="text-text-300" size={16} />}
+      kind="scheduled-task"
       meta={<div className="font-small text-text-500 pl-[34px]">{scheduleLabel(input)}</div>}
       name={name}
+      officialSource="index-BELzQL5P:ITe"
       title={update ? "Update task" : "Schedule task"}
     >
       {prompt ? <ExpandableDetails label="Details"><CoworkMarkdown text={prompt} /></ExpandableDetails> : null}
@@ -53,7 +55,9 @@ export function CoworkSaveSkillApproval({ busy, disableKeyboardShortcuts, onDeci
       actions={<><CoworkComposerButton disabled={busy} onClick={() => onDecide("once")} shortcut={shortcut(disableKeyboardShortcuts, "enter")}>{update ? "Update" : "Save"}</CoworkComposerButton><CoworkComposerButton disabled={busy} onClick={() => onDecide("deny")} shortcut={shortcut(disableKeyboardShortcuts, "escape")} variant="secondary">Cancel</CoworkComposerButton></>}
       description={description}
       icon={<CoworkSkillGlyph className="text-text-300" size={16} />}
+      kind="save-skill"
       name={name}
+      officialSource="index-BELzQL5P:ETe"
       title={update ? "Update skill" : "Save skill"}
     >
       {content ? <ExpandableDetails announceExpanded label="Content"><CoworkMarkdown text={content} /></ExpandableDetails> : null}
@@ -75,8 +79,10 @@ export function CoworkArtifactApproval({ busy, disableKeyboardShortcuts, isSched
       description={description ?? ""}
       descriptionClassName="pl-[34px] font-base text-text-200"
       icon={<Icon className="text-text-300" customSize={16} name="Artifacts" />}
+      kind="artifact"
       leading={!update ? <ArtifactNotice /> : null}
       name={name}
+      officialSource="index-BELzQL5P:Gge"
       title={update ? "Update artifact" : "Create artifact"}
     >
       {tools.length ? <ArtifactTools tools={tools} /> : null}
@@ -84,20 +90,39 @@ export function CoworkArtifactApproval({ busy, disableKeyboardShortcuts, isSched
   );
 }
 
-function ContentApprovalCard({ actionClassName = "mt-2", actions, children, description, descriptionClassName = "font-base text-text-300 pl-[34px]", icon, leading, meta, name, title }: {
+function ContentApprovalCard({
+  actionClassName = "mt-2",
+  actions,
+  children,
+  description,
+  descriptionClassName = "font-base text-text-300 pl-[34px]",
+  icon,
+  kind,
+  leading,
+  meta,
+  name,
+  officialSource,
+  title,
+}: {
   actionClassName?: string;
   actions: ReactNode;
   children?: ReactNode;
   description: string;
   descriptionClassName?: string;
   icon: ReactNode;
+  kind?: string;
   leading?: ReactNode;
   meta?: ReactNode;
   name: string;
+  officialSource?: string;
   title: string;
 }) {
   return (
-    <div className="bg-bg-000 rounded-xl border-0.5 border-border-300 shadow-sm overflow-hidden p-3">
+    <div
+      className="bg-bg-000 rounded-xl border-0.5 border-border-300 shadow-sm overflow-hidden p-3"
+      data-official-source={officialSource}
+      data-permission-kind={kind}
+    >
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center rounded-md border border-border-300 p-1">{icon}</div>

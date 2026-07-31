@@ -1,10 +1,6 @@
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type { RouteViewProps } from "../../app/routes";
-import {
-  ARTIFACTS_PREF_EVENT,
-  readPreviewFeatureUsesArtifacts,
-} from "../settings/artifactsPreference";
 import { primaryButtonClass, secondaryButtonClass } from "../shared/buttonClasses";
 
 type Navigate = RouteViewProps["onNavigate"];
@@ -190,48 +186,13 @@ export function ProjectsNoPermissionPage({ onNavigate }: RouteViewProps) {
 }
 
 /**
- * Official /artifacts space residual — product still Coming soon for 3P.
- * When preview_feature_uses_artifacts is off, surface disabled residual instead
- * of inventing a full Artifacts library (settings Visuals gate).
+ * Official desktop Artifacts residual:
+ * - routes: `/cowork-artifact` (qQt) + `/cowork-artifact/:id` (UQt/kGt)
+ * - aliases: `/artifacts`, `/artifacts/my` (nav chrome) → same library page
+ * - settings Visuals off → disabled message (preview_feature_uses_artifacts)
+ * - host IPC: claude.web.CoworkArtifacts (not cloud studio Coming soon)
  */
-export function ArtifactsComingSoonPage({ onNavigate }: RouteViewProps) {
-  const showArtifacts = useSyncExternalStore(
-    (onStoreChange) => {
-      if (typeof window === "undefined") return () => {};
-      const handler = () => onStoreChange();
-      window.addEventListener(ARTIFACTS_PREF_EVENT, handler);
-      window.addEventListener("storage", handler);
-      return () => {
-        window.removeEventListener(ARTIFACTS_PREF_EVENT, handler);
-        window.removeEventListener("storage", handler);
-      };
-    },
-    () => readPreviewFeatureUsesArtifacts(),
-    () => true,
-  );
-  if (!showArtifacts) {
-    return (
-      <Surface root={false}>
-        <CenteredMessage
-          button="Open Capabilities settings"
-          description="Artifacts is turned off in Settings → Capabilities → Visuals. Enable it to use the Artifacts space when available."
-          headline="Artifacts disabled"
-          onClick={() => onNavigate("/settings/capabilities")}
-        />
-      </Surface>
-    );
-  }
-  return (
-    <Surface root={false}>
-      <CenteredMessage
-        button="Go back home"
-        description="We're working hard to bring the artifacts space to Teams and Enterprises."
-        headline="Coming soon"
-        onClick={() => onNavigate("/new")}
-      />
-    </Surface>
-  );
-}
+export { ArtifactsLibraryPage as ArtifactsComingSoonPage } from "./ArtifactsLibraryPage";
 
 export function BlankProjectPage() {
   return <Surface root={false} />;

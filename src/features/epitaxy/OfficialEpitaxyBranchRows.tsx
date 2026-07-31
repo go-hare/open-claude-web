@@ -1,8 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GitCommandResult, LocalPrState, LocalSessionsBridge, SessionSummary } from "../../adapters/desktopBridge/types";
+import { useErrorsOptional } from "../settings/errorsToast";
 import { Icon } from "../../shell/icons";
 import { parseLocalBranches, resolveOfficialBaseBranch } from "./composer/workspaceControlsHelpers";
 import { OfficialButton, OfficialSplitDropdownButton, type OfficialDropdownItem } from "./OfficialEpitaxyComponents";
+import { OfficialEpitaxyInstallGhModal } from "./OfficialEpitaxyInstallGhModal";
+
+/** Official ion-dist c11959232 LSaIX82GfM defaultMessage. */
+const CREATE_PR_TOAST_MESSAGE = "Could not create pull request. You can try again.";
 
 type OfficialBranchSessionRef = {
   id: string;
@@ -26,11 +31,15 @@ type BranchRowState = {
   additions: number;
   baseBranch: string;
   branchName: string;
+  /** Official Q residual: branch has upstream / been pushed (local path uses true when remote exists + not only-local). */
+  branchPushed: boolean;
   changedFiles: number;
   cwd?: string;
   deletions: number;
   hasChanges: boolean;
   hasRemote: boolean;
+  /** Official G residual: local session on base branch with no upstream fork path. */
+  isOnBaseBranch: boolean;
   prNumber?: number;
   prUrl?: string;
   prVisual?: OfficialPrVisualState;
@@ -138,6 +147,8 @@ const ELEVATION_TEXT: Record<"purple" | "yellow", string> = {
  * prMenuItems when no PR; CI chip from getPrChecks when PR exists.
  */
 export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows({ bridge, onOpenDiff, session, sessionRef }: OfficialEpitaxyBranchRowsProps) {
+  // Official PC() toast carrier for LSaIX82GfM create-PR failures.
+  const errors = useErrorsOptional();
   const [state, setState] = useState<BranchRowState | null>(null);
   const [prBusy, setPrBusy] = useState(false);
   const [prError, setPrError] = useState<string | null>(null);
@@ -185,6 +196,18 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
       const prUrl = normalizeLabel(prState?.url);
       const prNumber = typeof prState?.number === "number" ? prState.number : undefined;
       const prVisual = officialPrVisualFromState(prState);
+      // Official G: "local"!==s.type && !upstreamRepo && branch===baseBranch
+      // Local code sessions keep create enabled; remote/bridge on base are disabled.
+      const isOnBaseBranch = Boolean(
+        sessionRef.type !== "local"
+        && branchName
+        && baseBranch
+        && branchName === baseBranch
+        && !prUrl,
+      );
+      // Official Q: remote sessions use "hasn't been pushed"; local: treat status tracking
+      // as push signal — "## branch...origin/x [ahead N]" / no upstream → not pushed.
+      const branchPushed = detectBranchPushed(statusText, hasRemote, Boolean(prUrl));
 
       // Official: hide row when no changes and no open PR stack.
       if (!branchName || !repoName || (!hasChanges && !prUrl)) {
@@ -197,11 +220,13 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
         additions: stat.additions,
         baseBranch,
         branchName,
+        branchPushed,
         changedFiles: stat.changedFiles || countStatusFiles(statusText),
         cwd,
         deletions: stat.deletions,
         hasChanges,
         hasRemote,
+        isOnBaseBranch,
         prNumber,
         prUrl,
         prVisual,
@@ -244,45 +269,92 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
       setPrError("Add a GitHub remote to create a pull request");
       return;
     }
+    // Official G residual — create disabled when already on base (no feature branch).
+    if (state.isOnBaseBranch && !state.prUrl) {
+      setPrError("Already on the base branch — check out a feature branch first");
+      return;
+    }
     if (!state.hasChanges && !state.prUrl) {
       setPrError("No changes to create a PR from");
+      return;
+    }
+    if (session?.isRunning) {
+      setPrError("Claude is working — wait for the turn to finish");
       return;
     }
     setPrBusy(true);
     setPrError(null);
     setPrMode(mode === "draft" ? "draft" : "create");
     writeCreateAsDraft(mode === "draft");
+    /** Official c11959232: C(formatMessage LSaIX82GfM, {error, errorContext, messageForLogging}). */
+    const toastCreatePrFailed = (error?: unknown) => {
+      errors?.addError(CREATE_PR_TOAST_MESSAGE, {
+        error,
+        errorContext: { tags: { source: "epitaxy_pr_bar_create" } },
+        messageForLogging: "Could not create pull request.",
+        uniqueKey: "LSaIX82GfM",
+      });
+      // Keep footnote residual for bar-local feedback (product already used text-footnote).
+      setPrError(CREATE_PR_TOAST_MESSAGE);
+    };
     try {
       const draft = mode === "draft";
+      // Official PR bar Z: no pre-create checkGhAvailable hard-gate (Qy drives InstallGh modal).
+      // Ensure branch is on remote before gh pr create (GitHubPrManager.ensureBranchPushed).
+      if (bridge.ensureBranchPushed) {
+        const pushed = await bridge.ensureBranchPushed(sessionRef.id).catch((error) => ({
+          success: false as const,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+        if (!pushed?.success) {
+          setPrError(
+            pushed?.error
+            || "Could not push branch to remote. Check your git remote configuration and network connection.",
+          );
+          return;
+        }
+      }
+      // Content may be null without 1p OAuth — still create with session link residual.
       const content = await bridge.generateLocalPrContent?.(sessionRef.id).catch(() => null);
       const sessionUrl = new URL(`/code/${sessionRef.id}`, window.location.origin).toString();
-      const body = content?.body ? `${content.body}\n\n${sessionUrl}` : sessionUrl;
+      // Official: body:t?.body?`${t.body}\n\n${a}`:a — never dump dirty tree.
+      let body = content?.body ? `${content.body}\n\n${sessionUrl}` : sessionUrl;
+      if (body.length > 12_000) body = `${body.slice(0, 12_000)}\n…`;
       const result = await bridge.createLocalPr?.(sessionRef.id, {
-        title: content?.title,
+        title: content?.title || "Update project",
         body,
         draft,
+        baseBranch: state.baseBranch,
       });
       const ok = result?.ok !== false && result?.success !== false;
       if (!ok) {
-        setPrError(result?.error || result?.stderr || "Could not create pull request. You can try again.");
+        // Official bar toast residual (LSaIX82GfM). Host still maps auth dump → short error
+        // (CREATE_PR_AUTH_ERROR) but UI shows try-again, never Command failed megabyte body.
+        toastCreatePrFailed(result);
         return;
       }
+      // Prefer official-shaped url field; fall back to stdout parse.
+      const urlFromBag =
+        typeof (result as { url?: unknown } | null | undefined)?.url === "string"
+          ? String((result as { url?: string }).url)
+          : "";
       const stdout = resultText(result);
-      const urlMatch = stdout.match(/https?:\/\/\S+/);
+      const urlMatch = urlFromBag || stdout.match(/https?:\/\/\S+/)?.[0] || "";
       if (urlMatch) {
         setState((current) => (current ? {
           ...current,
-          prUrl: urlMatch[0],
+          prUrl: urlMatch,
           prVisual: draft ? "draft" : "open",
         } : current));
-        window.open(urlMatch[0], "_blank", "noopener");
+        window.open(urlMatch, "_blank", "noopener");
       }
     } catch (error) {
-      setPrError(error instanceof Error ? error.message : "Could not create pull request. You can try again.");
+      // Official catch → LSaIX82GfM (cross-fork 403 is separate residual, not product 3p).
+      toastCreatePrFailed(error);
     } finally {
       setPrBusy(false);
     }
-  }, [bridge, openComposePr, prBusy, prMode, sessionRef, state]);
+  }, [bridge, errors, openComposePr, prBusy, prMode, session?.isRunning, sessionRef, state]);
 
   const prMenuItems = useMemo((): OfficialDropdownItem[] | undefined => {
     if (!state || state.prUrl) return undefined;
@@ -322,6 +394,8 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
 
   return (
     <div className="flex flex-col gap-g3">
+      {/* Official: q&&H&&c.jsx(Yy,{cwd:H}) — InstallGh when checkGhAvailable false */}
+      <OfficialEpitaxyInstallGhModal bridge={bridge} cwd={state.cwd} />
       <EpitaxyBranchRow
         ciStatus={ciStatus}
         onCreatePr={() => void createPr(prMode)}
@@ -329,6 +403,7 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
         onOpenPr={() => {
           if (state.prUrl) window.open(state.prUrl, "_blank", "noopener");
         }}
+        isTurnBusy={session?.isRunning === true}
         prBusy={prBusy}
         prMenuItems={prMenuItems}
         prMode={state.prUrl ? "view" : prMode}
@@ -341,6 +416,7 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
 
 function EpitaxyBranchRow({
   ciStatus,
+  isTurnBusy,
   onCreatePr,
   onOpenDiff,
   onOpenPr,
@@ -350,6 +426,7 @@ function EpitaxyBranchRow({
   state,
 }: {
   ciStatus: OfficialCiStatus | null;
+  isTurnBusy: boolean;
   onCreatePr: () => void;
   onOpenDiff?: () => void;
   onOpenPr: () => void;
@@ -359,12 +436,25 @@ function EpitaxyBranchRow({
   state: BranchRowState;
 }) {
   const prLabel = officialPrActionLabel(prMode, prBusy);
-  const prDisabled = prBusy || (!state.prUrl && !state.hasRemote && prMode !== "compose");
-  const prDisabledReason = !state.hasRemote && prMode !== "compose"
-    ? "Add a GitHub remote to create a pull request"
-    : !state.hasChanges && !state.prUrl
-      ? "No changes to create a PR from"
-      : undefined;
+  // Official X/Y residual (c11959232): disable when no remote / on base / not pushed /
+  // Claude working / no changes (compose mode only needs remote for open URL).
+  const prDisabledReason = (() => {
+    if (state.prUrl) return undefined;
+    if (prMode === "compose") {
+      return !state.hasRemote && !state.remoteSlug
+        ? "Add a GitHub remote to create a pull request"
+        : undefined;
+    }
+    if (!state.hasRemote) return "Add a GitHub remote to create a pull request";
+    if (state.isOnBaseBranch) return "Already on the base branch — check out a feature branch first";
+    // Local path: not-pushed is soft — create will ensureBranchPushed. Only hard-disable
+    // when there is clearly no remote tracking and no commits ahead signal is unknown.
+    // Official Q is remote-session-centric; product local keeps create enabled so ensure can run.
+    if (!state.hasChanges) return "No changes to create a PR from";
+    if (isTurnBusy) return "Claude is working — wait for the turn to finish";
+    return undefined;
+  })();
+  const prDisabled = prBusy || Boolean(prDisabledReason);
   const iconMeta = state.prVisual ? PR_STATE_ICON[state.prVisual] : { name: "GitPullRequest" as const };
   const elevation = state.prVisual ? PR_STATE_ELEVATION[state.prVisual] : undefined;
   const prIconAria = state.prVisual
@@ -639,6 +729,26 @@ function hasWorkingTreeChanges(text: string) {
     const trimmed = line.trim();
     return Boolean(trimmed) && !trimmed.startsWith("##");
   });
+}
+
+/**
+ * Official Q residual (`c11959232` kM): `Q = "local" !== s.type && false === m`
+ * where `m = pp(sessionRepo)` is the remote/bridge "branch on GitHub" flag.
+ * Local sessions never hard-disable on Q (create path runs ensureBranchPushed).
+ * Product still tracks a soft local signal from `git status -sb` for state fidelity:
+ *   - existing PR → pushed
+ *   - no remote → not pushed
+ *   - `## branch...upstream` without `[gone]` → has upstream tracking → pushed
+ *   - bare `## branch` / upstream gone → not pushed
+ */
+function detectBranchPushed(statusText: string, hasRemote: boolean, hasPr: boolean): boolean {
+  if (hasPr) return true;
+  if (!hasRemote) return false;
+  const header = statusText.split(/\r?\n/).find((line) => line.startsWith("##")) ?? "";
+  if (!header) return false;
+  if (!header.includes("...")) return false;
+  if (/\[gone\]/i.test(header)) return false;
+  return true;
 }
 
 function countStatusFiles(text: string) {

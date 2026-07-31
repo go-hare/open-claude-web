@@ -34,7 +34,7 @@ import {
   BaseContextMenuPopup,
   ContextMenu,
 } from "../../../shell/BaseMenu";
-import { sessionPath } from "../../../shell/sessionPaths";
+import { sessionHomePath, sessionPath } from "../../../shell/sessionPaths";
 import {
   canResetRateLimitsFromBootstrap,
   fetchBootstrapPayload,
@@ -147,7 +147,7 @@ let officialThinkingSparkAnimationPromise: Promise<OfficialSparkAnimation | null
 type OfficialBackgroundTask = OfficialBackgroundTaskImported;
 
 
-export function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState, pendingTurnStartedAt, ref, reload, scrollRef, session, spawnLabel, streamTokenEstimate, tasks, transcriptMode }: {
+export function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onNavigate, onScrollState, pendingTurnStartedAt, ref, reload, scrollRef, session, sessionType, spawnLabel, streamTokenEstimate, tasks, transcriptMode }: {
   entries: TranscriptEntry[];
   error: Error | null;
   initialSessionId?: string;
@@ -155,29 +155,58 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   isResponding: boolean;
   isSessionNotFound: boolean;
   landingBody?: ReactNode;
+  /** Official CC "Start a new session" navigates home (Rs / sessionHomePath). */
+  onNavigate?: (path: string) => void;
   onScrollState: (state: OfficialTranscriptScrollState) => void;
   pendingTurnStartedAt?: number | null;
   ref: Ref<OfficialTranscriptHandle>;
   reload: (options?: { silent?: boolean }) => Promise<void>;
   scrollRef: MutableRefObject<HTMLDivElement | null>;
   session: SessionSummary | null;
+  /** Official remote tR uses Connecting empty; local Ja uses delayed Loading spark. */
+  sessionType?: "local" | "remote" | "bridge" | "pool" | "ssh";
   spawnLabel?: string;
   streamTokenEstimate: number;
   tasks: OfficialBackgroundTask[];
   transcriptMode: OfficialTranscriptMode;
 }) {
-  if (isSessionNotFound) return <SessionNotFound onBack={reload} />;
-  if (error && entries.length === 0) return <SessionError error={error} onRetry={reload} />;
+  if (isSessionNotFound) {
+    return (
+      <SessionNotFound
+        onStartNewSession={() => {
+          onNavigate?.(sessionHomePath("code"));
+        }}
+      />
+    );
+  }
+  if (error && entries.length === 0) return <SessionError error={error} />;
   if (!initialSessionId) return <div className="h-full overflow-y-auto overflow-x-hidden">{landingBody ?? null}</div>;
   const transcriptKey = `${initialSessionId}:messages`;
   // Official Ja: Boolean(D) && 0===Ya.length && (B||J). Za delays spinner 20ms.
   // Do NOT gate on !session — Recents openSession seeds meta before getTranscript;
   // that used to skip Ja and flash "No messages yet." / empty→full jump.
+  // Official remote tR (c119): empty + isTranscriptPending → spinner + "Connecting to session…"
   if (isLoading && entries.length === 0) {
+    if (sessionType === "remote" || sessionType === "pool" || sessionType === "bridge") {
+      return <OfficialConnectingToSession />;
+    }
     return <OfficialConversationLoading />;
   }
-  if (entries.length === 0 && !isResponding) return <div className="h-full flex items-center justify-center text-body text-t5">No messages yet.</div>;
+  // Official: empty + not pending → "No messages yet." (xc7r0SA6rC)
+  if (entries.length === 0 && !isResponding) {
+    return <div className="h-full flex flex-col items-center justify-center gap-g4 text-body text-t5">No messages yet.</div>;
+  }
   return <Transcript key={transcriptKey} entries={entries} isAwaitingReply={officialIsAwaitingReply(session, isResponding)} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} spawnLabel={spawnLabel} streamTokenEstimate={streamTokenEstimate} tasks={tasks} transcriptMode={transcriptMode} />;
+}
+
+/** Official c119 remote tR empty pending residual (L2r8A2+O5x). */
+function OfficialConnectingToSession() {
+  return (
+    <div className="h-full flex flex-col items-center justify-center gap-g4 text-body text-t5">
+      <OfficialSpinner size="m" />
+      <span>Connecting to session…</span>
+    </div>
+  );
 }
 
 function officialIsAwaitingReply(session: SessionSummary | null, isResponding: boolean) {

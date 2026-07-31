@@ -26,16 +26,38 @@ export function normalizeCoworkPermissionRequest(
     ?? stringValue(request.session_id);
   const requestId = stringValue(request.requestId) ?? stringValue(request.request_id) ?? stringValue(raw.requestId);
   if (sessionId !== activeSessionId || !requestId) return null;
+  const annotations = parseCoworkToolAnnotations(
+    request.annotations ?? raw.annotations ?? message.annotations,
+  );
+  const readOnlyHint = booleanValue(request.readOnlyHint)
+    ?? booleanValue(request.read_only_hint)
+    ?? booleanValue(raw.readOnlyHint)
+    ?? annotations?.readOnlyHint;
   return {
     alwaysAllowScope: stringValue(request.alwaysAllowScope) ?? stringValue(request.always_allow_scope),
+    annotations,
     description: stringValue(request.description),
     hasAlwaysAllow: booleanValue(request.hasAlwaysAllow) ?? booleanValue(request.has_always_allow),
     input: asRecord(request.input ?? raw.input),
+    readOnlyHint,
     requestId,
     sessionId,
     suggestions: request.suggestions ?? raw.suggestions,
     toolName: stringValue(request.toolName) ?? stringValue(request.tool_name) ?? stringValue(raw.toolName) ?? "Tool",
     toolUseId: stringValue(request.toolUseId) ?? stringValue(request.tool_use_id) ?? stringValue(raw.toolUseId) ?? requestId,
+  };
+}
+
+/** Official annotations bag residual (readOnlyHint / destructiveHint). */
+function parseCoworkToolAnnotations(value: unknown): CoworkPermissionRequest["annotations"] | undefined {
+  const record = asRecord(value);
+  if (!Object.keys(record).length) return undefined;
+  const readOnlyHint = booleanValue(record.readOnlyHint) ?? booleanValue(record.read_only_hint);
+  const destructiveHint = booleanValue(record.destructiveHint) ?? booleanValue(record.destructive_hint);
+  if (readOnlyHint === undefined && destructiveHint === undefined) return undefined;
+  return {
+    ...(readOnlyHint === undefined ? {} : { readOnlyHint }),
+    ...(destructiveHint === undefined ? {} : { destructiveHint }),
   };
 }
 

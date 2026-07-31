@@ -334,6 +334,29 @@ function createFakeScheduledTasksBridge(items: ScheduledTaskSummary[]): Schedule
       }
       items[index] = { ...items[index], enabled: status === "enabled" };
     },
+    removeApprovedPermission: async (id, toolName) => {
+      const index = items.findIndex((task) => task.id === id);
+      if (index < 0) return false;
+      const approvals = items[index].approvedPermissions ?? [];
+      const next = approvals.filter((permission) => permission.toolName !== toolName);
+      if (next.length === approvals.length) return false;
+      items[index] = { ...items[index], approvedPermissions: next };
+      return true;
+    },
+    clearChromePermissions: async (id) => {
+      const index = items.findIndex((task) => task.id === id);
+      if (index < 0) return false;
+      const task = items[index];
+      if (task.chromePermissionMode === undefined && task.chromeAllowedDomains === undefined) {
+        return false;
+      }
+      items[index] = {
+        ...task,
+        chromePermissionMode: undefined,
+        chromeAllowedDomains: undefined,
+      };
+      return true;
+    },
   };
 }
 
@@ -490,6 +513,13 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     branch: workspace.branchName || "feature/workspace-trust",
   }),
   createLocalPr: async () => ({ ok: true, success: true, stdout: "https://github.com/example/repo/pull/1\n", stderr: "" }),
+  ensureBranchPushed: async () => ({ success: true, branch: workspace.branchName || "feature/workspace-trust" }),
+  commitAllChanges: async () => ({ success: true }),
+  isWorkingTreeDirty: async () => false,
+  // Official checkGhAvailable residual: boolean (auth status). Browser fake = available.
+  checkGhAvailable: async () => true,
+  // Official installGh residual bag. Browser fake = already present.
+  installGh: async () => ({ success: true }),
   summarizeSession: async (id) => {
     const session = sessions.find((item) => item.id === id && item.kind === targetKind);
     if (!session) return null;
@@ -942,6 +972,25 @@ export const fakeDesktopBridge: DesktopBridge = {
     show: async () => false,
     hide: async () => undefined,
     parkAndCapture: async () => null,
+  },
+  CoworkArtifacts: {
+    getAllArtifacts: async () => [],
+    getArtifactMetadata: async () => null,
+    getArtifactIndexHtmlPath: async () => null,
+    getArtifactThumbnail: async () => null,
+    showArtifact: async () => 0,
+    hideArtifact: async () => false,
+    reloadArtifactView: async () => 0,
+    parkAndCaptureArtifact: async () => null,
+    deleteArtifact: async () => false,
+    restoreArtifactVersion: async () => false,
+    setArtifactStarred: async () => null,
+    isSharingEnabled: async () => false,
+    shareArtifact: async () => ({ ok: false, error: "Sharing is not enabled." }),
+    unshareArtifact: async () => false,
+    importArtifact: async () => ({ ok: false, error: "Sharing is not enabled." }),
+    printArtifactToPdf: async () => false,
+    onArtifactsChanged: () => () => {},
   },
   FileSystem: {
     browseFiles: async () => [`${workspace.cwd ?? "/tmp"}/sample.txt`],

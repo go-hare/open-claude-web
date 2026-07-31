@@ -55,6 +55,9 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
 
   const slashMenuComponent = useMemo(() => function OfficialComposerSlashCommandMenuRenderer(props: OfficialSlashCommandMenuProps) {
     const state = slashMenuStateRef.current;
+    // New-session draft residual (no open session id): still resolve / commands against
+    // the selected folder cwd, and treat the draft as a local Code session so the same
+    // local extras (model, btw, schedule, …) surface. clear is gated off __draft__ in the menu.
     const draftSession = state.session ?? (state.slashCwd ? {
       id: "__draft__",
       title: "Draft",
@@ -65,7 +68,8 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       sessionKind: "code",
       cwd: state.slashCwd,
     } satisfies SessionSummary : null);
-    return <OfficialEpitaxySlashCommandMenu {...props} bridge={state.bridge} session={draftSession} sessionRef={state.sessionRef} />;
+    const draftSessionRef = state.sessionRef ?? (state.slashCwd ? { id: "__draft__", type: "local" as const } : null);
+    return <OfficialEpitaxySlashCommandMenu {...props} bridge={state.bridge} session={draftSession} sessionRef={draftSessionRef} />;
   }, []);
 
   const editor = useEditor({

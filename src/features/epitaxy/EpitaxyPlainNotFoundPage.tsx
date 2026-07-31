@@ -1,7 +1,9 @@
+/**
+ * Official shared Page not found residual (QRccCMoxuD / k7xSM0388d / DupNoSk4qt).
+ * Replaces hand-rolled "Not Found" plain text.
+ */
+import { PageNotFound } from "../shared/PageNotFound";
+
 export function EpitaxyPlainNotFoundPage() {
-  return (
-    <div className="flex-1 min-h-0 relative flex flex-col overflow-x-clip overflow-y-auto">
-      <p>Not Found</p>
-    </div>
-  );
+  return <PageNotFound />;
 }

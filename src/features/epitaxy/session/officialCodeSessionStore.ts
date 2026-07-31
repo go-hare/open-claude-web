@@ -30,6 +30,8 @@ export const EMPTY_QUEUED_MESSAGES: ChatMessage[] = [];
 
 export type OfficialCodeSessionBucket = {
   error: Error | null;
+  /** Official tm errorCategory for FM/si residual; null when unknown. */
+  errorCategory: string | null;
   /** True while first transcript fetch is in flight and bucket has no messages yet. */
   isTranscriptPending: boolean;
   /** True while session meta fetch is in flight and bucket has no session yet. */
@@ -72,6 +74,7 @@ export type OfficialCodeSessionState = {
 function emptyBucket(pending: boolean): OfficialCodeSessionBucket {
   return {
     error: null,
+    errorCategory: null,
     isTranscriptPending: pending,
     isMetaPending: pending,
     isSessionNotFound: false,
@@ -167,6 +170,18 @@ type OfficialCodeSessionActions = {
   openSession: (sessionId: string, session: SessionSummary | null, messages?: ChatMessage[]) => void;
   /** Official beginPendingTurn — mark turn started (optimistic send). */
   beginPendingTurn: (sessionId: string, optimisticUser?: ChatMessage) => void;
+  /**
+   * Official he.failPendingTurn(id, message, category?) residual.
+   * Only when pendingTurn is active — sets error + errorCategory for FM shell.
+   */
+  failPendingTurn: (sessionId: string, message: string, errorCategory?: string | null) => void;
+  /** Official clearError residual — FM Try again / next send path. */
+  clearError: (sessionId: string) => void;
+  /**
+   * Runtime/session error with optional MAt category (non-pending path).
+   * failPendingTurn remains the mid-turn residual; this covers host type:"error" when idle.
+   */
+  applyRuntimeError: (sessionId: string, error: Error, errorCategory?: string | null) => void;
   /**
    * Official noteQueuedSend — only bumps pendingQueuedSends when a turn is already pending.
    * Gr onMutate always calls this before beginPendingTurn / echo.
@@ -518,6 +533,7 @@ function createOfficialCodeSessionStore() {
           [sessionId]: {
             ...prev,
             error: null,
+            errorCategory: null,
             isTranscriptPending: false,
             isSessionNotFound: false,
             liveMeta,
@@ -551,6 +567,7 @@ function createOfficialCodeSessionStore() {
           [sessionId]: {
             ...prev,
             error: null,
+            errorCategory: null,
             isMetaPending: session ? false : prev.isMetaPending,
             isTranscriptPending: transcriptPending,
             isSessionNotFound: session === null && nextMessages.length === 0,
@@ -574,12 +591,76 @@ function createOfficialCodeSessionStore() {
           [sessionId]: {
             ...prev,
             error: null,
+            errorCategory: null,
             isTranscriptPending: false,
             isMetaPending: false,
             messages,
             pendingTurnStartedAt: Date.now(),
             streamActivityMode: "requesting",
             session: prev.session ? { ...prev.session, isRunning: true, messages } : prev.session,
+          },
+        },
+      };
+    });
+  },
+
+  // Official failPendingTurn: only when pendingTurn set → error + category (bridge_offline path).
+  failPendingTurn: (sessionId, message, errorCategory) => {
+    set((state) => {
+      const prev = state.buckets[sessionId];
+      if (!prev || prev.pendingTurnStartedAt === null) return state;
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: {
+            ...prev,
+            error: new Error(message),
+            errorCategory: errorCategory ?? null,
+            pendingTurnStartedAt: null,
+            streamActivityMode: idleStreamActivityMode,
+            streamingMessageId: null,
+            streamSnapshot: null,
+            session: prev.session ? { ...prev.session, isRunning: false } : prev.session,
+          },
+        },
+      };
+    });
+  },
+
+  clearError: (sessionId) => {
+    set((state) => {
+      const prev = state.buckets[sessionId];
+      if (!prev || (!prev.error && !prev.errorCategory)) return state;
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: {
+            ...prev,
+            error: null,
+            errorCategory: null,
+          },
+        },
+      };
+    });
+  },
+
+  applyRuntimeError: (sessionId, error, errorCategory) => {
+    set((state) => {
+      const prev = state.buckets[sessionId] ?? emptyBucket(false);
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: {
+            ...prev,
+            error,
+            errorCategory: errorCategory ?? null,
+            isTranscriptPending: false,
+            isMetaPending: false,
+            pendingTurnStartedAt: null,
+            streamActivityMode: idleStreamActivityMode,
+            streamingMessageId: null,
+            streamSnapshot: null,
+            session: prev.session ? { ...prev.session, isRunning: false } : prev.session,
           },
         },
       };
@@ -630,6 +711,7 @@ function createOfficialCodeSessionStore() {
           [sessionId]: {
             ...prev,
             error: null,
+            errorCategory: null,
             isTranscriptPending: false,
             isMetaPending: false,
             queuedMessages: [...prev.queuedMessages, message],
@@ -677,6 +759,7 @@ function createOfficialCodeSessionStore() {
         [sessionId]: {
           ...prev,
           error: null,
+          errorCategory: null,
           loadGeneration: generation,
           // Official Ja B: transcript pending only when Ya empty. Session meta alone must
           // not suppress B (Recents openSession seeds session without messages).
@@ -700,6 +783,7 @@ function createOfficialCodeSessionStore() {
             [sessionId]: {
               ...prev,
               error: null,
+              errorCategory: null,
               isTranscriptPending: false,
               isMetaPending: false,
               isSessionNotFound: true,
@@ -732,6 +816,7 @@ function createOfficialCodeSessionStore() {
             [sessionId]: {
               ...prev,
               error: null,
+              errorCategory: null,
               isTranscriptPending: false,
               isMetaPending: false,
               isSessionNotFound: false,
@@ -755,6 +840,7 @@ function createOfficialCodeSessionStore() {
           [sessionId]: {
             ...prev,
             error: null,
+            errorCategory: null,
             isTranscriptPending: false,
             isMetaPending: false,
             isSessionNotFound: false,
@@ -783,6 +869,7 @@ function createOfficialCodeSessionStore() {
           [sessionId]: {
             ...prev,
             error,
+            errorCategory: null,
             isTranscriptPending: false,
             isMetaPending: false,
           },

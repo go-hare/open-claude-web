@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   coworkComputerAccessApprovalKind,
   coworkPermissionApprovalKindFromRequest,
+  coworkWriteToolWarningFromRequest,
   visibleCoworkPermissions,
 } from "./coworkPermissionApprovalModel";
 
@@ -61,5 +62,29 @@ describe("visibleCoworkPermissions", () => {
     ]);
     expect(visible).toHaveLength(1);
     expect(visible[0]?.request.toolName).toBe("computer:request_access");
+  });
+});
+
+describe("coworkWriteToolWarningFromRequest (nue residual)", () => {
+  it("defaults true when readOnlyHint is absent (official !0 !== undefined)", () => {
+    expect(coworkWriteToolWarningFromRequest({})).toBe(true);
+    expect(coworkWriteToolWarningFromRequest({ annotations: {} })).toBe(true);
+  });
+
+  it("false when annotations.readOnlyHint === true", () => {
+    expect(
+      coworkWriteToolWarningFromRequest({ annotations: { readOnlyHint: true } }),
+    ).toBe(false);
+  });
+
+  it("false when flattened readOnlyHint === true", () => {
+    expect(coworkWriteToolWarningFromRequest({ readOnlyHint: true })).toBe(false);
+  });
+
+  it("true when readOnlyHint explicitly false", () => {
+    expect(
+      coworkWriteToolWarningFromRequest({ annotations: { readOnlyHint: false } }),
+    ).toBe(true);
+    expect(coworkWriteToolWarningFromRequest({ readOnlyHint: false })).toBe(true);
   });
 });

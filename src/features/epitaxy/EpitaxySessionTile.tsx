@@ -55,6 +55,8 @@ import {
   useEpitaxyViewShortcuts,
 } from "./session/EpitaxyChatChrome";
 import { ExistingSessionComposer } from "./session/OfficialExistingSessionComposer";
+import { OfficialCodeSessionErrorBanner } from "./session/OfficialCodeSessionErrorBanner";
+import { EpitaxyChatPanelErrorBoundary } from "./session/EpitaxyChatPanelErrorBoundary";
 
 type OfficialPreviewTarget = OfficialPreviewTargetImported;
 
@@ -106,28 +108,36 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
     replaceAppNavigation(fallbackHome);
   }, [activeSessionId, fallbackHome]);
 
+  // Official Ho fallback onBack → landing (uc Back to landing page).
+  const onChatPanelBack = useCallback(() => {
+    onNavigate(fallbackHome);
+  }, [fallbackHome, onNavigate]);
+
   // Official tile layout (c11959232 KI/YI): topLeftId marks the primary pane tile isTopLeft.
   // EpitaxyFramePage is always the dframe-pane-primary chat tile, so isTopLeft must be true.
   // Official CSS then applies:
   //   .dframe-root[data-collapsed] .dframe-pane-primary .epitaxy-root [data-top-left]{margin-left:112px}
+  // Official wt: Ho(EpitaxyChatPanel) → fallback uc({ message, onBack, error }).
   const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft = true, dragHandle?: ReactNode) => (
     <OfficialChatTileShell>
-      <EpitaxyChatPanel
-        draftPersistKey={activeSessionId ? `epitaxy-${activeSessionId}` : draftPersistKey}
-        dragHandle={dragHandle}
-        hideComposer={hideComposer}
-        initialSessionId={activeSessionId}
-        isPanelActive
-        isTopLeft={isTopLeft}
-        landingActions={landingActions}
-        landingBody={landingBody}
-        onNavigate={onNavigate}
-        onSessionRemoved={activeSessionId ? onSessionRemoved : undefined}
-        sessionRef={sessionRef}
-        sessionType={activeSessionId ? sessionType : undefined}
-      />
+      <EpitaxyChatPanelErrorBoundary onBack={onChatPanelBack} sessionId={activeSessionId}>
+        <EpitaxyChatPanel
+          draftPersistKey={activeSessionId ? `epitaxy-${activeSessionId}` : draftPersistKey}
+          dragHandle={dragHandle}
+          hideComposer={hideComposer}
+          initialSessionId={activeSessionId}
+          isPanelActive
+          isTopLeft={isTopLeft}
+          landingActions={landingActions}
+          landingBody={landingBody}
+          onNavigate={onNavigate}
+          onSessionRemoved={activeSessionId ? onSessionRemoved : undefined}
+          sessionRef={sessionRef}
+          sessionType={activeSessionId ? sessionType : undefined}
+        />
+      </EpitaxyChatPanelErrorBoundary>
     </OfficialChatTileShell>
-  ), [activeSessionId, hideComposer, landingActions, landingBody, onNavigate, onSessionRemoved, sessionRef, sessionType]);
+  ), [activeSessionId, hideComposer, landingActions, landingBody, onChatPanelBack, onNavigate, onSessionRemoved, sessionRef, sessionType]);
 
   return (
     <div className="epitaxy-root select-none h-full w-full flex flex-col">
@@ -155,28 +165,38 @@ export function EpitaxySessionTile({ isLonePane = false, onClose, onMovePane, on
 function EpitaxySecondPane({ isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, slot }: EpitaxySessionTileProps) {
   const sessionType = useEpitaxySessionType(sessionId);
   const sessionRef = useMemo(() => ({ id: sessionId, type: sessionType }), [sessionId, sessionType]);
+  // Secondary pane crash: close the pane if possible, else home (do not steal primary route on close alone).
+  const onChatPanelBack = useCallback(() => {
+    if (onClose) {
+      onClose();
+      return;
+    }
+    onNavigate(sessionHomePath("code"));
+  }, [onClose, onNavigate]);
   // Official ZR residual: secondary delete/close only removes the pane by stable ref.
   // Never fall back to onNavigate(home) — that would steal the primary route.
   const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft?: boolean, dragHandle?: ReactNode) => (
     <OfficialChatTileShell>
-      <EpitaxyChatPanel
-        draftPersistKey={`epitaxy-pane-${sessionId}`}
-        dragHandle={dragHandle}
-        initialSessionId={sessionId}
-        isLonePane={isLonePane}
-        isPanelActive={false}
-        isTopLeft={isTopLeft}
-        onClose={onClose}
-        onNavigate={onNavigate}
-        onMovePane={onMovePane}
-        onSessionRemoved={onClose}
-        paneIndex={paneIndex}
-        sessionRef={sessionRef}
-        sessionType={sessionType}
-        slot={slot}
-      />
+      <EpitaxyChatPanelErrorBoundary onBack={onChatPanelBack} sessionId={sessionId}>
+        <EpitaxyChatPanel
+          draftPersistKey={`epitaxy-pane-${sessionId}`}
+          dragHandle={dragHandle}
+          initialSessionId={sessionId}
+          isLonePane={isLonePane}
+          isPanelActive={false}
+          isTopLeft={isTopLeft}
+          onClose={onClose}
+          onNavigate={onNavigate}
+          onMovePane={onMovePane}
+          onSessionRemoved={onClose}
+          paneIndex={paneIndex}
+          sessionRef={sessionRef}
+          sessionType={sessionType}
+          slot={slot}
+        />
+      </EpitaxyChatPanelErrorBoundary>
     </OfficialChatTileShell>
-  ), [isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, sessionRef, sessionType, slot]);
+  ), [isLonePane, onChatPanelBack, onClose, onMovePane, onNavigate, paneIndex, sessionId, sessionRef, sessionType, slot]);
 
   return (
     <div className="epitaxy-root select-none flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -228,6 +248,7 @@ function EpitaxyChatPanel({
     cancelQueuedMessage,
     entries,
     error,
+    errorCategory,
     isLoading,
     isResponding,
     isSessionNotFound,
@@ -514,10 +535,22 @@ function EpitaxyChatPanel({
           <div aria-hidden="true" className="epitaxy-top-scrim" />
           <div aria-hidden="true" className="epitaxy-bottom-scrim" style={{ opacity: showBottomFade ? 1 : 0 }} />
           <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
-            {renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onScrollState: updateTranscriptScrollState, pendingTurnStartedAt, ref: transcriptRef, reload, scrollRef: transcriptScrollRef, session, spawnLabel, streamTokenEstimate, tasks, transcriptMode })}
+            {renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onNavigate, onScrollState: updateTranscriptScrollState, pendingTurnStartedAt, ref: transcriptRef, reload, scrollRef: transcriptScrollRef, session, sessionType, spawnLabel, streamTokenEstimate, tasks, transcriptMode })}
           </EpitaxyTranscriptActionContext.Provider>
         </div>
         {!hideComposer && initialSessionId && !isSessionNotFound ? (
+          <>
+          {error ? (
+            <div className="epitaxy-chat-column epitaxy-chat-size shrink-0 pb-g3">
+              <OfficialCodeSessionErrorBanner
+                errorCategory={errorCategory}
+                errorMessage={error.message}
+                // Official W&&!xn?vi — product maps retry to clearError+reload (FM Try again).
+                onRetry={reload ? () => void reload() : undefined}
+                sessionId={initialSessionId}
+              />
+            </div>
+          ) : null}
           <ExistingSessionComposer
             attachRef={composerAttachRef}
             bridge={bridge}
@@ -547,6 +580,7 @@ function EpitaxyChatPanel({
             showScrollButton={showScrollButton}
             onScrollToBottom={() => scrollTranscriptToBottom("smooth")}
           />
+          </>
         ) : null}
       </div>
     </>

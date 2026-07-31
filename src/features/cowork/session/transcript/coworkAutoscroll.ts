@@ -37,6 +37,15 @@ export function isCoworkNearBottom(node: Pick<HTMLElement, "clientHeight" | "scr
 }
 
 /**
+ * Official t$t showScrollButton / `l` is purely "sentinel not intersecting"
+ * (IntersectionObserver on e$t, rootMargin 0 0 150px 0). No near-bottom gate.
+ * nearBottom is accepted for call-site compatibility but ignored.
+ */
+export function resolveCoworkShowScrollButton(sentinelAway: boolean, _nearBottom?: boolean): boolean {
+  return sentinelAway;
+}
+
+/**
  * Official IYe scroll listener pin update.
  * Returns next pin value (and updates previous top/height trackers via mutation of input refs).
  */

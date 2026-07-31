@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { matchRoute } from "./routes";
 import { isDesktopBridgeMissingInElectron } from "../adapters/desktopBridge";
+import { BootstrapConnectionErrorPage } from "../features/public/AccessPages";
 import { subscribeResponseCompletionEvents } from "../features/settings/responseCompletionNotify";
 import { DesktopFrame } from "../shell/DesktopFrame";
 import {
@@ -240,16 +241,28 @@ export function App() {
     );
   }
 
-  // Official Pos residual: isLoggedOut → /login. Do not mount DesktopFrame with a null
-  // account (product home/shell can white-screen). While history catches up, render the
-  // LoginDesktop standalone route component directly.
+  // Official Pos residual (index-BELzQL5P): only after bootstrap knows isLoggedOut → /login.
+  // Do not mount DesktopFrame with a null account. While history catches up, render
+  // LoginDesktop directly (same end state as replaceState → /login).
   if (loginGate === "logged_out" && !isLoginGateExempt(window.location.pathname)) {
     const loginRoute = matchRoute("/login");
     return <loginRoute.Component route={loginRoute} onNavigate={navigate} />;
   }
 
+  // Official does NOT paint LoginDesktop while auth is still pending.
+  // Product bug: pending → LoginDesktop on shell routes (/task/new etc.) forced
+  // useLoginWindowSize 600×600, then bootstrap signed_in (3p synthetic account)
+  // remounted DesktopFrame + resize 1200×800 → "login window then flash to main".
+  // Pending here is brief null over createMainWindow backgroundColor (I8) — residual-like.
   if (loginGate === "pending") {
     return null;
+  }
+
+  // Official Vis/Pos bootstrapFailed → Yrs connection error (not main shell).
+  // Product loginGate "unknown": /api/bootstrap returned no usable JSON.
+  // Never mount DesktopFrame without a resolved identity.
+  if (loginGate === "unknown") {
+    return <BootstrapConnectionErrorPage />;
   }
 
   return (

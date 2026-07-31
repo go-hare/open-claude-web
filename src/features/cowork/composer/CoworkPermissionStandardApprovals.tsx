@@ -1,7 +1,14 @@
+import { useCallback, useMemo, useState } from "react";
 import type { CoworkPermissionDecision, CoworkPermissionRequest } from "../session/coworkPermissionTypes";
 import { Icon } from "../../../shell/icons";
+import { OfficialTooltip } from "../../shared/OfficialTooltip";
 import { CoworkComputerAccessGlyph, CoworkWebGlyph } from "../ui/CoworkOfficialGlyphs";
+import {
+  canShowCoworkBrowserAllowAll,
+  readCoworkBrowserAllowAllBootstrap,
+} from "./coworkPermissionBrowserAllowAll";
 import { CoworkComposerButton, CoworkPermissionSplitButton } from "./CoworkComposerPrimitives";
+import { CoworkLaunchCodeSessionModal } from "./CoworkLaunchCodeSessionModal";
 import { useCoworkPermissionKeyboard } from "./useCoworkPermissionKeyboard";
 
 type ApprovalProps = {
@@ -16,7 +23,11 @@ export function CoworkDirectoryApproval({ busy, disableKeyboardShortcuts, isSche
   const path = text(request.input.path);
   useStandardShortcuts(busy || disableKeyboardShortcuts === true, onDecide);
   return (
-    <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden p-3">
+    <div
+      className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden p-3"
+      data-official-source="index-BELzQL5P:Yge"
+      data-permission-kind="directory"
+    >
       <div className="flex flex-col gap-2">
         <div className="flex items-start gap-2">
           <Icon className="text-text-300 flex-shrink-0 mt-0.5" customSize={20} name="Folder1" />
@@ -24,7 +35,12 @@ export function CoworkDirectoryApproval({ busy, disableKeyboardShortcuts, isSche
             <span className="text-sm text-text-200">
               Claude would like to <span className="font-semibold">Cowork</span> in{path ? ":" : " a folder"}
             </span>
-            {path ? <span className="font-mono text-sm text-text-100 break-all" title={path}>{path}</span> : null}
+            {path ? (
+              // Official Yge: Xp tooltipContent=path align=start around mono path.
+              <OfficialTooltip side="bottom" tooltipContent={path}>
+                <span className="font-mono text-sm text-text-100 break-all">{path}</span>
+              </OfficialTooltip>
+            ) : null}
           </div>
         </div>
         <div className="flex justify-end gap-2">
@@ -41,7 +57,11 @@ export function CoworkFileDeleteApproval({ busy, disableKeyboardShortcuts, onDec
   const folderName = text(request.input._folderName) ?? "workspace";
   useStandardShortcuts(busy || disableKeyboardShortcuts === true, onDecide);
   return (
-    <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden p-3">
+    <div
+      className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden p-3"
+      data-official-source="index-BELzQL5P:Zge"
+      data-permission-kind="file-delete"
+    >
       <div className="flex flex-col gap-2">
         <div className="flex items-start gap-2">
           <Icon className="text-warning-100 flex-shrink-0 mt-0.5" customSize={20} name="Warning" />
@@ -63,7 +83,11 @@ export function CoworkWebFetchApproval({ busy, disableKeyboardShortcuts, onDecid
   const domain = text(request.input.domain) ?? "";
   useStandardShortcuts(busy || disableKeyboardShortcuts === true, onDecide);
   return (
-    <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4">
+    <div
+      className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4"
+      data-official-source="index-BELzQL5P:TTe"
+      data-permission-kind="web-fetch"
+    >
       <div className="p-3">
         <div className="flex items-start gap-2 mb-3">
           <CoworkWebGlyph className="text-text-300 flex-shrink-0" size={20} />
@@ -83,6 +107,20 @@ export function CoworkBrowserApproval({ busy, disableKeyboardShortcuts, duplicat
   isScheduledTask: boolean;
 }) {
   const domain = text(request.input.domain) ?? "";
+  // Official Dfe residual: show allow-all strip when org present && !raven.
+  const showAllowAll = useMemo(() => {
+    try {
+      const w = window as unknown as {
+        __CLAUDE_BOOTSTRAP__?: Record<string, unknown>;
+        __bootstrap?: Record<string, unknown>;
+      };
+      return canShowCoworkBrowserAllowAll(
+        readCoworkBrowserAllowAllBootstrap(w.__CLAUDE_BOOTSTRAP__ ?? w.__bootstrap ?? null),
+      );
+    } catch {
+      return false;
+    }
+  }, []);
   useCoworkPermissionKeyboard({
     enabled: !busy && !disableKeyboardShortcuts,
     ignoreEditableTarget: true,
@@ -91,13 +129,21 @@ export function CoworkBrowserApproval({ busy, disableKeyboardShortcuts, duplicat
   });
   const alwaysLabel = isScheduledTask ? "Allow for all scheduled runs" : "Allow for this website";
   return (
-    <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4">
+    <div
+      className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4"
+      data-official-source="index-BELzQL5P:Pfe"
+      data-permission-kind="browser"
+    >
       <div className="p-3">
         <div className="flex items-start gap-2 mb-3">
           <CoworkComputerAccessGlyph className="text-text-300 flex-shrink-0" size={20} />
           <span className="text-sm text-text-200">
             Allow Claude to use the browser on <span className="font-semibold">{domain}</span>?
-            {duplicateCount > 1 ? <span className="ml-2 text-xs text-text-400">({duplicateCount} requests)</span> : null}
+            {duplicateCount > 1 ? (
+              <span className="ml-2 text-xs text-text-400">
+                ({duplicateCount} {duplicateCount === 1 ? "request" : "requests"})
+              </span>
+            ) : null}
           </span>
         </div>
         <div className="flex gap-2 ml-7">
@@ -116,37 +162,108 @@ export function CoworkBrowserApproval({ busy, disableKeyboardShortcuts, duplicat
           <CoworkComposerButton className="!font-semibold !text-xs !h-9" disabled={busy} onClick={() => onDecide("deny")} variant="secondary">Deny</CoworkComposerButton>
         </div>
       </div>
+      {showAllowAll ? (
+        <>
+          <div className="border-t border-border-300" />
+          <div className="p-3" data-permission-browser-allow-all="true">
+            <div className="flex items-start gap-2">
+              <CoworkWebGlyph className="text-text-300 flex-shrink-0" size={20} />
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm text-text-200">
+                  Allow Claude to browse and interact with any website without asking
+                </span>
+                <span className="text-xs text-text-300">
+                  This setting can put your data at risk.{" "}
+                  <a
+                    className="underline hover:text-text-100"
+                    href="https://support.claude.com/en/articles/12902428-using-claude-in-chrome-safely"
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    Learn more
+                  </a>
+                </span>
+                <CoworkComposerButton
+                  className="!font-semibold !text-xs mt-1 w-fit"
+                  disabled={busy}
+                  onClick={() => onDecide("always", { ...request.input, _allowAllSites: true })}
+                  variant="secondary"
+                >
+                  Allow all browser actions
+                </CoworkComposerButton>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
 
 export function CoworkLaunchCodeApproval({ busy, disableKeyboardShortcuts, onDecide, onSetup, request }: ApprovalProps & {
+  /** Optional inject override; official residual opens MTe modal locally (NTe). */
   onSetup?: (request: CoworkPermissionRequest) => void;
 }) {
+  // Official NTe: local modal open state + MTe; onLaunched → once + launched_session.
+  const [modalOpen, setModalOpen] = useState(false);
   const spec = text(request.input.spec) ?? "";
+  const suggestedCwd = text(request.input.suggested_cwd);
   const summary = spec.split("\n", 1)[0]?.trim();
+  const openSetup = useCallback(() => {
+    if (onSetup) {
+      onSetup(request);
+      return;
+    }
+    setModalOpen(true);
+  }, [onSetup, request]);
   useCoworkPermissionKeyboard({
-    enabled: !busy && !disableKeyboardShortcuts,
+    enabled: !busy && !disableKeyboardShortcuts && !modalOpen,
     ignoreEditableTarget: true,
     onDeny: () => onDecide("deny"),
-    onEnter: () => onSetup?.(request),
+    onEnter: openSetup,
   });
   return (
-    <div className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden p-3">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 min-w-0">
-          <Icon className="text-text-300 flex-shrink-0" customSize={20} name="Code" />
-          <div className="min-w-0 flex flex-col">
-            <span className="text-sm text-text-200">Claude wants to send this to <span className="font-semibold">Claude Code</span></span>
-            {summary ? <span className="text-xs text-text-400 truncate">{summary}</span> : null}
+    <>
+      <div
+        className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden p-3"
+        data-official-source="index-BELzQL5P:NTe"
+        data-permission-kind="launch-code"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 min-w-0">
+            <Icon className="text-text-300 flex-shrink-0" customSize={20} name="Code" />
+            <div className="min-w-0 flex flex-col">
+              <span className="text-sm text-text-200">Claude wants to send this to <span className="font-semibold">Claude Code</span></span>
+              {summary ? <span className="text-xs text-text-400 truncate">{summary}</span> : null}
+            </div>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <CoworkComposerButton disabled={busy || modalOpen} onClick={() => onDecide("deny")} shortcut={shortcut(disableKeyboardShortcuts || modalOpen, "escape")} variant="secondary">Deny</CoworkComposerButton>
+            <CoworkComposerButton disabled={busy} onClick={openSetup} shortcut={shortcut(disableKeyboardShortcuts || modalOpen, "enter")}>Set up…</CoworkComposerButton>
           </div>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
-          <CoworkComposerButton disabled={busy} onClick={() => onDecide("deny")} shortcut={shortcut(disableKeyboardShortcuts, "escape")} variant="secondary">Deny</CoworkComposerButton>
-          <CoworkComposerButton disabled={busy || !onSetup} onClick={() => onSetup?.(request)} shortcut={shortcut(disableKeyboardShortcuts, "enter")}>Set up…</CoworkComposerButton>
-        </div>
       </div>
-    </div>
+      {!onSetup ? (
+        <CoworkLaunchCodeSessionModal
+          isOpen={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onLaunched={(launched) => {
+            setModalOpen(false);
+            onDecide("once", {
+              ...request.input,
+              launched_session: {
+                session_id: launched.sessionId,
+                target: launched.target,
+                display_path: launched.displayPath,
+              },
+            });
+          }}
+          source="tool"
+          spec={spec}
+          suggestedCwd={suggestedCwd}
+        />
+      ) : null}
+    </>
   );
 }
 

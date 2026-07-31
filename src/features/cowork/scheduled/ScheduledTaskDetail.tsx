@@ -176,6 +176,18 @@ function ScheduledTaskDetailView({
     onTaskMutated();
   };
 
+  // Residual rKt F: jT.removeApprovedPermission(taskId, toolName)
+  const removeApprovedPermission = async (toolName: string) => {
+    await desktopBridge.CoworkScheduledTasks.removeApprovedPermission?.(task.id, toolName);
+    onTaskMutated();
+  };
+
+  // Residual rKt q: jT.clearChromePermissions(taskId)
+  const clearChromePermissions = async () => {
+    await desktopBridge.CoworkScheduledTasks.clearChromePermissions?.(task.id);
+    onTaskMutated();
+  };
+
   // Residual existingNames for edit excludes current task name
   const editExistingNames = useMemo(() => {
     const next = new Set(existingNames);
@@ -228,8 +240,10 @@ function ScheduledTaskDetailView({
           />
           <DetailMetaColumn
             linkedSpace={linkedSpace}
+            onClearChromePermissions={() => void clearChromePermissions()}
             onEdit={() => setEditOpen(true)}
             onOpenSpace={(spaceId) => onNavigate(`/space/${encodeURIComponent(spaceId)}`)}
+            onRemoveApprovedPermission={(toolName) => void removeApprovedPermission(toolName)}
             onUnlinkSpace={() => void unlinkSpace()}
             spacesInitialized={spacesInitialized}
             task={task}

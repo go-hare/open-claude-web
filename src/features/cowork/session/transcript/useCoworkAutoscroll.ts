@@ -1,7 +1,15 @@
 /**
- * Official IYe pin-to-bottom controller as a hook (pretty function IYe).
+ * Official IYe pin-to-bottom controller as a hook (pretty function IYe ~106047).
  * Owns pin ref + ResizeObserver re-stick + imperative handle surface.
  * Source: index-BELzQL5P.pretty.js IYe.
+ *
+ * Official scrollToBottom:
+ *   if onlyIfPinned && !pinned return
+ *   if scrollTop > scrollHeight - clientHeight return
+ *   programmatic = true
+ *   scrollTo({ top: scrollHeight, behavior })
+ *   setTimeout(() => programmatic = false, 0)
+ * Official RO: if pinned → scrollToBottom()
  */
 import { useCallback, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import {
@@ -53,12 +61,20 @@ export function useCoworkAutoscroll(
   ) => {
     const node = scrollRef.current;
     if (!node) return;
+    // Official: if (t?.onlyIfPinned && !u.current) return;
     if (options?.onlyIfPinned && !pinnedRef.current) return;
     const { scrollHeight, scrollTop, clientHeight } = node;
+    // Official: n > s - a || (...stick)
     if (scrollTop > scrollHeight - clientHeight) return;
     programmaticRef.current = true;
-    node.scrollTo({ behavior: resolveCoworkScrollBehavior(behavior), top: node.scrollHeight });
+    // Official: l.current.scrollTo({ top: l.current.scrollHeight, behavior: e })
+    // Map "instant" → "auto" for browsers that reject non-standard behavior strings.
+    node.scrollTo({
+      top: node.scrollHeight,
+      behavior: resolveCoworkScrollBehavior(behavior),
+    });
     if (programmaticTimerRef.current != null) window.clearTimeout(programmaticTimerRef.current);
+    // Official clears programmatic flag on timeout 0.
     programmaticTimerRef.current = window.setTimeout(() => {
       programmaticRef.current = false;
       programmaticTimerRef.current = null;
@@ -84,6 +100,7 @@ export function useCoworkAutoscroll(
       });
     };
 
+    // Official: n = new ResizeObserver(() => { u.current && b(); });
     const stickIfPinned = () => {
       if (!pinnedRef.current) return;
       scrollToBottom("auto");
@@ -93,7 +110,6 @@ export function useCoworkAutoscroll(
     node.addEventListener("scroll", onScroll, { passive: true });
     observer.observe(inner);
     observer.observe(node);
-    stickIfPinned();
 
     return () => {
       node.removeEventListener("scroll", onScroll);

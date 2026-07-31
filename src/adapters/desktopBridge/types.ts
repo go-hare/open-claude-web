@@ -314,7 +314,11 @@ export type EffortApplied = {
 
 export type StartSessionInput = {
   kind: SessionSummary["kind"];
-  effort?: EffortLevel;
+  /**
+   * Ladder id, or wire "ultracode" when Ultracode flag is on
+   * (official setEffort / spawn residual; not an EffortLevel ladder stop).
+   */
+  effort?: EffortLevel | "ultracode" | string;
   /** Official LocalAgentModeSessions.start residual: first-turn image attachments. */
   images?: CoworkImagePayload[];
   message?: string;
@@ -463,6 +467,8 @@ export type LocalPrState = {
 };
 
 export type CreateLocalPrOptions = {
+  /** Official createLocalPr params.baseBranch → gh pr create --base. */
+  baseBranch?: string;
   body?: string;
   draft?: boolean;
   title?: string;
@@ -526,6 +532,27 @@ export type LocalSessionsBridge = {
   getPrDetails?: (idOrCwd: string, prNumberOrBranch?: string | number) => Promise<unknown>;
   generateLocalPrContent?: (idOrCwd: string) => Promise<LocalPrContent | null>;
   createLocalPr?: (idOrCwd: string, options?: CreateLocalPrOptions) => Promise<GitCommandResult>;
+  /**
+   * Official GitHubPrManager.ensureBranchPushed residual:
+   * dirty auto-commit → push --set-upstream when ahead / no upstream.
+   * Returns { success, branch?, error?, errorType? }.
+   */
+  ensureBranchPushed?: (idOrCwd: string) => Promise<{
+    success: boolean;
+    branch?: string;
+    error?: string;
+    errorType?: string;
+  }>;
+  /** Official commitAllChanges residual. */
+  commitAllChanges?: (idOrCwd: string, message?: string) => Promise<{ success: boolean; error?: string }>;
+  isWorkingTreeDirty?: (idOrCwd: string) => Promise<boolean>;
+  /**
+   * Official checkGhAvailable(cwd): gh auth status → boolean.
+   * False when gh missing or not authenticated (c11959232 Qy / install modal).
+   */
+  checkGhAvailable?: (idOrCwd?: string) => Promise<boolean>;
+  /** Official installGh residual (darwin brew / open docs). */
+  installGh?: () => Promise<boolean | { success: boolean; error?: string }>;
   summarizeSession?: (id: string) => Promise<{ summary?: string; title?: string | null; session?: SessionSummary | null } | string | null>;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<string>;
@@ -603,8 +630,8 @@ export type LocalSessionsBridge = {
   start: (input: StartSessionInput) => Promise<SessionSummary>;
   sendMessage?: (id: string, text: string, input?: SendMessageInput) => Promise<SessionSummary | null>;
   /**
-   * Official cancelQueued / Yr mutation — drop a mid-turn queued user uuid.
-   * Desktop currently no-ops success (returns true); UI still drops local queuedMessages.
+   * Official cancelQueued / Yr mutation — host must return true before UI dropQueuedMessage.
+   * false = too-late (already on active stdin / no deferred queue entry).
    */
   cancelQueuedMessage?: (id: string, uuid: string) => Promise<boolean>;
   forkSession?: (id: string, messageId?: string) => Promise<SessionSummary | null>;
@@ -708,6 +735,8 @@ export type CoworkSessionsBridge = {
   onShellPtyEvent?: (listener: (event: ShellPtyEvent) => void) => () => void;
   start: (input: StartSessionInput) => Promise<SessionSummary>;
   sendMessage?: (id: string, text: string, input?: SendMessageInput) => Promise<SessionSummary | null>;
+  /** Residual LocalAgentModeSessions.cancelQueuedMessage / Yr. */
+  cancelQueuedMessage?: (id: string, uuid: string) => Promise<boolean>;
   forkSession?: (id: string, messageId?: string) => Promise<SessionSummary | null>;
   rewind?: (id: string, messageId?: string) => Promise<string | null>;
   create: (kind: SessionSummary["kind"]) => Promise<SessionSummary>;
@@ -727,6 +756,10 @@ export type ScheduledTasksBridge = {
   /** Official residual updateScheduledTask(id, patch) — also used by space Qa link/unlink. */
   update?: (id: string, input: UpdateScheduledTaskInput) => Promise<ScheduledTaskSummary | null>;
   updateStatus?: (id: string, status: "enabled" | "disabled" | "deleted") => Promise<void>;
+  /** Official jT.removeApprovedPermission(taskId, toolName) — Always allowed remove. */
+  removeApprovedPermission?: (id: string, toolName: string) => Promise<boolean>;
+  /** Official jT.clearChromePermissions(taskId) — Always allowed browser remove. */
+  clearChromePermissions?: (id: string) => Promise<boolean>;
   onEvent?: (listener: (event: unknown) => void) => () => void;
 };
 
@@ -833,6 +866,51 @@ export type CoworkFilePreviewBridge = {
   parkAndCapture: (bounds: CoworkFilePreviewBounds) => Promise<string | null>;
 };
 
+/** Official uUt / getAllArtifacts row residual (app.asar CoworkArtifacts). */
+export type CoworkArtifactSummary = {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: number;
+  updatedAt?: number;
+  isStarred?: boolean;
+  errors?: string[];
+  versions?: number[];
+  createdBySessionId?: string;
+  lastModifiedBySessionId?: string;
+  indexHtmlPath?: string;
+  [key: string]: unknown;
+};
+
+/**
+ * Official claude.web.CoworkArtifacts residual (oT):
+ * list/metadata/thumbnail + cXe show / YD hide / IXe reload / CXe park.
+ */
+export type CoworkArtifactsBridge = {
+  getAllArtifacts?: () => Promise<CoworkArtifactSummary[]>;
+  getArtifactMetadata?: (artifactId: string) => Promise<CoworkArtifactSummary | null>;
+  getArtifactIndexHtmlPath?: (artifactId: string) => Promise<string | null>;
+  getArtifactThumbnail?: (artifactId: string) => Promise<string | null>;
+  showArtifact?: (
+    artifactId: string,
+    bounds: CoworkFilePreviewBounds,
+    version?: number,
+  ) => Promise<number>;
+  hideArtifact?: () => Promise<boolean>;
+  reloadArtifactView?: () => Promise<number>;
+  parkAndCaptureArtifact?: (bounds: CoworkFilePreviewBounds) => Promise<string | null>;
+  deleteArtifact?: (artifactId: string, removeFiles?: boolean) => Promise<boolean>;
+  /** Official yn.restoreVersion(id, version) residual. */
+  restoreArtifactVersion?: (artifactId: string, version: number) => Promise<boolean>;
+  setArtifactStarred?: (artifactId: string, starred: boolean) => Promise<CoworkArtifactSummary | null>;
+  isSharingEnabled?: () => Promise<boolean>;
+  shareArtifact?: (artifactId: string) => Promise<{ ok: boolean; url?: string; error?: string }>;
+  unshareArtifact?: (artifactId: string) => Promise<boolean>;
+  importArtifact?: (sharedUuid: string) => Promise<{ ok: boolean; error?: string } | CoworkArtifactSummary>;
+  printArtifactToPdf?: () => Promise<boolean>;
+  onArtifactsChanged?: (listener: () => void) => () => void;
+};
+
 export type FileSystemBridge = {
   browseFiles?: (options?: string | { defaultPath?: string; multiSelections?: boolean; title?: string }) => Promise<string[]>;
   /** Official residual bT.browseFolder(title, multi?) → folder path string. */
@@ -923,6 +1001,8 @@ export type DesktopBridge = {
   CoworkScheduledTasks: ScheduledTasksBridge;
   CoworkSpaces: CoworkSpacesBridge;
   CoworkFilePreview: CoworkFilePreviewBridge;
+  /** Official claude.web.CoworkArtifacts (oT). */
+  CoworkArtifacts?: CoworkArtifactsBridge;
   FileSystem: FileSystemBridge;
   /** Official claude.web.FramebufferPreview (lr). */
   FramebufferPreview?: FramebufferPreviewBridge;

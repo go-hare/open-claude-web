@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  accountDetailsFromBootstrap,
+  bootstrapUrls,
+} from "../app/useDesktopCoworkAccountSync";
 import { FOOTER_LANGUAGE_OPTIONS, type FooterMenuText, useFooterMenuText, useManagedLocale } from "../i18n/footerMenuMessages";
 import type { FrameStore } from "../stores/frameStore";
 import { AppearanceMenu } from "./AppearanceMenu";
@@ -53,13 +57,81 @@ function useShowDesktopSignOut(): boolean {
   return show;
 }
 
+/**
+ * Official Gns residual: footer chip uses bootstrap account.display_name · org.name.
+ * Product previously hard-coded "Cowork 3P · Gateway" — wrong vs custom3pApi identity
+ * (default display Claudex; org from createOrganization / provider).
+ * Account bridge is write-only (setAccountDetails); re-fetch bootstrap on auth epochs.
+ */
+function useFooterAccountLabels(): { displayName: string; organizationName: string } {
+  const [labels, setLabels] = useState({
+    displayName: "Claudex",
+    organizationName: "Gateway",
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      for (const url of bootstrapUrls()) {
+        try {
+          const response = await fetch(url, {
+            credentials: "include",
+            cache: "no-store",
+          });
+          if (!response.ok) continue;
+          const contentType = response.headers.get("content-type") || "";
+          let payload: unknown = null;
+          if (contentType.includes("json")) {
+            payload = await response.json();
+          } else {
+            const text = await response.text();
+            if (text.startsWith("{") || text.startsWith("[")) {
+              payload = JSON.parse(text) as unknown;
+            }
+          }
+          if (!payload) continue;
+          const details = accountDetailsFromBootstrap(payload);
+          if (cancelled) return;
+          // Soft clear / logged-out: reset chip (footer may still be mounted under
+          // signed-out overlay until /login). Defaults match custom3pApi identity.
+          if (details.isLoggedOut) {
+            setLabels({ displayName: "Claudex", organizationName: "Gateway" });
+            return;
+          }
+          setLabels({
+            displayName: details.displayName || details.fullName || "Claudex",
+            organizationName: details.organizationName || "Gateway",
+          });
+          return;
+        } catch {
+          /* try next */
+        }
+      }
+    };
+    void load();
+    const bump = () => {
+      void load();
+    };
+    window.addEventListener("app:auth-signed-in", bump);
+    window.addEventListener("app:auth-logged-out", bump);
+    window.addEventListener("app:deployment-mode-changed", bump);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("app:auth-signed-in", bump);
+      window.removeEventListener("app:auth-logged-out", bump);
+      window.removeEventListener("app:deployment-mode-changed", bump);
+    };
+  }, []);
+
+  return labels;
+}
+
 export function SidebarFooter({ frame, mode, onNavigate }: SidebarFooterProps) {
   const [locale, setLocale] = useManagedLocale();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // Official m2t/h2t pending residual — Sign out opens signed-out interstitial first.
   const [signOutPending, setSignOutPending] = useState(false);
-  const displayName = "Cowork 3P";
-  const organizationName = "Gateway";
+  const { displayName, organizationName } = useFooterAccountLabels();
   const menuText = useFooterMenuText(locale);
   const showSignOut = useShowDesktopSignOut();
 

@@ -16,6 +16,8 @@ export type CoworkRateLimitState = {
     sessionId?: string,
   ) => void;
   getMessageLimit: (orgUuid: string) => CoworkMappedRateLimit | undefined;
+  /** Residual dismiss CTA: clear local banner for org (no Anthropic billing invent). */
+  dismissMessageLimit: (orgUuid: string) => void;
 };
 
 export type CoworkRateLimitStore = StoreApi<CoworkRateLimitState>;
@@ -38,6 +40,14 @@ export function createCoworkRateLimitStore(): CoworkRateLimitStore {
       }));
     },
     getMessageLimit: (orgUuid) => get().messageLimits[orgUuid],
+    dismissMessageLimit: (orgUuid) => {
+      set((state) => {
+        if (!(orgUuid in state.messageLimits)) return state;
+        const next = { ...state.messageLimits };
+        delete next[orgUuid];
+        return { messageLimits: next };
+      });
+    },
   }));
 }
 

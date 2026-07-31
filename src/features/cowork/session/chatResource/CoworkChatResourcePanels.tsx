@@ -4,12 +4,14 @@
  * Structure/classNames copied from official; no homemade approximate chrome.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { desktopBridge } from "../../../../adapters/desktopBridge";
 import { Icon } from "../../../../shell/icons";
 import { CoworkBrowserExtensionDetailPanel } from "../activity/CoworkBrowserExtensionDetailPanel";
 import type { CoworkResourceActivity } from "../activity/coworkResourceActivity";
 import type {
   CoworkSelectedBrowserExtensionItem,
+  CoworkSelectedCoworkArtifactItem,
   CoworkSelectedItem,
   CoworkSelectedMcpServerItem,
   CoworkSelectedSkillItem,
@@ -50,13 +52,7 @@ export function CoworkChatResourcePanel({
     case "skill_proposal":
       return <CoworkSkillProposalDetailPanel onClose={onClose} selectedItem={selectedItem} />;
     case "cowork_artifact":
-      return (
-        <CoworkUnavailableResourcePanel
-          onClose={onClose}
-          title="Artifact"
-          message="Cowork artifact detail is not available in this host build."
-        />
-      );
+      return <CoworkArtifactDetailPanel onClose={onClose} selectedItem={selectedItem} />;
     case "attachment":
       return (
         <CoworkUnavailableResourcePanel
@@ -430,6 +426,98 @@ function CoworkUnavailableResourcePanel({
         </button>
       </div>
       <div className="flex flex-1 items-center justify-center text-sm text-text-400 pr-5">{message}</div>
+    </div>
+  );
+}
+
+/**
+ * Official SELECT_COWORK_ARTIFACT drawer residual:
+ * kGt-style host showArtifact bounds mount inside cFt drawer (not soft unavailable).
+ */
+function CoworkArtifactDetailPanel({
+  onClose,
+  selectedItem,
+}: {
+  onClose: () => void;
+  selectedItem: CoworkSelectedCoworkArtifactItem;
+}) {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const [title, setTitle] = useState(selectedItem.id);
+  const [missing, setMissing] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void desktopBridge.CoworkArtifacts?.getArtifactMetadata?.(selectedItem.id)
+      .then((meta) => {
+        if (cancelled || !meta) return;
+        if (typeof meta.name === "string" && meta.name) setTitle(meta.name);
+        if (meta.errors?.includes("artifactFolderMissing")) setMissing(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedItem.id]);
+
+  useEffect(() => {
+    const bridge = desktopBridge.CoworkArtifacts;
+    const node = mountRef.current;
+    if (!bridge?.showArtifact || !node || missing) return;
+    let cancelled = false;
+    const pushBounds = () => {
+      if (cancelled) return;
+      const rect = node.getBoundingClientRect();
+      void bridge.showArtifact?.(selectedItem.id, {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      });
+    };
+    pushBounds();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(pushBounds) : null;
+    observer?.observe(node);
+    window.addEventListener("resize", pushBounds);
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+      window.removeEventListener("resize", pushBounds);
+      void bridge.hideArtifact?.();
+    };
+  }, [selectedItem.id, missing]);
+
+  return (
+    <div
+      className="flex h-full flex-col pb-1 pl-5 pt-3"
+      data-official-source="index-BELzQL5P.js:SELECT_COWORK_ARTIFACT + kGt showArtifact"
+      data-cft-type="cowork_artifact"
+    >
+      <div className="sticky flex items-center gap-1 pr-5">
+        <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-bg-000 rounded-md border border-border-300 text-text-400">
+          <Icon name="Plugin" customSize={16} />
+        </div>
+        <h2 className="font-ui flex-1 truncate text-lg font-medium">{title}</h2>
+        <button
+          aria-label="Close panel"
+          className="-mr-2 inline-flex size-8 items-center justify-center rounded text-text-400 hover:bg-bg-200 hover:text-text-200"
+          onClick={onClose}
+          type="button"
+        >
+          <Icon name="Add" className="rotate-45" customSize={20} />
+        </button>
+      </div>
+      <div className="mb-1 flex min-h-0 flex-1 flex-col pb-3 pr-5">
+        {missing ? (
+          <div className="flex flex-1 items-center justify-center text-sm text-text-400">
+            Artifact folder is missing on disk.
+          </div>
+        ) : (
+          <div
+            ref={mountRef}
+            className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border-300 bg-bg-100"
+          />
+        )}
+      </div>
     </div>
   );
 }

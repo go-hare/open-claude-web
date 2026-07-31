@@ -7,7 +7,10 @@ import { Icon } from "./icons";
 type ConfirmDialogProps = {
   cancelText?: string;
   children?: ReactNode;
+  /** Official rp residual: disable confirm while async work runs (InstallGh Installing…). */
+  closeOnConfirm?: boolean;
   confirmText?: string;
+  disabled?: boolean;
   isOpen: boolean;
   message: ReactNode;
   onClose: () => void;
@@ -24,7 +27,9 @@ const modalVars = { "--modal-overlay-opacity": 0.5 } as CSSProperties;
 export function ConfirmDialog({
   cancelText,
   children,
+  closeOnConfirm = true,
   confirmText,
+  disabled = false,
   isOpen,
   message,
   onClose,
@@ -38,19 +43,29 @@ export function ConfirmDialog({
   const confirmClassName = variant === "danger" ? `${primaryButtonClass} bg-danger-100 hover:bg-danger-200` : primaryButtonClass;
   return createPortal(
     <div className="epitaxy-root">
-      <div className={overlayClassName} onMouseDown={onClose} role="presentation" style={modalVars}>
+      <div className={overlayClassName} onMouseDown={disabled ? undefined : onClose} role="presentation" style={modalVars}>
         <section aria-labelledby="confirm-dialog-title" aria-modal="true" className={contentClassName} onMouseDown={(event) => event.stopPropagation()} role="dialog">
           <div className="flex items-center gap-4 justify-between">
             <h2 className="font-xl-bold text-text-100 flex w-full min-w-0 items-center leading-6 break-words" id="confirm-dialog-title">{title}</h2>
-            <button aria-label="Close" className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border-0 bg-transparent !text-text-500 hover:bg-bg-200 hover:!text-text-400 -mx-2" onClick={onClose} type="button"><Icon name="X" size="sm" /></button>
+            <button aria-label="Close" className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border-0 bg-transparent !text-text-500 hover:bg-bg-200 hover:!text-text-400 -mx-2" disabled={disabled} onClick={onClose} type="button"><Icon name="X" size="sm" /></button>
           </div>
           <div className="pt-3 text-body text-text-300">
             {message}
             {children}
           </div>
           <div className="mt-5 flex justify-end gap-2">
-            <button className="inline-flex h-9 items-center justify-center rounded-lg px-4 text-sm hover:bg-bg-200" onClick={onClose} type="button">{cancelText ?? text.cancel}</button>
-            <button className={confirmClassName} onClick={() => { onConfirm(); onClose(); }} type="button">{confirmText ?? text.confirm}</button>
+            <button className="inline-flex h-9 items-center justify-center rounded-lg px-4 text-sm hover:bg-bg-200" disabled={disabled} onClick={onClose} type="button">{cancelText ?? text.cancel}</button>
+            <button
+              className={`${confirmClassName}${disabled ? " opacity-60 pointer-events-none" : ""}`}
+              disabled={disabled}
+              onClick={() => {
+                onConfirm();
+                if (closeOnConfirm) onClose();
+              }}
+              type="button"
+            >
+              {confirmText ?? text.confirm}
+            </button>
           </div>
         </section>
       </div>

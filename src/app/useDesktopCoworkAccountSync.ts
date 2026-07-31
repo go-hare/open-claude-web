@@ -19,12 +19,21 @@ export function accountDetailsFromBootstrap(
   const root = record(value);
   const account = record(root.account);
   const accountUuid = string(account.uuid);
+  // Official Gns / account menu: org name from first membership organization.
+  // 3p product bootstrap (custom3pApi createOrganization): provider → "Gateway" | name.
+  let organizationName: string | undefined;
+  const memberships = account.memberships;
+  if (Array.isArray(memberships) && memberships.length > 0) {
+    const org = record(record(memberships[0]).organization);
+    organizationName = string(org.name);
+  }
   return {
     accountTaggedId: string(account.tagged_id),
     accountUuid,
     displayName: string(account.display_name),
     emailAddress: string(account.email_address),
     fullName: string(account.full_name),
+    organizationName,
     hasWiggle: account.has_wiggle === true,
     isLoggedOut: !accountUuid,
     isRaven: account.is_raven === true,

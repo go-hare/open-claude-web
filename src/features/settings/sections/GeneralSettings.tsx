@@ -17,7 +17,7 @@ import {
   writeChatFontSetting,
   writeThemeMode,
 } from "../appearanceSettings";
-import { WORK_FUNCTION_OPTIONS } from "../accountSettingsApi";
+import { WORK_FUNCTION_VALUES } from "../accountSettingsApi";
 import { useSettingsBootstrap } from "../useSettingsBootstrap";
 import { ensureDesktopNotificationPermission } from "../desktopNotificationPermission";
 import { notificationRowGatesFromBootstrap } from "../notificationRowGates";
@@ -37,8 +37,9 @@ import { syncResponseCompletionsPrefMirror } from "../responseCompletionNotify";
  * CMEK: LBt taint:cmek → Instructions locked + tooltip D4CuWTj4f5.
  * Voice: official ne = C()?oe:null where C≈Iyt = voice_mode && media && !jd(); desktop jd() → omit.
  * Notifications (official ie + YBe/ZBe/KBe):
- *   Response completions — feature_preference.compass + completion enable_push (both)
- *   Code / Dispatch rows gated by aA/bas/VBe/GBe residual (notificationRowGates)
+ *   Response completions — always; feature_preference.compass + completion enable_push
+ *   Code / email / Dispatch rows: hide-on-missing aA/bas/VBe/GBe (notificationRowGates)
+ *   3P without Anthropic entitlement flags → only Response completions
  * Code emails: Statsig keys 1tnv78j/162hnvx — residual EN defaults (not spa i18n).
  * Copy uses official /i18n message ids via useGeneralSettingsText.
  */
@@ -112,6 +113,28 @@ export function GeneralSettings() {
       dyslexia: text.dyslexicFriendly,
     }),
     [text.anthropicSans, text.anthropicSerif, text.dyslexicFriendly, text.matchSystem],
+  );
+
+  // Official j4t map: value = English residual key; label = /i18n message id.
+  const workFunctionOptions = useMemo(
+    () =>
+      WORK_FUNCTION_VALUES.map((value) => {
+        const labelByValue: Record<(typeof WORK_FUNCTION_VALUES)[number], string> = {
+          "Product Management": text.workFunctionProductManagement,
+          Engineering: text.workFunctionEngineering,
+          "Human Resources": text.workFunctionHumanResources,
+          Finance: text.workFunctionFinance,
+          Marketing: text.workFunctionMarketing,
+          Sales: text.workFunctionSales,
+          Operations: text.workFunctionOperations,
+          "Data Science": text.workFunctionDataScience,
+          Design: text.workFunctionDesign,
+          Legal: text.workFunctionLegal,
+          Other: text.workFunctionOther,
+        };
+        return { value, label: labelByValue[value] };
+      }),
+    [text],
   );
 
   // Official ee Appearance XD: icon + tooltip only (no label) — tooltips from +CwN9C/QFk / 3cc4CtJM5h / tOdNiYuuag.
@@ -243,7 +266,7 @@ export function GeneralSettings() {
               placeholder={text.select}
               searchable={false}
               value={workFunction}
-              options={WORK_FUNCTION_OPTIONS}
+              options={workFunctionOptions}
               onChange={(value) => {
                 saveProfile({ work_function: value });
               }}

@@ -119,16 +119,22 @@ export function DetailHero({
 
 export function DetailMetaColumn({
   linkedSpace,
+  onClearChromePermissions,
   onEdit,
   onOpenSpace,
+  onRemoveApprovedPermission,
   onUnlinkSpace,
   spacesInitialized,
   task,
   text,
 }: {
   linkedSpace: LinkedSpaceInfo | null;
+  /** Residual rKt q → jT.clearChromePermissions(taskId). */
+  onClearChromePermissions?: () => void;
   onEdit: () => void;
   onOpenSpace?: (spaceId: string) => void;
+  /** Residual rKt F/w → jT.removeApprovedPermission(taskId, toolName). */
+  onRemoveApprovedPermission?: (toolName: string) => void;
   onUnlinkSpace?: () => void;
   spacesInitialized: boolean;
   task: ScheduledTaskSummary;
@@ -206,7 +212,13 @@ export function DetailMetaColumn({
       </section>
 
       {showAlwaysAllowed ? (
-        <AlwaysAllowedSection onEdit={onEdit} task={task} text={text} />
+        <AlwaysAllowedSection
+          onClearChromePermissions={onClearChromePermissions}
+          onEdit={onEdit}
+          onRemoveApprovedPermission={onRemoveApprovedPermission}
+          task={task}
+          text={text}
+        />
       ) : null}
     </div>
   );
@@ -324,11 +336,15 @@ function FoldersSection({
 }
 
 function AlwaysAllowedSection({
+  onClearChromePermissions,
   onEdit,
+  onRemoveApprovedPermission,
   task,
   text,
 }: {
+  onClearChromePermissions?: () => void;
   onEdit: () => void;
+  onRemoveApprovedPermission?: (toolName: string) => void;
   task: ScheduledTaskSummary;
   text: ScheduledDetailText;
 }) {
@@ -336,6 +352,9 @@ function AlwaysAllowedSection({
   const approvals = task.approvedPermissions ?? [];
   const hasBrowser = Boolean(task.chromePermissionMode);
   const hasAny = approvals.length > 0 || hasBrowser;
+  // Residual: remove buttons only when mutators exist (w / k).
+  const canRemoveTool = typeof onRemoveApprovedPermission === "function";
+  const canClearChrome = typeof onClearChromePermissions === "function";
   return (
     <section data-official-source="index-BELzQL5P.js:rKt always allowed">
       <h2 className="flex items-center gap-1.5 font-base text-text-500 mb-3">
@@ -368,8 +387,30 @@ function AlwaysAllowedSection({
                         : formatWebsiteCount(text.websiteCount, task.chromeAllowedDomains?.length ?? 0)}
                     </span>
                   </div>
+                  {task.chromePermissionMode === "follow_a_plan" &&
+                  (task.chromeAllowedDomains?.length ?? 0) > 0 ? (
+                    <p className="text-xs text-text-400 font-mono truncate">
+                      {task.chromeAllowedDomains!.join(", ")}
+                    </p>
+                  ) : null}
                 </div>
               </div>
+              {canClearChrome ? (
+                <div className="ml-2 flex-shrink-0">
+                  <OfficialTooltip side="top" tooltipContent={text.removeApproval}>
+                    <OfficialButton
+                      aria-label={text.removeApproval}
+                      className="p-1 !min-w-0 [--button-text:hsl(var(--text-400))]"
+                      onClick={() => onClearChromePermissions?.()}
+                      size="icon_fit"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Icon name="XCrossCloseMedium" size="s" />
+                    </OfficialButton>
+                  </OfficialTooltip>
+                </div>
+              ) : null}
             </div>
           ) : null}
           {approvals.map((approval) => (
@@ -379,6 +420,22 @@ function AlwaysAllowedSection({
                   {displayToolName(approval.toolName)}
                 </span>
               </div>
+              {canRemoveTool ? (
+                <div className="ml-2 flex-shrink-0">
+                  <OfficialTooltip side="top" tooltipContent={text.removeApproval}>
+                    <OfficialButton
+                      aria-label={text.removeApproval}
+                      className="p-1 !min-w-0 [--button-text:hsl(var(--text-400))]"
+                      onClick={() => onRemoveApprovedPermission?.(approval.toolName)}
+                      size="icon_fit"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Icon name="XCrossCloseMedium" size="s" />
+                    </OfficialButton>
+                  </OfficialTooltip>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

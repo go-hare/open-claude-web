@@ -16,7 +16,9 @@ import {
  * - Gate qt = !c("papi_disable_mcp_ui") (nav already keeps page for desktop shell)
  * - Header + "Connectors have moved to Customize" + desktop extensions link
  * - Wt Discovery: only when GrowthBook cai_opt_in_connector_suggestions is true
- *   (missing flag → omit — official if(!t) return null; do not invent on)
+ *   (official if(!t) return null). Writes enabled_connector_suggestions + analytics
+ *   claudeai.mcp.registry.opt_in.* — cloud directory residual.
+ *   Product: no invent flag true; no directory-suggestion consumer → hide when missing.
  * - Bt list residual: org/remote directory + local custom connectors.
  *   Without Anthropic directory feed, show local customize store items when present;
  *   else official empty: "Your organization has not enabled any connectors".
@@ -33,12 +35,14 @@ export function ConnectorsSettings({
   const items = useSyncExternalStore(subscribeConnectorItems, getConnectorItems, getConnectorItems);
 
   // Official Wt: t = c("cai_opt_in_connector_suggestions"); if (!t) return null
+  // Product honesty: require explicit true — missing/false hide (no invent cloud directory).
   const discoveryFlag = readBootstrapFeatureFlag(
     bootstrap.bootstrapPayload,
     "cai_opt_in_connector_suggestions",
   );
   const showDiscovery = discoveryFlag === true;
-  const discoveryEnabled = bootstrap.account?.settings?.enabled_connector_suggestions === true;
+  const discoveryEnabled =
+    bootstrap.account?.settings?.enabled_connector_suggestions === true;
 
   const spaClick = (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
     if (!onNavigate) return;

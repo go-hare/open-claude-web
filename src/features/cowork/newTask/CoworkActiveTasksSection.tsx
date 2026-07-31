@@ -10,6 +10,7 @@ import { scheduledTaskDetailPath } from "../scheduled/scheduledPaths";
 import { coworkSessionPath } from "../sessionPaths";
 import {
   clearCoworkActiveReadState,
+  isCoworkSessionUnreadForOverview,
   markCoworkActiveSessionRead,
   readCoworkActiveReadState,
   useCoworkActiveTasksText,
@@ -364,8 +365,15 @@ function ScheduledOverviewRow({
 }
 
 /**
- * Official filter:
- * starred OR pending permissions OR activity after initializedAt AND (unread | running | sticky).
+ * Official p6t filter residual (index-BELzQL5P.js):
+ *   (isStarred && localStarGate) || pendingPermissions
+ *   || (activity > initializedAt && (YSe unread || isRunning || sticky))
+ *
+ * Product maps isStarred → isPinned on SessionSummary. localStarGate is always
+ * true for desktop local (official B4 is always true on our shell; C4 only
+ * tightens when sidebar collapsed — we keep starred visible).
+ *
+ * sessionType agent/radar excluded via official r6.
  */
 function filterActiveOverviewSessions(
   sessions: SessionSummary[],
@@ -376,16 +384,25 @@ function filterActiveOverviewSessions(
   const initializedAt = readState.initializedAt ?? 0;
   return sessions.filter((session) => {
     if (session.isArchived) return false;
-    if (session.sessionType === "dispatch_child") return false;
+    // Official r6: exclude sessionType agent | radar (dispatch_child is product safety).
+    if (session.sessionType === "dispatch_child" || session.sessionType === "agent" || session.sessionType === "radar") {
+      return false;
+    }
+    // Official: !(!isStarred || !a) ⇒ isStarred && a. a ≈ local desktop feature gate.
     if (session.isPinned) return true;
     if (pendingSessionIds.has(session.id)) return true;
     const activityAt = session.updatedAtMs || session.createdAtMs || 0;
+    // Critical residual: activity at/before first-run watermark is not "in progress".
     if (activityAt <= initializedAt) return false;
-    return isSessionUnread(session, readState) || Boolean(session.isRunning) || stickyIds.has(session.id);
+    return (
+      isCoworkSessionUnreadForOverview(session, readState)
+      || Boolean(session.isRunning)
+      || stickyIds.has(session.id)
+    );
   });
 }
 
-/** Official sort: pending → unread done → rest. */
+/** Official sort: pending → unread (not running) → rest. */
 function sortActiveOverviewSessions(
   sessions: SessionSummary[],
   readState: CoworkActiveReadState,
@@ -393,7 +410,7 @@ function sortActiveOverviewSessions(
 ): SessionSummary[] {
   const rank = (session: SessionSummary) => {
     if (pendingSessionIds.has(session.id)) return 0;
-    if (!session.isRunning && isSessionUnread(session, readState)) return 1;
+    if (!session.isRunning && isCoworkSessionUnreadForOverview(session, readState)) return 1;
     return 2;
   };
   return [...sessions].sort((left, right) => {
@@ -411,18 +428,9 @@ function toOverviewSession(
   return {
     ...session,
     overviewPending: pendingSessionIds.has(session.id),
-    overviewUnread: isSessionUnread(session, readState),
+    // Official d6t isUnread prop is pure YSe — not bridge isUnread.
+    overviewUnread: isCoworkSessionUnreadForOverview(session, readState),
   };
-}
-
-/** Residual YSe-ish: bridge isUnread OR activity after last local read. */
-function isSessionUnread(session: SessionSummary, readState: CoworkActiveReadState): boolean {
-  if (session.isUnread) return true;
-  if (session.isRunning) return false;
-  const activityAt = session.updatedAtMs || session.createdAtMs || 0;
-  if (!activityAt) return false;
-  const readAt = readState.sessions[session.id] ?? 0;
-  return activityAt > Math.max(readAt, readState.initializedAt ?? 0);
 }
 
 function resolveActiveSectionTitle(

@@ -8,17 +8,61 @@ import { Icon } from "../../../../shell/icons";
  * - sQt ConnectorRow (clicked/connected → pointer-events-none, no re-add)
  * - aQt SuggestedConnectors + nQt content
  * - See all → DK = "/customize/connectors"
- * - sG = "https://claude.com/chrome?open_in_browser=1"
+ * - sG residual official chrome landing: https://claude.com/chrome?open_in_browser=1
  *
- * Product 3p honesty: no Anthropic cloud MCP directory (aae/wae). Notion/Linear/Canva
- * open connectors directory surface instead of inventing OAuth enablement.
+ * Official aQt gates (do not invent):
+ *   l = ud("suggested_connectors") — missing/false → hide directory suggestions
+ *   se = aae().servers.length > 0 — empty directory → no Notion/Linear/Canva rows
+ *   N/E/I only pushed when found in directory; Canva only when list.length < 2
+ *   wae connect uses directory uuid/url OAuth — product has no cloud directory BFF
+ *
+ * Product 3p: default flag off + empty catalog → only Claude in Chrome (local residual).
+ * Force for residual testing: localStorage/query `gb_gate_suggested_connectors=true`
+ * (still needs directory servers — do not invent Notion/Linear/Canva without catalog).
  */
 
 const dismissedKey = "suggested_connectors_dismissed_v1";
 const clickedKey = "suggested_connectors_clicked_v1";
+/** Official index-BELzQL5P sG residual. */
 const CHROME_STORE_URL = "https://claude.com/chrome?open_in_browser=1";
 const CONNECTORS_PATH = "/customize/connectors";
 const CONNECTORS_DIRECTORY_PATH = "/customize/connectors?directory=true";
+
+/** Official ud("suggested_connectors") residual — hide-on-missing. */
+function readSuggestedConnectorsFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const query =
+      params.get("gb_gate_suggested_connectors") ?? params.get("suggested_connectors");
+    if (query === "1" || query === "true") return true;
+    if (query === "0" || query === "false") return false;
+    const stored =
+      window.localStorage.getItem("gb_gate_suggested_connectors")
+      ?? window.localStorage.getItem("suggested_connectors");
+    return stored === "1" || stored === "true";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Official aae() directory catalog residual.
+ * Product 3p has no Anthropic `/api/directory/servers` / mcp-registry BFF — return [].
+ * When a real catalog bridge exists, map servers here (name/uuid/url/iconUrl/isConnected).
+ */
+type DirectoryCatalogServer = {
+  iconUrl?: string;
+  isConnected?: boolean;
+  name: string;
+  url?: string;
+  uuid: string;
+};
+
+function listMcpDirectoryCatalogServers(): DirectoryCatalogServer[] {
+  // No invent: empty until product wires cloud/local directory BFF (official aae).
+  return [];
+}
 
 type ChromeInstallStatus = "succeeded" | "skipped" | "error" | string;
 
@@ -48,7 +92,12 @@ function isDarwinDesktop(): boolean {
 }
 
 /** Official QZt: darwin + ChromeExtension bridge → install modal; else open store URL. */
-function useChromeExtensionInstall(onInstallSuccess?: () => void) {
+function useChromeExtensionInstall(options?: {
+  onInstallSuccess?: () => void;
+  onRestartDone?: () => void;
+}) {
+  const onInstallSuccess = options?.onInstallSuccess;
+  const onRestartDone = options?.onRestartDone;
   const [installOpen, setInstallOpen] = useState(false);
   const [restartOpen, setRestartOpen] = useState(false);
 
@@ -58,8 +107,11 @@ function useChromeExtensionInstall(onInstallSuccess?: () => void) {
       const result = await bridge?.installExtension?.();
       const status = result?.status;
       if (status === "succeeded" || status === "skipped") {
-        onInstallSuccess?.();
         setInstallOpen(false);
+        // Re-probe: product "succeeded" may only open the GitHub listing.
+        onInstallSuccess?.();
+        // Official QZt restart prompt when install skipped/succeeded for store path.
+        // Product sideload still shows it so user can relaunch Chrome after loading unpacked.
         setRestartOpen(true);
         return;
       }
@@ -76,8 +128,9 @@ function useChromeExtensionInstall(onInstallSuccess?: () => void) {
       await chromeExtensionBridge()?.restartChrome?.();
     } finally {
       setRestartOpen(false);
+      onRestartDone?.();
     }
-  }, []);
+  }, [onRestartDone]);
 
   const triggerInstall = useCallback(() => {
     const bridge = chromeExtensionBridge();
@@ -114,7 +167,10 @@ function useChromeExtensionInstall(onInstallSuccess?: () => void) {
         confirmText="Restart now"
         isOpen={restartOpen}
         message="Chrome needs to restart for the extension to take effect. Any open Chrome tabs will be restored after restarting."
-        onClose={() => setRestartOpen(false)}
+        onClose={() => {
+          setRestartOpen(false);
+          onRestartDone?.();
+        }}
         onConfirm={() => {
           void runRestart();
         }}
@@ -199,25 +255,47 @@ function measureAvailableConnectorHeight(container: HTMLElement, emptyState: HTM
 
 function CoworkSuggestedConnectors({ availableHeight, onNavigate }: { availableHeight?: number; onNavigate: (path: string) => void }) {
   const state = useSuggestedConnectorState();
-  const { installModals, triggerInstall } = useChromeExtensionInstall();
   const [chromeInstalled, setChromeInstalled] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-    void chromeExtensionBridge()
-      ?.isInstalled?.()
-      .then((installed) => {
-        if (alive && installed) setChromeInstalled(true);
-      })
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
+  const refreshChromeInstalled = useCallback(async () => {
+    try {
+      const installed = Boolean(await chromeExtensionBridge()?.isInstalled?.());
+      setChromeInstalled(installed);
+    } catch {
+      /* keep previous */
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshChromeInstalled();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshChromeInstalled();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [refreshChromeInstalled]);
+
+  const { installModals, triggerInstall } = useChromeExtensionInstall({
+    onInstallSuccess: () => {
+      void refreshChromeInstalled();
+    },
+    onRestartDone: () => {
+      void refreshChromeInstalled();
+    },
+  });
+
+  // Official aQt: l = ud("suggested_connectors"); se = aae().servers.length > 0.
+  const suggestedConnectorsEnabled = useMemo(() => readSuggestedConnectorsFlag(), []);
+  const directoryServers = useMemo(() => listMcpDirectoryCatalogServers(), []);
+  const directoryAvailable = directoryServers.length > 0;
 
   const connectors = useMemo<SuggestedConnector[]>(() => {
     const list: SuggestedConnector[] = [];
-    // Official aQt: chrome when lG() && !isConnected; product hides only when extension installed.
+    // Official aQt: chrome when lG() && !isConnected; product hides when extension installed.
     if (!chromeInstalled) {
       list.push({
         id: "chrome-extension",
@@ -229,33 +307,55 @@ function CoworkSuggestedConnectors({ availableHeight, onNavigate }: { availableH
         onClick: triggerInstall,
       });
     }
-    // Official only pushes Notion/Linear/Canva when aae() directory server exists.
-    // Product residual: open local connectors directory (no invented cloud OAuth).
-    list.push(
-      {
-        id: "notion",
-        name: "Notion",
-        description: "Search and update your Notion pages and databases",
-        icon: "Connectors",
-        onClick: () => onNavigate(CONNECTORS_DIRECTORY_PATH),
-      },
-      {
-        id: "linear",
-        name: "Linear",
-        description: "Create, update, and track issues in Linear",
-        icon: "Connectors",
-        onClick: () => onNavigate(CONNECTORS_DIRECTORY_PATH),
-      },
-      {
-        id: "canva",
-        name: "Canva",
-        description: "Create and edit designs in Canva",
-        icon: "Plugin",
-        onClick: () => onNavigate(CONNECTORS_DIRECTORY_PATH),
-      },
-    );
+
+    // Official: only when suggested_connectors flag + directory catalog non-empty.
+    // Never invent Notion/Linear/Canva without aae() server entries (no fake OAuth).
+    if (suggestedConnectorsEnabled && directoryAvailable) {
+      const notion = directoryServers.find((s) => s.name === "Notion");
+      const linear = directoryServers.find((s) => s.name === "Linear");
+      const canva = directoryServers.find((s) => s.name === "Canva");
+      if (notion && !notion.isConnected) {
+        list.push({
+          id: "notion",
+          name: "Notion",
+          description: "Search and update your Notion pages and databases",
+          icon: "Connectors",
+          isConnected: Boolean(notion.isConnected),
+          // No wae cloud enable — open local connectors until directory connect is wired.
+          onClick: () => onNavigate(CONNECTORS_DIRECTORY_PATH),
+        });
+      }
+      if (linear && !linear.isConnected) {
+        list.push({
+          id: "linear",
+          name: "Linear",
+          description: "Create, update, and track issues in Linear",
+          icon: "Connectors",
+          isConnected: Boolean(linear.isConnected),
+          onClick: () => onNavigate(CONNECTORS_DIRECTORY_PATH),
+        });
+      }
+      // Official: Canva only when fewer than 2 other suggested rows already.
+      if (list.length < 2 && canva && !canva.isConnected) {
+        list.push({
+          id: "canva",
+          name: "Canva",
+          description: "Create and edit designs in Canva",
+          icon: "Plugin",
+          isConnected: Boolean(canva.isConnected),
+          onClick: () => onNavigate(CONNECTORS_DIRECTORY_PATH),
+        });
+      }
+    }
     return list;
-  }, [chromeInstalled, onNavigate, triggerInstall]);
+  }, [
+    chromeInstalled,
+    directoryAvailable,
+    directoryServers,
+    onNavigate,
+    suggestedConnectorsEnabled,
+    triggerInstall,
+  ]);
 
   const layout = useMemo(() => connectorLayout(availableHeight, connectors.length), [availableHeight, connectors.length]);
   const isCycling = layout.maxRows === 1 && connectors.length > 1 && availableHeight !== undefined;

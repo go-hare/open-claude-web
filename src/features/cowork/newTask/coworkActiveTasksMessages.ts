@@ -29,8 +29,20 @@ export const COWORK_ACTIVE_TASKS_MESSAGES = {
 
 export type CoworkActiveTasksText = Record<keyof typeof COWORK_ACTIVE_TASKS_MESSAGES, string>;
 
-/** Official VSe read-state bag used by p6t clear / YSe unread. */
-export const COWORK_ACTIVE_READ_STATE_KEY = "cowork-active-tasks-read-state";
+/**
+ * Official residual `$Se` in index-BELzQL5P.js:
+ *   const $Se = "cowork-read-state"
+ * GSe seeds `{ sessions: {}, initializedAt: Date.now() }` on first load so the
+ * p6t filter does not treat every historical cowork session as "in progress".
+ *
+ * Product previously used `cowork-active-tasks-read-state` with initializedAt:0,
+ * which made activityAt > 0 always pass — flooding /task/new with old recents
+ * (looks like a second "cowork" list next to suggestions).
+ */
+export const COWORK_ACTIVE_READ_STATE_KEY = "cowork-read-state";
+
+/** Pre-fix product key — migrate once into official residual key. */
+export const COWORK_ACTIVE_READ_STATE_LEGACY_KEY = "cowork-active-tasks-read-state";
 
 export type CoworkActiveReadState = {
   initializedAt: number;
@@ -52,33 +64,81 @@ export function buildCoworkActiveTasksText(messages: I18nMessages): CoworkActive
   ) as CoworkActiveTasksText;
 }
 
-export function readCoworkActiveReadState(): CoworkActiveReadState {
-  if (typeof window === "undefined") return { initializedAt: 0, sessions: {} };
+function seedFreshReadState(now = Date.now()): CoworkActiveReadState {
+  return { initializedAt: now, sessions: {} };
+}
+
+function parseReadStateJson(raw: string | null): CoworkActiveReadState | null {
+  if (!raw) return null;
   try {
-    const raw = window.localStorage.getItem(COWORK_ACTIVE_READ_STATE_KEY);
-    if (!raw) return { initializedAt: 0, sessions: {} };
     const parsed = JSON.parse(raw) as Partial<CoworkActiveReadState>;
+    // Official GSe: only accept when initializedAt is a positive number.
+    // Product bug left initializedAt:0 which admits every historical session.
+    if (typeof parsed.initializedAt !== "number" || !(parsed.initializedAt > 0)) {
+      return null;
+    }
     return {
-      initializedAt: typeof parsed.initializedAt === "number" ? parsed.initializedAt : 0,
-      sessions: parsed.sessions && typeof parsed.sessions === "object" ? parsed.sessions : {},
+      initializedAt: parsed.initializedAt,
+      sessions:
+        parsed.sessions && typeof parsed.sessions === "object" && !Array.isArray(parsed.sessions)
+          ? Object.fromEntries(
+              Object.entries(parsed.sessions).filter(
+                (entry): entry is [string, number] => typeof entry[1] === "number",
+              ),
+            )
+          : {},
     };
   } catch {
-    return { initializedAt: 0, sessions: {} };
+    return null;
   }
+}
+
+/**
+ * Official GSe residual: load `cowork-read-state`, or seed initializedAt=now.
+ * Also migrates the product legacy key when the official key is absent.
+ */
+export function readCoworkActiveReadState(): CoworkActiveReadState {
+  if (typeof window === "undefined") return seedFreshReadState(0);
+
+  const fromOfficial = parseReadStateJson(window.localStorage.getItem(COWORK_ACTIVE_READ_STATE_KEY));
+  if (fromOfficial) return fromOfficial;
+
+  const fromLegacy = parseReadStateJson(
+    window.localStorage.getItem(COWORK_ACTIVE_READ_STATE_LEGACY_KEY),
+  );
+  if (fromLegacy) {
+    writeCoworkActiveReadState(fromLegacy);
+    try {
+      window.localStorage.removeItem(COWORK_ACTIVE_READ_STATE_LEGACY_KEY);
+    } catch {
+      // ignore quota / private mode
+    }
+    return fromLegacy;
+  }
+
+  // Official GSe first-run: persist watermark so old sessions stay out of p6t.
+  const fresh = seedFreshReadState();
+  writeCoworkActiveReadState(fresh);
+  return fresh;
 }
 
 export function writeCoworkActiveReadState(state: CoworkActiveReadState): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(COWORK_ACTIVE_READ_STATE_KEY, JSON.stringify(state));
+  try {
+    window.localStorage.setItem(COWORK_ACTIVE_READ_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore quota / private mode
+  }
 }
 
 /** Official clear handler on p6t: reset readState to {sessions:{}, initializedAt:now}. */
 export function clearCoworkActiveReadState(): CoworkActiveReadState {
-  const next: CoworkActiveReadState = { sessions: {}, initializedAt: Date.now() };
+  const next = seedFreshReadState();
   writeCoworkActiveReadState(next);
   return next;
 }
 
+/** Official KSe residual — mark one session read at now. */
 export function markCoworkActiveSessionRead(sessionId: string): void {
   const current = readCoworkActiveReadState();
   const next: CoworkActiveReadState = {
@@ -86,4 +146,20 @@ export function markCoworkActiveSessionRead(sessionId: string): void {
     sessions: { ...current.sessions, [sessionId]: Date.now() },
   };
   writeCoworkActiveReadState(next);
+}
+
+/**
+ * Official YSe residual:
+ *   unread if lastActivity > per-session read watermark, else > initializedAt.
+ * (Does not short-circuit on bridge isUnread / isRunning — those gate the filter.)
+ */
+export function isCoworkSessionUnreadForOverview(
+  session: { id: string; updatedAtMs?: number; createdAtMs?: number },
+  readState: CoworkActiveReadState,
+): boolean {
+  const activityAt = session.updatedAtMs || session.createdAtMs || 0;
+  if (!activityAt) return false;
+  const readAt = readState.sessions[session.id];
+  if (readAt === undefined) return activityAt > (readState.initializedAt ?? 0);
+  return activityAt > readAt;
 }

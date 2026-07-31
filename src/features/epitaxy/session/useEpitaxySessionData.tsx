@@ -54,8 +54,7 @@ import {
   subscribeOfficialUltrareviewLaunching,
 } from "./officialUltrareviewLaunch";
 import type { EpitaxySessionType } from "./epitaxyTranscriptActionContext";
-
-const composerDropdownButtonClass = "group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled aria-[expanded=true]:text-[var(--text-uncontained-selected)] aria-[expanded=true]:hover:text-[var(--text-uncontained-selected)] h-small rounded-small text-footnote justify-between pl-p5 pr-p2";
+import { OfficialButton } from "../OfficialEpitaxyComponents";
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -74,25 +73,40 @@ export function isMacPlatform() {
 }
 
 
-export function SessionNotFound({ onBack }: { onBack: () => Promise<void> }) {
+/**
+ * Official c119 CC residual:
+ * - main VZoQaACZaG
+ * - optional CLI subtitle DgpHBoCXb3 when `?from=cli`
+ * - contained small CTA +4zh1/luZI "Start a new session" → home (not Retry/reload)
+ */
+export function SessionNotFound({ onStartNewSession }: { onStartNewSession: () => void }) {
+  const fromCli =
+    typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).get("from") === "cli";
   return (
-    <div className="h-full flex items-center justify-center text-body text-t5">
-      <div className="flex flex-col items-center gap-g5">
-        <span>找不到这个会话。</span>
-        <button className={composerDropdownButtonClass} onClick={() => void onBack()} type="button">重试</button>
-      </div>
+    <div className="h-full flex flex-col items-center justify-center gap-g5 text-body text-t6">
+      <span>This session could not be found. It may have been deleted, or you may not have access.</span>
+      {fromCli ? (
+        <span className="text-t7 max-w-md text-center">
+          If you just created this session from the Claude Code CLI, make sure you&apos;re signed in to the same Claude account here as in your terminal.
+        </span>
+      ) : null}
+      <OfficialButton onClick={onStartNewSession} size="small" variant="contained">
+        Start a new session
+      </OfficialButton>
     </div>
   );
 }
 
-export function SessionError({ error, onRetry }: { error: Error; onRetry: () => Promise<void> }) {
+/**
+ * Official c119 remote tR residual (diHcJ+720f):
+ * title + footnote error body only — no Retry button.
+ */
+export function SessionError({ error }: { error: Error }) {
   return (
-    <div className="h-full flex items-center justify-center text-body text-t5">
-      <div className="flex max-w-[360px] flex-col items-center gap-g5 text-center">
-        <span>Something went wrong loading this session.</span>
-        <code className="text-code text-t6 break-words">{error.message}</code>
-        <button className={composerDropdownButtonClass} onClick={() => void onRetry()} type="button">Retry</button>
-      </div>
+    <div className="h-full flex flex-col items-center justify-center gap-g3 px-p8 text-body text-t5 text-center">
+      <span>Couldn&apos;t load this session.</span>
+      <div className="text-footnote text-t6 break-words">{error.message}</div>
     </div>
   );
 }
@@ -271,6 +285,8 @@ export function useEpitaxySessionData(sessionId?: string) {
   const reload = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent === true;
     if (!sessionId) return;
+    // Official clearError before retry/reload so FM drops while revalidating.
+    store.getState().clearError(sessionId);
     const generation = store.getState().markLoading(sessionId, silent);
     try {
       const next = await loadEpitaxySession(sessionId);
@@ -316,11 +332,28 @@ export function useEpitaxySessionData(sessionId?: string) {
     return { queued: false as const, uuid: optimistic.id };
   }, [sessionId, store]);
 
-  // Official yt → ve.mutateAsync({ ref, uuid }) → Yr cancelQueued + dropQueuedMessage.
+  // Official ca0135 Yr:
+  //   o = await transport.cancelQueued(id, uuid) ?? false
+  //   if (o) dropQueuedMessage; if queue empty && pendingTurn → clearPendingTurn
   const cancelQueuedMessage = useCallback((uuid: string) => {
     if (!sessionId) return;
-    store.getState().dropQueuedMessage(sessionId, uuid);
-    void desktopBridge.LocalSessions.cancelQueuedMessage?.(sessionId, uuid);
+    void (async () => {
+      const cancelled =
+        (await desktopBridge.LocalSessions.cancelQueuedMessage?.(sessionId, uuid).catch(() => false)) ===
+        true;
+      if (!cancelled) return;
+      store.getState().dropQueuedMessage(sessionId, uuid);
+      const bucket = store.getState().buckets[sessionId];
+      if (
+        bucket &&
+        bucket.pendingTurnStartedAt != null &&
+        bucket.queuedMessages.length === 0 &&
+        bucket.pendingQueuedSends === 0
+      ) {
+        // Residual clearPendingTurn — do not mark session settled (turn may still stream).
+        store.getState().setStreamActivity(sessionId, { pendingTurnStartedAt: null });
+      }
+    })();
   }, [sessionId, store]);
 
   useEffect(() => {
@@ -412,6 +445,28 @@ export function useEpitaxySessionData(sessionId?: string) {
         return;
       }
       if (shouldReloadTranscriptForEvent(event)) {
+        // Official type:"error" (+ nested message.type error) → FM category when host sends it.
+        // failPendingTurn only when pendingTurn is set (store guard); else applyRuntimeError.
+        // Do NOT route isRunning/stream-only into failPendingTurn — that NOOPs and drops FM.
+        if (isBridgeRuntimeErrorEvent(event)) {
+          const runtimeError = bridgeRuntimeErrorFromEvent(event);
+          const bucket = store.getState().buckets[sessionId];
+          if (bucket && bucket.pendingTurnStartedAt !== null) {
+            store.getState().failPendingTurn(
+              sessionId,
+              runtimeError.message,
+              runtimeError.errorCategory,
+            );
+          } else {
+            store.getState().applyRuntimeError(
+              sessionId,
+              new Error(runtimeError.message),
+              runtimeError.errorCategory,
+            );
+          }
+          clearStreamState(true);
+          return;
+        }
         if (shouldClearOfficialStreamForEvent(event)) {
           const streamGeneration = streamGenerationRef.current;
           const finalize = () => {
@@ -509,6 +564,53 @@ export function useEpitaxySessionData(sessionId?: string) {
     };
   }, [clearStreamState, reload, sessionId, store]);
 
+  /**
+   * Official c119 residual:
+   * E = session.type === "bridge" && pendingTurn && connectionStatus === "disconnected"
+   * → getSession recheck → failPendingTurn(..., "bridge_offline")
+   * Product host maps connection via session.connectionState (types residual).
+   */
+  useEffect(() => {
+    if (!sessionId) return undefined;
+    const session = bucket.session;
+    if (!session || session.sessionType !== "bridge") return undefined;
+    const turnActive = bucket.pendingTurnStartedAt !== null
+      || session.isRunning === true
+      || bucket.streamActivityMode !== idleStreamActivityMode
+      || bucket.streamingMessageId !== null;
+    if (!turnActive) return undefined;
+    if (session.connectionState !== "disconnected") return undefined;
+    let cancelled = false;
+    void desktopBridge.LocalSessions.getSession(sessionId)
+      .then((latest) => {
+        if (cancelled || !latest) return;
+        // Official: only when recheck still reports disconnected.
+        if (latest.connectionState !== "disconnected") return;
+        const still = store.getState().buckets[sessionId];
+        if (!still || still.pendingTurnStartedAt === null) return;
+        store.getState().failPendingTurn(
+          sessionId,
+          "The bridged Claude Code process stopped responding mid-turn. Check your terminal for errors (you may need to run /login), then resend your message.",
+          "bridge_offline",
+        );
+        officialStreamClear(sessionId);
+        clearOfficialEkeCache(sessionId);
+      })
+      .catch(() => {
+        /* host recheck failed — leave pending turn; do not invent error */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    bucket.pendingTurnStartedAt,
+    bucket.session,
+    bucket.streamActivityMode,
+    bucket.streamingMessageId,
+    sessionId,
+    store,
+  ]);
+
   // Official Ja
   const isLoading = Boolean(sessionId) && (bucket.isTranscriptPending || bucket.isMetaPending);
 
@@ -595,6 +697,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     cancelQueuedMessage,
     entries,
     error: bucket.error,
+    errorCategory: bucket.errorCategory,
     isLoading,
     isResponding,
     isSessionNotFound: bucket.isSessionNotFound,
@@ -856,6 +959,34 @@ function shouldReloadTranscriptForEvent(event: unknown) {
     || type === "stopped"
     || type === "permission_mode_changed"
     || type === "session_updated";
+}
+
+/** Host runtime error residual (type error / nested message.type error). */
+function isBridgeRuntimeErrorEvent(event: unknown) {
+  const raw = asRecord(event);
+  const type = stringValue(raw.type);
+  if (type === "error") return true;
+  if (type === "message" && stringValue(asRecord(raw.message).type) === "error") return true;
+  return false;
+}
+
+function bridgeRuntimeErrorFromEvent(event: unknown): { errorCategory: string | null; message: string } {
+  const raw = asRecord(event);
+  const nested = asRecord(raw.message);
+  const message =
+    stringValue(raw.error)
+    ?? stringValue(raw.message)
+    ?? stringValue(nested.error)
+    ?? stringValue(nested.message)
+    ?? stringValue(nested.content)
+    ?? "Claude Code session failed";
+  const errorCategory =
+    stringValue(raw.errorCategory)
+    ?? stringValue(raw.error_category)
+    ?? stringValue(nested.errorCategory)
+    ?? stringValue(nested.error_category)
+    ?? null;
+  return { errorCategory, message };
 }
 
 async function bridgeGetSessionPending(sessionId: string): Promise<SessionSummary["pendingToolPermissions"]> {

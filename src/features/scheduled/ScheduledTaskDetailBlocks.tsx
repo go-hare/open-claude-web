@@ -26,7 +26,19 @@ export function DetailActions({ isDeleting, isRunDisabled, isRunning, onDelete, 
   );
 }
 
-export function DetailLeftColumn({ task, enabled, onToggle }: { task: ScheduledTaskSummary; enabled: boolean; onToggle: () => void }) {
+export function DetailLeftColumn({
+  task,
+  enabled,
+  onToggle,
+  onClearChromePermissions,
+  onRemoveApprovedPermission,
+}: {
+  task: ScheduledTaskSummary;
+  enabled: boolean;
+  onToggle: () => void;
+  onClearChromePermissions?: () => void;
+  onRemoveApprovedPermission?: (toolName: string) => void;
+}) {
   const text = useI18nText(SCHEDULED_DETAIL_MESSAGES);
   const folders = folderListForTask(task);
   const repeatLabel = task.fireAt || task.cronExpression ? localizedScheduleLabel(task, text) : text.manualOnly;
@@ -44,7 +56,12 @@ export function DetailLeftColumn({ task, enabled, onToggle }: { task: ScheduledT
       </DetailSection>
       {folders.length > 0 ? <DetailSection heading={task.cwd ? text.folder : text.folders}><div className="flex flex-col gap-g3">{folders.map((folder) => <FolderPathChip key={folder} path={folder} />)}</div></DetailSection> : null}
       <DetailSection heading={text.repeats}><p className="text-body text-t9">{repeatLabel}</p></DetailSection>
-      <AlwaysAllowedSection task={task} text={text} />
+      <AlwaysAllowedSection
+        onClearChromePermissions={onClearChromePermissions}
+        onRemoveApprovedPermission={onRemoveApprovedPermission}
+        task={task}
+        text={text}
+      />
     </div>
   );
 }
@@ -115,9 +132,21 @@ function FolderPathChip({ path }: { path: string }) {
   );
 }
 
-function AlwaysAllowedSection({ task, text }: { task: ScheduledTaskSummary; text: ScheduledDetailText }) {
+function AlwaysAllowedSection({
+  onClearChromePermissions,
+  onRemoveApprovedPermission,
+  task,
+  text,
+}: {
+  onClearChromePermissions?: () => void;
+  onRemoveApprovedPermission?: (toolName: string) => void;
+  task: ScheduledTaskSummary;
+  text: ScheduledDetailText;
+}) {
   const approvals = task.approvedPermissions ?? [];
   const hasBrowserApproval = Boolean(task.chromePermissionMode);
+  const canRemoveTool = typeof onRemoveApprovedPermission === "function";
+  const canClearChrome = typeof onClearChromePermissions === "function";
   return (
     <DetailSection heading={text.alwaysAllowed}>
       {hasBrowserApproval || approvals.length > 0 ? (
@@ -125,24 +154,61 @@ function AlwaysAllowedSection({ task, text }: { task: ScheduledTaskSummary; text
           {hasBrowserApproval ? (
             <span className={chipClass}>
               <Icon name="Globe" size="s" />
-              <span className="inline-flex items-baseline gap-g2">
+              <span className="inline-flex items-baseline gap-g2 min-w-0">
                 <span>{text.browser}</span>
                 <span className="text-t6">{task.chromePermissionMode === "SkipAllPermissionChecks" ? text.allWebsites : formatWebsiteCount(text.websiteCount, task.chromeAllowedDomains?.length ?? 0)}</span>
               </span>
+              {canClearChrome ? (
+                <button
+                  aria-label={text.removeApproval}
+                  className="ml-1 shrink-0 text-t6 hover:text-t9"
+                  onClick={() => onClearChromePermissions?.()}
+                  title={text.removeApproval}
+                  type="button"
+                >
+                  <Icon name="XCrossCloseMedium" size="s" />
+                </button>
+              ) : null}
             </span>
           ) : null}
-          {approvals.map((approval) => <ApprovalChip key={approval.toolName} toolName={approval.toolName} />)}
+          {approvals.map((approval) => (
+            <ApprovalChip
+              key={approval.toolName}
+              onRemove={canRemoveTool ? () => onRemoveApprovedPermission?.(approval.toolName) : undefined}
+              removeLabel={text.removeApproval}
+              toolName={approval.toolName}
+            />
+          ))}
         </div>
       ) : <p className="text-footnote text-t5">{text.alwaysAllowedEmpty}</p>}
     </DetailSection>
   );
 }
 
-function ApprovalChip({ toolName }: { toolName: string }) {
+function ApprovalChip({
+  onRemove,
+  removeLabel,
+  toolName,
+}: {
+  onRemove?: () => void;
+  removeLabel?: string;
+  toolName: string;
+}) {
   return (
     <span className={chipClass}>
       <Icon name="Tool" size="s" />
       <span className="min-w-0 truncate">{displayToolName(toolName)}</span>
+      {onRemove ? (
+        <button
+          aria-label={removeLabel}
+          className="ml-1 shrink-0 text-t6 hover:text-t9"
+          onClick={onRemove}
+          title={removeLabel}
+          type="button"
+        >
+          <Icon name="XCrossCloseMedium" size="s" />
+        </button>
+      ) : null}
     </span>
   );
 }

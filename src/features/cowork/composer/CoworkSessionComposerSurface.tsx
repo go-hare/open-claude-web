@@ -7,15 +7,32 @@ import { CoworkComposerPlusIcon } from "../newTask/CoworkAddMenuIcons";
 import { CoworkSelectedFiles } from "../newTask/CoworkSelectedFiles";
 import type { CoworkUploadedFile } from "../newTask/coworkUploadedFiles";
 import { bindCoworkChatInputTopMeasure } from "../session/transcript/coworkChatLayoutStore";
+import {
+  canOpenCoworkAgentFeedback,
+  openCoworkAgentFeedback,
+} from "../session/activity/openCoworkAgentFeedback";
+import { CoworkReconnectBanner } from "../session/activity/CoworkReconnectBanner";
+import {
+  CoworkClaudeAvatar,
+  type CoworkClaudeAvatarState,
+} from "../session/transcript/CoworkClaudeAvatar";
 import { CoworkDropdownButton } from "../ui/CoworkDropdownButton";
 import type { CoworkDropdownItem } from "../ui/CoworkMenuTypes";
 import { CoworkArrowDownGlyph } from "../ui/CoworkOfficialGlyphs";
+import {
+  splitDisclaimerFeedbackTemplate,
+  useCoworkDisclaimerText,
+} from "./coworkDisclaimerMessages";
 import { CoworkComposerButton } from "./CoworkComposerPrimitives";
 
 type CoworkSessionComposerSurfaceProps = {
+  /** Official t$t avatarState (v$t Et) for Ace blur glow. */
+  avatarState?: CoworkClaudeAvatarState;
   canStop: boolean;
   canSubmit: boolean;
   childrenAbove?: ReactNode;
+  /** Official kAt connectionState (session path only when reconnect handler present). */
+  connectionState?: string | null;
   containerRef?: RefObject<HTMLDivElement | null>;
   disabled: boolean;
   editor: Editor | null;
@@ -24,9 +41,13 @@ type CoworkSessionComposerSurfaceProps = {
   isSubmitting: boolean;
   modelItems: CoworkDropdownItem[];
   modelLabel: ReactNode;
+  /** Official kAt nextReconnectTime (ms epoch). */
+  nextReconnectTime?: number | null;
   onContainerClick: (event: MouseEvent<HTMLElement>) => void;
   onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => void;
   onRemoveFile: (filePath: string) => void;
+  /** Official kAt onRetryNow — only mount kAt when provided (session path `ee && P`). */
+  onRetryConnection?: () => void;
   onScrollToBottom: () => void;
   onStop: () => void;
   onSubmit: () => void;
@@ -45,9 +66,25 @@ export function CoworkSessionComposerSurface(props: CoworkSessionComposerSurface
     () => bindCoworkChatInputTopMeasure(props.containerRef?.current ?? null),
     [props.containerRef, props.canStop, props.canSubmit, props.selectedFiles.length, props.showScrollButton, props.text],
   );
+  // Official v$t sticky: t$t then (ee && P) kAt in px-4 pb-2, then aboveComposer / input.
+  const showReconnectBanner = Boolean(props.onRetryConnection);
   return (
     <div className="sticky bottom-0 mx-auto w-full pt-6 z-[5]" data-chat-input-container ref={props.containerRef}>
-      <ScrollToBottomButton isStreaming={Boolean(props.isStreaming)} onScroll={props.onScrollToBottom} visible={props.showScrollButton} />
+      <ScrollToBottomButton
+        avatarState={props.avatarState}
+        isStreaming={Boolean(props.isStreaming)}
+        onScroll={props.onScrollToBottom}
+        visible={props.showScrollButton}
+      />
+      {showReconnectBanner ? (
+        <div className="px-4 pb-2">
+          <CoworkReconnectBanner
+            connectionState={props.connectionState ?? undefined}
+            nextReconnectTime={props.nextReconnectTime}
+            onRetryNow={props.onRetryConnection}
+          />
+        </div>
+      ) : null}
       {props.childrenAbove}
       <div onKeyDownCapture={props.onKeyDownCapture}>
         <fieldset className="flex w-full min-w-0 flex-col">
@@ -72,7 +109,53 @@ export function CoworkSessionComposerSurface(props: CoworkSessionComposerSurface
           </div>
         </fieldset>
       </div>
-      <div className="bg-bg-100 text-text-500 text-center text-xs py-2" role="note">Claude 是 AI，可能会出错。请务必再次核对回复内容。</div>
+      {/*
+        Official index-BELzQL5P disclaimer residual (data-disclaimer):
+        Hz3uf5n9Ga base; JyEEg0ExZX + Give us feedback when xT.openFeedbackWindow present.
+      */}
+      <CoworkDisclaimer />
+    </div>
+  );
+}
+
+/**
+ * Official disclaimer residual (index-BELzQL5P data-disclaimer):
+ * openFeedbackWindow present → JyEEg0ExZX + aQPexOUJ+Y CTA
+ * else → Hz3uf5n9Ga base string only.
+ * Copy from spa /i18n catalog (locale-aware); never hardcode EN.
+ */
+function CoworkDisclaimer() {
+  const showFeedback = canOpenCoworkAgentFeedback();
+  const text = useCoworkDisclaimerText();
+  const feedbackParts = showFeedback
+    ? splitDisclaimerFeedbackTemplate(text.withFeedback)
+    : null;
+  return (
+    <div
+      className="bg-bg-100 text-text-500 text-center text-xs py-2"
+      data-disclaimer
+      data-official-source={
+        showFeedback
+          ? "index-BELzQL5P.js:JyEEg0ExZX"
+          : "index-BELzQL5P.js:Hz3uf5n9Ga"
+      }
+      role="note"
+    >
+      {showFeedback && feedbackParts ? (
+        <>
+          {feedbackParts.before}
+          <button
+            className="underline-offset-2 hover:underline text-text-500 hover:text-text-300 transition cursor-pointer border-0 bg-transparent p-0 text-xs"
+            onClick={() => openCoworkAgentFeedback({ source: "claude_chat" })}
+            type="button"
+          >
+            {text.giveFeedback}
+          </button>
+          {feedbackParts.after}
+        </>
+      ) : (
+        text.base
+      )}
     </div>
   );
 }
@@ -124,13 +207,16 @@ function ComposerActions({ canStop, disabled, isSubmitting, onStop, onSubmit }: 
 
 /**
  * Official index-BELzQL5P `t$t` scroll-to-bottom control (cowork / chat path).
- * Circular size-9 + full ArrowDown `ly` — NOT the code-path (c119) contained pill + ChevronDownSmall.
+ * Circular size-9 + Ace blur (state=avatarState) + ArrowDown `ly`.
+ * NOT the code-path (c119) contained pill + ChevronDownSmall.
  */
 function ScrollToBottomButton({
+  avatarState = "static",
   isStreaming,
   onScroll,
   visible,
 }: {
+  avatarState?: CoworkClaudeAvatarState;
   isStreaming: boolean;
   onScroll: () => void;
   visible: boolean;
@@ -154,13 +240,15 @@ function ScrollToBottomButton({
       onClick={onScroll}
       type="button"
     >
-      {/* Official Ace blur while streaming; static state is opacity-0 so omitted here. */}
-      {isStreaming ? (
-        <span
-          aria-hidden
-          className="absolute pointer-events-none size-8 rounded-full bg-accent-brand/50 blur-md transition duration-300 opacity-50"
-        />
-      ) : null}
+      {/* Official Ace: absolute blur-md; opacity-50 while streaming else 0 */}
+      <CoworkClaudeAvatar
+        className={[
+          "!w-8 !h-8 absolute blur-md transition duration-300 pointer-events-none",
+          isStreaming ? "opacity-50" : "opacity-0",
+        ].join(" ")}
+        isInteractive={false}
+        state={avatarState}
+      />
       <CoworkArrowDownGlyph className="mix-blend-luminosity" size={20} vectorSizeOverride={20} />
     </button>
   );

@@ -1123,18 +1123,38 @@ export function OfficialSessionSource({ ariaLabel, session, sessionRef }: { aria
   const branch = normalizeLabel(session?.repo?.branch);
   const repoNames = normalizeLabel(session?.repo?.name) ? [normalizeLabel(session?.repo?.name)!] : [];
   const repoName = normalizeLabel(repoNames.length > 1 ? `${repoNames.length} repos` : repoNames[0]) ?? normalizeLabel(basename(cwd));
-  const kind = sessionSourceKind(sessionRef);
+  const kind = sessionSourceKind(sessionRef, session);
+
+  const connection = session?.connectionState ?? null;
 
   if (repoName) {
-    return <OfficialSessionSourceMenu ariaLabel={ariaLabel} branch={branch} cwd={cwd} kind={kind} repoName={repoName} repoNames={repoNames} />;
+    return (
+      <OfficialSessionSourceMenu
+        ariaLabel={ariaLabel}
+        branch={branch}
+        connection={connection}
+        cwd={cwd}
+        kind={kind}
+        repoName={repoName}
+        repoNames={repoNames}
+      />
+    );
   }
 
-  return <OfficialSessionSourceButton ariaLabel={ariaLabel} kind={kind} loading={!session} />;
+  return (
+    <OfficialSessionSourceButton
+      ariaLabel={ariaLabel}
+      connection={connection}
+      kind={kind}
+      loading={!session}
+    />
+  );
 }
 
-function OfficialSessionSourceMenu({ ariaLabel, branch, cwd, kind, repoName, repoNames }: {
+function OfficialSessionSourceMenu({ ariaLabel, branch, connection, cwd, kind, repoName, repoNames }: {
   ariaLabel?: string;
   branch?: string;
+  connection?: string | null;
   cwd?: string;
   kind: OfficialSessionSourceKind;
   repoName: string;
@@ -1157,7 +1177,7 @@ function OfficialSessionSourceMenu({ ariaLabel, branch, cwd, kind, repoName, rep
           setOpen(true);
         }}
       >
-        <OfficialSessionSourceIcon kind={kind} />
+        <OfficialSessionSourceIcon connection={connection} kind={kind} />
         <span className="truncate">{repoName}</span>
       </Menu.Trigger>
       {items.length > 0 || detail ? (
@@ -1177,12 +1197,12 @@ function OfficialSessionSourceMenu({ ariaLabel, branch, cwd, kind, repoName, rep
   );
 }
 
-function OfficialSessionSourceButton({ ariaLabel, kind, label, loading = false }: { ariaLabel?: string; kind: OfficialSessionSourceKind; label?: string; loading?: boolean }) {
+function OfficialSessionSourceButton({ ariaLabel, connection, kind, label, loading = false }: { ariaLabel?: string; connection?: string | null; kind: OfficialSessionSourceKind; label?: string; loading?: boolean }) {
   const resolvedAriaLabel = ariaLabel ?? sourceAriaLabel(kind);
   if (label) {
     return (
       <span aria-label={resolvedAriaLabel} className={officialSessionSourceClass}>
-        <OfficialSessionSourceIcon kind={kind} />
+        <OfficialSessionSourceIcon connection={connection} kind={kind} />
         <span className="truncate">{label}</span>
       </span>
     );
@@ -1190,7 +1210,7 @@ function OfficialSessionSourceButton({ ariaLabel, kind, label, loading = false }
   if (loading) {
     return (
       <span aria-label={resolvedAriaLabel} className={officialSessionSourceClass}>
-        <OfficialSessionSourceIcon kind={kind} />
+        <OfficialSessionSourceIcon connection={connection} kind={kind} />
         <span className="h-[10px] w-[64px] rounded-r3 bg-t2 animate-pulse" />
       </span>
     );
@@ -1198,12 +1218,69 @@ function OfficialSessionSourceButton({ ariaLabel, kind, label, loading = false }
   return <OfficialButton ariaLabel={resolvedAriaLabel} className="text-t9" icon={officialSessionIconMap[kind]} />;
 }
 
-function OfficialSessionSourceIcon({ kind }: { kind: OfficialSessionSourceKind }) {
-  return <Icon name={officialSessionIconMap[kind]} size="sm" />;
+/**
+ * Official PC residual: kind icon with optional EC connection dot overlay.
+ * When connection is undefined (typical local host-loop), badge is omitted.
+ */
+function OfficialSessionSourceIcon({
+  connection,
+  kind,
+}: {
+  connection?: string | null;
+  kind: OfficialSessionSourceKind;
+}) {
+  const badge = officialConnectionDot(connection);
+  const icon = <Icon name={officialSessionIconMap[kind]} size="sm" />;
+  if (!badge) return icon;
+  return (
+    <span className="grid" data-official-source="c11959232-h_zsw3wI.js:PC">
+      <span className="col-start-1 row-start-1">{icon}</span>
+      <span className="col-start-1 row-start-1 translate-x-[1px] -translate-y-[1px] self-start justify-self-end">
+        {badge}
+      </span>
+    </span>
+  );
 }
 
-function sessionSourceKind(sessionRef: OfficialSessionRef): OfficialSessionSourceKind {
-  return sessionRef.type === "bridge" ? "bridge" : sessionRef.type === "remote" ? "remote" : "local";
+/** Official EC residual — connection status dot. */
+function officialConnectionDot(connection?: string | null) {
+  if (!connection) return null;
+  if (connection === "connecting" || connection === "reconnecting") {
+    return <span className="block size-[6px] rounded-full animate-pulse bg-[var(--accent)]" style={{ boxShadow: "0 0 0 0.5px var(--surface-primary)" }} />;
+  }
+  if (connection === "connected") {
+    return <span className="block size-[6px] rounded-full bg-[var(--accent)]" style={{ boxShadow: "0 0 0 0.5px var(--surface-primary)" }} />;
+  }
+  if (connection === "disconnected") {
+    return <span className="block size-[6px] rounded-full bg-[var(--core-red)]" style={{ boxShadow: "0 0 0 0.5px var(--surface-primary)" }} />;
+  }
+  if (connection === "idle") {
+    return (
+      <span
+        className="block size-[6px] rounded-full"
+        style={{ boxShadow: "inset 0 0 0 1px var(--accent), 0 0 0 0.5px var(--surface-primary)" }}
+      />
+    );
+  }
+  return null;
+}
+
+/**
+ * Official RC residual: local | ssh | remote | bridge.
+ * sessionRef.type has no ssh — use session.sessionType / workspace mode when present.
+ */
+function sessionSourceKind(
+  sessionRef: OfficialSessionRef,
+  session?: SessionSummary | null,
+): OfficialSessionSourceKind {
+  if (sessionRef.type === "bridge") return "bridge";
+  if (sessionRef.type === "remote") return "remote";
+  const sessionType = session?.sessionType?.toLowerCase?.() ?? "";
+  if (sessionType === "ssh" || sessionType.includes("ssh")) return "ssh";
+  // Workspace mode residual when session meta carries ssh config marker.
+  const mode = (session as { workspaceMode?: string } | null | undefined)?.workspaceMode;
+  if (mode === "ssh") return "ssh";
+  return "local";
 }
 
 function sourceAriaLabel(kind: OfficialSessionSourceKind) {

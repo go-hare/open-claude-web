@@ -20,10 +20,10 @@ import { useCoworkModelOptions } from "../cowork/composer/useCoworkModelOptions"
 import { useCoworkPermissionModeAvailability } from "../cowork/composer/useCoworkPermissionModeAvailability";
 import { useCoworkNewTaskText } from "../cowork/newTask/coworkNewTaskMessages";
 import { CoworkComposerPlusIcon } from "../cowork/newTask/CoworkAddMenuIcons";
-import { createCoworkAddMenuItems, type CoworkAddMenuProject } from "./cowork/CoworkAddMenuItems";
-import { CoworkSelectedProjectIndicators } from "./cowork/CoworkProjectContext";
-import { CoworkSelectedFiles } from "./cowork/CoworkSelectedFiles";
-import type { CoworkUploadedFile } from "./cowork/coworkUploadedFiles";
+import { createCoworkAddMenuItems, type CoworkAddMenuProject } from "../cowork/newTask/CoworkAddMenuItems";
+import { CoworkSelectedProjectIndicators } from "../cowork/newTask/CoworkProjectContext";
+import { CoworkSelectedFiles } from "../cowork/newTask/CoworkSelectedFiles";
+import type { CoworkUploadedFile } from "../cowork/newTask/coworkUploadedFiles";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
 import { OfficialSlashCommandSuggestion } from "./slash/OfficialSlashCommandSuggestion";

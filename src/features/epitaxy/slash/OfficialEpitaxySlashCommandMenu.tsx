@@ -104,7 +104,9 @@ export const OfficialEpitaxySlashCommandMenu = memo(function OfficialEpitaxySlas
       aliases: command.aliases,
       onAction: () => {},
     }));
-    if (isLocalSession && sessionRef?.id && bridge.clearSession && !isLoading) {
+    // New-session draft uses sessionRef id "__draft__" for local slash extras only —
+    // never offer clear against a non-existent session.
+    if (isLocalSession && sessionRef?.id && sessionRef.id !== "__draft__" && bridge.clearSession && !isLoading) {
       const targetSessionId = sessionRef.id;
       commandItems.push({
         type: "button",

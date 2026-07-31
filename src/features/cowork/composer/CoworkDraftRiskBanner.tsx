@@ -26,7 +26,8 @@ export function CoworkDraftRiskBanner({ visible }: { visible: boolean }) {
                   <Icon customSize={16} name="Warning" />
                 </div>
                 <p className="min-w-0 flex-1 text-xs">
-                  <span className="font-bold">High risk:</span> Claude can use connectors, browse the web, and control apps without asking. This could put your data at risk.{" "}
+                  {/* Official index-BELzQL5P id 5j7bd5H/l2 */}
+                  <span className="font-bold">High risk:</span> Claude can act anywhere on the internet, which could put your data at risk.{" "}
                   <a className="underline-offset-2 hover:underline" href={COWORK_SUPPORT_URL} rel="noopener noreferrer" target="_blank">
                     See safe use tips
                   </a>

@@ -3,41 +3,63 @@ import { SettingsRow, SettingsSection, Switch } from "../SettingsShell";
 import { GhostSelect } from "../SettingsControls";
 import { useSettingsBootstrap } from "../useSettingsBootstrap";
 import { readBootstrapFeatureFlag } from "../notificationRowGates";
+import { useErrors } from "../errorsToast";
 import {
   renderMessageWithLearnMore,
   renderMessageWithLink,
   useCapabilitiesText,
 } from "../settingsMessages";
+import { normalizeToolSearchMode } from "../toolAccessPreference";
 
 /**
  * Official Capabilities Fe (c71860c77-CQj8rzol):
  * Te Memory · Ce General · _e Visuals · Me (wiggle null) · ee Feature preview · Ee Skills
  *
- * Account keys (index-BELzQL5P):
- * - enabled_saffron_search — Search and reference chats
- * - enabled_saffron — Generate memory from chat history
- * - enabled_melange — melange default (memory mode residual)
- * - tool_search_mode — "on" | "off" (UI maps auto→on, off→off)
- * - enable_chat_suggestions — CSV chat suggestions
- * - enabled_gdrive_indexing — Google Drive cataloging
- * - preview_feature_uses_artifacts / enabled_turmeric
- * - enabled_mcp_tools — map of tool enabledKey → boolean (Inline visualizations)
+ * Official show gates (same honesty family as notificationRowGates):
+ * - Te Memory: d||c||N — N=melange cohort hard-false in this ion-dist; d/c = host memory
+ *   status residual. Product 3P has no Anthropic memory status API → hide (do not invent).
+ * - Ce CSV: l = _()||!1 residual (se("chat_follow_up_chips_main") is side-effect only).
+ *   Product has no CSV follow-up chip consumer → hide.
+ * - Ce Drive: b = u&&S (Drive connector residual). No Drive OAuth invent → hide.
+ * - Ce Tool access: k = cache_scoped_prompt_ordering.enable_tool_search — product wired.
+ * - _e Artifacts: always when Visuals mounts; product showArtifacts wired.
+ * - _e AI turmeric: M = se("apps_use_turmeric") — missing/false hide; no product consumer → hide.
+ * - _e Inline: C && (connected visualize MCP || orgBlocked). Product: require real toolKeys.
+ * - Ee Skills: $() && se("claudeai_skills") — product Customize/skills residual keeps when flag on.
+ * - Me / ee Feature preview: absent without residual arms — do not invent.
  *
- * Product residual (3P / custom3p):
- * - GrowthBook missing → show arms that only need account/settings PATCH (no invent Anthropic memory API).
- * - Memory empty Ne only when memory isAvailable residual (enabled_saffron / melange).
- * - Memory description without userSetting API: cowork product → IStNSe/rhY (has zh).
- * - Inline visualizations residual key when no connected MCP tool keys.
- * - Drive cataloging is an account switch (enabled_gdrive_indexing) without inventing Drive OAuth.
- * - Me / ee (Feature preview) stay absent without residual arms — do not invent.
+ * Account keys still PATCH-able if residual later lands; UI does not show store-only fakes.
  */
-
-const INLINE_VISUALIZATIONS_TOOL_KEY = "inline_visualizations";
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+/**
+ * Official `_e` Inline residual:
+ *   C = se("claudeai_mcp_apps_visualize")
+ *   I = connector named residual with isConnected + toolKeys from enabled_mcp_tools
+ *   show when C && (I.isConnected || orgBlocked)
+ * Product 3P: no invent visualize MCP — require real toolKeys under enabled_mcp_tools
+ * (prefix or official enabledKey map) that are not the fake residual-only key.
+ */
+function inlineVisualizationsResidual(settings: Record<string, unknown>): {
+  isConnected: boolean;
+  isEnabled: boolean;
+  toolKeys: string[];
+} {
+  const mcpTools = asRecord(settings.enabled_mcp_tools);
+  // Official toolKeys come from connected visualize connector tools[].enabledKey.
+  // Product honesty: only treat server-scoped keys (server:tool) as real MCP tool keys.
+  // Bare residual "inline_visualizations" alone is not a connected connector.
+  const toolKeys = Object.keys(mcpTools).filter((key) => key.includes(":"));
+  if (toolKeys.length === 0) {
+    return { isConnected: false, isEnabled: false, toolKeys: [] };
+  }
+  const isEnabled = toolKeys.some((key) => mcpTools[key] !== false);
+  return { isConnected: true, isEnabled, toolKeys };
 }
 
 export function CapabilitiesSettings({
@@ -48,6 +70,7 @@ export function CapabilitiesSettings({
 } = {}) {
   const { bootstrap, updateAccountSetting, updateAccountSettings } = useSettingsBootstrap();
   const text = useCapabilitiesText();
+  const { addSuccess } = useErrors();
   const settings = bootstrap.account?.settings ?? {};
   const payload = bootstrap.bootstrapPayload;
 
@@ -58,33 +81,38 @@ export function CapabilitiesSettings({
   const aiArtifactsSwitchId = useId();
   const inlineSwitchId = useId();
 
-  const showCsv = useMemo(() => {
-    const flag = readBootstrapFeatureFlag(payload, "chat_follow_up_chips_main");
-    // Official Ce: l = _()||!1  — product residual missing flag still shows on desktop 3P.
-    return flag !== false;
-  }, [payload]);
+  /**
+   * Official Ce CSV: l = _()||!1 residual (not se flag). Product has no CSV chip
+   * consumer — hide like missing residual (do not invent store-only switch).
+   */
+  const showCsv = false;
 
-  const showAiArtifacts = useMemo(() => {
-    const flag = readBootstrapFeatureFlag(payload, "apps_use_turmeric");
-    return flag !== false;
-  }, [payload]);
+  /**
+   * Official _e AI-powered: M = se("apps_use_turmeric") — true only.
+   * Missing/false hide; product has no turmeric consumer → never invent true in GB.
+   */
+  const showAiArtifacts = useMemo(
+    () => readBootstrapFeatureFlag(payload, "apps_use_turmeric") === true,
+    [payload],
+  );
 
+  /** Official Ee: $() && se("claudeai_skills"). Product Customize/skills residual. */
   const showSkills = useMemo(() => {
     const flag = readBootstrapFeatureFlag(payload, "claudeai_skills");
+    // Missing → show product residual (Skills route exists). Explicit false → hide.
     return flag !== false;
   }, [payload]);
 
-  // Official Te Memory residual: product shows account-key arms without Anthropic-hosted status API.
-  const showMemory = useMemo(() => {
-    const saffron = readBootstrapFeatureFlag(payload, "claudeai_saffron");
-    const melange = readBootstrapFeatureFlag(payload, "melange_enabled_for_chat");
-    const memoryTab = readBootstrapFeatureFlag(payload, "claudeai_customize_memory_tab_main");
-    // Missing flags → show (usable 3P settings). Explicit false → hide.
-    return saffron !== false && melange !== false && memoryTab !== false;
-  }, [payload]);
+  /**
+   * Official Te: d||c||N (memory host residual / melange cohort).
+   * This ion-dist hard-codes melange cohort false; product 3P has no memory status API.
+   * Hide entire Memory section — do not invent saffron/melange store-only toggles.
+   */
+  const showMemory = false;
 
   const showToolAccess = useMemo(() => {
-    // Official: cache_scoped_prompt_ordering.enable_tool_search. Missing → show product residual.
+    // Official: cache_scoped_prompt_ordering.enable_tool_search.
+    // Product residual: missing → show (wired tool_search_mode eager/defer).
     const nested = asRecord(asRecord(payload?.growthbook)?.features);
     const scoped = asRecord(nested.cache_scoped_prompt_ordering);
     const dv = asRecord(scoped.defaultValue);
@@ -93,48 +121,49 @@ export function CapabilitiesSettings({
     return true;
   }, [payload]);
 
-  const showDriveCatalog = useMemo(() => {
-    // Official needs Drive connector residual; account key still useful for 3P.
-    const flag = readBootstrapFeatureFlag(payload, "claudeai_gdrive_cataloging");
-    return flag !== false;
-  }, [payload]);
+  /**
+   * Official Ce Drive: b = u&&S (Drive connector residual).
+   * Product does not invent Drive OAuth / cataloging pipeline → hide.
+   */
+  const showDriveCatalog = false;
+
+  const inlineResidual = useMemo(
+    () => inlineVisualizationsResidual(settings),
+    [settings],
+  );
 
   const showInlineVisualizations = useMemo(() => {
+    // Official _e: C && (I.isConnected || N). Product: no invent N org-block arm
+    // as a way to show a disabled fake switch — require connected toolKeys.
     const flag = readBootstrapFeatureFlag(payload, "claudeai_mcp_apps_visualize");
-    // Missing → show product residual toggle; explicit false → hide.
-    return flag !== false;
-  }, [payload]);
+    if (flag === false) return false;
+    // Missing flag: still allow residual when real MCP toolKeys exist.
+    return inlineResidual.isConnected;
+  }, [payload, inlineResidual.isConnected]);
 
   // Official: b = l?.settings.preview_feature_uses_artifacts ?? !0
   const artifactsEnabled = settings.preview_feature_uses_artifacts !== false;
-  // Official AI-powered: enabled_turmeric
+  // Official AI-powered: enabled_turmeric (row hidden unless showAiArtifacts)
   const aiArtifactsEnabled = settings.enabled_turmeric === true;
-  // Official CSV: enable_chat_suggestions ?? true when General arm on
+  // Official CSV: enable_chat_suggestions (row hidden unless showCsv)
   const csvSuggestionsEnabled = settings.enable_chat_suggestions !== false;
 
   // Official we(): "off" === (tool_search_mode ?? "auto") ? "off" : "on"
-  const toolAccessUi =
-    (settings.tool_search_mode === "off" ? "off" : "on") as "on" | "off";
+  const toolAccessUi = normalizeToolSearchMode(settings.tool_search_mode);
 
   const saffronSearchEnabled = settings.enabled_saffron_search === true;
-  // Official memory available residual: enabled_saffron true (or melange path).
   const memoryFromHistoryEnabled =
     settings.enabled_saffron === true || settings.enabled_melange === true;
   const driveCatalogEnabled = settings.enabled_gdrive_indexing === true;
 
   const mcpTools = asRecord(settings.enabled_mcp_tools);
-  // Product residual: residual key true, or any tool key explicitly true.
-  const inlineChecked =
-    mcpTools[INLINE_VISUALIZATIONS_TOOL_KEY] === true
-    || Object.entries(mcpTools).some(
-      ([key, value]) => key !== INLINE_VISUALIZATIONS_TOOL_KEY && value === true,
-    );
+  const inlineChecked = showInlineVisualizations && inlineResidual.isEnabled;
 
   const showGeneral = showCsv || showToolAccess || showDriveCatalog;
-  const showVisuals = true; // Artifacts always; AI / inline optional
+  // Official _e always mounts Visuals (Artifacts row). AI / inline optional.
+  const showVisuals = true;
 
-  // Official Te: without userSetting/admin block + U() cowork → IStNSe/rhY (zh present).
-  // Desktop personal shell always surfaces Cowork → cowork description residual.
+  // Dead-code path kept for residual structure when showMemory later gains host API.
   const memoryHistoryDescription = renderMessageWithLearnMore(
     text.generateMemoryFromHistoryDescriptionCowork,
   );
@@ -206,15 +235,24 @@ export function CapabilitiesSettings({
                       {
                         value: "on",
                         label: text.loadToolsWhenNeeded,
+                        description: text.loadToolsWhenNeededDescription,
                       },
                       {
                         value: "off",
                         label: text.toolsAlreadyLoaded,
+                        description: text.toolsAlreadyLoadedDescription,
                       },
                     ]}
                     onChange={(value) => {
-                      // Official n({ tool_search_mode: a }) with a = "on" | "off"
-                      void updateAccountSetting("tool_search_mode", value);
+                      // Official n({ tool_search_mode: a }) + success toast we()
+                      const mode = normalizeToolSearchMode(value);
+                      void updateAccountSetting("tool_search_mode", mode).then(() => {
+                        addSuccess(
+                          mode === "off"
+                            ? text.toolAccessSetAlreadyLoaded
+                            : text.toolAccessSetLoadWhenNeeded,
+                        );
+                      });
                     }}
                   />
                 </div>
@@ -299,12 +337,14 @@ export function CapabilitiesSettings({
                   id={inlineSwitchId}
                   checked={inlineChecked}
                   onCheckedChange={(checked) => {
-                    // Official: reduce toolKeys into enabled_mcp_tools map.
-                    // Product residual: write residual key when no live MCP tool keys.
-                    void updateAccountSetting("enabled_mcp_tools", {
-                      ...mcpTools,
-                      [INLINE_VISUALIZATIONS_TOOL_KEY]: checked,
-                    });
+                    // Official: reduce I.toolKeys into enabled_mcp_tools map.
+                    // Only when residual toolKeys exist (connected visualize MCP).
+                    if (inlineResidual.toolKeys.length === 0) return;
+                    const next = { ...mcpTools };
+                    for (const key of inlineResidual.toolKeys) {
+                      next[key] = checked;
+                    }
+                    void updateAccountSetting("enabled_mcp_tools", next);
                   }}
                 />
               }

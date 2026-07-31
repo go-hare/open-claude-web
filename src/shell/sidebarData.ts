@@ -37,6 +37,19 @@ export const primaryNavItems: SidebarNavItem[] = [
     href: "/projects",
     visibleIn: ["cowork"],
   },
+  /**
+   * Official desktop Artifacts residual:
+   * - nav label "Artifacts" (eW5eoWkxy3)
+   * - chrome often href `/artifacts/my`, desktop host library is `_K=/cowork-artifact`
+   * Product uses the desktop residual path so DesktopFrame mode stays cowork.
+   */
+  {
+    key: "artifacts",
+    label: "Artifacts",
+    icon: "Artifacts",
+    href: "/cowork-artifact",
+    visibleIn: ["cowork"],
+  },
   {
     key: "scheduled",
     label: "定时任务",

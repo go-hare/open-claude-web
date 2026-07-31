@@ -210,8 +210,10 @@ export const WORK_FUNCTION_VALUES = [
 ] as const;
 
 /**
- * Official j4t defaultMessage residual (index-BELzQL5P). zh-CN catalog keeps
- * English for these job titles — do not invent unofficial ZH labels.
+ * Official j4t defaultMessage residual (index-BELzQL5P) — EN fallback only.
+ * UI must resolve labels via GENERAL_SETTINGS_MESSAGES / useGeneralSettingsText
+ * (official message ids vln2MGiyKI …) so locale catalogs + overrides apply.
+ * Product ZH补 lives in public/i18n/zh-CN.overrides.json (official zh-CN left EN).
  */
 export const WORK_FUNCTION_LABELS: Record<(typeof WORK_FUNCTION_VALUES)[number], string> = {
   "Product Management": "Product management",
@@ -227,6 +229,7 @@ export const WORK_FUNCTION_LABELS: Record<(typeof WORK_FUNCTION_VALUES)[number],
   Other: "Other",
 };
 
+/** @deprecated Prefer WORK_FUNCTION_VALUES + i18n labels in GeneralSettings. */
 export const WORK_FUNCTION_OPTIONS = WORK_FUNCTION_VALUES.map((value) => ({
   value,
   label: WORK_FUNCTION_LABELS[value],

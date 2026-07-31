@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import type { LocalSessionsBridge, OfficialGitDiffComparison } from "../../adapters/desktopBridge/types";
 import { parseLocalBranches, resolveOfficialBaseBranch } from "./composer/workspaceControlsHelpers";
-import { OfficialSpinner } from "./cowork/CoworkActivitySpinner";
+import { OfficialSpinner } from "./session/OfficialWorkingStatus";
 import { OfficialDiffFileRow } from "./diff/OfficialDiffFileRow";
 import { OfficialDiffFileTree } from "./diff/OfficialDiffFileTree";
 import {

@@ -48,6 +48,8 @@ type RawLocalSessionsBridge = {
   getDetectedProjects?: () => Promise<unknown[]>;
   getDiffFileContent?: (idOrCwd: string, mergeBase: string, filePath: string, previousFilePath?: string) => Promise<unknown>;
   getEffort?: (id: string) => Promise<unknown>;
+  /** Official get_settings applied probe for new-session / cold catalog ladder. */
+  getEffortCatalogDefaults?: (model?: string) => Promise<unknown>;
   getSession?: (id: string, options?: Record<string, unknown>) => Promise<unknown | null>;
   getSessionsForScheduledTask?: (taskId: string) => Promise<unknown[]>;
   getTranscript?: (id: string) => Promise<unknown[]>;
@@ -61,6 +63,11 @@ type RawLocalSessionsBridge = {
   getPrDetails?: (idOrCwd: string, prNumberOrBranch?: string | number) => Promise<unknown>;
   generateLocalPrContent?: (idOrCwd: string) => Promise<unknown>;
   createLocalPr?: (idOrCwd: string, title?: string, body?: string, options?: Record<string, unknown>) => Promise<unknown>;
+  ensureBranchPushed?: (idOrCwd: string) => Promise<unknown>;
+  commitAllChanges?: (idOrCwd: string, message?: string) => Promise<unknown>;
+  isWorkingTreeDirty?: (idOrCwd: string) => Promise<unknown>;
+  checkGhAvailable?: (idOrCwd?: string) => Promise<unknown>;
+  installGh?: () => Promise<unknown>;
   summarizeSession?: (id: string) => Promise<unknown>;
   isFolderTrusted?: (folder: string) => Promise<unknown>;
   mcpCallTool?: (serverName: string, toolName: string, input?: Record<string, unknown>) => Promise<unknown>;
@@ -124,7 +131,7 @@ type RawLocalSessionsBridge = {
 type CoworkQueryBridge = Pick<CoworkSessionsBridge,
   | "list" | "getSessionsForScheduledTask" | "getCodeStats" | "getContextUsage"
   | "getDefaultEffort" | "getDefaultPermissionMode" | "getDetectedProjects"
-  | "getDiffFileContent" | "getEffort" | "getGitInfo" | "getGitDiff"
+  | "getDiffFileContent" | "getEffort" | "getEffortCatalogDefaults" | "getGitInfo" | "getGitDiff"
   | "getGitDiffStats" | "getMergeBase" | "getLocalBranches" | "checkRemoteTrust" | "checkTrust"
   | "isFolderTrusted" | "saveTrust" | "addTrustedFolder" | "openInEditor" | "getPermissionMode" | "getSupportedCommands"
   | "getWorkingTreeStatus"
@@ -141,7 +148,8 @@ type CoworkMutationBridge = Pick<CoworkSessionsBridge,
   | "stopShellPty" | "stopTask" | "writeShellPty" | "resizeShellPty" | "getShellPtyBuffer"
 >;
 type CoworkLifecycleBridge = Pick<CoworkSessionsBridge,
-  | "getTranscriptFeedback" | "onShellPtyEvent" | "start" | "sendMessage" | "forkSession"
+  | "getTranscriptFeedback" | "onShellPtyEvent" | "start" | "sendMessage" | "cancelQueuedMessage"
+  | "forkSession"
   | "rewind" | "create" | "archive" | "delete" | "setFocusedSession" | "submitFeedback"
   | "submitTranscriptFeedback" | "onEvent"
 >;
@@ -153,6 +161,10 @@ type RawScheduledTasksBridge = {
   /** Host: updateScheduledTask(id, patch). Residual single-object form also accepted. */
   updateScheduledTask?: (idOrInput: string | Record<string, unknown>, input?: Record<string, unknown>) => Promise<unknown>;
   createScheduledTask?: (input: CreateScheduledTaskInput) => Promise<unknown>;
+  /** Official jT.removeApprovedPermission(taskId, toolName). */
+  removeApprovedPermission?: (id: string, toolName: string) => Promise<unknown>;
+  /** Official jT.clearChromePermissions(taskId). */
+  clearChromePermissions?: (id: string) => Promise<unknown>;
   onScheduledTaskEvent?: RawEventSubscription;
   onOnScheduledTaskEvent?: RawEventSubscription;
 };
@@ -183,6 +195,27 @@ type RawCoworkSpacesBridge = {
 type RawLocalSessionEnvironmentBridge = {
   get?: () => Promise<unknown>;
   save?: (env: Record<string, string>) => Promise<unknown>;
+};
+
+type RawCoworkArtifactsBridge = {
+  getAllArtifacts?: () => Promise<unknown>;
+  getArtifactMetadata?: (artifactId: string) => Promise<unknown>;
+  getArtifactIndexHtmlPath?: (artifactId: string) => Promise<unknown>;
+  getArtifactThumbnail?: (artifactId: string) => Promise<unknown>;
+  showArtifact?: (artifactId: string, bounds: unknown, version?: number) => Promise<unknown>;
+  hideArtifact?: () => Promise<unknown>;
+  reloadArtifactView?: () => Promise<unknown>;
+  parkAndCaptureArtifact?: (bounds: unknown) => Promise<unknown>;
+  deleteArtifact?: (artifactId: string, removeFiles?: boolean) => Promise<unknown>;
+  restoreArtifactVersion?: (artifactId: string, version: number) => Promise<unknown>;
+  setArtifactStarred?: (artifactId: string, starred: boolean) => Promise<unknown>;
+  isSharingEnabled?: () => Promise<unknown>;
+  shareArtifact?: (artifactId: string) => Promise<unknown>;
+  unshareArtifact?: (artifactId: string) => Promise<unknown>;
+  importArtifact?: (sharedUuid: string) => Promise<unknown>;
+  printArtifactToPdf?: () => Promise<unknown>;
+  onArtifactsChanged?: (listener: () => void) => () => void;
+  onOnArtifactsChanged?: (listener: () => void) => () => void;
 };
 
 type RawCoworkFilePreviewBridge = {
@@ -252,6 +285,7 @@ export type RawClaudeWebBridge = {
   CoworkScheduledTasks?: RawScheduledTasksBridge;
   CoworkSpaces?: RawCoworkSpacesBridge;
   CoworkFilePreview?: RawCoworkFilePreviewBridge;
+  CoworkArtifacts?: RawCoworkArtifactsBridge;
   FileSystem?: RawFileSystemBridge;
   OpenDocuments?: RawOpenDocumentsBridge;
   /** Official Le — mention / content search for Files (browser) pane XC. */
@@ -303,6 +337,8 @@ export type RawAccountDetails = {
   displayName?: string;
   emailAddress?: string;
   fullName?: string;
+  /** Official Gns footer · org segment — memberships[0].organization.name */
+  organizationName?: string;
   hasWiggle: boolean;
   isLoggedOut: boolean;
   isRaven: boolean;
@@ -358,6 +394,7 @@ export function createDesktopBridgeFromOfficialNamespaces(
     Resources: createResourcesBridge(web.Resources),
     FramebufferPreview: createFramebufferPreviewBridge(web.FramebufferPreview),
     CoworkFilePreview: createCoworkFilePreviewBridge(web.CoworkFilePreview),
+    CoworkArtifacts: createCoworkArtifactsBridge(web.CoworkArtifacts),
     FileSystem: {
       browseFiles: async (options) => normalizeStringArray(await web.FileSystem?.browseFiles?.(options).catch(() => [])),
       browseFolder: async (options, defaultPath) => {
@@ -848,9 +885,8 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     getDiffFileContent: async (idOrCwd, mergeBase, filePath, previousFilePath) => normalizeDiffFileContentResult(await raw?.getDiffFileContent?.(idOrCwd, mergeBase, filePath, previousFilePath)),
     getEffort: async (id) => normalizeEffortApplied(await raw?.getEffort?.(id).catch(() => null)),
     getEffortCatalogDefaults: async (model) => {
-      const fn = (raw as unknown as { getEffortCatalogDefaults?: (model?: string) => Promise<unknown> } | undefined)?.getEffortCatalogDefaults;
-      if (!fn) return null;
-      return normalizeEffortApplied(await fn(model).catch(() => null));
+      if (!raw?.getEffortCatalogDefaults) return null;
+      return normalizeEffortApplied(await raw.getEffortCatalogDefaults(model).catch(() => null));
     },
     getGitInfo: async (idOrCwd) => raw?.getGitInfo?.(idOrCwd),
     getGitDiff: async (idOrCwd, base = "HEAD") => normalizeOfficialGitDiffComparison(await raw?.getGitDiff?.(idOrCwd, base)),
@@ -862,9 +898,72 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     getPrDetails: async (idOrCwd, prNumberOrBranch) => raw?.getPrDetails?.(idOrCwd, prNumberOrBranch).catch(() => null),
     generateLocalPrContent: async (idOrCwd) => normalizeLocalPrContent(await raw?.generateLocalPrContent?.(idOrCwd).catch(() => null)),
     createLocalPr: async (idOrCwd, options) => {
+      // Official kOt bag: {cwd,title,body,baseBranch?,draft?,sessionId?} — product host
+      // still accepts multi-arg residual; pass title/body/options for both shapes.
       const title = options?.title;
       const body = options?.body;
-      return normalizeGitCommandResult(await raw?.createLocalPr?.(idOrCwd, title, body, options as Record<string, unknown> | undefined));
+      const rawResult = await raw?.createLocalPr?.(
+        idOrCwd,
+        title,
+        body,
+        options as Record<string, unknown> | undefined,
+      );
+      const normalized = normalizeGitCommandResult(rawResult);
+      // Official TOt also carries number/url — preserve for UI open-PR path.
+      const bag = asRecord(rawResult);
+      if (bag) {
+        const url = stringValue(bag.url);
+        const number = typeof bag.number === "number" ? bag.number : undefined;
+        if (url) (normalized as GitCommandResult & { url?: string }).url = url;
+        if (number != null) (normalized as GitCommandResult & { number?: number }).number = number;
+      }
+      return normalized;
+    },
+    // Official ensureBranchPushed residual bag {success, branch?, error?, errorType?}.
+    ensureBranchPushed: async (idOrCwd) => {
+      const result = await raw?.ensureBranchPushed?.(idOrCwd).catch((error) => ({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      const bag = asRecord(result);
+      if (!bag) return { success: false, error: "Could not push branch to remote." };
+      return {
+        success: bag.success === true || bag.ok === true,
+        branch: stringValue(bag.branch) ?? undefined,
+        error: stringValue(bag.error) ?? undefined,
+        errorType: stringValue(bag.errorType) ?? undefined,
+      };
+    },
+    commitAllChanges: async (idOrCwd, message) => {
+      const result = await raw?.commitAllChanges?.(idOrCwd, message).catch((error) => ({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      const bag = asRecord(result);
+      if (!bag) return { success: false, error: "Could not commit changes." };
+      return {
+        success: bag.success === true || bag.ok === true,
+        error: stringValue(bag.error) ?? undefined,
+      };
+    },
+    isWorkingTreeDirty: async (idOrCwd) => (await raw?.isWorkingTreeDirty?.(idOrCwd).catch(() => false)) === true,
+    // Official checkGhAvailable → boolean (auth status); bag {available} also accepted.
+    checkGhAvailable: async (idOrCwd) => {
+      const result = await raw?.checkGhAvailable?.(idOrCwd).catch(() => false);
+      if (result === true) return true;
+      if (result && typeof result === "object" && (result as { available?: unknown }).available === true) {
+        return true;
+      }
+      return false;
+    },
+    installGh: async () => {
+      const result = await raw?.installGh?.().catch(() => ({ success: false }));
+      if (result === true) return true;
+      if (result && typeof result === "object") {
+        const bag = result as { success?: unknown; error?: unknown };
+        return { success: bag.success === true, error: typeof bag.error === "string" ? bag.error : undefined };
+      }
+      return { success: false };
     },
     summarizeSession: async (id) => {
       const result = await raw?.summarizeSession?.(id).catch(() => null);
@@ -1010,10 +1109,10 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       );
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
     },
-    // Official Yr → transport.cancelQueued(sessionId, uuid). Desktop IPC is currently a no-op true.
+    // Official Yr → transport.cancelQueued(sessionId, uuid) → boolean (false = too-late).
     cancelQueuedMessage: async (id, uuid) => {
       const result = await raw?.cancelQueuedMessage?.(id, uuid);
-      return result !== false;
+      return result === true;
     },
     forkSession: async (id, messageId) => {
       const item = await raw?.forkSession?.(id, messageId);
@@ -1083,9 +1182,8 @@ function createCoworkQueryBridge(raw: RawLocalSessionsBridge | undefined): Cowor
     getDiffFileContent: async (idOrCwd, mergeBase, filePath, previousFilePath) => normalizeDiffFileContentResult(await raw?.getDiffFileContent?.(idOrCwd, mergeBase, filePath, previousFilePath)),
     getEffort: async (id) => normalizeEffortApplied(await raw?.getEffort?.(id).catch(() => null)),
     getEffortCatalogDefaults: async (model) => {
-      const fn = (raw as unknown as { getEffortCatalogDefaults?: (model?: string) => Promise<unknown> } | undefined)?.getEffortCatalogDefaults;
-      if (!fn) return null;
-      return normalizeEffortApplied(await fn(model).catch(() => null));
+      if (!raw?.getEffortCatalogDefaults) return null;
+      return normalizeEffortApplied(await raw.getEffortCatalogDefaults(model).catch(() => null));
     },
     getGitInfo: async (idOrCwd) => raw?.getGitInfo?.(idOrCwd),
     getGitDiff: async (idOrCwd, base = "HEAD") => normalizeOfficialGitDiffComparison(await raw?.getGitDiff?.(idOrCwd, base)),
@@ -1192,6 +1290,11 @@ function createCoworkLifecycleBridge(raw: RawLocalSessionsBridge | undefined): C
       await raw?.sendMessage?.(...buildOfficialCoworkSendMessageArgs(id, text, input, messageUuid));
       return null;
     },
+    // Residual LocalAgentModeSessions.cancelQueuedMessage → boolean (false = too-late).
+    cancelQueuedMessage: async (id, uuid) => {
+      const result = await raw?.cancelQueuedMessage?.(id, uuid);
+      return result === true;
+    },
     forkSession: async (id, messageId) => normalizeCoworkResult(await raw?.forkSession?.(id, messageId)),
     rewind: async (id, messageId) => {
       const prompt = await raw?.rewind?.(id, messageId);
@@ -1246,6 +1349,117 @@ function createCoworkFilePreviewBridge(raw: RawCoworkFilePreviewBridge | undefin
   };
 }
 
+function normalizeCoworkArtifactSummary(value: unknown): import("./types").CoworkArtifactSummary | null {
+  const record = asRecord(value);
+  if (typeof record.id !== "string" || !record.id) return null;
+  const name =
+    typeof record.name === "string" && record.name
+      ? record.name
+      : typeof record.title === "string" && record.title
+        ? record.title
+        : record.id;
+  const createdAt =
+    typeof record.createdAt === "number"
+      ? record.createdAt
+      : typeof record.createdAt === "string"
+        ? Date.parse(record.createdAt) || Date.now()
+        : Date.now();
+  const updatedAt =
+    typeof record.updatedAt === "number"
+      ? record.updatedAt
+      : typeof record.updatedAt === "string"
+        ? Date.parse(record.updatedAt) || undefined
+        : undefined;
+  const errors = Array.isArray(record.errors)
+    ? record.errors.filter((item): item is string => typeof item === "string")
+    : undefined;
+  return {
+    ...record,
+    id: record.id,
+    name,
+    createdAt,
+    ...(updatedAt !== undefined ? { updatedAt } : {}),
+    isStarred: record.isStarred === true || record.starred === true,
+    ...(errors ? { errors } : {}),
+  };
+}
+
+function createCoworkArtifactsBridge(
+  raw: RawCoworkArtifactsBridge | undefined,
+): DesktopBridge["CoworkArtifacts"] {
+  return {
+    getAllArtifacts: async () => {
+      const rows = await raw?.getAllArtifacts?.().catch(() => []);
+      if (!Array.isArray(rows)) return [];
+      return rows
+        .map((row) => normalizeCoworkArtifactSummary(row))
+        .filter((row): row is import("./types").CoworkArtifactSummary => Boolean(row));
+    },
+    getArtifactMetadata: async (artifactId) =>
+      normalizeCoworkArtifactSummary(await raw?.getArtifactMetadata?.(artifactId).catch(() => null)),
+    getArtifactIndexHtmlPath: async (artifactId) => {
+      const result = await raw?.getArtifactIndexHtmlPath?.(artifactId).catch(() => null);
+      return typeof result === "string" ? result : null;
+    },
+    getArtifactThumbnail: async (artifactId) => {
+      const result = await raw?.getArtifactThumbnail?.(artifactId).catch(() => null);
+      return typeof result === "string" ? result : null;
+    },
+    showArtifact: async (artifactId, bounds, version) => {
+      const result = await raw?.showArtifact?.(artifactId, bounds, version).catch(() => 0);
+      return typeof result === "number" && Number.isFinite(result) ? result : 0;
+    },
+    hideArtifact: async () => (await raw?.hideArtifact?.().catch(() => false)) === true,
+    reloadArtifactView: async () => {
+      const result = await raw?.reloadArtifactView?.().catch(() => 0);
+      return typeof result === "number" && Number.isFinite(result) ? result : 0;
+    },
+    parkAndCaptureArtifact: async (bounds) => {
+      const result = await raw?.parkAndCaptureArtifact?.(bounds).catch(() => null);
+      return typeof result === "string" ? result : null;
+    },
+    deleteArtifact: async (artifactId, removeFiles) =>
+      (await raw?.deleteArtifact?.(artifactId, removeFiles).catch(() => false)) === true,
+    restoreArtifactVersion: async (artifactId, version) =>
+      (await raw?.restoreArtifactVersion?.(artifactId, version).catch(() => false)) === true,
+    setArtifactStarred: async (artifactId, starred) =>
+      normalizeCoworkArtifactSummary(
+        await raw?.setArtifactStarred?.(artifactId, starred).catch(() => null),
+      ),
+    isSharingEnabled: async () => (await raw?.isSharingEnabled?.().catch(() => false)) === true,
+    shareArtifact: async (artifactId) => {
+      const result = asRecord(await raw?.shareArtifact?.(artifactId).catch(() => null));
+      if (result.ok === true && typeof result.url === "string") {
+        return { ok: true, url: result.url };
+      }
+      return {
+        ok: false,
+        error: typeof result.error === "string" ? result.error : "Sharing is not enabled.",
+      };
+    },
+    unshareArtifact: async (artifactId) =>
+      (await raw?.unshareArtifact?.(artifactId).catch(() => false)) === true,
+    importArtifact: async (sharedUuid) => {
+      const result = await raw?.importArtifact?.(sharedUuid).catch(() => ({
+        ok: false,
+        error: "Sharing is not enabled.",
+      }));
+      const summary = normalizeCoworkArtifactSummary(result);
+      if (summary) return summary;
+      const record = asRecord(result);
+      return {
+        ok: false,
+        error: typeof record.error === "string" ? record.error : "Sharing is not enabled.",
+      };
+    },
+    printArtifactToPdf: async () => (await raw?.printArtifactToPdf?.().catch(() => false)) === true,
+    onArtifactsChanged: (listener) => {
+      const subscribe = raw?.onArtifactsChanged ?? raw?.onOnArtifactsChanged;
+      return subscribe?.(listener) ?? (() => {});
+    },
+  };
+}
+
 function createScheduledTasksBridge(raw: RawScheduledTasksBridge | undefined): DesktopBridge["CCDScheduledTasks"] {
   return {
     list: async () => normalizeScheduledTasks(await raw?.getAllScheduledTasks?.()),
@@ -1272,6 +1486,15 @@ function createScheduledTasksBridge(raw: RawScheduledTasksBridge | undefined): D
     },
     updateStatus: async (id, status) => {
       await raw?.updateScheduledTaskStatus?.(id, status);
+    },
+    // Residual jT: only true when host returns true (already-empty chrome → false).
+    removeApprovedPermission: async (id, toolName) => {
+      const result = await raw?.removeApprovedPermission?.(id, toolName);
+      return result === true;
+    },
+    clearChromePermissions: async (id) => {
+      const result = await raw?.clearChromePermissions?.(id);
+      return result === true;
     },
     onEvent: (listener) => {
       const subscribe = raw?.onScheduledTaskEvent ?? raw?.onOnScheduledTaskEvent;

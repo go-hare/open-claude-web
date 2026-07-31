@@ -463,7 +463,7 @@ export function LoginDesktopPage(_props: RouteViewProps) {
       try {
         await Promise.resolve(bridge?.setDeploymentMode?.(mode));
       } catch {
-        /* still try leave if mode already persisted (publish residual must not block) */
+        /* poll bootstrap below — leave only when uuid is visible */
       }
       // Confirm synthetic account is visible before soft SPA leave (no process relaunch).
       let hasAccount = false;
@@ -485,28 +485,32 @@ export function LoginDesktopPage(_props: RouteViewProps) {
         }
         await new Promise((resolve) => window.setTimeout(resolve, 50));
       }
+      // Soft SPA must not leave /login until bootstrap has a uuid. Leaving early
+      // paints /task/new while loginGate is still logged_out → chooser remount
+      // (first click looks dead). Official NQt waits mode write / remount.
+      if (!hasAccount) {
+        window.dispatchEvent(new Event("app:deployment-mode-changed"));
+        return;
+      }
       // Optimistic signed-in BEFORE leave so App does not keep rendering LoginDesktop
-      // while path is already /task/new (loginGate was still logged_out → first click
-      // looked dead; second click worked once bootstrap settled).
+      // while path is already /task/new.
       // Also push Account.setAccountDetails now so Cowork getAll initialize does not
       // wait waitForIdentity(5s) on sticky logged-out / missing org ("Loading Cowork").
-      if (hasAccount) {
-        try {
-          const boot = await fetch("app://localhost/api/bootstrap", {
-            credentials: "include",
-            cache: "no-store",
-          });
-          if (boot.ok) {
-            const payload = await boot.json();
-            void window["claude.web"]?.Account?.setAccountDetails?.(
-              accountDetailsFromBootstrap(payload),
-            );
-          }
-        } catch {
-          /* useDesktopCoworkAccountSync will re-publish on app:auth-signed-in */
+      try {
+        const boot = await fetch("app://localhost/api/bootstrap", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (boot.ok) {
+          const payload = await boot.json();
+          void window["claude.web"]?.Account?.setAccountDetails?.(
+            accountDetailsFromBootstrap(payload),
+          );
         }
-        window.dispatchEvent(new Event("app:auth-signed-in"));
+      } catch {
+        /* useDesktopCoworkAccountSync will re-publish on app:auth-signed-in */
       }
+      window.dispatchEvent(new Event("app:auth-signed-in"));
       window.dispatchEvent(new Event("app:deployment-mode-changed"));
       leaveLoginForShell();
       return;
