@@ -2,6 +2,8 @@ node_modules/
 dist/
 .DS_Store
 *.local
+*.bak
+*.bak-*
 npm-debug.log*
 .codex-runtime/
 .codex-backups/
