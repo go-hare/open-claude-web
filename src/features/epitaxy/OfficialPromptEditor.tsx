@@ -5,6 +5,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "rea
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import type { LocalSessionsBridge } from "../../adapters/desktopBridge/types";
 import { handleEmptyDocBeforeInput } from "../shared/tiptapEmptyDocBeforeInput";
+import { syncControlledTiptapValue } from "../shared/syncControlledTiptapValue";
 import { OfficialButton, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
@@ -170,26 +171,20 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
 
   useEffect(() => {
     if (!editor) return;
-    // Parent still mirrors last emit — do not fight the live document.
-    if (value === lastEmittedValueRef.current) return;
-    const current = editor.getText({ blockSeparator: "\n" });
-    if (current === value) {
-      lastEmittedValueRef.current = value;
-      return;
-    }
-    // Stale empty shortly after onUpdate (packaged ~2ms wipe): heal parent, keep doc.
-    if (
-      value === ""
-      && current !== ""
-      && current === lastEmittedValueRef.current
-      && Date.now() - lastEmitAtRef.current < 50
-    ) {
-      onChangeRef.current(current);
-      return;
-    }
-    lastEmittedValueRef.current = value;
-    lastEmitAtRef.current = 0;
-    editor.commands.setContent(tiptapDocFromPlainText(value), { emitUpdate: false });
+    // Official c119: typing is editor-owned; only external setText/clear setContent.
+    // Lagging parent value (e.g. "4" while doc is "45") must not wipe further keys.
+    const next = syncControlledTiptapValue({
+      editor,
+      value,
+      emit: {
+        lastEmittedValue: lastEmittedValueRef.current,
+        lastEmitAt: lastEmitAtRef.current,
+      },
+      onChange: (text) => onChangeRef.current(text),
+      docFromPlainText: tiptapDocFromPlainText,
+    });
+    lastEmittedValueRef.current = next.lastEmittedValue;
+    lastEmitAtRef.current = next.lastEmitAt;
   }, [editor, value]);
 
   return (

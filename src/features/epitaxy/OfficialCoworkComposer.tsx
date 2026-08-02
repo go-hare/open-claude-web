@@ -7,6 +7,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { desktopBridge, type CoworkMountedProject, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { CoworkSessionsBridge, SessionSummary } from "../../adapters/desktopBridge/types";
 import { handleEmptyDocBeforeInput } from "../shared/tiptapEmptyDocBeforeInput";
+import { syncControlledTiptapValue } from "../shared/syncControlledTiptapValue";
 import { OfficialButton, type OfficialDropdownItem } from "./OfficialEpitaxyComponents";
 import { OfficialButton as SharedOfficialButton } from "../shared/OfficialButton";
 import { OfficialTooltip } from "../shared/OfficialTooltip";
@@ -616,24 +617,18 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
 
   useEffect(() => {
     if (!editor) return;
-    if (value === lastEmittedValueRef.current) return;
-    const current = editor.getText({ blockSeparator: "\n" });
-    if (current === value) {
-      lastEmittedValueRef.current = value;
-      return;
-    }
-    if (
-      value === ""
-      && current !== ""
-      && current === lastEmittedValueRef.current
-      && Date.now() - lastEmitAtRef.current < 50
-    ) {
-      onChangeRef.current(current);
-      return;
-    }
-    lastEmittedValueRef.current = value;
-    lastEmitAtRef.current = 0;
-    editor.commands.setContent(tiptapDocFromPlainText(value), { emitUpdate: false });
+    const next = syncControlledTiptapValue({
+      editor,
+      value,
+      emit: {
+        lastEmittedValue: lastEmittedValueRef.current,
+        lastEmitAt: lastEmitAtRef.current,
+      },
+      onChange: (text) => onChangeRef.current(text),
+      docFromPlainText: tiptapDocFromPlainText,
+    });
+    lastEmittedValueRef.current = next.lastEmittedValue;
+    lastEmitAtRef.current = next.lastEmitAt;
   }, [editor, value]);
 
   const isEmpty = value.trim().length === 0;

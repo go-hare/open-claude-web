@@ -4,6 +4,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import type { SessionSummary } from "../../../adapters/desktopBridge/types";
 import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
+import { syncControlledTiptapValue } from "../../shared/syncControlledTiptapValue";
 import { coworkSessionsBridge } from "../session/coworkSessionBridge";
 import { CoworkRotatingPlaceholder } from "./CoworkRotatingPlaceholder";
 import { CoworkSessionSlashMenu } from "./slash/CoworkSessionSlashMenu";
@@ -166,26 +167,19 @@ function syncEditorContent(
   onChangeRef: React.MutableRefObject<(value: string) => void>,
 ) {
   if (!editor) return;
-  // Skip when parent is only echoing what we just emitted (avoids stale-empty wipe).
-  if (value === lastEmittedValueRef.current) return;
-  const current = editor.getText({ blockSeparator: "\n" });
-  if (current === value) {
-    lastEmittedValueRef.current = value;
-    return;
-  }
-  // Stale empty shortly after onUpdate (packaged ~2ms wipe): heal parent, keep doc.
-  if (
-    value === ""
-    && current !== ""
-    && current === lastEmittedValueRef.current
-    && Date.now() - lastEmitAtRef.current < 50
-  ) {
-    onChangeRef.current(current);
-    return;
-  }
-  lastEmittedValueRef.current = value;
-  lastEmitAtRef.current = 0;
-  editor.commands.setContent(tiptapDoc(value), { emitUpdate: false });
+  // Official residual: editor owns typing; lagging parent value must not wipe keys.
+  const next = syncControlledTiptapValue({
+    editor,
+    value,
+    emit: {
+      lastEmittedValue: lastEmittedValueRef.current,
+      lastEmitAt: lastEmitAtRef.current,
+    },
+    onChange: (text) => onChangeRef.current(text),
+    docFromPlainText: tiptapDoc,
+  });
+  lastEmittedValueRef.current = next.lastEmittedValue;
+  lastEmitAtRef.current = next.lastEmitAt;
 }
 
 function tiptapDoc(value: string) {

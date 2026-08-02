@@ -8,6 +8,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
 import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
+import { syncControlledTiptapValue } from "../../shared/syncControlledTiptapValue";
 
 const PROMPT_PLACEHOLDER =
   "Check my Google Calendar for today's meetings and summarize my unread emails. Highlight anything urgent.";
@@ -93,24 +94,18 @@ export function ScheduledPromptEditor({
 
   useEffect(() => {
     if (!editor) return;
-    if (value === lastEmittedValueRef.current) return;
-    const current = editor.getText({ blockSeparator: "\n" });
-    if (current === value) {
-      lastEmittedValueRef.current = value;
-      return;
-    }
-    if (
-      value === ""
-      && current !== ""
-      && current === lastEmittedValueRef.current
-      && Date.now() - lastEmitAtRef.current < 50
-    ) {
-      onUpdateRef.current(current);
-      return;
-    }
-    lastEmittedValueRef.current = value;
-    lastEmitAtRef.current = 0;
-    editor.commands.setContent(textToDoc(value), { emitUpdate: false });
+    const next = syncControlledTiptapValue({
+      editor,
+      value,
+      emit: {
+        lastEmittedValue: lastEmittedValueRef.current,
+        lastEmitAt: lastEmitAtRef.current,
+      },
+      onChange: (text) => onUpdateRef.current(text),
+      docFromPlainText: textToDoc,
+    });
+    lastEmittedValueRef.current = next.lastEmittedValue;
+    lastEmitAtRef.current = next.lastEmitAt;
   }, [editor, value]);
 
   // Official uYt aYt size branch — classes verified in c6a992d55 CSS
