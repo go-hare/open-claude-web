@@ -1053,6 +1053,22 @@ export function OfficialComposerFolderPill({
     return browseDisabled ? <span className="inline-flex">{button}</span> : button;
   }
 
+  /** Official c119 focusComposer: after folder menu closes, keyboard goes to TipTap — not the pill. */
+  const focusCodePrompt = () => {
+    if (typeof document === "undefined") return null;
+    const prompt =
+      document.querySelector<HTMLElement>(".epitaxy-prompt-input .tiptap")
+      ?? document.querySelector<HTMLElement>(".epitaxy-prompt .tiptap")
+      ?? document.querySelector<HTMLElement>(".tiptap");
+    if (!prompt) return null;
+    try {
+      prompt.focus({ preventScroll: true });
+    } catch {
+      prompt.focus();
+    }
+    return prompt;
+  };
+
   return (
     <Menu.Root
       open={open}
@@ -1075,12 +1091,14 @@ export function OfficialComposerFolderPill({
             ) {
               active.blur();
             }
+            focusCodePrompt();
           };
           releaseFolderFocus();
           requestAnimationFrame(releaseFolderFocus);
           window.setTimeout(releaseFolderFocus, 0);
           window.setTimeout(releaseFolderFocus, 50);
           window.setTimeout(releaseFolderFocus, 120);
+          window.setTimeout(releaseFolderFocus, 250);
           onMenuClosed?.();
         }
       }}
@@ -1090,8 +1108,12 @@ export function OfficialComposerFolderPill({
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner align="start" className="epitaxy-root z-[60]" side="top" sideOffset={8}>
-          {/* finalFocus=false: do not return keyboard to folder pill (Base UI default). */}
-          <Menu.Popup className={officialMenuPopupClass} data-cds="Menu" finalFocus={false}>
+          {/* finalFocus → Code prompt (not folder pill). Base UI accepts element | false | fn. */}
+          <Menu.Popup
+            className={officialMenuPopupClass}
+            data-cds="Menu"
+            finalFocus={() => focusCodePrompt()}
+          >
             <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
             <div className={officialMenuScrollClass}>
               <Menu.Group className="flex flex-col">

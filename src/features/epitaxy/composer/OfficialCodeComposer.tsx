@@ -27,6 +27,7 @@ import {
   buildOfficialEffortMenuItems,
   clampEffortToCatalog,
 } from "../session/officialComposerOptions";
+import { useOfficialTypeToComposer } from "../../shared/useOfficialTypeToComposer";
 
 type OfficialCodeComposerProps = {
   busy: boolean;
@@ -210,17 +211,45 @@ export function OfficialCodeComposer({
 
   const focusPromptEditor = useCallback(() => {
     // Base UI Menu returnFocus / FloatingFocusManager microtask can re-focus the
-    // folder Trigger *after* a single rAF/50ms. Retries cover close animation.
+    // folder Trigger *after* a single rAF/50ms. Retries cover close animation +
+    // native folder dialog returning focus to the pill.
     // Official session surface: focusComposer (c119 Ye.current?.focus).
-    const run = () => promptEditorRef.current?.focus();
+    const run = () => {
+      promptEditorRef.current?.focus();
+      const dom =
+        document.querySelector<HTMLElement>(".epitaxy-prompt-input .tiptap")
+        ?? document.querySelector<HTMLElement>(".epitaxy-prompt .tiptap");
+      if (dom && document.activeElement !== dom) {
+        try {
+          dom.focus({ preventScroll: true });
+        } catch {
+          dom.focus();
+        }
+      }
+    };
     run();
     requestAnimationFrame(() => {
       requestAnimationFrame(run);
     });
-    for (const ms of [0, 16, 50, 100, 200, 400]) {
+    for (const ms of [0, 16, 50, 100, 200, 400, 700]) {
       window.setTimeout(run, ms);
     }
   }, []);
+
+  // Official Ase residual (index-BELzQL5P): printable keys while focus is on folder /
+  // env pill still go into TipTap — matches Code home after folder select.
+  useOfficialTypeToComposer(
+    useCallback((key: string) => {
+      // Official: T.current?.getEditor()?.chain().insertContent(e).focus().run()
+      const ed = promptEditorRef.current?.getEditor?.();
+      if (ed) {
+        ed.chain().insertContent(key).focus("end").run();
+        return;
+      }
+      promptEditorRef.current?.insertText?.(key);
+    }, []),
+    !busy,
+  );
 
   // Folder / env change leaves focus on the pill trigger (Base UI Menu residual).
   // Official session surface exposes focusComposer; draft home needs the same return path.

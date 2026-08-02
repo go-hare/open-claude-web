@@ -18,7 +18,11 @@ import type { OfficialSlashCommandMenuProps } from "./slash/OfficialSlashTypes";
 
 export type OfficialPromptEditorHandle = {
   focus: () => void;
+  /** Official aYt / c119 Ye residual — used by Ase type-to-composer. */
+  getEditor: () => Editor | null;
   insertSlashCommand: () => void;
+  /** Insert plain text at cursor and focus (Ase residual). */
+  insertText: (text: string) => void;
 };
 
 type OfficialPromptEditorProps = {
@@ -91,13 +95,16 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   }, []);
 
   const editor = useEditor({
+    // TipTap + React 19: avoid SSR/hydration double-mount wiping the first keystrokes.
+    immediatelyRender: false,
     // Prefer live emit if parent value lags (editor recreate mid-keystroke).
     content: tiptapDocFromPlainText(value || emitRef.current.lastEmittedValue),
     editable: !disabled && !busy,
     editorProps: {
       attributes: {
         "aria-label": "Prompt",
-        class: "tiptap",
+        // epitaxy-root is select-none; contenteditable must opt back into text selection/input.
+        class: "tiptap select-text",
         "data-placeholder": placeholder,
       },
       handleDOMEvents: {
@@ -159,8 +166,15 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       }
       editor?.commands.focus("end");
     },
+    getEditor: () => editor ?? editorRef.current,
     insertSlashCommand: () => {
       editor?.chain().focus("start").insertContent("/").run();
+    },
+    // Official Ase residual: insertContent(key).focus() when focus was on a pill.
+    insertText: (text: string) => {
+      const ed = editor ?? editorRef.current;
+      if (!ed || !text) return;
+      ed.chain().insertContent(text).focus("end").run();
     },
   }), [editor]);
 

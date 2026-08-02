@@ -158,15 +158,19 @@ export function OfficialWorkspaceControls({
         const firstDir = entries.find((entry) => asRecord(entry).isDirectory) ?? entries[0];
         const path = stringValue(asRecord(firstDir).path) ?? remoteBase;
         await applyWorkspacePath(path);
+        onFolderMenuClosed?.();
         return;
       }
       await applyWorkspacePath(remoteBase);
+      onFolderMenuClosed?.();
       return;
     }
     const selectedPaths = await desktopBridge.Preferences.getDirectoryPath?.(false);
     const selectedPath = selectedPaths?.[0];
     if (selectedPath) await applyWorkspacePath(selectedPath);
-  }, [applyWorkspacePath, isSsh, workspace.cwd, workspace.sshConfig]);
+    // Native dialog steals focus; official residual re-focuses composer (Ye.focus).
+    onFolderMenuClosed?.();
+  }, [applyWorkspacePath, isSsh, onFolderMenuClosed, workspace.cwd, workspace.sshConfig]);
 
   const selectLocalEnv = useCallback(() => {
     const next: WorkspaceContext = {

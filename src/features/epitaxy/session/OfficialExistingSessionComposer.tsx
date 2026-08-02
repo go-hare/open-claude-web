@@ -9,6 +9,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { desktopBridge, type SessionSummary } from "../../../adapters/desktopBridge";
 import type { LocalSessionsBridge, SendMessageInput } from "../../../adapters/desktopBridge/types";
 import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
+import { useOfficialTypeToComposer } from "../../shared/useOfficialTypeToComposer";
 import { Icon } from "../../../shell/icons";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
 import { OfficialComposerFooter } from "../OfficialComposerFooter";
@@ -175,7 +176,7 @@ export function ExistingSessionComposer({
     editorProps: {
       attributes: {
         "aria-label": "Prompt",
-        class: "tiptap",
+        class: "tiptap select-text",
         "data-placeholder": placeholder,
       },
       handleDOMEvents: {
@@ -214,6 +215,16 @@ export function ExistingSessionComposer({
       setText(nextEditor.getText({ blockSeparator: "\n" }));
     },
   }, [placeholder, slashMenuComponent]);
+
+  // Official Ase residual: printable keys while focus is on chrome still insert into TipTap.
+  useOfficialTypeToComposer(
+    useCallback((key: string) => {
+      const ed = tiptapEditorRef.current ?? editor;
+      if (!ed || disabled || isSubmitting || isResponding) return;
+      ed.chain().insertContent(key).focus("end").run();
+    }, [disabled, editor, isResponding, isSubmitting]),
+    !disabled && !isSubmitting && !isResponding,
+  );
 
   useEffect(() => {
     setModel(normalizeSelectorModelValue(session?.model, allowedModelValues));
