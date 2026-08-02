@@ -1,9 +1,9 @@
 import type { Editor } from "@tiptap/core";
 
 /**
- * Official c119 residual: TipTap is source of truth while typing.
+ * Official c119 residual: TipTap owns text while the user types.
  * Parent only drives setContent via imperative setText / clear / external
- * draft restore — never re-apply a lagging controlled `value` over live doc.
+ * draft restore — never re-apply a lagging controlled `value` over the live doc.
  *
  * Packaged React 19 + app://: parent `value` can lag 1+ keystrokes behind
  * onUpdate. Re-applying that lag (e.g. value "4" while doc is "45") looks like
@@ -22,47 +22,54 @@ export type SyncControlledTiptapValueArgs = {
   onChange: (next: string) => void;
   /** Build TipTap JSON doc from plain text (product residual). */
   docFromPlainText: (value: string) => unknown;
-  /**
-   * How long after onUpdate a lagging parent value is treated as stale
-   * (heal, don't wipe). Official has no continuous controlled setContent;
-   * keep a generous window for packaged IPC/render lag.
-   */
-  lagMs?: number;
 };
 
+function liveText(editor: Editor): string {
+  return editor.getText({ blockSeparator: "\n" });
+}
+
+/**
+ * Prefer the live ProseMirror doc. Heal parent when it lags.
+ * Only setContent when the editor is unfocused (true external apply).
+ */
 export function syncControlledTiptapValue({
   editor,
   value,
   emit,
   onChange,
   docFromPlainText,
-  lagMs = 500,
 }: SyncControlledTiptapValueArgs): ControlledTiptapEmitState {
-  // Parent still mirrors last emit — do not fight the live document.
+  const current = liveText(editor);
+
+  // Live doc already matches parent.
+  if (current === value) {
+    return {
+      lastEmittedValue: value,
+      lastEmitAt: emit.lastEmitAt,
+    };
+  }
+
+  // Official residual: while focused, editor is source of truth.
+  // Never setContent over in-progress typing (including IME).
+  if (editor.isFocused || editor.view?.hasFocus?.()) {
+    if (current !== emit.lastEmittedValue) {
+      onChange(current);
+      return { lastEmittedValue: current, lastEmitAt: Date.now() };
+    }
+    // Parent lagged behind last emit (or empty wipe) — push live text up.
+    onChange(current);
+    return {
+      lastEmittedValue: current,
+      lastEmitAt: emit.lastEmitAt || Date.now(),
+    };
+  }
+
+  // Parent still mirrors last emit but doc diverged while unfocused — rare.
   if (value === emit.lastEmittedValue) {
     return emit;
   }
 
-  const current = editor.getText({ blockSeparator: "\n" });
-  if (current === value) {
-    return { lastEmittedValue: value, lastEmitAt: emit.lastEmitAt };
-  }
-
-  const lagging =
-    current === emit.lastEmittedValue
-    && current !== value
-    && (
-      Date.now() - emit.lastEmitAt < lagMs
-      || editor.isFocused
-    );
-
-  // Parent lag (empty or older prefix) while user already typed more.
-  if (lagging) {
-    onChange(current);
-    return emit;
-  }
-
-  // True external change (reset, suggestion, setComposerText residual).
+  // Unfocused external change (reset / setComposerText residual).
   editor.commands.setContent(docFromPlainText(value), { emitUpdate: false });
   return { lastEmittedValue: value, lastEmitAt: 0 };
 }
