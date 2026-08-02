@@ -9,7 +9,7 @@ import {
   OfficialDropdownButton,
   type OfficialDropdownItem,
 } from "../OfficialEpitaxyComponents";
-import { OfficialPromptEditor } from "../OfficialPromptEditor";
+import { OfficialPromptEditor, type OfficialPromptEditorHandle } from "../OfficialPromptEditor";
 import { useWorkspaceTrustGate } from "../trust/useWorkspaceTrustGate";
 import {
   normalizeSelectorModelValue,
@@ -90,6 +90,9 @@ export function OfficialCodeComposer({
     && !workspace.sshConfig
     && gitAvailable === false;
   const submitStateRef = useRef({ busy, ensureTrusted, hasPrompt: false, onSubmit, workspaceCwd: workspace.cwd });
+  // Official Ye / focusComposer residual: after folder pill / native browse, focus returns
+  // to the prompt so keystrokes land in TipTap (not the folder Menu.Trigger / body).
+  const promptEditorRef = useRef<OfficialPromptEditorHandle | null>(null);
   const [replayKey, setReplayKey] = useState(0);
   const [openFooterMenu, setOpenFooterMenu] = useState<"effort" | "mode" | "model" | null>(null);
   const hasPrompt = prompt.trim().length > 0;
@@ -205,6 +208,31 @@ export function OfficialCodeComposer({
     void state.ensureTrusted(state.workspaceCwd, state.onSubmit);
   }, []);
 
+  const focusPromptEditor = useCallback(() => {
+    // Base UI Menu restores focus to the Trigger *after* item onClick. Queue past that
+    // restore (rAF + short timeout) so keystrokes land in TipTap, not the folder pill.
+    // Official session surface exposes focusComposer (c119 Ye.current?.focus).
+    const run = () => promptEditorRef.current?.focus();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run);
+    });
+    window.setTimeout(run, 0);
+    window.setTimeout(run, 50);
+  }, []);
+
+  // Folder / env change leaves focus on the pill trigger (Base UI Menu residual).
+  // Official session surface exposes focusComposer; draft home needs the same return path.
+  useEffect(() => {
+    if (!workspace.cwd) return;
+    focusPromptEditor();
+  }, [focusPromptEditor, workspace.cwd, workspace.mode]);
+
+  const handleWorkspaceChange = useCallback((next: WorkspaceContext) => {
+    onWorkspaceChange(next);
+    // Immediate focus attempt for menu-select path (cwd may be unchanged if re-picked).
+    focusPromptEditor();
+  }, [focusPromptEditor, onWorkspaceChange]);
+
   return (
     <div className="flex flex-col gap-g5">
       <OfficialWorkspaceControls
@@ -212,7 +240,7 @@ export function OfficialCodeComposer({
         ensureTrusted={ensureTrusted}
         onSourceBranchChange={onSourceBranchChange}
         onUseWorktreeChange={onUseWorktreeChange}
-        onWorkspaceChange={onWorkspaceChange}
+        onWorkspaceChange={handleWorkspaceChange}
         sourceBranch={sourceBranch}
         useWorktree={useWorktree}
         workspace={workspace}
@@ -231,6 +259,7 @@ export function OfficialCodeComposer({
       </div>
       <div style={{ boxShadow: "var(--df-shadow-card)" }}>
         <OfficialPromptEditor
+          ref={promptEditorRef}
           bridge={desktopBridge.LocalSessions}
           busy={busy}
           onChange={setPrompt}

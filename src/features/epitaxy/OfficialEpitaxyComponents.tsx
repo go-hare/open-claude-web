@@ -1051,7 +1051,22 @@ export function OfficialComposerFolderPill({
   }
 
   return (
-    <Menu.Root open={open} onOpenChange={setOpen}>
+    <Menu.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        // Base UI restores focus to Menu.Trigger after item select. Blur the
+        // folder trigger so Code draft composer can focus TipTap (focusComposer residual).
+        if (!next && typeof document !== "undefined") {
+          requestAnimationFrame(() => {
+            const active = document.activeElement;
+            if (!(active instanceof HTMLElement)) return;
+            const title = active.getAttribute("title") || "";
+            if (folder && title === folder) active.blur();
+          });
+        }
+      }}
+    >
       <Menu.Trigger className={officialComposerPillClass} title={folder}>
         {triggerChildren}
       </Menu.Trigger>
