@@ -1,20 +1,16 @@
 import type { Editor } from "@tiptap/core";
 
 /**
- * Official residual (index-BELzQL5P.js `vTt` + aYt CodeTipTapEditor):
+ * Official residual (index-BELzQL5P.js `vTt` + aYt CodeTipTapEditor + c119 Ye):
  *
  *   onUpdate → k.current = true  (user has edited)
- *   useEffect hydrate:
- *     if (!editor || destroyed || !isEmpty || !hasHydrated || k.current) return
- *     only then setContent(parent)
+ *   hydrate setContent only while !k.current && empty editor
+ *   setText / clear are imperative — NOT continuous parent value→setContent
  *
- * Parent state is a mirror of the editor (submit / placeholder), NOT a continuous
- * controlled setContent source. After the user types once, the only parent-driven
- * doc mutation is clear (value → "").
+ * Product: parent `value` is a submit/placeholder mirror. After the user types
+ * once, the only parent-driven doc mutation is clear (value → "").
  *
- * Product bug this prevents: React 19 + app:// lag where parent `value` is still
- * "4" while the live doc is "45" — re-applying setContent("4") looks like
- * "first char works, cannot type further".
+ * Non-empty parent while userEdited is ignored (never wipe "ab" with lagging "a").
  */
 export type ControlledTiptapEmitState = {
   lastEmittedValue: string;
@@ -29,10 +25,6 @@ export type SyncControlledTiptapValueArgs = {
   /** Build TipTap JSON doc from plain text (product residual). */
   docFromPlainText: (value: string) => unknown;
 };
-
-function liveText(editor: Editor): string {
-  return editor.getText({ blockSeparator: "\n" });
-}
 
 /**
  * Apply parent `value` only when residual-safe:
@@ -56,19 +48,25 @@ export function syncControlledTiptapValue({
       editor.commands.clearContent(false);
       return { lastEmittedValue: "", userEdited: false };
     }
-    // Parent lag / non-clear external while typing — keep live doc.
     return emit;
   }
 
   // Not yet user-edited: external hydrate / setComposerText / draft restore.
   if (value === "") {
-    editor.commands.clearContent(false);
+    if (emit.lastEmittedValue !== "") {
+      editor.commands.clearContent(false);
+    }
     return { lastEmittedValue: "", userEdited: false };
   }
 
-  const current = liveText(editor);
+  const current = editor.getText({ blockSeparator: "\n" });
   if (current === value) {
     return { lastEmittedValue: value, userEdited: false };
+  }
+
+  // Official vTt: only hydrate into an empty editor before first user edit.
+  if (!editor.isEmpty && current.length > 0) {
+    return emit;
   }
 
   editor.commands.setContent(docFromPlainText(value), { emitUpdate: false });
