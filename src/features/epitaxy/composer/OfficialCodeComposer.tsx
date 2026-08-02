@@ -209,15 +209,17 @@ export function OfficialCodeComposer({
   }, []);
 
   const focusPromptEditor = useCallback(() => {
-    // Base UI Menu restores focus to the Trigger *after* item onClick. Queue past that
-    // restore (rAF + short timeout) so keystrokes land in TipTap, not the folder pill.
-    // Official session surface exposes focusComposer (c119 Ye.current?.focus).
+    // Base UI Menu returnFocus / FloatingFocusManager microtask can re-focus the
+    // folder Trigger *after* a single rAF/50ms. Retries cover close animation.
+    // Official session surface: focusComposer (c119 Ye.current?.focus).
     const run = () => promptEditorRef.current?.focus();
+    run();
     requestAnimationFrame(() => {
       requestAnimationFrame(run);
     });
-    window.setTimeout(run, 0);
-    window.setTimeout(run, 50);
+    for (const ms of [0, 16, 50, 100, 200, 400]) {
+      window.setTimeout(run, ms);
+    }
   }, []);
 
   // Folder / env change leaves focus on the pill trigger (Base UI Menu residual).
@@ -238,6 +240,7 @@ export function OfficialCodeComposer({
       <OfficialWorkspaceControls
         disabled={busy}
         ensureTrusted={ensureTrusted}
+        onFolderMenuClosed={focusPromptEditor}
         onSourceBranchChange={onSourceBranchChange}
         onUseWorktreeChange={onUseWorktreeChange}
         onWorkspaceChange={handleWorkspaceChange}

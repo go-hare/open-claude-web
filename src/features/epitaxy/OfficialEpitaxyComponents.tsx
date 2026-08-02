@@ -136,6 +136,8 @@ type OfficialComposerFolderPillProps = {
   folder?: string;
   isSSH?: boolean;
   onBrowse: () => void;
+  /** Official focusComposer residual after folder menu closes (select or dismiss). */
+  onMenuClosed?: () => void;
   onSelectFolder: (path: string) => void;
   recentFolders: OfficialComposerFolderRecent[];
 };
@@ -1029,6 +1031,7 @@ export function OfficialComposerFolderPill({
   folder,
   isSSH = false,
   onBrowse,
+  onMenuClosed,
   onSelectFolder,
   recentFolders,
 }: OfficialComposerFolderPillProps) {
@@ -1055,15 +1058,30 @@ export function OfficialComposerFolderPill({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        // Base UI restores focus to Menu.Trigger after item select. Blur the
-        // folder trigger so Code draft composer can focus TipTap (focusComposer residual).
+        // Base UI FloatingFocusManager returnFocus parks keyboard on Menu.Trigger /
+        // epitaxy-popup after item select — Code draft then cannot type into TipTap.
+        // Official c119 focusComposer residual: after folder UI closes, focus composer.
         if (!next && typeof document !== "undefined") {
-          requestAnimationFrame(() => {
+          const releaseFolderFocus = () => {
             const active = document.activeElement;
             if (!(active instanceof HTMLElement)) return;
-            const title = active.getAttribute("title") || "";
-            if (folder && title === folder) active.blur();
-          });
+            if (active.closest?.(".tiptap") || active.classList?.contains("tiptap")) return;
+            // Folder trigger, menu popup, or any non-composer focus left by Menu close.
+            if (
+              active.getAttribute("title") === folder
+              || active.closest?.("[data-cds='Menu']")
+              || active.classList?.contains("epitaxy-popup")
+              || active.matches?.("button")
+            ) {
+              active.blur();
+            }
+          };
+          releaseFolderFocus();
+          requestAnimationFrame(releaseFolderFocus);
+          window.setTimeout(releaseFolderFocus, 0);
+          window.setTimeout(releaseFolderFocus, 50);
+          window.setTimeout(releaseFolderFocus, 120);
+          onMenuClosed?.();
         }
       }}
     >
@@ -1072,7 +1090,8 @@ export function OfficialComposerFolderPill({
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner align="start" className="epitaxy-root z-[60]" side="top" sideOffset={8}>
-          <Menu.Popup className={officialMenuPopupClass} data-cds="Menu">
+          {/* finalFocus=false: do not return keyboard to folder pill (Base UI default). */}
+          <Menu.Popup className={officialMenuPopupClass} data-cds="Menu" finalFocus={false}>
             <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
             <div className={officialMenuScrollClass}>
               <Menu.Group className="flex flex-col">

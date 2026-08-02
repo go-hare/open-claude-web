@@ -141,7 +141,19 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   }, [slashMenuComponent]);
 
   useImperativeHandle(ref, () => ({
-    focus: () => editor?.commands.focus(),
+    focus: () => {
+      // Prefer DOM focus first so Base UI returnFocus cannot leave the folder
+      // pill as activeElement while PM thinks it is focused.
+      const dom = editor?.view?.dom as HTMLElement | undefined;
+      if (dom && typeof dom.focus === "function") {
+        try {
+          dom.focus({ preventScroll: true });
+        } catch {
+          dom.focus();
+        }
+      }
+      editor?.commands.focus("end");
+    },
     insertSlashCommand: () => {
       editor?.chain().focus("start").insertContent("/").run();
     },

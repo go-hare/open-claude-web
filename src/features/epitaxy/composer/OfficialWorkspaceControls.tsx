@@ -24,6 +24,8 @@ export type EnsureWorkspaceTrusted = (cwd: string | undefined, afterAccept: () =
 type OfficialWorkspaceControlsProps = {
   disabled?: boolean;
   ensureTrusted: EnsureWorkspaceTrusted;
+  /** Official focusComposer residual after folder menu closes. */
+  onFolderMenuClosed?: () => void;
   onSourceBranchChange: (branch: string) => void;
   onUseWorktreeChange: (enabled: boolean) => void;
   onWorkspaceChange: (workspace: WorkspaceContext) => void;
@@ -36,6 +38,7 @@ type OfficialWorkspaceControlsProps = {
 export function OfficialWorkspaceControls({
   disabled,
   ensureTrusted,
+  onFolderMenuClosed,
   onSourceBranchChange,
   onUseWorktreeChange,
   onWorkspaceChange,
@@ -231,6 +234,7 @@ export function OfficialWorkspaceControls({
           folder={workspace.cwd}
           isSSH={isSsh}
           onBrowse={() => void chooseWorkspace()}
+          onMenuClosed={onFolderMenuClosed}
           onSelectFolder={(path) => void applyWorkspacePath(path)}
           recentFolders={recentFolders}
         />
