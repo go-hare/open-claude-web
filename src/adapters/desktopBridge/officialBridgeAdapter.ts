@@ -1065,9 +1065,7 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     stopShellPty: async (sessionId) => {
       await raw?.stopShellPty?.(sessionId);
     },
-    stopTask: async (sessionId, taskId) => {
-      await raw?.stopTask?.(sessionId, taskId);
-    },
+    stopTask: async (sessionId, taskId) => raw?.stopTask?.(sessionId, taskId),
     writeShellPty: async (sessionId, data) => {
       await raw?.writeShellPty?.(sessionId, data);
     },
@@ -1258,7 +1256,7 @@ function createCoworkMutationBridge(raw: RawLocalSessionsBridge | undefined): Co
     startShellPty: async (sessionId, cols, rows) => normalizeShellPtyStartResult(await raw?.startShellPty?.(sessionId, cols, rows), await raw?.getShellPtyBuffer?.(sessionId).catch(() => "")),
     stop: async (id) => raw?.stop?.(id),
     stopShellPty: async (sessionId) => { await raw?.stopShellPty?.(sessionId); },
-    stopTask: async (sessionId, taskId) => { await raw?.stopTask?.(sessionId, taskId); },
+    stopTask: async (sessionId, taskId) => raw?.stopTask?.(sessionId, taskId),
     writeShellPty: async (sessionId, data) => { await raw?.writeShellPty?.(sessionId, data); },
     resizeShellPty: async (sessionId, cols, rows) => { await raw?.resizeShellPty?.(sessionId, cols, rows); },
     getShellPtyBuffer: async (sessionId) => String(await raw?.getShellPtyBuffer?.(sessionId).catch(() => "") ?? ""),
@@ -2047,6 +2045,18 @@ function normalizeMessages(value: unknown): ChatMessage[] | undefined {
     const nestedMessage = asRecord(raw.message);
     const rawRole = stringValue(raw.role) ?? stringValue(nestedMessage.role);
     const rawType = stringValue(raw.type);
+    // queue-operation residual: Tasks Qp only. Keep raw.type for Jp, but never role=user
+    // (would default messageText to the raw <task-notification> XML and risk Hb paint).
+    if (rawType === "queue-operation") {
+      const createdAt = stringValue(raw.createdAt) ?? stringValue(raw.timestamp) ?? new Date().toISOString();
+      return {
+        id: stringValue(raw.id) ?? stringValue(raw.uuid) ?? stringValue(raw.message_id) ?? `msg_${index}`,
+        role: "system" as const,
+        text: "",
+        createdAt,
+        raw: message,
+      };
+    }
     const role = rawRole === "assistant" || rawRole === "system"
       ? rawRole
       : author === "assistant"

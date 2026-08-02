@@ -15,6 +15,8 @@ import { createMessageUuid } from "../../adapters/desktopBridge/messageUuid";
 import {
   officialCodeSessionStore,
 } from "./session/officialCodeSessionStore";
+import { setDraftPermissionMode } from "./codeDraftComposerStore";
+import type { PermissionMode } from "../../adapters/desktopBridge";
 import {
   useOfficialFilesBrowserMenuGate,
 } from "./session/OfficialFilesBrowserPane";
@@ -319,6 +321,10 @@ function EpitaxyChatPanel({
     setSubagentView(target);
     openSidePane("subagent");
   }, [openSidePane]);
+  /** Stable poll callback for OfficialSubagentPane — must not be recreated each render. */
+  const refreshSubagentTranscript = useCallback(() => {
+    void reload({ silent: true });
+  }, [reload]);
   const openTasks = useCallback(() => openSidePane("tasks"), [openSidePane]);
   // Official Wk onOpenPlan → qn("plan") / setSidePane("plan").
   const openPlan = useCallback(() => openSidePane("plan"), [openSidePane]);
@@ -560,9 +566,36 @@ function EpitaxyChatPanel({
             onOpenPlan={openPlan}
             onPermissionModeChange={async (mode) => {
               // Official Wk onModeChange after plan Accept — host Mode pill + CLI set_permission_mode.
+              // Same residual as composer: if host returns null (active-turn control fail), do not keep optimistic mode.
               if (!effectiveSessionRef) return;
+              const bucket = officialCodeSessionStore.getState().buckets[effectiveSessionRef.id];
+              const previousMode =
+                bucket?.session?.permissionMode
+                ?? bucket?.liveMeta?.permissionMode
+                ?? session?.permissionMode
+                ?? "default";
+              if (previousMode === mode) {
+                officialCodeSessionStore.getState().mergeLiveMeta(effectiveSessionRef.id, { permissionMode: mode });
+                return;
+              }
               officialCodeSessionStore.getState().mergeLiveMeta(effectiveSessionRef.id, { permissionMode: mode });
-              await bridge.setPermissionMode?.(effectiveSessionRef.id, mode);
+              try {
+                const result = await bridge.setPermissionMode?.(effectiveSessionRef.id, mode);
+                if (result == null) {
+                  officialCodeSessionStore.getState().mergeLiveMeta(effectiveSessionRef.id, {
+                    permissionMode: previousMode,
+                  });
+                  return;
+                }
+                // Official jn: folder map + landing sticky so draft home keeps Mode.
+                setDraftPermissionMode(mode as PermissionMode, {
+                  cwd: session?.cwd,
+                });
+              } catch {
+                officialCodeSessionStore.getState().mergeLiveMeta(effectiveSessionRef.id, {
+                  permissionMode: previousMode,
+                });
+              }
             }}
             onStop={stopLiveTurn}
             onSubmit={async (text, input) => {
@@ -651,7 +684,13 @@ function EpitaxyChatPanel({
               onCloseTile={closeSidePane}
               onSidePaneWidthChange={setSidePaneWidth}
               previewTarget={previewTarget}
-              renderSubagent={(view) => <OfficialSubagentPane messages={messages} subagentView={view} />}
+              renderSubagent={(view) => (
+                <OfficialSubagentPane
+                  messages={messages}
+                  onRefreshTranscript={refreshSubagentTranscript}
+                  subagentView={view}
+                />
+              )}
               session={session}
               sessionRef={effectiveSessionRef}
               sidePaneWidth={sidePaneWidth}

@@ -15,7 +15,10 @@ export function parseCoworkTranscript(messages: CoworkRawMessage[], streamingMes
   messages.forEach((message, index) => {
     const raw = asRecord(message.raw);
     const rawType = stringValue(raw.type);
-    if (rawType === "result" || rawType === "stream_event" || raw.parent_tool_use_id || raw.parentToolUseId) return;
+    // Official durable filter: skip result/stream_event and parent_tool_use_id != null
+    // (subagent). Keep main-turn when parent is null/undefined (do not use truthy ||).
+    const parentToolUseId = raw.parent_tool_use_id ?? raw.parentToolUseId;
+    if (rawType === "result" || rawType === "stream_event" || parentToolUseId != null) return;
     if (rawType === "user" && rawMessageHasToolResult(raw)) {
       attachToolResults(raw, pendingTools);
       return;

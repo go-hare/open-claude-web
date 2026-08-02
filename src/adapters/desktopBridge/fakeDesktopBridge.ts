@@ -652,11 +652,30 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   },
   stopShellPty: async () => {},
   stopTask: async (sessionId, taskId) => {
+    // Official Xr: stopTask then echoPending task_notification(stopped). Host web also
+    // echoes on success; inject a bookend here so fake transcript stays consistent.
     const session = sessions.find((item) => item.id === sessionId && item.kind === targetKind);
-    const message = session?.messages?.find((item) => item.raw && typeof item.raw === "object" && (item.raw as { task_id?: string }).task_id === taskId);
-    if (message?.raw && typeof message.raw === "object") {
-      (message.raw as { status?: string }).status = "stopped";
-    }
+    if (!session) return { ok: false, status: "failed" as const, error: "session not found" };
+    const timestamp = new Date().toISOString();
+    const uuid = `fake-stop-${taskId}`;
+    const bookend = {
+      id: uuid,
+      role: "system" as const,
+      text: "",
+      createdAt: timestamp,
+      raw: {
+        type: "system",
+        subtype: "task_notification",
+        task_id: taskId,
+        status: "stopped",
+        output_file: "",
+        summary: "Stopped",
+        uuid,
+        timestamp,
+      },
+    };
+    session.messages = [...(session.messages ?? []), bookend];
+    return { ok: true, status: "informed" as const };
   },
   writeShellPty: async () => {},
   resizeShellPty: async () => {},

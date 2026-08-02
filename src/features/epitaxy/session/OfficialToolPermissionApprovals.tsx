@@ -421,7 +421,7 @@ const OfficialToolApprovalCard = memo(function OfficialToolApprovalCard({
         return (
           <div
             aria-hidden="true"
-            className="absolute inset-0 rounded-r7 bg-surface-primary-elevated epitaxy-approval-ghost"
+            className="absolute inset-0 rounded-r7 bg-surface-primary-elevated epitaxy-approval-ghost pointer-events-none"
             key={layer}
             style={{
               opacity: 1 - 0.25 * layer,
@@ -435,7 +435,8 @@ const OfficialToolApprovalCard = memo(function OfficialToolApprovalCard({
       <OfficialToolApprovalCopyView copy={copy} description={request.description} toolName={request.toolName} />
       {request.decisionReason ? <div className="text-footnote text-t7 select-text break-words">{request.decisionReason}</div> : null}
       {children}
-      <div className="epitaxy-approval-actions flex flex-wrap justify-between gap-x-g3 gap-y-[8px]">
+      {/* relative z-[1]: keep actions above decorative ghosts if stacking context flips */}
+      <div className="epitaxy-approval-actions relative z-[1] flex flex-wrap justify-between gap-x-g3 gap-y-[8px]">
         <OfficialButton ariaLabel="Deny" className="shrink-0" disabled={busy} onClick={() => onDecide("deny")} size="base" variant="contained">
           Deny
           <OfficialApprovalShortcut>esc</OfficialApprovalShortcut>
@@ -659,7 +660,7 @@ const OfficialExitPlanModeApprovalCard = memo(function OfficialExitPlanModeAppro
         return (
           <div
             aria-hidden="true"
-            className="absolute inset-0 rounded-r7 bg-surface-primary-elevated epitaxy-approval-ghost"
+            className="absolute inset-0 rounded-r7 bg-surface-primary-elevated epitaxy-approval-ghost pointer-events-none"
             key={layer}
             style={{
               opacity: 1 - 0.25 * layer,

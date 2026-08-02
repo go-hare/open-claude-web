@@ -377,7 +377,16 @@ export function useEpitaxySessionData(sessionId?: string) {
       const streamMessage = streamEventMessageFromBridgeEvent(event);
       if (streamMessage) {
         // Official index feed: Pke.feed(sessionId, stream_event.event, parent_tool_use_id)
-        const parentToolUseId = streamMessage.parent_tool_use_id ?? streamMessage.parentToolUseId;
+        // Official Pke: if (null !== parent) return — only strict null drives main Va.
+        // Do NOT use `??` here: null is the main-turn sentinel and must not fall through.
+        // Early-return also keeps subagent stream from re-opening isRunning / pendingTurn
+        // after parent result (product densable; official still mCe-counts sidechain).
+        const parentToolUseId = Object.prototype.hasOwnProperty.call(streamMessage, "parent_tool_use_id")
+          ? streamMessage.parent_tool_use_id
+          : streamMessage.parentToolUseId;
+        if (parentToolUseId !== null) {
+          return;
+        }
         const innerEvent = asRecord(streamMessage.event);
         const isStart = stringValue(innerEvent.type) === "message_start";
         // Official Pke/Qa: Anthropic event.message.id only — never outer stream_event.uuid.
@@ -496,8 +505,15 @@ export function useEpitaxySessionData(sessionId?: string) {
           // getTranscript/reload the conversation body mid-turn.
           const nextSession = asRecord(event).session ?? asRecord(asRecord(event).payload).session;
           if (nextSession) {
+            const prevRunning = store.getState().buckets[sessionId]?.session?.isRunning === true;
             const patched = normalizeSessionSummaryPatch(store.getState().buckets[sessionId]?.session ?? null, nextSession);
             if (patched) store.getState().patchSession(sessionId, patched);
+            // densable: host sets isRunning=false on parent `result` while CLI may still
+            // hold bookend stdin. patchSession clears bucket stream flags; also clear
+            // local Va / activity so main spinner cannot stick if result settle raced.
+            if (prevRunning && patched?.isRunning === false) {
+              clearStreamState(true);
+            }
           }
         } else if (stringValue(asRecord(event).type) === "initialization_status") {
           // Official $s / initialization_status → Gv spawnLabel step (plugins/worktree/…).
@@ -532,6 +548,20 @@ export function useEpitaxySessionData(sessionId?: string) {
             const current = store.getState().buckets[sessionId]?.session ?? null;
             if (current) {
               store.getState().patchSession(sessionId, { ...current, permissionMode: nextMode });
+            }
+          }
+        } else if (stringValue(asRecord(event).type) === "permission_mode_change_failed") {
+          // Host refused live CLI set_permission_mode — restore Mode from prior session on event.
+          const raw = asRecord(event);
+          const priorMode =
+            stringValue(asRecord(raw.session).permissionMode)
+            ?? stringValue(asRecord(raw.payload).permissionMode)
+            ?? stringValue(store.getState().buckets[sessionId]?.session?.permissionMode);
+          if (priorMode) {
+            store.getState().mergeLiveMeta(sessionId, { permissionMode: priorMode }, { mirrorPermissionMode: true });
+            const current = store.getState().buckets[sessionId]?.session ?? null;
+            if (current) {
+              store.getState().patchSession(sessionId, { ...current, permissionMode: priorMode });
             }
           }
         } else {
@@ -958,6 +988,7 @@ function shouldReloadTranscriptForEvent(event: unknown) {
     || type === "cleared"
     || type === "stopped"
     || type === "permission_mode_changed"
+    || type === "permission_mode_change_failed"
     || type === "session_updated";
 }
 
@@ -1111,8 +1142,23 @@ function chatMessageFromBridgeMessageEvent(event: unknown): ChatMessage | null {
   }
   if (message.type === "error") return null;
   const type = stringValue(message.type);
-  if (type !== "assistant" && type !== "user" && type !== "system") return null;
-  return chatMessageFromRawTranscriptEvent(message);
+  // queue-operation residual: CLI may enqueue <task-notification> XML without
+  // system dual-emit yet; Jp parseOfficialTasks reads raw.type === "queue-operation".
+  if (
+    type !== "assistant"
+    && type !== "user"
+    && type !== "system"
+    && type !== "queue-operation"
+  ) {
+    return null;
+  }
+  const chat = chatMessageFromRawTranscriptEvent(message);
+  // Keep raw.type=queue-operation for Jp, but role=system so eke does not paint a
+  // user bubble of raw XML (role default would be "user" for non user/assistant/system types).
+  if (type === "queue-operation" && chat) {
+    return { ...chat, role: "system", text: "" };
+  }
+  return chat;
 }
 
 function chatMessageFromRawTranscriptEvent(rawEvent: Record<string, unknown>): ChatMessage {

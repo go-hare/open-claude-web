@@ -82,17 +82,15 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         "data-placeholder": placeholder,
       },
       handleKeyDown: (_view, event) => {
+        // Enter submit is handled in onKeyDownCapture (official wTt residual).
+        // ProseMirror skips handleKeyDown while view.composing / keyCode 229, so
+        // capture is the source of truth; keep Escape here for bash-mode exit.
         const slashStorage = (editorRef.current?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
         const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
         if (event.key === "Escape" && bashModeRef.current && !hasSlashMenu) {
           event.preventDefault();
           onChange("");
           editorRef.current?.commands.clearContent(true);
-          return true;
-        }
-        if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.isComposing && !hasSlashMenu) {
-          event.preventDefault();
-          if (!disabledRef.current) submitRef.current();
           return true;
         }
         return false;
@@ -167,7 +165,17 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
               event.preventDefault();
               onChange("");
               editor?.commands.clearContent(true);
+              return;
             }
+            // Official wTt residual: Enter submits in capture so PM composition skip
+            // (view.composing / keyCode 229) cannot swallow the key. Manual Send still
+            // works via onClick. Never submit while IME is actively composing.
+            if (event.key !== "Enter" || event.shiftKey || event.altKey || event.isComposing || event.keyCode === 229 || hasSlashMenu) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            if (!disabledRef.current) submitRef.current();
           }}
         />
         {value.trim().length === 0 ? <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5">{isBashMode ? "Enter a shell command" : placeholder}</span> : null}

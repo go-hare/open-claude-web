@@ -4,6 +4,7 @@
  * Extracted from EpitaxySessionTile — behavior unchanged.
  */
 import type { ChatMessage, CodeStats, ContextUsage } from "../../../adapters/desktopBridge/types";
+import { officialCoworkMessageText } from "../../cowork/session/transcript/coworkMessageText";
 import { parseEpitaxyUploadedFilesText, type EpitaxyUploadedFile } from "../epitaxyUploadedFiles";
 import type { OfficialStreamSnapshot } from "../officialStreamSmoother";
 import { mergeOfficialStreamOntoTranscript } from "./officialStreamTranscriptMerge";
@@ -396,6 +397,10 @@ export function parseOfficialTranscriptEntries(messages: ChatMessage[], streamin
       return;
     }
 
+    // queue-operation is Tasks residual (Jp Qp), not a user Hb row. Official eke never
+    // paints it; bridge normalize may still mark role=user — skip before Ike.
+    if (rawType === "queue-operation") return;
+
     if (rawType !== "user" && rawType !== "assistant") {
       // Fall through for ChatMessage.role when raw.type missing (optimistic local user).
       if (message.role !== "user" && message.role !== "assistant") return;
@@ -768,7 +773,17 @@ export function parseOfficialCodeStatsXml(text: string): { kind: "none" } | { ki
   }
 }
 
-export function parseOfficialSubagentTranscriptEntries(messages: ChatMessage[], parentToolUseId: string): TranscriptEntry[] {
+/**
+ * Official dr/eke subagent filter: parent_tool_use_id === Agent tool_use id.
+ * CLI sidechain jsonl also stamps `agentId` (task-id) without native parent — host
+ * stamps parent on getTranscript; accept agentId match so pane still fills when
+ * stamp is late or open used toolUseId while rows only have agentId.
+ */
+export function parseOfficialSubagentTranscriptEntries(
+  messages: ChatMessage[],
+  parentToolUseId: string,
+  agentTaskId?: string | null,
+): TranscriptEntry[] {
   // Same eke control flow as main transcript, filtered to parent_tool_use_id === parentToolUseId.
   const entries: TranscriptEntry[] = [];
   const pendingTools = new Map<string, TranscriptToolUse>();
@@ -791,7 +806,14 @@ export function parseOfficialSubagentTranscriptEntries(messages: ChatMessage[], 
     const rawType = stringValue(raw.type);
     if (rawType === "result" || rawType === "stream_event") return;
     const parent = stringValue(raw.parent_tool_use_id) ?? stringValue(raw.parentToolUseId);
-    if (parent !== parentToolUseId) return;
+    const rowAgentId = stringValue(raw.agentId) ?? stringValue(raw.agent_id);
+    const matchesParent = parent === parentToolUseId;
+    const matchesAgent =
+      Boolean(agentTaskId)
+      && (rowAgentId === agentTaskId || parent === agentTaskId);
+    // Also allow open(toolUseId) when rows only carry agentId equal to toolUseId (rare).
+    const matchesOpenIdAsAgent = rowAgentId === parentToolUseId;
+    if (!matchesParent && !matchesAgent && !matchesOpenIdAsAgent) return;
     const nestedMessage = asRecord(raw.message);
     const role = rawType === "assistant" || rawType === "user"
       ? rawType
@@ -852,7 +874,8 @@ function parseAssistantTranscriptItems(
   fallbackText: string,
 ): TranscriptEntryItem[] {
   if (typeof content === "string") {
-    const text = content.trim();
+    // Official ake: The(e) — strip task-notification / system-reminder / …; empty → no text item.
+    const text = officialCoworkMessageText(content);
     return text ? [{ id: messageId, kind: "text", text }] : [];
   }
   const source = Array.isArray(content)
@@ -886,7 +909,8 @@ function parseAssistantTranscriptItems(
         ? stringValue(record.connector_text) ?? stringValue(record.connectorText)
         : undefined;
     if (textBody) {
-      const text = textBody.trim();
+      // Official ake text branch: The(e) before push.
+      const text = officialCoworkMessageText(textBody);
       if (!text) continue;
       toolGroup = null;
       flushThinking();
@@ -961,7 +985,7 @@ function parseAssistantTranscriptItems(
  */
 function parseUserTranscriptItems(content: unknown, messageIndex: number, fallbackText: string): TranscriptEntryItem[] {
   const entryId = `user-${messageIndex}`;
-  // Official Ike string path: peer envelope → event → bash → plain text.
+  // Official Ike string path: peer → event → bash → Mke/The text (empty → no Hb).
   if (typeof content === "string" || (!content && fallbackText.trim())) {
     const text = typeof content === "string" ? content : fallbackText;
     const peer = parseOfficialPeerTaggedText(text);
@@ -981,14 +1005,21 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
         output: bash.output || undefined,
       }];
     }
+    // Official Ike/Mke: The strip on string path; pure <task-notification> → [].
+    const uploaded = parseEpitaxyUploadedFilesText(text);
+    const items: TranscriptEntryItem[] = [];
+    uploaded.files.forEach((file, fileIndex) => {
+      items.push({ file, id: `${entryId}-uploaded-${fileIndex}`, kind: "uploaded-file" });
+    });
+    const visible = officialCoworkMessageText(uploaded.text);
+    if (visible) items.push({ id: entryId, kind: "text", text: visible });
+    return items;
   }
-  const source = typeof content === "string"
-    ? [{ type: "text", text: content }]
-    : Array.isArray(content)
-      ? content
-      : fallbackText.trim()
-        ? [{ type: "text", text: fallbackText }]
-        : [];
+  const source = Array.isArray(content)
+    ? content
+    : fallbackText.trim()
+      ? [{ type: "text", text: fallbackText }]
+      : [];
   const items: TranscriptEntryItem[] = [];
   const textChunks: string[] = [];
   let imageIndex = 0;
@@ -1002,6 +1033,7 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
     if (kind === "text") {
       const text = stringValue(record.text) ?? stringValue(record.content);
       if (!text) return;
+      // Special envelopes first (peer/event/bash) — official Ike order before The strip.
       const peer = parseOfficialPeerTaggedText(text);
       if (peer) {
         items.push({ content: peer.content, id: `${entryId}-peer${peerIndex++}`, kind: "peer", origin: peer.origin });
@@ -1028,7 +1060,12 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
       parsed.files.forEach((file, fileIndex) => {
         items.push({ file, id: `${id}-uploaded-${fileIndex}`, kind: "uploaded-file" });
       });
-      if (parsed.text) textChunks.push(parsed.text);
+      // Official The residual (index Nhe / Mke): strip <task-notification> / system-reminder / …
+      // Pure task-notification user rows → empty text → no Hb bubble (Tasks pane only).
+      if (parsed.text) {
+        const visible = officialCoworkMessageText(parsed.text);
+        if (visible) textChunks.push(visible);
+      }
       return;
     }
     if (kind === "image") {

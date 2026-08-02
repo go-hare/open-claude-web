@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Tabs } from "@base-ui-components/react/tabs";
 import { desktopBridge, type CodeStats } from "../../adapters/desktopBridge";
 import { formatCoworkModelDisplayName } from "../cowork/composer/useCoworkModelOptions";
@@ -12,28 +13,31 @@ import {
   type ModelUsageDisplay,
 } from "./codeStatsDisplay";
 
-/** Official $x: stats data → qx card; null/loading → Hx skeleton. Optional `stats` for transcript-embedded local_command output. */
+/**
+ * Official $x residual (c11959232):
+ *   useQuery({ queryKey:["epitaxy","code-stats"], staleTime:3e5, gcTime:Infinity })
+ * Cached data paints immediately on remount; skeleton only on cold miss / error-without-data.
+ * Optional `stats` for transcript-embedded local_command output (skip host fetch).
+ */
 export function CodeStatsCard({ stats: statsProp }: { stats?: CodeStats | null } = {}) {
-  const [fetchedStats, setFetchedStats] = useState<CodeStats | null>(null);
-  const [isLoading, setLoading] = useState(statsProp === undefined);
   const [view, setView] = useState<"overview" | "models">("overview");
   const [range, setRange] = useState<CodeStatsRange>("all");
   const useProp = statsProp !== undefined;
-  const stats = useProp ? statsProp : fetchedStats;
-
-  useEffect(() => {
-    if (useProp) return undefined;
-    let alive = true;
-    setLoading(true);
-    void desktopBridge.LocalSessions.getCodeStats?.().then((nextStats) => {
-      if (alive) setFetchedStats(nextStats);
-    }).finally(() => {
-      if (alive) setLoading(false);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [useProp]);
+  const hasHost = typeof desktopBridge.LocalSessions.getCodeStats === "function";
+  const statsQuery = useQuery({
+    queryKey: ["epitaxy", "code-stats"],
+    queryFn: async () => {
+      const next = await desktopBridge.LocalSessions.getCodeStats?.();
+      if (!next) throw new Error("getCodeStats returned null");
+      return next;
+    },
+    enabled: !useProp && hasHost,
+    staleTime: 300_000,
+    gcTime: Number.POSITIVE_INFINITY,
+  });
+  const stats = useProp ? statsProp : (statsQuery.data ?? null);
+  // Official: if host missing, or (error && no cached data) → skeleton; cached data skips skeleton.
+  const isLoading = !useProp && hasHost && statsQuery.isPending && !statsQuery.data;
 
   const display = useMemo(() => buildCodeStatsDisplay(stats, range), [range, stats]);
   if (isLoading || !stats) return <CodeStatsSkeletonCard />;

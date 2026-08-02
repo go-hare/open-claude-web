@@ -413,7 +413,14 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
     const streamMessage = coworkStreamMessage(event);
     if (streamMessage) {
       // Official Pke.feed(sessionId, event, parent_tool_use_id) — zE owns typewriter.
-      const parentToolUseId = streamMessage.parent_tool_use_id ?? streamMessage.parentToolUseId;
+      // Residual (index-BELzQL5P): if (null !== parent) return — only strict null is main turn.
+      // Do NOT use `??`: null is the main-turn sentinel and must not fall through.
+      // Early-return before activity: subagent stream must not reopen isRunning / pendingTurn
+      // (Code useEpitaxySessionData same gate; was re-spinning after parent result).
+      const parentToolUseId = Object.prototype.hasOwnProperty.call(streamMessage, "parent_tool_use_id")
+        ? streamMessage.parent_tool_use_id
+        : streamMessage.parentToolUseId;
+      if (parentToolUseId !== null) return;
       officialStreamFeed(sessionId, streamMessage, parentToolUseId);
       // Activity / streamingMessageId only — blocks come from stream-snapshot (Oke).
       dispatch({ message: streamMessage, startedAt: Date.now(), type: "stream-event" });

@@ -17,6 +17,7 @@
  *   blocked | need_input | failed
  */
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { desktopBridge, type SessionSummary } from "../../adapters/desktopBridge";
 
 export type ActionCenterSessionKind = "blocked" | "review" | "unread" | "routine";
@@ -109,38 +110,30 @@ export function formatActionCenterRelativeTime(timestampMs: number, nowMs = Date
  * Official Pw residual. Pass `enabled: false` when a parent already owns the list
  * (home Tw + _w share one fetch) so the hook stays Rules-of-Hooks-safe without
  * a second LocalSessions.list.
+ *
+ * Cache LocalSessions.list so remounting Code home does not flash empty body while
+ * re-IPC (same spirit as official code-stats staleTime / home query keys).
  */
 export function useEpitaxyActionCenterState(options?: {
   enabled?: boolean;
 }): EpitaxyActionCenterState {
   const enabled = options?.enabled !== false;
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [isSessionsLoading, setSessionsLoading] = useState(enabled);
-
-  useEffect(() => {
-    if (!enabled) {
-      setSessions([]);
-      setSessionsLoading(false);
-      return undefined;
-    }
-    let alive = true;
-    setSessionsLoading(true);
-    void desktopBridge.LocalSessions.list()
-      .then((items) => {
-        if (!alive) return;
-        setSessions(items);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setSessions([]);
-      })
-      .finally(() => {
-        if (alive) setSessionsLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [enabled]);
+  const sessionsQuery = useQuery({
+    queryKey: ["epitaxy", "action-center-sessions"],
+    queryFn: async () => {
+      try {
+        return await desktopBridge.LocalSessions.list();
+      } catch {
+        return [] as SessionSummary[];
+      }
+    },
+    enabled,
+    staleTime: 30_000,
+    gcTime: Number.POSITIVE_INFINITY,
+  });
+  const sessions = enabled ? (sessionsQuery.data ?? []) : [];
+  // Cold miss only — cached list paints immediately without isSessionsLoading gate.
+  const isSessionsLoading = enabled && sessionsQuery.isPending && !sessionsQuery.data;
 
   const attentionSessions = useMemo(
     () => (enabled ? buildEpitaxyActionCenterAttention(sessions) : []),

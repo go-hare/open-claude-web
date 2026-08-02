@@ -621,7 +621,10 @@ export type LocalSessionsBridge = {
   startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<ShellPtyStartResult>;
   stop?: (id: string) => Promise<unknown>;
   stopShellPty?: (sessionId: string) => Promise<unknown>;
-  stopTask?: (sessionId: string, taskId: string) => Promise<unknown>;
+  stopTask?: (
+    sessionId: string,
+    taskId: string,
+  ) => Promise<{ ok: boolean; status: "informed" | "no_turn" | "failed"; error?: string } | unknown>;
   writeShellPty?: (sessionId: string, data: string) => Promise<unknown>;
   resizeShellPty?: (sessionId: string, cols: number, rows: number) => Promise<unknown>;
   getShellPtyBuffer?: (sessionId: string) => Promise<string>;
@@ -727,7 +730,10 @@ export type CoworkSessionsBridge = {
   startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<ShellPtyStartResult>;
   stop?: (id: string) => Promise<unknown>;
   stopShellPty?: (sessionId: string) => Promise<unknown>;
-  stopTask?: (sessionId: string, taskId: string) => Promise<unknown>;
+  stopTask?: (
+    sessionId: string,
+    taskId: string,
+  ) => Promise<{ ok: boolean; status: "informed" | "no_turn" | "failed"; error?: string } | unknown>;
   writeShellPty?: (sessionId: string, data: string) => Promise<unknown>;
   resizeShellPty?: (sessionId: string, cols: number, rows: number) => Promise<unknown>;
   getShellPtyBuffer?: (sessionId: string) => Promise<string>;

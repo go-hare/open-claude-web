@@ -35,7 +35,7 @@ export type CoworkSessionAction =
   | { requestId: string; type: "permission-resolved" }
   /** Official: stream_event only updates activity / streamingMessageId — Va/Pke owns blocks. */
   | { message: Record<string, unknown>; startedAt: number; type: "stream-event" }
-  /** Official Oke → Va: smoothed snapshot from Pke/zE (not reduceCoworkStreamEvent dump). */
+  /** Official Oke → Va: smoothed snapshot from shared Pke/zE (epitaxy officialStream*). */
   | { snapshot: CoworkStreamSnapshot; type: "stream-snapshot" }
   | { message: CoworkRawMessage; receivedAt: number; type: "transcript-message" }
   | { disconnected: boolean; type: "settled" }

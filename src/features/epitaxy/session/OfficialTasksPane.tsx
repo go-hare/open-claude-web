@@ -2,18 +2,21 @@
  * Official zR / Jp tasks side-pane (c11959232).
  * Extracted from EpitaxySessionTile — behavior unchanged.
  */
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import type { LocalSessionsBridge, SessionSummary } from "../../../adapters/desktopBridge";
 import { Icon } from "../../../shell/icons";
+import { useErrorsOptional } from "../../settings/errorsToast";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
-import { useOfficialCodeSessionBucket } from "./officialCodeSessionStore";
+import {
+  officialCodeSessionStore,
+  useOfficialCodeSessionBucket,
+} from "./officialCodeSessionStore";
 import { OfficialSpinner } from "./OfficialWorkingStatus";
 import {
-  formatDuration,
-  formatTokens,
   officialTaskKind,
   parseOfficialTasks,
+  resolveOfficialTaskUsageParts,
   type OfficialBackgroundTask,
   type OfficialTaskStatus,
 } from "./officialTasksAndPlan";
@@ -44,9 +47,22 @@ export function OfficialTasksPane({
 }) {
   // Official Jp(sessionId) / zR: oe(sessionId) full hydrated transcript (c11959232).
   const bucket = useOfficialCodeSessionBucket(sessionRef.id);
+  const errors = useErrorsOptional();
   const messages = bucket?.messages ?? session?.messages ?? [];
   const tasks = useMemo(() => parseOfficialTasks(messages), [messages]);
   const visibleTasks = useMemo(() => tasks.filter((task) => task.taskType !== "dream"), [tasks]);
+  // Official zR running duration ticks while tasks are live (usage fallback uses Date.now).
+  const hasRunning = useMemo(
+    () => visibleTasks.some((task) => task.status === "running"),
+    [visibleTasks],
+  );
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!hasRunning) return;
+    setNowMs(Date.now());
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [hasRunning]);
   const running = useMemo(
     () =>
       visibleTasks
@@ -58,14 +74,70 @@ export function OfficialTasksPane({
     () =>
       visibleTasks
         .filter((task) => task.status !== "running")
-        .sort((left, right) => (right.completedAt ?? -Infinity) - (left.completedAt ?? -Infinity) || left.index - right.index),
+        // Official DR: completedAt desc, then index desc (newer index first on ties).
+        .sort((left, right) => (right.completedAt ?? -Infinity) - (left.completedAt ?? -Infinity) || right.index - left.index),
     [visibleTasks],
   );
   const stopTask = useCallback(
     (taskId: string) => {
-      void bridge.stopTask?.(sessionRef.id, taskId);
+      if (!bridge.stopTask) return;
+      void bridge.stopTask(sessionRef.id, taskId).then((result) => {
+        const record = result && typeof result === "object" ? (result as Record<string, unknown>) : null;
+        const status = typeof record?.status === "string" ? record.status : undefined;
+        // Desktop returns { ok, status }. Missing/undefined result is NOT success
+        // (bridge stub / no LocalSessions.stopTask) — do not fake-stop the row.
+        // densable Xr treats resolved mutate as success; our Host always returns a body.
+        const explicitOk = record?.ok === true || status === "informed";
+        const explicitFail =
+          record?.ok === false
+          || status === "no_turn"
+          || status === "failed";
+        if (explicitOk && !explicitFail) {
+          // Official densable Xr onSuccess → echoPending(system/task_notification stopped).
+          // Host stopTask is control_request only (no host-stop transcript invent).
+          // Durable bookend: CLI dual-emit; Jp last status wins on same taskId.
+          const uuid =
+            typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+              ? crypto.randomUUID()
+              : `xr-stop-echo-${taskId}-${Date.now()}`;
+          const timestamp = new Date().toISOString();
+          officialCodeSessionStore.getState().mergeMessage(sessionRef.id, {
+            id: uuid,
+            role: "system",
+            text: "",
+            createdAt: timestamp,
+            raw: {
+              type: "system",
+              subtype: "task_notification",
+              task_id: taskId,
+              status: "stopped",
+              output_file: "",
+              summary: "",
+              uuid,
+              session_id: sessionRef.id,
+              timestamp,
+            },
+          });
+          return;
+        }
+        const error = typeof record?.error === "string" ? record.error : undefined;
+        const message =
+          status === "no_turn"
+            ? "Can't stop this task — the session turn is no longer active."
+            : error
+              ? `Couldn't stop task: ${error}`
+              : record == null
+                ? "Couldn't stop this task — stop is unavailable."
+                : "Couldn't stop this task.";
+        errors?.addError(message, { uniqueKey: `stop-task:${sessionRef.id}:${taskId}` });
+      }).catch((err: unknown) => {
+        const detail = err instanceof Error ? err.message : String(err ?? "unknown error");
+        errors?.addError(`Couldn't stop task: ${detail}`, {
+          uniqueKey: `stop-task:${sessionRef.id}:${taskId}`,
+        });
+      });
     },
-    [bridge, sessionRef.id],
+    [bridge, errors, sessionRef.id],
   );
   return (
     <div className="h-full overflow-y-auto">
@@ -74,8 +146,8 @@ export function OfficialTasksPane({
           <OfficialTasksEmpty />
         ) : (
           <>
-            <OfficialTaskSection actions={actions} heading="Running" onStop={bridge.stopTask ? stopTask : undefined} tasks={running} />
-            <OfficialTaskSection actions={actions} heading="Completed" tasks={finished} />
+            <OfficialTaskSection actions={actions} heading="Running" nowMs={nowMs} onStop={bridge.stopTask ? stopTask : undefined} tasks={running} />
+            <OfficialTaskSection actions={actions} heading="Completed" nowMs={nowMs} tasks={finished} />
           </>
         )}
       </div>
@@ -95,11 +167,13 @@ function OfficialTasksEmpty() {
 const OfficialTaskSection = memo(function OfficialTaskSection({
   actions,
   heading,
+  nowMs,
   onStop,
   tasks,
 }: {
   actions?: OfficialTasksPaneActions | null;
   heading: string;
+  nowMs: number;
   onStop?: (taskId: string) => void;
   tasks: OfficialBackgroundTask[];
 }) {
@@ -109,7 +183,7 @@ const OfficialTaskSection = memo(function OfficialTaskSection({
       <h3 className="text-footnote text-t6">{heading}</h3>
       {tasks.map((task) => (
         <motion.div key={task.taskId} layout="position" transition={officialTaskLayoutTransition}>
-          <OfficialTaskCard actions={actions} onStop={onStop} task={task} />
+          <OfficialTaskCard actions={actions} nowMs={nowMs} onStop={onStop} task={task} />
         </motion.div>
       ))}
     </motion.section>
@@ -118,22 +192,26 @@ const OfficialTaskSection = memo(function OfficialTaskSection({
 
 const OfficialTaskCard = memo(function OfficialTaskCard({
   actions,
+  nowMs,
   onStop,
   task,
 }: {
   actions?: OfficialTasksPaneActions | null;
+  nowMs: number;
   onStop?: (taskId: string) => void;
   task: OfficialBackgroundTask;
 }) {
   const [expanded, setExpanded] = useState(false);
   const kind = officialTaskKind(task.taskType);
-  const usage = task.usage
-    ? [formatDuration(task.usage.durationMs), formatTokens(task.usage.totalTokens), `${task.usage.toolUses} ${task.usage.toolUses === 1 ? "tool use" : "tool uses"}`].join(
-        officialTaskSeparator,
-      )
-    : null;
+  // Official zR: usage.duration_ms or bookend startedAt/completedAt (running elapsed).
+  const usageParts = resolveOfficialTaskUsageParts(task, nowMs);
+  const usage = usageParts.length > 0 ? usageParts.join(officialTaskSeparator) : null;
   const canOpenSubagent = kind.kind === "agent" && Boolean(task.toolUseId && actions?.openSubagent);
-  const canExpand = !canOpenSubagent && Boolean(task.summary || task.workflowProgress?.length);
+  // Official AR: expand when not subagent/remote open — summary / workflowProgress.
+  // Also allow expand for result-only residual (TaskOutput) when toolUseId missing.
+  const canExpand =
+    !canOpenSubagent
+    && Boolean(task.summary || task.workflowProgress?.length || task.result);
   const canActivate = canOpenSubagent || canExpand;
   const canStop = task.status === "running" && Boolean(onStop);
   const activate = () => {
@@ -184,6 +262,9 @@ const OfficialTaskCard = memo(function OfficialTaskCard({
       {expanded && canExpand ? (
         <div className="flex flex-col gap-g4 pl-[calc(var(--p6)+20px+var(--g6))] pr-p8 pb-[16px] select-text">
           {task.summary ? <div className="text-footnote text-t7 whitespace-pre-wrap break-words">{task.summary}</div> : null}
+          {!task.summary && task.result ? (
+            <div className="text-footnote text-t7 whitespace-pre-wrap break-words">{task.result}</div>
+          ) : null}
           {task.workflowProgress?.length ? <OfficialWorkflowProgress progress={task.workflowProgress} /> : null}
         </div>
       ) : null}

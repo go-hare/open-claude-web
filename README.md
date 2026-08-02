@@ -1,47 +1,42 @@
 # Claudex Web
 
-Claudex 的 **产品 SPA**：按官方 Claude Desktop `ion-dist` residual 重建的 React / TypeScript 前端。由姊妹仓库 **[open-claude-desktop](../open-claude-desktop)** 以 Electron 壳加载。
+**Claudex Web** 是 Claudex 桌面端的**主界面**（React / TypeScript SPA）：登录、侧栏、Cowork、Code 会话、设置等都在这里。
 
-| 仓库 | 职责 |
+真正跑 CLI、开窗口、管配置的是姊妹仓库 **[open-claude-desktop](https://github.com/go-hare/open-claude-desktop)**。本仓库单独 `npm run dev` 可以看 UI，完整能力需要桌面壳一起开。
+
+> 非 Anthropic 官方产品。Claude / Claude Desktop / Claude Code 商标与权利归 Anthropic；本仓库仅供学习研究与自托管使用。
+
+| 项目 | 说明 |
 |------|------|
-| **open-claude-web**（本仓库） | UI、路由、会话渲染、设置、desktopBridge 适配 |
-| **open-claude-desktop** | 主进程、IPC、协议、CLI/MCP、打包 dual-root |
+| 定位 | 桌面 App 的产品前端（不是独立 SaaS 站） |
+| 配套桌面 | [open-claude-desktop](https://github.com/go-hare/open-claude-desktop) |
+| 仓库 | https://github.com/go-hare/open-claude-web |
+| 开发地址 | `http://127.0.0.1:5176` |
+| 版本 | 见 `package.json` |
 
-官方前端 residual（本机路径，见 `CLAUDE.md`）：
-
-```text
-…/Claude-Deepseek.app/Contents/Resources/ion-dist
-```
-
-硬规则：先定位官方 JS 的组件 / DOM / class / 状态机，再改产品代码；禁止凭感觉补 CSS 或近似组件。
+| 仓库 | 干什么 |
+|------|--------|
+| **本仓库** open-claude-web | 界面、路由、会话展示、设置页、桌面 bridge 调用 |
+| **open-claude-desktop** | Electron、CLI、MCP、打包成 `.app` / `.exe` |
 
 ---
 
-## 它如何被加载
+## 能干什么
 
-| 场景 | 谁提供 URL | 来源 |
-|------|------------|------|
-| **开发** | 本仓库 Vite | `http://127.0.0.1:5176`（桌面 `CLAUDE_DESKTOP_MAIN_VIEW_URL`） |
-| **打包** | 桌面 `app://localhost` | 构建进 `open-claude-desktop/resources/product-web` |
+| 模块 | 说明 |
+|------|------|
+| 登录 / 模式选择 | 1p 登录态、第三方网关、沿用本机 `~/.claude` 等入口 |
+| Cowork 主页 | 冷启动默认进协作主页（新建任务） |
+| Code 会话 | 模型 / Effort / 权限模式、流式输出、工具调用展示 |
+| 设置 | 偏好与账号相关信息（以桌面返回为准） |
+| Artifacts / 工作区 | 有能力时列出与打开产物 |
+| 桌面 bridge | 通过 `window` / preload 调主进程，不自己造后端 |
 
-打包时桌面执行 `npm run build:product-web`：默认 `vite build` 本仓库 → 拷贝到 `product-web`。  
-**不要**把本仓库构建产物覆盖进 residual `ion-dist`；`ion-dist` 只保留官方 setup 等 residual SPA。
-
-```text
-open-claude-web (dev :5176 或 dist/)
-        │
-        ▼
-desktopBridge / window.claude.*  →  Electron preload → main IPC
-        │
-        ▼
-会话 / CLI / MCP / preferences / artifacts …
-```
+一句话：**侧栏和会话区像桌面 Claude；推理与配置由桌面壳说了算。**
 
 ---
 
 ## 快速开始
-
-**要求：** 现代 Node（与桌面仓库一致时建议 `>=22`）。
 
 ```bash
 cd open-claude-web
@@ -49,13 +44,15 @@ npm install
 npm run dev
 ```
 
-浏览器可直接打开（仅 UI；无完整桌面 bridge 时部分能力会降级）：
+浏览器打开：
 
 ```text
 http://127.0.0.1:5176/
 ```
 
-**推荐联调**（与桌面壳一起）：
+> 仅浏览器时：很多按钮会「看起来有、实际半残」——正常。会话、CLI、配置都依赖桌面。
+
+### 推荐：和桌面一起调
 
 ```bash
 # 终端 1
@@ -65,82 +62,28 @@ cd open-claude-web && npm run dev
 cd ../open-claude-desktop && npm run dev
 ```
 
-### 脚本
-
-| 脚本 | 作用 |
-|------|------|
-| `npm run dev` | Vite，host `127.0.0.1`，port **5176** |
-| `npm run build` | `tsc -b` + `vite build` → `dist/` |
-| `npm run typecheck` | 仅类型检查 |
-| `npm run preview` | 预览构建结果，port **4176** |
-
-桌面打包默认只跑 `vite build`（可用 `CLAUDE_PRODUCT_WEB_STRICT=1` 强制完整 `npm run build`）。
-
----
-
-## 源码地图
+目录建议并列：
 
 ```text
-src/
-  main.tsx                 入口
-  app/                     路由、public routes、App 壳
-  shell/                   DesktopFrame / Sidebar / ModePill / icons…
-  adapters/desktopBridge/  官方 bridge 面 → 类型化 adapter
-  features/
-    public/                登录 LoginDesktop 等
-    cowork/                Cowork 主页、会话、rate-limit、transcript、MCP UI…
-    epitaxy/               Epitaxy / 部分 Cowork 侧栏 residual
-    webcode/ · codeWeb/    Code 会话面
-    settings/              设置、账号/bootstrap 相关 API
-    workspace/             Artifacts 库、Projects、Recents…
-    customize/ · dispatch/ · tasks/ · scheduled/ · analytics/
-  stores/ · i18n/ · styles/
-docs/
-  official-alignment-map.md   已核对的官方 DOM / class 对照
-  source-route-audit.md
-  cowork-conversation-official-source-map.md
+somewhere/
+  open-claude-desktop/
+  open-claude-web/
 ```
 
-### 路由口径（节选）
-
-- 已登录冷启动 residual：`/` → **`/task/new`**（Cowork home），不是默认进 Code。
-- 登录：`/login`（LoginDesktop；1p/3p/dotClaude chooser residual）。
-- Cowork 会话、Code、Settings、Customize、Artifacts 库等见 `src/app/routes.tsx`。
-- 路由表里的 `sourceChunk` 字段记录官方 chunk 线索，便于对照。
-
-### Bridge
-
-- 类型与调用集中在 `src/adapters/desktopBridge/`。
-- 桌面 preload 暴露面在 `open-claude-desktop/electron/preload/bridges/webBridge.ts`。
-- **禁止**在 web 侧发明 OAuth / BFF / 假订阅成功；3p 配置与 health 以桌面 resolution / bootstrap 为准。
-
 ---
 
-## 产品诚实边界（与桌面一致）
+## 常用命令
 
-| 主题 | 口径 |
+| 命令 | 作用 |
 |------|------|
-| 1p logged-out | bootstrap `account: null`；不伪造 Anthropic 登录成功 |
-| 3p | 桌面 configLibrary / activation；缺配置 → Setup / degraded |
-| rate-limit CTA | 结构对齐官方 pVe action 槽；仅 `dismiss` / `reset` / `open-setup`，无 Subscribe/AddCredits |
-| Alluvium | 受 feature `claude_ai_alluvium_main` 门控；对照官方 markdown residual |
-| Artifacts | 库列表 + 打开路径走桌面 CoworkArtifacts；feature 由 `supportedFeatures` 控制 |
-| host-loop | 默认本机会话；不在 web 侧强推 VM |
+| `npm run dev` | 开发服务器，`127.0.0.1:5176` |
+| `npm run build` | 类型检查 + 构建到 `dist/` |
+| `npm run typecheck` | 只做类型检查 |
+| `npm run preview` | 预览构建结果，`4176` 端口 |
 
-更细的 UI 对照表见 [`docs/official-alignment-map.md`](docs/official-alignment-map.md)。
+桌面打包时会把本仓库构建结果拷进桌面的 `resources/product-web`，用 `app://` 加载，不必你手动拷。
 
----
-
-## 与桌面打包的关系
-
-桌面 `npm run package` 会：
-
-1. 构建产品 main / preload  
-2. `build:product-web`：构建本仓库 → `open-claude-desktop/resources/product-web`  
-3. forge package + align dual-root（**保留** residual `ion-dist`）  
-4. audit：要求 `product-web` 的 `data-build-id` **不是** `spa-dev`
-
-本地只改 web、测打包效果：
+只改了界面、想进打包 App 里看：
 
 ```bash
 cd ../open-claude-desktop
@@ -149,29 +92,73 @@ npm run package
 npm run package:open
 ```
 
-完整打包 / smoke 说明：[`../open-claude-desktop/docs/package-and-test.md`](../open-claude-desktop/docs/package-and-test.md)。
+---
+
+## 界面大概分哪几块
+
+```text
+src/
+  app/                 路由与 App 壳
+  shell/               侧栏、顶栏、框架
+  adapters/desktopBridge/  调桌面能力的接口
+  features/
+    public/            登录页
+    cowork/            Cowork 会话与相关 UI
+    epitaxy/ · webcode/  Code 会话与 composer
+    settings/          设置
+    workspace/         Artifacts、最近项等
+  stores/ · i18n/ · styles/
+```
+
+冷启动（已进入主壳时）一般是 **`/` → `/task/new`（Cowork 新建）**，不是默认一进来就 Code。
 
 ---
 
-## 改 UI 前的检查清单
+## 和桌面怎么配合
 
-1. 在官方 `ion-dist` JS 中定位组件名、className、DOM 层级、Portal 挂载与状态分支。  
-2. 在 `docs/official-alignment-map.md`（或相关 map）补/查对照。  
-3. 改产品组件结构与 class，**不要**先靠 margin/padding 补丁。  
-4. `npm run typecheck`（或桌面联调）。  
-5. **桌面实际启动**验证（dev 或 packaged），不得只凭浏览器 Vite 声称完成。
+```text
+你点发送 / 改模型 / 改 Effort
+        │
+        ▼
+  open-claude-web（本仓库）
+        │  desktopBridge
+        ▼
+  open-claude-desktop（preload → 主进程）
+        │
+        ▼
+  本机 Claude Code CLI / 会话存储 / 配置库
+```
+
+- **Effort 档位**：以 CLI 对该模型返回的档位为准（例如部分模型只有 low / medium / high），选中后会传给 CLI（`--effort` 或会话内更新）。  
+- **第三方配置、健康状态、账号态**：桌面算好再给前端，前端不自己编一套。
 
 ---
 
-## 相关文档
+## 边界（务必看）
 
-| 文档 | 内容 |
+- 本仓库是 **UI**，不是完整产品；发版请以 **Desktop 打包** 为准  
+- 不伪造官方登录成功、订阅、加余额  
+- 限流条等区域只保留真实可用的操作（关闭、在允许时重置、打开配置等）  
+- 没有桌面 bridge 时，不要拿浏览器单独打开的结果当「功能完成」  
+- 适合：改界面、对照交互、二次开发前端  
+- 不适合：当独立在线 Chat 产品部署
+
+工程向硬规则见 [`CLAUDE.md`](CLAUDE.md)。官方 DOM / class 对照笔记（偏开发）在 [`docs/official-alignment-map.md`](docs/official-alignment-map.md)。
+
+---
+
+## 相关链接
+
+| 链接 | 说明 |
 |------|------|
 | [`CLAUDE.md`](CLAUDE.md) | residual 硬规则、host-loop、登录/账号 residual |
 | [`docs/official-alignment-map.md`](docs/official-alignment-map.md) | 官方 ↔ 产品 DOM/class 对照 |
 | [`../open-claude-desktop/README.md`](../open-claude-desktop/README.md) | 桌面壳、打包、部署模式 |
 | [`../open-claude-desktop/docs/package-and-test.md`](../open-claude-desktop/docs/package-and-test.md) | dual-root 与 smoke 规范 |
+| https://github.com/go-hare/open-claude-web | 本仓库（界面） |
+| https://github.com/go-hare/open-claude-desktop | 桌面壳与打包 |
+| https://github.com/go-hare/claude-code-1 | 配套 Claude Code 方向 |
+| https://github.com/go-hare/agent-extension | 浏览器扩展 |
+| [linux.do](https://linux.do/) | linux.do 社区 |
 
-
-## 链接
-- [((https://linux.do/))](https://linux.do/) — linux.do 社区
+欢迎 star / issue / PR。报 bug 请说明：只开了 web 还是连了 desktop、路由截图、控制台报错。

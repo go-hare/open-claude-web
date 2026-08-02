@@ -65,11 +65,12 @@ export function isCoworkStreamStart(streamMessage: Record<string, unknown>) {
  * Official streamingMessageId / Pke.messageId = event.message.id (Anthropic API id).
  * Outer stream_event.uuid is per NDJSON line identity only — must NOT drive eke suppress
  * (durable assistant uses nested message.id; mismatch paints full durable dumps).
+ * Residual: no outer-uuid fallback (Code useEpitaxySessionData + official Pke same).
  */
 export function coworkStreamMessageId(streamMessage: Record<string, unknown>) {
   const event = asRecord(streamMessage.event);
   const message = asRecord(event.message);
-  return stringValue(message.id) ?? stringValue(streamMessage.uuid) ?? null;
+  return stringValue(message.id) ?? null;
 }
 
 /** Outer stream_event.uuid for SDK row identity when distinct from API message.id. */

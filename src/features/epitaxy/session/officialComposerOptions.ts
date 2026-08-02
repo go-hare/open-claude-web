@@ -18,6 +18,8 @@ export const permissionModeOptions = [
   { label: "询问权限", value: "default" },
   { label: "接受编辑", value: "acceptEdits" },
   { label: "规划模式", value: "plan" },
+  // Official Os residual: auto when available (settings defaultMode / plan exit trust).
+  { label: "Auto", value: "auto" },
   { label: "绕过权限", value: "bypassPermissions" },
 ];
 

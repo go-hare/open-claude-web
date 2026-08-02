@@ -2,7 +2,7 @@
  * Epitaxy chat header / view shortcuts / subagent pane — c11959232.
  * Extracted from EpitaxySessionTile — behavior unchanged.
  */
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import type { SessionSummary } from "../../../adapters/desktopBridge";
 import type { ChatMessage } from "../../../adapters/desktopBridge/types";
 import {
@@ -125,11 +125,52 @@ export function useEpitaxyViewShortcuts(
  * - no 42% / 760 invent-width; width comes from flex until user resizes
  */
 
-export function OfficialSubagentPane({ messages, subagentView }: { messages: ChatMessage[]; subagentView: OfficialSubagentTarget }) {
+export function OfficialSubagentPane({
+  messages,
+  onRefreshTranscript,
+  subagentView,
+}: {
+  messages: ChatMessage[];
+  /** While open + running, host silently re-reads CLI agent jsonl into the bucket. */
+  onRefreshTranscript?: () => void;
+  subagentView: OfficialSubagentTarget;
+}) {
   // Official CR: dr(oe(sessionId), toolUseId) + Jp(sessionId) task lookup on same list.
-  const entries = useMemo(() => parseOfficialSubagentTranscriptEntries(messages, subagentView.toolUseId), [messages, subagentView.toolUseId]);
-  const task = useMemo(() => parseOfficialTasks(messages).find((item) => item.toolUseId === subagentView.toolUseId), [messages, subagentView.toolUseId]);
+  // task-id in notifications is often the CLI agentId; tool-use-id is the Agent tool id.
+  const task = useMemo(
+    () => parseOfficialTasks(messages).find(
+      (item) => item.toolUseId === subagentView.toolUseId || item.taskId === subagentView.toolUseId,
+    ),
+    [messages, subagentView.toolUseId],
+  );
+  const entries = useMemo(
+    () => parseOfficialSubagentTranscriptEntries(messages, subagentView.toolUseId, task?.taskId),
+    [messages, subagentView.toolUseId, task?.taskId],
+  );
+  // Official Host: running only when Jp task row is running. New CLI dual-emits
+  // task_started (+ async_launched residual still creates a running row via agentId).
+  // Missing task must not invent eternal spinner/poll (was residual for pre-bookend CLI).
   const isRunning = task?.status === "running";
+
+  // Live agent rows live on disk under {session}/subagents/; CLI stdout does not stream them
+  // with parent_tool_use_id. Poll getTranscript only while the task is running so the UI
+  // fills without a manual full-session refresh. Always refresh once on open.
+  //
+  // IMPORTANT: do NOT put `onRefreshTranscript` in the effect deps. Tile used to pass an
+  // inline `() => void reload({ silent: true })` — every poll/reload re-rendered the tile,
+  // created a new callback, re-ran this effect, called reload again → React #185
+  // (Maximum update depth exceeded) and white-screen chat panel.
+  const refreshRef = useRef(onRefreshTranscript);
+  refreshRef.current = onRefreshTranscript;
+  useEffect(() => {
+    const refresh = () => {
+      refreshRef.current?.();
+    };
+    refresh();
+    if (!isRunning) return;
+    const timer = window.setInterval(refresh, 900);
+    return () => window.clearInterval(timer);
+  }, [subagentView.toolUseId, isRunning]);
 
   if (entries.length === 0 && task && (task.prompt || task.result)) {
     return (

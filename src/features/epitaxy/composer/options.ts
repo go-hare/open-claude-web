@@ -16,6 +16,8 @@ export const permissionModeOptions: Array<{ label: string; value: PermissionMode
   { label: "询问权限", value: "default" },
   { label: "接受编辑", value: "acceptEdits" },
   { label: "规划模式", value: "plan" },
+  // Official Os can include auto (settings permissions.defaultMode); label residual "Auto".
+  { label: "Auto", value: "auto" },
   { label: "绕过权限", value: "bypassPermissions" },
 ];
 
@@ -53,6 +55,7 @@ export function effortLabel(value: EffortLevel) {
 }
 
 export function normalizePermissionMode(value: unknown): PermissionMode {
+  if (value === "bypass") return "bypassPermissions";
   return permissionModeOptions.find((option) => option.value === value)?.value ?? "default";
 }
 

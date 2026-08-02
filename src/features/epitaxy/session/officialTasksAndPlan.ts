@@ -1,6 +1,15 @@
 /**
  * Official task/plan parsers (c11959232 Jp/XN).
- * Shared by Tasks pane, Plan pane, subagent, chat chrome — behavior unchanged.
+ * Shared by Tasks pane, Plan pane, subagent, chat chrome.
+ *
+ * Primary (official densable Jp / dual-emit CLI contract — the only 1:1 path):
+ *   system task_started / task_progress / task_notification (+ ISO timestamp)
+ *   user / queue-operation `<task-notification>` XML (Qp)
+ *
+ * Legacy residual (older CLI / AppAgent jsonl with **no** system bookends):
+ *   async_launched agentId may open a running row; TaskOutput tool_result may
+ *   settle **that existing** row only. TaskOutput alone never invents a Tasks
+ *   lifecycle — dual-emit is the product contract, residual is a safety net.
  */
 import type { ChatMessage, SessionSummary } from "../../../adapters/desktopBridge/types";
 
@@ -35,6 +44,11 @@ export type OfficialBackgroundTask = {
 
 const taskNotificationPattern = /<task-notification>([\s\S]*?)<\/task-notification>/g;
 const taskIdPattern = /<task-id>([^<]+)<\/task-id>/;
+/** TaskOutput tool_result residual (underscore tags, not task-notification). */
+const taskOutputIdPattern = /<task_id>([^<]+)<\/task_id>/;
+const taskOutputStatusPattern = /<status>([^<]+)<\/status>/;
+const taskOutputTypePattern = /<task_type>([^<]+)<\/task_type>/;
+const taskOutputBodyPattern = /<output>([\s\S]*?)<\/output>/;
 const taskStatusPattern = /<status>([^<]+)<\/status>/;
 const taskSummaryPattern = /<summary>([^<]+)<\/summary>/;
 const taskResultPattern = /<result>([\s\S]*?)<\/result>/;
@@ -68,7 +82,8 @@ export function parseOfficialTasks(messages: ChatMessage[]): OfficialBackgroundT
 
   for (const message of messages) {
     const raw = asRecord(message.raw);
-    if (raw.type === "user") {
+    // Durable residual: user text OR queue-operation content with <task-notification>.
+    if (raw.type === "user" || raw.type === "queue-operation") {
       for (const notification of parseTaskNotifications(raw, message)) {
         const task = ensureTask(notification.taskId);
         task.status = notification.status;
@@ -79,6 +94,11 @@ export function parseOfficialTasks(messages: ChatMessage[]): OfficialBackgroundT
         if (notification.description && task.description === task.taskId) task.description = notification.description;
         if (task.completedAt === undefined && notification.status !== "running") task.completedAt = timestampFromRaw(raw, message);
       }
+      if (raw.type === "user") {
+        applyAgentAsyncLaunch(ensureTask, raw, message);
+        applyTaskOutputCompletions(ensureTask, tasks, raw, message);
+      }
+      if (raw.type === "queue-operation") continue;
       continue;
     }
 
@@ -92,10 +112,11 @@ export function parseOfficialTasks(messages: ChatMessage[]): OfficialBackgroundT
 
     switch (raw.subtype) {
       case "task_started":
+        // Official Jp: set description/type/prompt/startedAt only — do NOT force
+        // status=running (would re-open a task already closed by task_notification).
         task.description = stringValue(raw.description) ?? task.description;
         task.taskType = stringValue(raw.task_type) ?? stringValue(raw.taskType) ?? task.taskType;
         task.prompt = stringValue(raw.prompt) ?? task.prompt;
-        task.status = "running";
         if (task.startedAt === undefined) task.startedAt = timestamp;
         break;
       case "task_progress":
@@ -120,7 +141,12 @@ export function parseOfficialTasks(messages: ChatMessage[]): OfficialBackgroundT
 }
 
 function parseTaskNotifications(raw: Record<string, unknown>, message: ChatMessage) {
-  const text = rawUserText(raw) || message.text;
+  // queue-operation residual stores XML in `content`; user rows use message content / text.
+  const text =
+    (typeof raw.content === "string" ? raw.content : "")
+    || rawUserText(raw)
+    || message.text
+    || "";
   if (!text.includes("<task-notification>")) return [];
   const notifications: Array<{
     description?: string;
@@ -225,6 +251,105 @@ export function applyPlanEdit(content: string, edit: Record<string, unknown>) {
   return content.slice(0, index) + newString + content.slice(index + oldString.length);
 }
 
+/**
+ * Legacy residual: toolUseResult.agentId + async_launched when stream lacks
+ * system task_started. Official CLI always emits task_started with the same
+ * agentId — then this only fills description/prompt/toolUseId.
+ */
+function applyAgentAsyncLaunch(
+  ensureTask: (taskId: string) => OfficialBackgroundTask,
+  raw: Record<string, unknown>,
+  message: ChatMessage,
+) {
+  const top = asRecord(raw.toolUseResult ?? raw.tool_use_result);
+  const agentId = stringValue(top.agentId) ?? stringValue(top.agent_id);
+  const status = stringValue(top.status);
+  if (!agentId || (status !== "async_launched" && status !== "running")) return;
+
+  const task = ensureTask(agentId);
+  if (task.status !== "running") return; // already terminal from later event
+  task.taskType ??= "local_agent";
+  const description = stringValue(top.description);
+  if (description && (task.description === task.taskId || !task.description)) {
+    task.description = description;
+  }
+  const prompt = stringValue(top.prompt);
+  if (prompt) task.prompt ??= prompt;
+  if (task.startedAt === undefined) task.startedAt = timestampFromRaw(raw, message);
+
+  // Link Agent tool_use id when tool_result block is present.
+  for (const item of rawMessageContent(raw)) {
+    const record = asRecord(item);
+    if (stringValue(record.type) !== "tool_result") continue;
+    const toolUseId = stringValue(record.tool_use_id) ?? stringValue(record.toolUseId);
+    if (toolUseId) task.toolUseId ??= toolUseId;
+  }
+}
+
+/**
+ * Legacy residual only: TaskOutput tool_result when CLI omitted task_notification.
+ *   <task_id>…</task_id><task_type>local_agent</task_type><status>completed</status><output>…
+ *
+ * dual-emit is the official Jp contract — TaskOutput must NOT invent a Tasks row.
+ * Only settles/enriches a task already known from:
+ *   system task_* | user/queue-operation XML | async_launched residual.
+ * If official bookend already closed the task, only attach result text.
+ */
+function applyTaskOutputCompletions(
+  _ensureTask: (taskId: string) => OfficialBackgroundTask,
+  tasks: Map<string, OfficialBackgroundTask>,
+  raw: Record<string, unknown>,
+  message: ChatMessage,
+) {
+  for (const item of rawMessageContent(raw)) {
+    const record = asRecord(item);
+    if (stringValue(record.type) !== "tool_result") continue;
+    const blob =
+      typeof record.content === "string"
+        ? record.content
+        : Array.isArray(record.content)
+          ? record.content.map((part) => stringValue(asRecord(part).text) ?? "").join("\n")
+          : "";
+    if (!blob.includes("<task_id>") || !blob.includes("<status>")) continue;
+    const taskId = blob.match(taskOutputIdPattern)?.[1];
+    const rawStatus = blob.match(taskOutputStatusPattern)?.[1];
+    if (!taskId || !rawStatus) continue;
+    // Only terminal statuses settle the task; ignore non-terminal if any.
+    if (rawStatus === "running" || rawStatus === "async_launched") continue;
+
+    const existing = tasks.get(taskId);
+    // No prior bookend/async/XML row → not official Jp; do not invent lifecycle.
+    if (!existing) continue;
+
+    const output = blob.match(taskOutputBodyPattern)?.[1]?.trim();
+    // Official bookend already settled — enrich payload, do not re-open lifecycle.
+    if (existing.status !== "running") {
+      if (output) {
+        existing.result ??= output;
+        if (!existing.summary) {
+          const firstLine = output.split("\n").map((line) => line.trim()).find(Boolean);
+          if (firstLine) existing.summary = firstLine.slice(0, 200);
+        }
+      }
+      continue;
+    }
+
+    // Legacy only: task was opened by async_launched residual (pre dual-emit CLI).
+    existing.status = normalizeTaskStatus(rawStatus);
+    existing.taskType ??= blob.match(taskOutputTypePattern)?.[1] ?? "local_agent";
+    if (output) {
+      existing.result ??= output;
+      if (!existing.summary) {
+        const firstLine = output.split("\n").map((line) => line.trim()).find(Boolean);
+        if (firstLine) existing.summary = firstLine.slice(0, 200);
+      }
+    }
+    if (existing.completedAt === undefined) {
+      existing.completedAt = timestampFromRaw(raw, message);
+    }
+  }
+}
+
 export function isOfficialTaskEvent(raw: Record<string, unknown>) {
   return raw.type === "system" && (raw.subtype === "task_started" || raw.subtype === "task_progress" || raw.subtype === "task_notification");
 }
@@ -309,16 +434,43 @@ function decodeTaskNotificationText(value?: string) {
   return value?.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
 }
 
+/** Official zR `RR`: round seconds; always show `Nm Ns` when ≥60s (incl. 0s remainder). */
 export function formatDuration(durationMs: number) {
-  if (!durationMs) return "0s";
-  if (durationMs < 60_000) return `${Math.max(1, Math.round(durationMs / 1000))}s`;
-  const minutes = Math.floor(durationMs / 60_000);
-  const seconds = Math.round((durationMs % 60_000) / 1000);
-  return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  const totalSeconds = Math.round(durationMs / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  return `${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`;
 }
 
 export function formatTokens(tokens: number) {
   return `${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens)} tokens`;
+}
+
+/**
+ * Official zR usage line: duration from usage.duration_ms, else bookend
+ * startedAt/completedAt (or running elapsed). Tokens/toolUses only when usage present.
+ */
+export function resolveOfficialTaskUsageParts(
+  task: Pick<OfficialBackgroundTask, "completedAt" | "startedAt" | "status" | "usage">,
+  nowMs: number = Date.now(),
+): string[] {
+  const durationMs =
+    task.usage?.durationMs
+    ?? (task.startedAt != null && task.completedAt != null
+      ? Math.max(0, task.completedAt - task.startedAt)
+      : task.status === "running" && task.startedAt != null
+        ? Math.max(0, nowMs - task.startedAt)
+        : undefined);
+  const parts: string[] = [];
+  if (durationMs != null && (durationMs > 0 || Boolean(task.usage))) {
+    parts.push(formatDuration(durationMs));
+  }
+  if (task.usage) {
+    parts.push(
+      formatTokens(task.usage.totalTokens),
+      `${task.usage.toolUses} ${task.usage.toolUses === 1 ? "tool use" : "tool uses"}`,
+    );
+  }
+  return parts;
 }
 
 function stringValue(value: unknown): string | undefined {

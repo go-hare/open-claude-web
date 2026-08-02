@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { desktopBridge, type EffortLevel, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
 import { useI18nText, type MessageDescriptors } from "../../i18n/footerMenuMessages";
@@ -9,25 +10,105 @@ import { CodeStatsCard } from "./CodeStatsCard";
 import { EpitaxyActionCenter } from "./EpitaxyActionCenter";
 import { useEpitaxyActionCenterState } from "./epitaxyActionCenterState";
 import { OfficialCodeComposer } from "./composer/OfficialCodeComposer";
-import { normalizePermissionMode } from "./composer/options";
+import {
+  getCodeDraftComposerState,
+  resetCodeDraftComposer,
+  resolveDraftPermissionMode,
+  setCodeDraftEffort,
+  setCodeDraftModel,
+  setDraftPermissionMode,
+} from "./codeDraftComposerStore";
 import {
   clampEffortToCatalog,
   cliEffortLevelsForModel,
 } from "./session/officialComposerOptions";
 
-export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
-  const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
-  void route;
+/**
+ * Official c119 react-query residual for Code home draft seed:
+ *   ["ccd-default-effort"] staleTime: Infinity
+ *   ["epitaxy-project-default-mode", cwd] staleTime/gcTime: Infinity + placeholderData
+ * Product was remounting EpitaxyHome → full-page skeleton + re-IPC every visit.
+ * Cache hits paint Mode/effort immediately; only first cold workspace wait shows skeleton.
+ */
+const WORKSPACE_QUERY_KEY = ["code-workspace-context"] as const;
+const DEFAULT_EFFORT_QUERY_KEY = ["ccd-default-effort"] as const;
 
-  useEffect(() => {
-    let alive = true;
-    void desktopBridge.Preferences.getWorkspaceContext().then((nextWorkspace) => {
-      if (alive) setWorkspace(nextWorkspace);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
+function useCodeWorkspaceContext() {
+  return useQuery({
+    queryKey: WORKSPACE_QUERY_KEY,
+    queryFn: () => desktopBridge.Preferences.getWorkspaceContext(),
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+function useCcdDefaultEffort() {
+  const hasHost = typeof desktopBridge.LocalSessions.getDefaultEffort === "function";
+  return useQuery({
+    queryKey: DEFAULT_EFFORT_QUERY_KEY,
+    queryFn: async () => {
+      const value = await desktopBridge.LocalSessions.getDefaultEffort?.().catch(() => null);
+      return (value as EffortLevel | null | undefined) ?? null;
+    },
+    enabled: hasHost,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+function useEpitaxyProjectDefaultMode(cwd: string | undefined) {
+  const hasHost = typeof desktopBridge.LocalSessions.getDefaultPermissionMode === "function";
+  // Official placeholderData = sticky landing/folder seed while host resolves (no Mode flash).
+  const stickyMode = useMemo(
+    () =>
+      resolveDraftPermissionMode({
+        cwd,
+        preferOverride: true,
+      }),
+    [cwd],
+  );
+  return useQuery({
+    queryKey: ["epitaxy-project-default-mode", cwd ?? ""],
+    queryFn: async () => {
+      if (!cwd) return null;
+      const value = await desktopBridge.LocalSessions.getDefaultPermissionMode?.(cwd).catch(() => null);
+      return typeof value === "string" && value.length > 0 ? value : null;
+    },
+    enabled: Boolean(cwd && hasHost),
+    placeholderData: stickyMode,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
+  void route;
+  const sticky = getCodeDraftComposerState();
+  const workspaceQuery = useCodeWorkspaceContext();
+  const effortQuery = useCcdDefaultEffort();
+  const workspace = workspaceQuery.data ?? null;
+  const hostDefaultModeQuery = useEpitaxyProjectDefaultMode(workspace?.cwd);
+
+  /**
+   * Official draft seed (c119):
+   * folder map + landing sticky (localStorage) outrank host defaultMode.
+   * Host getDefaultPermissionMode only fills when no folder/landing preference.
+   * Do NOT block the whole page on effort/mode IPC — only cold workspace.
+   */
+  const permissionMode = useMemo(
+    () =>
+      resolveDraftPermissionMode({
+        cwd: workspace?.cwd,
+        hostDefaultMode:
+          typeof hostDefaultModeQuery.data === "string" ? hostDefaultModeQuery.data : null,
+        preferOverride: true,
+      }),
+    [workspace?.cwd, hostDefaultModeQuery.data],
+  );
+  const effort: EffortLevel =
+    (effortQuery.data as EffortLevel | null | undefined)
+    || sticky.effort
+    || "medium";
 
   /**
    * Official c119 residual when no session (`!E`) and selectedFolder `je` is set:
@@ -51,19 +132,41 @@ export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
     return subscribe?.(pick) ?? undefined;
   }, [workspace?.cwd]);
 
+  // Cold start only: no cached workspace yet. Return visits hit react-query cache → no skeleton.
   if (!workspace) return <EpitaxySessionLoading />;
 
-  return <CodeNewSessionPage onNavigate={onNavigate} workspace={workspace} />;
+  return (
+    <CodeNewSessionPage
+      initialEffort={effort}
+      initialPermissionMode={permissionMode}
+      onNavigate={onNavigate}
+      workspace={workspace}
+    />
+  );
 }
 
-function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: string) => void; workspace: WorkspaceContext }) {
+function CodeNewSessionPage({
+  initialEffort,
+  initialPermissionMode,
+  onNavigate,
+  workspace,
+}: {
+  initialEffort: EffortLevel;
+  initialPermissionMode: PermissionMode;
+  onNavigate: (path: string) => void;
+  workspace: WorkspaceContext;
+}) {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
-  const [model, setModel] = useState("default");
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>("default");
-  const [effort, setEffort] = useState<EffortLevel>("medium");
+  // Sticky draft model/effort/ultracode survive leave/return (same store as Mode).
+  const [model, setModel] = useState(() => getCodeDraftComposerState().model ?? "default");
+  // Seeded from host getDefaultPermissionMode before first paint (no "default" flash).
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>(initialPermissionMode);
+  const [effort, setEffort] = useState<EffortLevel>(
+    () => getCodeDraftComposerState().effort ?? initialEffort,
+  );
   /** Official yR — new drafts start without Ultracode (session-only flag). */
-  const [ultracode, setUltracode] = useState(false);
+  const [ultracode, setUltracode] = useState(() => getCodeDraftComposerState().ultracode);
   /** Official get_settings.applied (CLI 2.7.16+) — per-model catalog ladder for the draft slider. */
   const [effortLevels, setEffortLevels] = useState<string[] | null>(null);
   const [ultracodeOfferable, setUltracodeOfferable] = useState<boolean | null>(null);
@@ -80,36 +183,63 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
   }, [workspace]);
 
   /**
-   * Official c119 residual (sidebar Qas epitaxy mode → CustomEvent "epitaxy:reset-draft"):
-   * when no session id, clear draft store + bump remount counter.
-   * Listener only on home draft (no session) — session tiles own their own residual.
+   * Official c119 residual (sidebar Qas → CustomEvent "epitaxy:reset-draft"):
+   * when no session id: clear prompt/ultracode + remount counter.
+   * Does NOT wipe folder map / landing sticky Mode (official zo(uE) only).
    */
   useEffect(() => {
     const onReset = () => {
       setPrompt("");
       setBusy(false);
-      // Official: Ultracode is session-only; reset draft clears it.
       setUltracode(false);
+      resetCodeDraftComposer();
+      // Re-resolve Mode from persisted folder/landing (not host "default").
+      setPermissionMode(
+        resolveDraftPermissionMode({
+          cwd: composerWorkspace.cwd,
+          preferOverride: false,
+        }),
+      );
       setDraftEpoch((n) => n + 1);
     };
     window.addEventListener("epitaxy:reset-draft", onReset);
     return () => window.removeEventListener("epitaxy:reset-draft", onReset);
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    void Promise.all([
-      desktopBridge.LocalSessions.getDefaultEffort?.(),
-      desktopBridge.LocalSessions.getDefaultPermissionMode?.(composerWorkspace.cwd),
-    ]).then(([nextEffort, nextPermissionMode]) => {
-      if (!alive) return;
-      if (nextEffort) setEffort(nextEffort);
-      setPermissionMode(normalizePermissionMode(nextPermissionMode));
-    });
-    return () => {
-      alive = false;
-    };
   }, [composerWorkspace.cwd]);
+
+  /**
+   * Cwd change: official rn = folderMap[cwd] ?? getDefaultPermissionMode ?? landing.
+   * Uses same react-query keys as EpitaxyHome (staleTime Infinity) — no re-IPC on cache hit.
+   * Never snap to "default" while host is loading.
+   */
+  const cwdEffortQuery = useCcdDefaultEffort();
+  const cwdModeQuery = useEpitaxyProjectDefaultMode(composerWorkspace.cwd);
+  useEffect(() => {
+    // Immediate folder/landing paint for new cwd (no host wait flash).
+    setPermissionMode(
+      resolveDraftPermissionMode({
+        cwd: composerWorkspace.cwd,
+        preferOverride: false,
+      }),
+    );
+  }, [composerWorkspace.cwd]);
+  useEffect(() => {
+    if (cwdEffortQuery.data) {
+      setEffort(cwdEffortQuery.data as EffortLevel);
+      setCodeDraftEffort(cwdEffortQuery.data as EffortLevel, ultracode);
+    }
+  }, [cwdEffortQuery.data, ultracode]);
+  useEffect(() => {
+    setPermissionMode(
+      resolveDraftPermissionMode({
+        cwd: composerWorkspace.cwd,
+        hostDefaultMode:
+          cwdModeQuery.data != null && cwdModeQuery.data !== ""
+            ? String(cwdModeQuery.data)
+            : null,
+        preferOverride: true,
+      }),
+    );
+  }, [composerWorkspace.cwd, cwdModeQuery.data]);
 
   /**
    * Effort ladder = CLI only.
@@ -212,9 +342,17 @@ function CodeNewSessionPage({ onNavigate, workspace }: { onNavigate: (path: stri
                 onEffortChange={(level, nextUltracode) => {
                   setEffort(level);
                   setUltracode(nextUltracode);
+                  setCodeDraftEffort(level, nextUltracode);
                 }}
-                onModelChange={setModel}
-                onPermissionModeChange={setPermissionMode}
+                onModelChange={(next) => {
+                  setModel(next);
+                  setCodeDraftModel(next);
+                }}
+                onPermissionModeChange={(next) => {
+                  // Official jn: folder map + landing sticky (not settings.defaultMode).
+                  setPermissionMode(next);
+                  setDraftPermissionMode(next, { cwd: composerWorkspace.cwd });
+                }}
                 onSourceBranchChange={setSourceBranch}
                 onSubmit={() => void submit()}
                 onUseWorktreeChange={setUseWorktree}

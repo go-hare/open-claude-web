@@ -183,14 +183,41 @@ function PromptBox() {
   );
 }
 
+/**
+ * Loading composer footer residual.
+ *
+ * Official draft Mode seed (c119): sticky `cc-landing-draft-permission-mode`
+ * defaults to acceptEdits until getDefaultPermissionMode(cwd) resolves.
+ * Product EpitaxyHome waits for host defaultMode before mounting the real
+ * composer — this skeleton must NOT invent Mode/model copy (was hardcoding
+ * 「接受编辑」/「Sonnet 4.5」→ visible flash before settings default e.g. Auto).
+ * Pulse bars match HeaderSkeleton residual; no provisional Mode label.
+ */
 function ComposerFooter() {
   return (
     <div className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]">
       <button type="button" aria-label="Scroll to bottom" className="inline-flex items-center h-[24px] px-p3 rounded-r5 bg-fill-contained-default text-contained-default effect-contained-default hover:bg-fill-contained-hover hover:text-contained-hover cursor-default border-0 outline-none hide-focus-ring ring-focus absolute -top-[32px] left-1/2 -translate-x-1/2 z-[1] transition-opacity duration-150 opacity-0 pointer-events-none" />
       <PromptBox />
-      <div className="w-full flex items-center gap-g5 py-[4px]">
-        <div className="flex items-center gap-g5 min-w-0"><button className={dropdownButtonClass} type="button"><span className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-[var(--fill-uncontained-default)]" /><span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap">接受编辑</span></button><button className={dropdownIconButtonClass} aria-label="Add" type="button"><span className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-[var(--fill-uncontained-default)]" /><span className="relative inline-flex size-[12px]" /></button></div>
-        <div className="ml-auto flex items-center gap-g4"><button className={dropdownButtonClass} type="button"><span className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-[var(--fill-uncontained-default)]" /><span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap">Sonnet 4.5</span></button><button className={`${iconButtonClass} h-small text-footnote rounded-small shrink-0`} aria-label="Usage" type="button"><span className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)]" /></button></div>
+      <div className="w-full flex items-center gap-g5 py-[4px]" aria-hidden="true">
+        <div className="flex items-center gap-g5 min-w-0">
+          <span className={`${dropdownButtonClass} pointer-events-none`}>
+            <span className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-[var(--fill-uncontained-default)]" />
+            <span className="h-[10px] w-[56px] rounded-r3 bg-t2 animate-pulse" />
+          </span>
+          <span className={`${dropdownIconButtonClass} pointer-events-none`}>
+            <span className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-[var(--fill-uncontained-default)]" />
+            <span className="relative inline-flex size-[12px]" />
+          </span>
+        </div>
+        <div className="ml-auto flex items-center gap-g4">
+          <span className={`${dropdownButtonClass} pointer-events-none`}>
+            <span className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-[var(--fill-uncontained-default)]" />
+            <span className="h-[10px] w-[72px] rounded-r3 bg-t2 animate-pulse" />
+          </span>
+          <span className={`${iconButtonClass} h-small text-footnote rounded-small shrink-0 pointer-events-none`} aria-hidden="true">
+            <span className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)]" />
+          </span>
+        </div>
       </div>
     </div>
   );

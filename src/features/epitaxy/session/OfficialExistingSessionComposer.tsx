@@ -45,6 +45,8 @@ import {
   previewAnnotationQueue,
   usePreviewAnnotationPendingCount,
 } from "./previewAnnotationQueue";
+import { setDraftPermissionMode } from "../codeDraftComposerStore";
+import type { PermissionMode } from "../../../adapters/desktopBridge";
 
 /** Plain text → TipTap doc (same shape as OfficialCodeComposer). */
 function tiptapDocFromPlainText(value: string) {
@@ -99,7 +101,19 @@ export function ExistingSessionComposer({
   const [text, setText] = useState("");
   const [isSubmitting, setSubmitting] = useState(false);
   const [model, setModel] = useState(() => normalizeSelectorModelValue(session?.model, []));
-  const [permissionMode, setPermissionMode] = useState(session?.permissionMode ?? "default");
+  /**
+   * Seed Mode from host session, then liveMeta (user menu / system status already
+   * mirrored). Do NOT force "default" when both are missing mid-load — that flash
+   * of 询问权限 after leave/return is the user bug. First paint without either
+   * still falls back to "default" only as last resort for the pill label.
+   */
+  const [permissionMode, setPermissionMode] = useState(() => {
+    const liveMode = sessionRef?.id
+      ? officialCodeSessionStore.getState().buckets[sessionRef.id]?.liveMeta?.permissionMode
+      : undefined;
+    const seeded = session?.permissionMode ?? liveMode;
+    return typeof seeded === "string" && seeded.length > 0 ? seeded : "default";
+  });
   const [effort, setEffort] = useState(() =>
     clampEffortToCatalog(
       session?.effort === "ultracode" ? catalogTopEffort(null) : session?.effort,
@@ -164,16 +178,13 @@ export function ExistingSessionComposer({
         "data-placeholder": placeholder,
       },
       handleKeyDown: (_view, event) => {
+        // Enter submit is handled in onKeyDownCapture (official wTt residual).
+        // ProseMirror skips handleKeyDown while view.composing / keyCode 229.
         const slashStorage = (tiptapEditorRef.current?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
         const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
         if (event.key === "Escape" && bashModeRef.current && !hasSlashMenu) {
           event.preventDefault();
           clearComposerRef.current();
-          return true;
-        }
-        if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.isComposing && !hasSlashMenu) {
-          event.preventDefault();
-          if (!respondingRef.current) void submitRef.current();
           return true;
         }
         return false;
@@ -202,7 +213,20 @@ export function ExistingSessionComposer({
 
   useEffect(() => {
     setModel(normalizeSelectorModelValue(session?.model, allowedModelValues));
-    setPermissionMode(session?.permissionMode ?? "default");
+    // Host session Mode is authoritative when present (official be(n.permissionMode)).
+    // When sparse session_updated / mid-load omits the field, keep liveMeta or current
+    // pill — never invent "default" here (that wiped bypass after leave/return).
+    const liveMode = sessionRef?.id
+      ? officialCodeSessionStore.getState().buckets[sessionRef.id]?.liveMeta?.permissionMode
+      : undefined;
+    const hostMode =
+      typeof session?.permissionMode === "string" && session.permissionMode.length > 0
+        ? session.permissionMode
+        : undefined;
+    const nextMode = hostMode ?? liveMode;
+    if (typeof nextMode === "string" && nextMode.length > 0) {
+      setPermissionMode(nextMode);
+    }
     // Official D = N!==L && T!=null ? T : b — while lock is this session, keep local effort.
     const sessionId = sessionRef?.id ?? null;
     if (sessionId && effortLocalLockRef.current === sessionId) {
@@ -525,12 +549,16 @@ export function ExistingSessionComposer({
               filename: image.name,
             }))
           : undefined;
-      await onSubmit(textWithNotes.trim() || " ", images ? { images } : undefined);
+      // Pass live Mode pill so host spawn matches UI even if session store lags.
+      await onSubmit(textWithNotes.trim() || " ", {
+        ...(images ? { images } : {}),
+        permissionMode,
+      });
       clearComposer();
     } finally {
       setSubmitting(false);
     }
-  }, [bridge, canSubmit, clearComposer, onSubmit, sessionRef, text]);
+  }, [bridge, canSubmit, clearComposer, onSubmit, permissionMode, sessionRef, text]);
 
   useEffect(() => {
     submitRef.current = submit;
@@ -571,18 +599,53 @@ export function ExistingSessionComposer({
 
   const applyPermissionMode = useCallback(async (nextMode: string) => {
     if (!sessionRef || nextMode === permissionMode) return;
+    const previousMode = permissionMode;
+    // Optimistic Mode pill (official ion); host may reject when active CLI turn fails set_permission_mode.
     setPermissionMode(nextMode);
     // User Mode menu is authoritative until CLI emits a newer system/status (Fke).
-    // Mirror into liveMeta so silent reload / stale session_updated cannot snap back.
-    officialCodeSessionStore.getState().mergeLiveMeta(sessionRef.id, { permissionMode: nextMode });
+    // Mirror into liveMeta + session so leave/return and silent reload cannot snap to default.
+    officialCodeSessionStore.getState().mergeLiveMeta(
+      sessionRef.id,
+      { permissionMode: nextMode },
+      { mirrorPermissionMode: true },
+    );
     setConfigBusy(true);
     try {
-      await bridge.setPermissionMode?.(sessionRef.id, nextMode);
-      await reload({ silent: true });
+      const result = await bridge.setPermissionMode?.(sessionRef.id, nextMode);
+      // Host returns null when live CLI control fails (CLI-first residual) — roll back pill.
+      if (result == null) {
+        setPermissionMode(previousMode);
+        officialCodeSessionStore.getState().mergeLiveMeta(
+          sessionRef.id,
+          { permissionMode: previousMode },
+          { mirrorPermissionMode: true },
+        );
+        return;
+      }
+      // Prefer host session when present; never force "default" if field absent.
+      const applied =
+        result && typeof (result as { permissionMode?: string }).permissionMode === "string"
+          ? (result as { permissionMode: string }).permissionMode
+          : nextMode;
+      setPermissionMode(applied);
+      // Official jn: also persist folder map (+ landing when !Sm) so Code home draft
+      // keeps the Mode after leave/return — not only host session field.
+      setDraftPermissionMode(applied as PermissionMode, {
+        cwd: session?.cwd,
+      });
+      // Do not full silent reload just for Mode — reload can race sparse session meta
+      // and briefly clear permissionMode → 询问权限. Host already emits permission_mode_changed.
+    } catch {
+      setPermissionMode(previousMode);
+      officialCodeSessionStore.getState().mergeLiveMeta(
+        sessionRef.id,
+        { permissionMode: previousMode },
+        { mirrorPermissionMode: true },
+      );
     } finally {
       setConfigBusy(false);
     }
-  }, [bridge, permissionMode, reload, sessionRef]);
+  }, [bridge, permissionMode, session?.cwd, sessionRef]);
 
   // Official Sm + EpitaxyPermissionModeModal: first bypass/auto selection confirms per workspace.
   const permissionModeConfirm = usePermissionModeConfirm(
@@ -711,7 +774,16 @@ export function ExistingSessionComposer({
               if (event.key === "Escape" && isBashMode && !hasSlashMenu) {
                 event.preventDefault();
                 clearComposer();
+                return;
               }
+              // Official wTt residual: Enter submit in capture so PM composition skip
+              // cannot swallow the key after IME gets stuck (view.composing sticky).
+              if (event.key !== "Enter" || event.shiftKey || event.altKey || event.isComposing || event.keyCode === 229 || hasSlashMenu) {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              if (!respondingRef.current) void submitRef.current();
             }}
           />
           {text.trim().length === 0 ? <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5">{placeholder}</span> : null}

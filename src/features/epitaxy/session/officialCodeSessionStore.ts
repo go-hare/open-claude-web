@@ -274,6 +274,12 @@ function chatMessageRichness(message: ChatMessage): number {
  */
 function preferRicherOnReload(prev: ChatMessage, next: ChatMessage): ChatMessage {
   if (prev === next) return prev;
+  // Prefer envelope that carries parent_tool_use_id (host-stamped agent rows) so
+  // silent getTranscript can fill OfficialSubagentPane after live rows without parent.
+  const prevParent = Boolean(asRecord(prev.raw).parent_tool_use_id ?? asRecord(prev.raw).parentToolUseId);
+  const nextParent = Boolean(asRecord(next.raw).parent_tool_use_id ?? asRecord(next.raw).parentToolUseId);
+  if (nextParent && !prevParent) return next;
+  if (prevParent && !nextParent) return prev;
   const nextScore = chatMessageRichness(next);
   const prevScore = chatMessageRichness(prev);
   if (nextScore > prevScore) return next;
@@ -929,15 +935,32 @@ function createOfficialCodeSessionStore() {
       const modelFilled =
         nextSession.model
         || (prev.liveMeta?.model && prev.liveMeta.model !== "<synthetic>" ? prev.liveMeta.model : undefined);
+      const session =
+        modelFilled && modelFilled !== nextSession.model
+          ? { ...nextSession, model: modelFilled }
+          : nextSession;
+      // densable: host may set isRunning=false on parent stream-json `result` while
+      // CLI process still open for stoppable task bookends. Main spinner uses
+      // isResponding ← session.isRunning || stream flags — settle stream when host
+      // reports not running (Tasks pane still tracks system bookends independently).
+      const hostSettledTurn =
+        base?.isRunning === true
+        && session.isRunning === false;
       return {
         buckets: {
           ...state.buckets,
           [sessionId]: {
             ...prev,
             isMetaPending: false,
-            session: modelFilled && modelFilled !== nextSession.model
-              ? { ...nextSession, model: modelFilled }
-              : nextSession,
+            session,
+            ...(hostSettledTurn
+              ? {
+                  pendingTurnStartedAt: null,
+                  streamActivityMode: idleStreamActivityMode,
+                  streamingMessageId: null,
+                  streamSnapshot: null,
+                }
+              : {}),
           },
         },
       };

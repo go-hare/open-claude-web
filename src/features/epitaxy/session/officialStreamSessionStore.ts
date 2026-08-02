@@ -62,6 +62,29 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+/** Distinguishes omitted 3rd arg from explicit `undefined` / `null`. */
+const PARENT_ARG_OMITTED: unique symbol = Symbol("parent-arg-omitted");
+
+/**
+ * Resolve parent_tool_use_id without `??` (null is the main-turn sentinel).
+ * Official call site: Pke.feed(s, n.message.event, n.message.parent_tool_use_id)
+ */
+function resolveParentToolUseId(
+  streamMessageOrEvent: Record<string, unknown>,
+  parentToolUseId: unknown,
+  parentArgProvided: boolean,
+): unknown {
+  // Third arg provided (including explicit null) wins — do not fall through on null.
+  if (parentArgProvided) return parentToolUseId;
+  if (Object.prototype.hasOwnProperty.call(streamMessageOrEvent, "parent_tool_use_id")) {
+    return streamMessageOrEvent.parent_tool_use_id;
+  }
+  if (Object.prototype.hasOwnProperty.call(streamMessageOrEvent, "parentToolUseId")) {
+    return streamMessageOrEvent.parentToolUseId;
+  }
+  return undefined;
+}
+
 /**
  * Official Pke.feed(sessionId, event, parent_tool_use_id):
  *   feed(s, n.message.event, n.message.parent_tool_use_id)
@@ -69,31 +92,35 @@ function stringValue(value: unknown): string | undefined {
  * NOT the outer `{ type: "stream_event", event }` envelope.
  *
  * Callers may pass either the envelope or the inner event — we normalize here.
+ *
+ * Residual gate (index-BELzQL5P `Pke.feed`):
+ *   if (null !== parent) return;
+ * Only strict `parent === null` drives main Va typewriter. Subagent ids / undefined skip.
  */
 export function officialStreamFeed(
   sessionId: string,
   streamMessageOrEvent: Record<string, unknown>,
-  parentToolUseId?: unknown,
+  parentToolUseId: unknown = PARENT_ARG_OMITTED,
 ) {
   // Normalize to official feed shape: inner event + parent_tool_use_id.
   const outerType = stringValue(streamMessageOrEvent.type);
   const nestedEvent = asRecord(streamMessageOrEvent.event);
   const isEnvelope = outerType === "stream_event" && stringValue(nestedEvent.type) !== undefined;
   const event = isEnvelope ? nestedEvent : streamMessageOrEvent;
-  const parent =
-    parentToolUseId
-    ?? streamMessageOrEvent.parent_tool_use_id
-    ?? streamMessageOrEvent.parentToolUseId
-    ?? (isEnvelope ? streamMessageOrEvent.parent_tool_use_id : undefined);
+  const parent = resolveParentToolUseId(
+    streamMessageOrEvent,
+    parentToolUseId,
+    parentToolUseId !== PARENT_ARG_OMITTED,
+  );
   // Official: if (null !== parent) return;
-  if (parent !== undefined && parent !== null) return;
+  if (parent !== null) return;
 
   const entry = ensureSession(sessionId);
   // OfficialSessionStreamSmoother.feed historically accepted envelopes; pass a
   // synthetic envelope so existing unwrap (streamMessage.event) stays correct.
   const feedPayload = isEnvelope
-    ? streamMessageOrEvent
-    : { type: "stream_event", event, parent_tool_use_id: parent ?? null };
+    ? { ...streamMessageOrEvent, parent_tool_use_id: null }
+    : { type: "stream_event", event, parent_tool_use_id: null };
   entry.smoother.feed(feedPayload);
   if (stringValue(event.type) === "message_start") {
     // Official: messageId = event.message.id only (never outer uuid).

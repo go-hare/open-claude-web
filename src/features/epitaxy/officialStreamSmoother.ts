@@ -369,7 +369,8 @@ export class OfficialSessionStreamSmoother {
 
   feed(streamMessage: Record<string, unknown>) {
     // Official Pke.feed(sessionId, event, parent): if (null !== parent) return;
-    if (streamMessage.parent_tool_use_id !== undefined && streamMessage.parent_tool_use_id !== null) return;
+    // Only strict null (main turn) proceeds; undefined / subagent id skip.
+    if (streamMessage.parent_tool_use_id !== null) return;
     const event = asRecord(streamMessage.event);
     const eventType = stringValue(event.type);
     if (eventType === "message_start") {
