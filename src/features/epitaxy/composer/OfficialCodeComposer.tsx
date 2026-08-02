@@ -289,18 +289,18 @@ export function OfficialCodeComposer({
           <img alt="" className="h-full w-full" draggable={false} key={replayKey} src="/assets/v1/clawd-laptop-official.gif" />
         </button>
       </div>
-      <div style={{ boxShadow: "var(--df-shadow-card)" }}>
-        <OfficialPromptEditor
-          ref={promptEditorRef}
-          bridge={desktopBridge.LocalSessions}
-          busy={busy}
-          onChange={setPrompt}
-          onSubmit={submitWithTrust}
-          placeholder="描述一个任务，或提一个问题"
-          slashCwd={workspace.cwd || undefined}
-          value={prompt}
-        />
-      </div>
+      {/* Official c119: shadow is on .epitaxy-prompt via effect-prompt-blur (+ _f(M)),
+          not dframe --df-shadow-card (card chrome). */}
+      <OfficialPromptEditor
+        ref={promptEditorRef}
+        bridge={desktopBridge.LocalSessions}
+        busy={busy}
+        onChange={setPrompt}
+        onSubmit={submitWithTrust}
+        placeholder="描述一个任务，或提一个问题"
+        slashCwd={workspace.cwd || undefined}
+        value={prompt}
+      />
       {/* Official c119 bi residual (CHsqi6o1Li) above mode footer when git probe false. */}
       {showGitRequired ? (
         <div
