@@ -3,6 +3,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import type { SessionSummary } from "../../../adapters/desktopBridge/types";
+import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
 import { coworkSessionsBridge } from "../session/coworkSessionBridge";
 import { CoworkRotatingPlaceholder } from "./CoworkRotatingPlaceholder";
 import { CoworkSessionSlashMenu } from "./slash/CoworkSessionSlashMenu";
@@ -37,6 +38,9 @@ export const CoworkPromptInput = forwardRef<CoworkPromptInputHandle, CoworkPromp
   const disabledRef = useRef(disabled);
   const onChangeRef = useRef(onChange);
   const slashCwdRef = useRef(slashCwd);
+  /** Only apply external value (reset/suggestion); never re-apply stale empty after onUpdate. */
+  const lastEmittedValueRef = useRef(value);
+  const lastEmitAtRef = useRef(0);
   submitRef.current = onSubmit;
   disabledRef.current = disabled;
   onChangeRef.current = onChange;
@@ -44,14 +48,28 @@ export const CoworkPromptInput = forwardRef<CoworkPromptInputHandle, CoworkPromp
   const slashMenu = useMemo(() => function CoworkDraftSlashMenu(props: CoworkSlashCommandMenuProps) {
     return <CoworkSessionSlashMenu {...props} bridge={coworkSessionsBridge} session={draftSession(slashCwdRef.current)} />;
   }, []);
-  const editor = useCoworkPromptEditor({ disabled, disabledRef, editorRef, onChangeRef, placeholder, slashMenu, submitRef, value });
+  const editor = useCoworkPromptEditor({
+    disabled,
+    disabledRef,
+    editorRef,
+    lastEmitAtRef,
+    lastEmittedValueRef,
+    onChangeRef,
+    placeholder,
+    slashMenu,
+    submitRef,
+    value,
+  });
   useImperativeHandle(ref, () => ({
     focus: () => editor?.commands.focus(),
     getEditor: () => editor ?? null,
     insertSlashCommand: () => editor?.chain().focus("start").insertContent("/").run(),
   }), [editor]);
   useEffect(() => { editor?.setEditable(!disabled); }, [disabled, editor]);
-  useEffect(() => syncEditorContent(editor, value), [editor, value]);
+  useEffect(
+    () => syncEditorContent(editor, value, lastEmittedValueRef, lastEmitAtRef, onChangeRef),
+    [editor, value],
+  );
   const isEmpty = value.trim().length === 0;
   // Official rt: new convo + empty → yAt; suppress is-editor-empty ::before when rotating.
   // Official PromptInput (wTt/rjt): editor class includes pl-[6px] pt-[6px]; yAt uses pl-1.5 pt-[5px]
@@ -86,6 +104,8 @@ type CoworkPromptEditorInput = {
   disabled: boolean;
   disabledRef: React.MutableRefObject<boolean>;
   editorRef: React.MutableRefObject<Editor | null>;
+  lastEmitAtRef: React.MutableRefObject<number>;
+  lastEmittedValueRef: React.MutableRefObject<string>;
   onChangeRef: React.MutableRefObject<(value: string) => void>;
   placeholder: string;
   slashMenu: React.ComponentType<CoworkSlashCommandMenuProps>;
@@ -95,10 +115,13 @@ type CoworkPromptEditorInput = {
 
 function useCoworkPromptEditor(input: CoworkPromptEditorInput) {
   return useEditor({
-    content: tiptapDoc(input.value),
+    content: tiptapDoc(input.value || input.lastEmittedValueRef.current),
     editable: !input.disabled,
     editorProps: {
       attributes: { "aria-label": "Prompt", class: "tiptap", "data-placeholder": input.placeholder },
+      handleDOMEvents: {
+        beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
+      },
       handleKeyDown: (_view, event) => handlePromptKeyDown(event, input.editorRef.current, input.disabledRef, input.submitRef),
     },
     extensions: [
@@ -108,7 +131,13 @@ function useCoworkPromptEditor(input: CoworkPromptEditorInput) {
     ],
     onCreate: ({ editor }) => { input.editorRef.current = editor; },
     onDestroy: () => { input.editorRef.current = null; },
-    onUpdate: ({ editor }) => input.onChangeRef.current(editor.getText({ blockSeparator: "\n" })),
+    onUpdate: ({ editor }) => {
+      const next = editor.getText({ blockSeparator: "\n" });
+      input.lastEmittedValueRef.current = next;
+      input.lastEmitAtRef.current = Date.now();
+      input.onChangeRef.current(next);
+    },
+    shouldRerenderOnTransaction: false,
   }, [input.slashMenu]);
 }
 
@@ -129,8 +158,33 @@ function handlePromptKeyDown(event: KeyboardEvent, editor: Editor | null, disabl
   return true;
 }
 
-function syncEditorContent(editor: Editor | null, value: string) {
-  if (!editor || editor.getText({ blockSeparator: "\n" }) === value) return;
+function syncEditorContent(
+  editor: Editor | null,
+  value: string,
+  lastEmittedValueRef: React.MutableRefObject<string>,
+  lastEmitAtRef: React.MutableRefObject<number>,
+  onChangeRef: React.MutableRefObject<(value: string) => void>,
+) {
+  if (!editor) return;
+  // Skip when parent is only echoing what we just emitted (avoids stale-empty wipe).
+  if (value === lastEmittedValueRef.current) return;
+  const current = editor.getText({ blockSeparator: "\n" });
+  if (current === value) {
+    lastEmittedValueRef.current = value;
+    return;
+  }
+  // Stale empty shortly after onUpdate (packaged ~2ms wipe): heal parent, keep doc.
+  if (
+    value === ""
+    && current !== ""
+    && current === lastEmittedValueRef.current
+    && Date.now() - lastEmitAtRef.current < 50
+  ) {
+    onChangeRef.current(current);
+    return;
+  }
+  lastEmittedValueRef.current = value;
+  lastEmitAtRef.current = 0;
   editor.commands.setContent(tiptapDoc(value), { emitUpdate: false });
 }
 

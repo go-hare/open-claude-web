@@ -6,6 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { desktopBridge, type CoworkMountedProject, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { CoworkSessionsBridge, SessionSummary } from "../../adapters/desktopBridge/types";
+import { handleEmptyDocBeforeInput } from "../shared/tiptapEmptyDocBeforeInput";
 import { OfficialButton, type OfficialDropdownItem } from "./OfficialEpitaxyComponents";
 import { OfficialButton as SharedOfficialButton } from "../shared/OfficialButton";
 import { OfficialTooltip } from "../shared/OfficialTooltip";
@@ -530,9 +531,14 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
   const editorRef = useRef<Editor | null>(null);
   const submitRef = useRef(onSubmit);
   const disabledRef = useRef(disabled);
+  const onChangeRef = useRef(onChange);
   const slashMenuStateRef = useRef({ bridge, slashCwd });
+  /** Only setContent for external value (reset/suggestion); skip echo of last emit. */
+  const lastEmittedValueRef = useRef(value);
+  const lastEmitAtRef = useRef(0);
   submitRef.current = onSubmit;
   disabledRef.current = disabled;
+  onChangeRef.current = onChange;
   slashMenuStateRef.current = { bridge, slashCwd };
 
   const slashMenuComponent = useMemo(() => function OfficialCoworkSlashCommandMenuRenderer(props: OfficialSlashCommandMenuProps) {
@@ -551,13 +557,16 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
   }, []);
 
   const editor = useEditor({
-    content: tiptapDocFromPlainText(value),
+    content: tiptapDocFromPlainText(value || lastEmittedValueRef.current),
     editable: !disabled,
     editorProps: {
       attributes: {
         "aria-label": "Prompt",
         class: "tiptap",
         "data-placeholder": placeholder,
+      },
+      handleDOMEvents: {
+        beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
       },
       // Official wTt: Enter submits when !shift/alt/composing and slash idle (desktop plain Enter).
       handleKeyDown: (_view, event) => {
@@ -587,8 +596,12 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
       editorRef.current = editor;
     },
     onUpdate: ({ editor }) => {
-      onChange(editor.getText({ blockSeparator: "\n" }));
+      const next = editor.getText({ blockSeparator: "\n" });
+      lastEmittedValueRef.current = next;
+      lastEmitAtRef.current = Date.now();
+      onChangeRef.current(next);
     },
+    shouldRerenderOnTransaction: false,
   }, [slashMenuComponent]);
 
   useImperativeHandle(ref, () => ({
@@ -603,8 +616,24 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
 
   useEffect(() => {
     if (!editor) return;
+    if (value === lastEmittedValueRef.current) return;
     const current = editor.getText({ blockSeparator: "\n" });
-    if (current !== value) editor.commands.setContent(tiptapDocFromPlainText(value), { emitUpdate: false });
+    if (current === value) {
+      lastEmittedValueRef.current = value;
+      return;
+    }
+    if (
+      value === ""
+      && current !== ""
+      && current === lastEmittedValueRef.current
+      && Date.now() - lastEmitAtRef.current < 50
+    ) {
+      onChangeRef.current(current);
+      return;
+    }
+    lastEmittedValueRef.current = value;
+    lastEmitAtRef.current = 0;
+    editor.commands.setContent(tiptapDocFromPlainText(value), { emitUpdate: false });
   }, [editor, value]);
 
   const isEmpty = value.trim().length === 0;

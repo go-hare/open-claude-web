@@ -4,6 +4,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
 import type { CoworkImagePayload, CoworkToolState, SendMessageInput, SessionSummary } from "../../../adapters/desktopBridge/types";
+import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
 import { createCoworkAddMenuItems } from "../newTask/CoworkAddMenuItems";
 import { mergeCoworkUploadedFiles, type CoworkUploadedFile } from "../newTask/coworkUploadedFiles";
 import { coworkSessionsBridge } from "../session/coworkSessionBridge";
@@ -208,7 +209,30 @@ function useCoworkComposerEditor(input: { disabled: boolean; session: SessionSum
   return useEditor({
     content: "",
     editable: !input.disabled,
-    editorProps: { attributes: { "aria-describedby": "legacy-model-warning-text claude-code-nudge-body", "aria-invalid": "false", "aria-label": "Write your prompt to Claude", "aria-multiline": "true", "aria-required": "false", class: "tiptap", "data-placeholder": "Write a message...", "data-testid": "chat-input", role: "textbox" }, handleKeyDown: (_view, event) => { if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.isComposing && !slashMenuVisible(editorRef.current)) { event.preventDefault(); void input.submitRef.current(); return true; } return false; } },
+    editorProps: {
+      attributes: {
+        "aria-describedby": "legacy-model-warning-text claude-code-nudge-body",
+        "aria-invalid": "false",
+        "aria-label": "Write your prompt to Claude",
+        "aria-multiline": "true",
+        "aria-required": "false",
+        class: "tiptap",
+        "data-placeholder": "Write a message...",
+        "data-testid": "chat-input",
+        role: "textbox",
+      },
+      handleDOMEvents: {
+        beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
+      },
+      handleKeyDown: (_view, event) => {
+        if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.isComposing && !slashMenuVisible(editorRef.current)) {
+          event.preventDefault();
+          void input.submitRef.current();
+          return true;
+        }
+        return false;
+      },
+    },
     extensions: [StarterKit.configure({ blockquote: false, bulletList: false, code: false, heading: false, horizontalRule: false, listItem: false, orderedList: false }), CoworkSkillChip, CoworkSlashCommandSuggestion.configure({ placement: "onpage", menuComponent: slashMenu })],
     onCreate: ({ editor }) => { editorRef.current = editor; },
     onDestroy: () => { editorRef.current = null; },

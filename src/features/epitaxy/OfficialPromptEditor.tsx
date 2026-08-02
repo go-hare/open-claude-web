@@ -4,6 +4,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import type { LocalSessionsBridge } from "../../adapters/desktopBridge/types";
+import { handleEmptyDocBeforeInput } from "../shared/tiptapEmptyDocBeforeInput";
 import { OfficialButton, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
@@ -43,13 +44,24 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   const editorRef = useRef<Editor | null>(null);
   const submitRef = useRef(onSubmit);
   const disabledRef = useRef(disabled || busy);
+  const onChangeRef = useRef(onChange);
   const bashModeRef = useRef(false);
   const slashMenuStateRef = useRef({ bridge, session, sessionRef, slashCwd });
+  /**
+   * Controlled TipTap residual: only setContent for *external* value changes
+   * (reset, suggestion pick, clear). Never re-apply a stale empty parent `value`
+   * after onUpdate — that wiped keystrokes in packaged app:// (~2ms after insert).
+   * Lag window (~50ms): empty prop while last emit still matches live doc → heal, don't wipe.
+   * Intentional parent clear (submit/reset) arrives later and still setContents.
+   */
+  const lastEmittedValueRef = useRef(value);
+  const lastEmitAtRef = useRef(0);
   const isBashMode = value.trimStart().startsWith("!");
   const canSubmit = value.trim().length > 0 && !disabled && !busy;
 
   submitRef.current = onSubmit;
   disabledRef.current = disabled || busy;
+  onChangeRef.current = onChange;
   bashModeRef.current = isBashMode;
   slashMenuStateRef.current = { bridge, session, sessionRef, slashCwd };
 
@@ -73,13 +85,17 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   }, []);
 
   const editor = useEditor({
-    content: tiptapDocFromPlainText(value),
+    // Prefer live emit if parent value lags (editor recreate mid-keystroke).
+    content: tiptapDocFromPlainText(value || lastEmittedValueRef.current),
     editable: !disabled && !busy,
     editorProps: {
       attributes: {
         "aria-label": "Prompt",
         class: "tiptap",
         "data-placeholder": placeholder,
+      },
+      handleDOMEvents: {
+        beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
       },
       handleKeyDown: (_view, event) => {
         // Enter submit is handled in onKeyDownCapture (official wTt residual).
@@ -89,7 +105,9 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
         if (event.key === "Escape" && bashModeRef.current && !hasSlashMenu) {
           event.preventDefault();
-          onChange("");
+          lastEmittedValueRef.current = "";
+          lastEmitAtRef.current = 0;
+          onChangeRef.current("");
           editorRef.current?.commands.clearContent(true);
           return true;
         }
@@ -113,8 +131,13 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       editorRef.current = editor;
     },
     onUpdate: ({ editor }) => {
-      onChange(editor.getText({ blockSeparator: "\n" }));
+      const next = editor.getText({ blockSeparator: "\n" });
+      lastEmittedValueRef.current = next;
+      lastEmitAtRef.current = Date.now();
+      onChangeRef.current(next);
     },
+    // Avoid TipTap re-render storms on each keystroke; parent owns controlled value.
+    shouldRerenderOnTransaction: false,
   }, [slashMenuComponent]);
 
   useImperativeHandle(ref, () => ({
@@ -135,8 +158,26 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
 
   useEffect(() => {
     if (!editor) return;
+    // Parent still mirrors last emit — do not fight the live document.
+    if (value === lastEmittedValueRef.current) return;
     const current = editor.getText({ blockSeparator: "\n" });
-    if (current !== value) editor.commands.setContent(tiptapDocFromPlainText(value), { emitUpdate: false });
+    if (current === value) {
+      lastEmittedValueRef.current = value;
+      return;
+    }
+    // Stale empty shortly after onUpdate (packaged ~2ms wipe): heal parent, keep doc.
+    if (
+      value === ""
+      && current !== ""
+      && current === lastEmittedValueRef.current
+      && Date.now() - lastEmitAtRef.current < 50
+    ) {
+      onChangeRef.current(current);
+      return;
+    }
+    lastEmittedValueRef.current = value;
+    lastEmitAtRef.current = 0;
+    editor.commands.setContent(tiptapDocFromPlainText(value), { emitUpdate: false });
   }, [editor, value]);
 
   return (
@@ -163,7 +204,9 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
             const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
             if (event.key === "Escape" && isBashMode && !hasSlashMenu) {
               event.preventDefault();
-              onChange("");
+              lastEmittedValueRef.current = "";
+              lastEmitAtRef.current = 0;
+              onChangeRef.current("");
               editor?.commands.clearContent(true);
               return;
             }

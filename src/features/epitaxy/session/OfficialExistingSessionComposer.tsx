@@ -8,6 +8,7 @@ import type { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { desktopBridge, type SessionSummary } from "../../../adapters/desktopBridge";
 import type { LocalSessionsBridge, SendMessageInput } from "../../../adapters/desktopBridge/types";
+import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
 import { Icon } from "../../../shell/icons";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
 import { OfficialComposerFooter } from "../OfficialComposerFooter";
@@ -176,6 +177,9 @@ export function ExistingSessionComposer({
         "aria-label": "Prompt",
         class: "tiptap",
         "data-placeholder": placeholder,
+      },
+      handleDOMEvents: {
+        beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
       },
       handleKeyDown: (_view, event) => {
         // Enter submit is handled in onKeyDownCapture (official wTt residual).

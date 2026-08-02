@@ -7,6 +7,7 @@ import { Placeholder } from "@tiptap/extensions/placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
+import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
 
 const PROMPT_PLACEHOLDER =
   "Check my Google Calendar for today's meetings and summarize my unread emails. Highlight anything urgent.";
@@ -32,12 +33,15 @@ export function ScheduledPromptEditor({
   value,
 }: ScheduledPromptEditorProps) {
   const onUpdateRef = useRef(onUpdate);
+  /** Skip setContent when parent only echoes last onUpdate (stale-empty wipe). */
+  const lastEmittedValueRef = useRef(value);
+  const lastEmitAtRef = useRef(0);
   onUpdateRef.current = onUpdate;
 
   const editor = useEditor(
     {
       immediatelyRender: false,
-      shouldRerenderOnTransaction: true,
+      shouldRerenderOnTransaction: false,
       extensions: [
         // Official vTt plainTextMode → MEt.configure(...)
         StarterKit.configure({
@@ -65,7 +69,7 @@ export function ScheduledPromptEditor({
           showOnlyWhenEditable: true,
         }),
       ],
-      content: textToDoc(value),
+      content: textToDoc(value || lastEmittedValueRef.current),
       editorProps: {
         attributes: {
           "aria-label": ariaLabel,
@@ -73,9 +77,15 @@ export function ScheduledPromptEditor({
           class: "outline-none border-0",
           enterkeyhint: "enter",
         },
+        handleDOMEvents: {
+          beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
+        },
       },
       onUpdate: ({ editor: next }) => {
-        onUpdateRef.current(next.getText({ blockSeparator: "\n" }));
+        const text = next.getText({ blockSeparator: "\n" });
+        lastEmittedValueRef.current = text;
+        lastEmitAtRef.current = Date.now();
+        onUpdateRef.current(text);
       },
     },
     [resetKey, placeholder],
@@ -83,8 +93,23 @@ export function ScheduledPromptEditor({
 
   useEffect(() => {
     if (!editor) return;
+    if (value === lastEmittedValueRef.current) return;
     const current = editor.getText({ blockSeparator: "\n" });
-    if (current === value) return;
+    if (current === value) {
+      lastEmittedValueRef.current = value;
+      return;
+    }
+    if (
+      value === ""
+      && current !== ""
+      && current === lastEmittedValueRef.current
+      && Date.now() - lastEmitAtRef.current < 50
+    ) {
+      onUpdateRef.current(current);
+      return;
+    }
+    lastEmittedValueRef.current = value;
+    lastEmitAtRef.current = 0;
     editor.commands.setContent(textToDoc(value), { emitUpdate: false });
   }, [editor, value]);
 
