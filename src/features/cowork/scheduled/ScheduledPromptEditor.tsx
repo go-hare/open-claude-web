@@ -8,7 +8,11 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
 import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
-import { syncControlledTiptapValue } from "../../shared/syncControlledTiptapValue";
+import {
+  markControlledTiptapUserEdit,
+  syncControlledTiptapValue,
+  type ControlledTiptapEmitState,
+} from "../../shared/syncControlledTiptapValue";
 
 const PROMPT_PLACEHOLDER =
   "Check my Google Calendar for today's meetings and summarize my unread emails. Highlight anything urgent.";
@@ -34,9 +38,8 @@ export function ScheduledPromptEditor({
   value,
 }: ScheduledPromptEditorProps) {
   const onUpdateRef = useRef(onUpdate);
-  /** Skip setContent when parent only echoes last onUpdate (stale-empty wipe). */
-  const lastEmittedValueRef = useRef(value);
-  const lastEmitAtRef = useRef(0);
+  /** Official vTt k.current residual — after onUpdate only honor parent clear. */
+  const emitRef = useRef<ControlledTiptapEmitState>({ lastEmittedValue: value, userEdited: false });
   onUpdateRef.current = onUpdate;
 
   const editor = useEditor(
@@ -70,7 +73,7 @@ export function ScheduledPromptEditor({
           showOnlyWhenEditable: true,
         }),
       ],
-      content: textToDoc(value || lastEmittedValueRef.current),
+      content: textToDoc(value || emitRef.current.lastEmittedValue),
       editorProps: {
         attributes: {
           "aria-label": ariaLabel,
@@ -84,8 +87,7 @@ export function ScheduledPromptEditor({
       },
       onUpdate: ({ editor: next }) => {
         const text = next.getText({ blockSeparator: "\n" });
-        lastEmittedValueRef.current = text;
-        lastEmitAtRef.current = Date.now();
+        emitRef.current = markControlledTiptapUserEdit(text);
         onUpdateRef.current(text);
       },
     },
@@ -94,18 +96,12 @@ export function ScheduledPromptEditor({
 
   useEffect(() => {
     if (!editor) return;
-    const next = syncControlledTiptapValue({
+    emitRef.current = syncControlledTiptapValue({
       editor,
       value,
-      emit: {
-        lastEmittedValue: lastEmittedValueRef.current,
-        lastEmitAt: lastEmitAtRef.current,
-      },
-      onChange: (text) => onUpdateRef.current(text),
+      emit: emitRef.current,
       docFromPlainText: textToDoc,
     });
-    lastEmittedValueRef.current = next.lastEmittedValue;
-    lastEmitAtRef.current = next.lastEmitAt;
   }, [editor, value]);
 
   // Official uYt aYt size branch — classes verified in c6a992d55 CSS

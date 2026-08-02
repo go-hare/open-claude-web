@@ -4,7 +4,11 @@ import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import type { SessionSummary } from "../../../adapters/desktopBridge/types";
 import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
-import { syncControlledTiptapValue } from "../../shared/syncControlledTiptapValue";
+import {
+  markControlledTiptapUserEdit,
+  syncControlledTiptapValue,
+  type ControlledTiptapEmitState,
+} from "../../shared/syncControlledTiptapValue";
 import { coworkSessionsBridge } from "../session/coworkSessionBridge";
 import { CoworkRotatingPlaceholder } from "./CoworkRotatingPlaceholder";
 import { CoworkSessionSlashMenu } from "./slash/CoworkSessionSlashMenu";
@@ -39,9 +43,8 @@ export const CoworkPromptInput = forwardRef<CoworkPromptInputHandle, CoworkPromp
   const disabledRef = useRef(disabled);
   const onChangeRef = useRef(onChange);
   const slashCwdRef = useRef(slashCwd);
-  /** Only apply external value (reset/suggestion); never re-apply stale empty after onUpdate. */
-  const lastEmittedValueRef = useRef(value);
-  const lastEmitAtRef = useRef(0);
+  /** Official vTt k.current residual — after onUpdate only honor parent clear. */
+  const emitRef = useRef<ControlledTiptapEmitState>({ lastEmittedValue: value, userEdited: false });
   submitRef.current = onSubmit;
   disabledRef.current = disabled;
   onChangeRef.current = onChange;
@@ -53,8 +56,7 @@ export const CoworkPromptInput = forwardRef<CoworkPromptInputHandle, CoworkPromp
     disabled,
     disabledRef,
     editorRef,
-    lastEmitAtRef,
-    lastEmittedValueRef,
+    emitRef,
     onChangeRef,
     placeholder,
     slashMenu,
@@ -67,10 +69,15 @@ export const CoworkPromptInput = forwardRef<CoworkPromptInputHandle, CoworkPromp
     insertSlashCommand: () => editor?.chain().focus("start").insertContent("/").run(),
   }), [editor]);
   useEffect(() => { editor?.setEditable(!disabled); }, [disabled, editor]);
-  useEffect(
-    () => syncEditorContent(editor, value, lastEmittedValueRef, lastEmitAtRef, onChangeRef),
-    [editor, value],
-  );
+  useEffect(() => {
+    if (!editor) return;
+    emitRef.current = syncControlledTiptapValue({
+      editor,
+      value,
+      emit: emitRef.current,
+      docFromPlainText: tiptapDoc,
+    });
+  }, [editor, value]);
   const isEmpty = value.trim().length === 0;
   // Official rt: new convo + empty → yAt; suppress is-editor-empty ::before when rotating.
   // Official PromptInput (wTt/rjt): editor class includes pl-[6px] pt-[6px]; yAt uses pl-1.5 pt-[5px]
@@ -105,8 +112,7 @@ type CoworkPromptEditorInput = {
   disabled: boolean;
   disabledRef: React.MutableRefObject<boolean>;
   editorRef: React.MutableRefObject<Editor | null>;
-  lastEmitAtRef: React.MutableRefObject<number>;
-  lastEmittedValueRef: React.MutableRefObject<string>;
+  emitRef: React.MutableRefObject<ControlledTiptapEmitState>;
   onChangeRef: React.MutableRefObject<(value: string) => void>;
   placeholder: string;
   slashMenu: React.ComponentType<CoworkSlashCommandMenuProps>;
@@ -116,7 +122,7 @@ type CoworkPromptEditorInput = {
 
 function useCoworkPromptEditor(input: CoworkPromptEditorInput) {
   return useEditor({
-    content: tiptapDoc(input.value || input.lastEmittedValueRef.current),
+    content: tiptapDoc(input.value || input.emitRef.current.lastEmittedValue),
     editable: !input.disabled,
     editorProps: {
       attributes: { "aria-label": "Prompt", class: "tiptap", "data-placeholder": input.placeholder },
@@ -134,8 +140,7 @@ function useCoworkPromptEditor(input: CoworkPromptEditorInput) {
     onDestroy: () => { input.editorRef.current = null; },
     onUpdate: ({ editor }) => {
       const next = editor.getText({ blockSeparator: "\n" });
-      input.lastEmittedValueRef.current = next;
-      input.lastEmitAtRef.current = Date.now();
+      input.emitRef.current = markControlledTiptapUserEdit(next);
       input.onChangeRef.current(next);
     },
     shouldRerenderOnTransaction: false,
@@ -157,29 +162,6 @@ function handlePromptKeyDown(event: KeyboardEvent, editor: Editor | null, disabl
   event.preventDefault();
   if (!disabledRef.current) submitRef.current();
   return true;
-}
-
-function syncEditorContent(
-  editor: Editor | null,
-  value: string,
-  lastEmittedValueRef: React.MutableRefObject<string>,
-  lastEmitAtRef: React.MutableRefObject<number>,
-  onChangeRef: React.MutableRefObject<(value: string) => void>,
-) {
-  if (!editor) return;
-  // Official residual: editor owns typing; lagging parent value must not wipe keys.
-  const next = syncControlledTiptapValue({
-    editor,
-    value,
-    emit: {
-      lastEmittedValue: lastEmittedValueRef.current,
-      lastEmitAt: lastEmitAtRef.current,
-    },
-    onChange: (text) => onChangeRef.current(text),
-    docFromPlainText: tiptapDoc,
-  });
-  lastEmittedValueRef.current = next.lastEmittedValue;
-  lastEmitAtRef.current = next.lastEmitAt;
 }
 
 function tiptapDoc(value: string) {

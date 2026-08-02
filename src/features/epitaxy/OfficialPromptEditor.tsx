@@ -5,7 +5,11 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "rea
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import type { LocalSessionsBridge } from "../../adapters/desktopBridge/types";
 import { handleEmptyDocBeforeInput } from "../shared/tiptapEmptyDocBeforeInput";
-import { syncControlledTiptapValue } from "../shared/syncControlledTiptapValue";
+import {
+  markControlledTiptapUserEdit,
+  syncControlledTiptapValue,
+  type ControlledTiptapEmitState,
+} from "../shared/syncControlledTiptapValue";
 import { OfficialButton, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
@@ -49,14 +53,15 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   const bashModeRef = useRef(false);
   const slashMenuStateRef = useRef({ bridge, session, sessionRef, slashCwd });
   /**
-   * Controlled TipTap residual: only setContent for *external* value changes
-   * (reset, suggestion pick, clear). Never re-apply a stale empty parent `value`
-   * after onUpdate — that wiped keystrokes in packaged app:// (~2ms after insert).
-   * Lag window (~50ms): empty prop while last emit still matches live doc → heal, don't wipe.
-   * Intentional parent clear (submit/reset) arrives later and still setContents.
+   * Official c119 / vTt residual:
+   * TipTap owns the doc while typing. Parent `value` is a submit/placeholder
+   * mirror only — continuous value→setContent is non-official and wipes lagging
+   * keystrokes. After first onUpdate (userEdited), only honor parent clear.
    */
-  const lastEmittedValueRef = useRef(value);
-  const lastEmitAtRef = useRef(0);
+  const emitRef = useRef<ControlledTiptapEmitState>({
+    lastEmittedValue: value,
+    userEdited: false,
+  });
   const isBashMode = value.trimStart().startsWith("!");
   const canSubmit = value.trim().length > 0 && !disabled && !busy;
 
@@ -87,7 +92,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
 
   const editor = useEditor({
     // Prefer live emit if parent value lags (editor recreate mid-keystroke).
-    content: tiptapDocFromPlainText(value || lastEmittedValueRef.current),
+    content: tiptapDocFromPlainText(value || emitRef.current.lastEmittedValue),
     editable: !disabled && !busy,
     editorProps: {
       attributes: {
@@ -106,8 +111,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
         if (event.key === "Escape" && bashModeRef.current && !hasSlashMenu) {
           event.preventDefault();
-          lastEmittedValueRef.current = "";
-          lastEmitAtRef.current = 0;
+          emitRef.current = { lastEmittedValue: "", userEdited: false };
           onChangeRef.current("");
           editorRef.current?.commands.clearContent(true);
           return true;
@@ -132,12 +136,12 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       editorRef.current = editor;
     },
     onUpdate: ({ editor }) => {
+      // Official vTt: k.current = true on first user edit.
       const next = editor.getText({ blockSeparator: "\n" });
-      lastEmittedValueRef.current = next;
-      lastEmitAtRef.current = Date.now();
+      emitRef.current = markControlledTiptapUserEdit(next);
       onChangeRef.current(next);
     },
-    // Avoid TipTap re-render storms on each keystroke; parent owns controlled value.
+    // Avoid TipTap re-render storms on each keystroke; parent owns submit mirror only.
     shouldRerenderOnTransaction: false,
   }, [slashMenuComponent]);
 
@@ -171,20 +175,13 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
 
   useEffect(() => {
     if (!editor) return;
-    // Official c119: typing is editor-owned; only external setText/clear setContent.
-    // Lagging parent value (e.g. "4" while doc is "45") must not wipe further keys.
-    const next = syncControlledTiptapValue({
+    // Official vTt hydrate: after userEdited only clear; never setContent over typing.
+    emitRef.current = syncControlledTiptapValue({
       editor,
       value,
-      emit: {
-        lastEmittedValue: lastEmittedValueRef.current,
-        lastEmitAt: lastEmitAtRef.current,
-      },
-      onChange: (text) => onChangeRef.current(text),
+      emit: emitRef.current,
       docFromPlainText: tiptapDocFromPlainText,
     });
-    lastEmittedValueRef.current = next.lastEmittedValue;
-    lastEmitAtRef.current = next.lastEmitAt;
   }, [editor, value]);
 
   return (
@@ -211,8 +208,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
             const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
             if (event.key === "Escape" && isBashMode && !hasSlashMenu) {
               event.preventDefault();
-              lastEmittedValueRef.current = "";
-              lastEmitAtRef.current = 0;
+              emitRef.current = { lastEmittedValue: "", userEdited: false };
               onChangeRef.current("");
               editor?.commands.clearContent(true);
               return;

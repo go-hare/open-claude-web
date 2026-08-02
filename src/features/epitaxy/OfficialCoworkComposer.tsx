@@ -7,7 +7,11 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { desktopBridge, type CoworkMountedProject, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { CoworkSessionsBridge, SessionSummary } from "../../adapters/desktopBridge/types";
 import { handleEmptyDocBeforeInput } from "../shared/tiptapEmptyDocBeforeInput";
-import { syncControlledTiptapValue } from "../shared/syncControlledTiptapValue";
+import {
+  markControlledTiptapUserEdit,
+  syncControlledTiptapValue,
+  type ControlledTiptapEmitState,
+} from "../shared/syncControlledTiptapValue";
 import { OfficialButton, type OfficialDropdownItem } from "./OfficialEpitaxyComponents";
 import { OfficialButton as SharedOfficialButton } from "../shared/OfficialButton";
 import { OfficialTooltip } from "../shared/OfficialTooltip";
@@ -534,9 +538,8 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
   const disabledRef = useRef(disabled);
   const onChangeRef = useRef(onChange);
   const slashMenuStateRef = useRef({ bridge, slashCwd });
-  /** Only setContent for external value (reset/suggestion); skip echo of last emit. */
-  const lastEmittedValueRef = useRef(value);
-  const lastEmitAtRef = useRef(0);
+  /** Official vTt k.current residual — after onUpdate only honor parent clear. */
+  const emitRef = useRef<ControlledTiptapEmitState>({ lastEmittedValue: value, userEdited: false });
   submitRef.current = onSubmit;
   disabledRef.current = disabled;
   onChangeRef.current = onChange;
@@ -558,7 +561,7 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
   }, []);
 
   const editor = useEditor({
-    content: tiptapDocFromPlainText(value || lastEmittedValueRef.current),
+    content: tiptapDocFromPlainText(value || emitRef.current.lastEmittedValue),
     editable: !disabled,
     editorProps: {
       attributes: {
@@ -598,8 +601,7 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
     },
     onUpdate: ({ editor }) => {
       const next = editor.getText({ blockSeparator: "\n" });
-      lastEmittedValueRef.current = next;
-      lastEmitAtRef.current = Date.now();
+      emitRef.current = markControlledTiptapUserEdit(next);
       onChangeRef.current(next);
     },
     shouldRerenderOnTransaction: false,
@@ -617,18 +619,13 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
 
   useEffect(() => {
     if (!editor) return;
-    const next = syncControlledTiptapValue({
+    // Official vTt: after userEdited only clear; never setContent over typing.
+    emitRef.current = syncControlledTiptapValue({
       editor,
       value,
-      emit: {
-        lastEmittedValue: lastEmittedValueRef.current,
-        lastEmitAt: lastEmitAtRef.current,
-      },
-      onChange: (text) => onChangeRef.current(text),
+      emit: emitRef.current,
       docFromPlainText: tiptapDocFromPlainText,
     });
-    lastEmittedValueRef.current = next.lastEmittedValue;
-    lastEmitAtRef.current = next.lastEmitAt;
   }, [editor, value]);
 
   const isEmpty = value.trim().length === 0;

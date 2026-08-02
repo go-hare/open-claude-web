@@ -1,25 +1,31 @@
 import type { Editor } from "@tiptap/core";
 
 /**
- * Official c119 residual: TipTap owns text while the user types.
- * Parent only drives setContent via imperative setText / clear / external
- * draft restore — never re-apply a lagging controlled `value` over the live doc.
+ * Official residual (index-BELzQL5P.js `vTt` + aYt CodeTipTapEditor):
  *
- * Packaged React 19 + app://: parent `value` can lag 1+ keystrokes behind
- * onUpdate. Re-applying that lag (e.g. value "4" while doc is "45") looks like
+ *   onUpdate → k.current = true  (user has edited)
+ *   useEffect hydrate:
+ *     if (!editor || destroyed || !isEmpty || !hasHydrated || k.current) return
+ *     only then setContent(parent)
+ *
+ * Parent state is a mirror of the editor (submit / placeholder), NOT a continuous
+ * controlled setContent source. After the user types once, the only parent-driven
+ * doc mutation is clear (value → "").
+ *
+ * Product bug this prevents: React 19 + app:// lag where parent `value` is still
+ * "4" while the live doc is "45" — re-applying setContent("4") looks like
  * "first char works, cannot type further".
  */
 export type ControlledTiptapEmitState = {
   lastEmittedValue: string;
-  lastEmitAt: number;
+  /** Official vTt `k.current` — true after first onUpdate from user typing. */
+  userEdited: boolean;
 };
 
 export type SyncControlledTiptapValueArgs = {
   editor: Editor;
   value: string;
   emit: ControlledTiptapEmitState;
-  /** Re-emit live text when parent lags behind typing. */
-  onChange: (next: string) => void;
   /** Build TipTap JSON doc from plain text (product residual). */
   docFromPlainText: (value: string) => unknown;
 };
@@ -29,47 +35,49 @@ function liveText(editor: Editor): string {
 }
 
 /**
- * Prefer the live ProseMirror doc. Heal parent when it lags.
- * Only setContent when the editor is unfocused (true external apply).
+ * Apply parent `value` only when residual-safe:
+ * - clear when value === ""
+ * - hydrate / external setText only before userEdited
+ * - never setContent over live typing
  */
 export function syncControlledTiptapValue({
   editor,
   value,
   emit,
-  onChange,
   docFromPlainText,
 }: SyncControlledTiptapValueArgs): ControlledTiptapEmitState {
-  const current = liveText(editor);
-
-  // Live doc already matches parent.
-  if (current === value) {
-    return {
-      lastEmittedValue: value,
-      lastEmitAt: emit.lastEmitAt,
-    };
-  }
-
-  // Official residual: while focused, editor is source of truth.
-  // Never setContent over in-progress typing (including IME).
-  if (editor.isFocused || editor.view?.hasFocus?.()) {
-    if (current !== emit.lastEmittedValue) {
-      onChange(current);
-      return { lastEmittedValue: current, lastEmitAt: Date.now() };
-    }
-    // Parent lagged behind last emit (or empty wipe) — push live text up.
-    onChange(current);
-    return {
-      lastEmittedValue: current,
-      lastEmitAt: emit.lastEmitAt || Date.now(),
-    };
-  }
-
-  // Parent still mirrors last emit but doc diverged while unfocused — rare.
   if (value === emit.lastEmittedValue) {
     return emit;
   }
 
-  // Unfocused external change (reset / setComposerText residual).
+  // Official k.current: after user typed, only honor clear.
+  if (emit.userEdited) {
+    if (value === "") {
+      editor.commands.clearContent(false);
+      return { lastEmittedValue: "", userEdited: false };
+    }
+    // Parent lag / non-clear external while typing — keep live doc.
+    return emit;
+  }
+
+  // Not yet user-edited: external hydrate / setComposerText / draft restore.
+  if (value === "") {
+    editor.commands.clearContent(false);
+    return { lastEmittedValue: "", userEdited: false };
+  }
+
+  const current = liveText(editor);
+  if (current === value) {
+    return { lastEmittedValue: value, userEdited: false };
+  }
+
   editor.commands.setContent(docFromPlainText(value), { emitUpdate: false });
-  return { lastEmittedValue: value, lastEmitAt: 0 };
+  return { lastEmittedValue: value, userEdited: false };
+}
+
+/** Mark emit state after TipTap onUpdate (official k.current = true). */
+export function markControlledTiptapUserEdit(
+  text: string,
+): ControlledTiptapEmitState {
+  return { lastEmittedValue: text, userEdited: true };
 }
