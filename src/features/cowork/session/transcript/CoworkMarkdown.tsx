@@ -159,25 +159,42 @@ function renderSpecialParagraph(node: Extract<RootContent, { type: "paragraph" }
   if (!value) return null;
   const table = parseTable(value);
   if (table) {
+    // Official StandardMarkDown table residual (c5f4e1303 BD components):
+    //   table → div.overflow-x-auto.w-full.px-2.mb-6 > table.min-w-full.border-collapse.text-sm.leading-[1.7]
+    //   thead.text-left; th/td border-b-0.5 + py-2 pr-4 align-top (+ th font-bold text-text-100)
+    // Product recovers pipe tables without remark-gfm; DOM must still match official.
     return (
-      <table key={key}>
-        <thead>
-          <tr>
-            {table[0].map((cell, index) => (
-              <th key={index}>{renderCell(cell, `${key}-h-${index}`, context)}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {table.slice(2).map((row, rowIndex) => (
-            <tr key={rowIndex}>
-              {table[0].map((_cell, cellIndex) => (
-                <td key={cellIndex}>{renderCell(row[cellIndex] ?? "", `${key}-${rowIndex}-${cellIndex}`, context)}</td>
+      <div className="overflow-x-auto w-full px-2 mb-6" key={key} data-official-source="c5f4e1303:StandardMarkDown.table">
+        <table className="min-w-full border-collapse text-sm leading-[1.7] whitespace-normal">
+          <thead className="text-left">
+            <tr>
+              {table[0].map((cell, index) => (
+                <th
+                  className="text-text-100 border-b-0.5 border-border-300/60 py-2 pr-4 align-top font-bold"
+                  key={index}
+                  scope="col"
+                >
+                  {renderCell(cell, `${key}-h-${index}`, context)}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {table.slice(2).map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                {table[0].map((_cell, cellIndex) => (
+                  <td
+                    className="border-b-0.5 border-border-300/30 py-2 pr-4 align-top"
+                    key={cellIndex}
+                  >
+                    {renderCell(row[cellIndex] ?? "", `${key}-${rowIndex}-${cellIndex}`, context)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     );
   }
   if (value.startsWith("$$\n") && value.endsWith("\n$$")) {
