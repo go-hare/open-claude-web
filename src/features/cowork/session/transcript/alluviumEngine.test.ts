@@ -58,4 +58,21 @@ describe("AlluviumIncrementalEngine", () => {
       expect(fence.code).toContain("const x = 1");
     }
   });
+
+  it("GFM pipe tables stay paragraph (official ae/bb has no table kind)", () => {
+    // Official c93 class ae / c119 bb: no kind:"table" — pipes are paragraph lines.
+    // GFM <table> only exists on kb+xd jb path (remark-gfm + mb.table).
+    const engine = new AlluviumIncrementalEngine();
+    engine.feed("| 项 | 值 |\n|----|-----|\n| Run | a |\n\n");
+    const snap = engine.snapshot(true);
+    expect(snap.committed.some((b) => (b as { kind: string }).kind === "table")).toBe(false);
+    const para = snap.committed.find((b) => b.kind === "paragraph");
+    expect(para?.kind).toBe("paragraph");
+    if (para?.kind === "paragraph") {
+      const flat = para.lines.map((line) =>
+        line.map((n) => (n.kind === "text" || n.kind === "code" ? n.value : "")).join(""),
+      );
+      expect(flat.some((line) => line.includes("|"))).toBe(true);
+    }
+  });
 });

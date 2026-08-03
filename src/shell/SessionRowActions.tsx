@@ -1,5 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { desktopBridge, type SessionSummary } from "../adapters/desktopBridge";
+import { useShellText } from "../i18n/shellMessages";
 import type { FrameStore } from "../stores/frameStore";
 import { BaseMenuPopup, Menu } from "./BaseMenu";
 import { Icon } from "./icons";
@@ -41,11 +42,13 @@ export function SessionRowActions({ frame, onAction, onCreateGroup, onOpenSplit,
   onOpenSplit: () => void;
   session: SessionSummary;
 }) {
+  const text = useShellText();
+  const moreOptionsLabel = text.moreOptionsFor.replace("{title}", session.title);
   return (
     <span className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
       <Menu.Root>
         <Menu.Trigger
-          aria-label={`More options for ${session.title}`}
+          aria-label={moreOptionsLabel}
           className="draggable-none size-[calc(var(--df-row-h)-8px)] flex items-center justify-center rounded-md text-text-300 hover:text-text-100 hover:bg-[var(--df-hover)] aria-expanded:bg-bg-400 aria-expanded:text-text-100 transition-colors hide-focus-ring focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--accent-100)),0_0_6px_0_hsl(var(--accent-100)/0.2)]"
           data-row-action=""
           onClick={(event) => event.stopPropagation()}

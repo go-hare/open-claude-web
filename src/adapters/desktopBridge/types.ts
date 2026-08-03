@@ -113,6 +113,19 @@ export type SessionSummary = {
   isUnread?: boolean;
   hasWorktree?: boolean;
   messages?: ChatMessage[];
+  /**
+   * Official session.prs residual (AutoArchive / getPrStateForBranch cache).
+   * Sidebar CodeStatusGlyph yje consumes this before lazy branch PR lookup.
+   */
+  prs?: Array<{
+    draft?: boolean;
+    merged?: boolean;
+    number?: number;
+    repo?: string;
+    state?: string;
+    title?: string;
+    url?: string;
+  }>;
   pendingToolPermissions?: Array<{
     alwaysAllowScope?: string;
     decisionReason?: string;
@@ -641,6 +654,8 @@ export type LocalSessionsBridge = {
   rewind?: (id: string, messageId?: string) => Promise<unknown>;
   create: (kind: SessionSummary["kind"]) => Promise<SessionSummary>;
   archive: (id: string) => Promise<void>;
+  /** Official LocalSessions.unarchive residual — restore archived row. */
+  unarchive?: (id: string) => Promise<void>;
   delete: (id: string) => Promise<void>;
   setFocusedSession?: (id: string | null) => Promise<void>;
   submitTranscriptFeedback?: (sessionIdOrInput: unknown, input?: unknown) => Promise<unknown>;
@@ -747,6 +762,7 @@ export type CoworkSessionsBridge = {
   rewind?: (id: string, messageId?: string) => Promise<string | null>;
   create: (kind: SessionSummary["kind"]) => Promise<SessionSummary>;
   archive: (id: string) => Promise<void>;
+  unarchive?: (id: string) => Promise<void>;
   delete: (id: string) => Promise<void>;
   setFocusedSession?: (id: string | null) => Promise<void>;
   submitTranscriptFeedback?: (sessionIdOrInput: unknown, input?: unknown) => Promise<unknown>;

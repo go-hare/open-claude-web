@@ -1124,6 +1124,9 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     archive: async (id) => {
       await raw?.archive?.(id);
     },
+    unarchive: async (id) => {
+      await raw?.unarchive?.(id);
+    },
     delete: async (id) => {
       await raw?.delete?.(id);
     },
@@ -1300,6 +1303,7 @@ function createCoworkLifecycleBridge(raw: RawLocalSessionsBridge | undefined): C
     },
     create: async (kind) => normalizeSession(await raw?.start?.({ kind, title: "New session" }), "epitaxy", false),
     archive: async (id) => { await raw?.archive?.(id); },
+    unarchive: async (id) => { await raw?.unarchive?.(id); },
     delete: async (id) => { await raw?.delete?.(id); },
     setFocusedSession: async (id) => { await raw?.setFocusedSession?.(id); },
     submitFeedback: async (input) => raw?.submitFeedback?.(input),
@@ -1564,10 +1568,13 @@ function createCoworkSpacesBridge(raw: RawCoworkSpacesBridge | undefined): Deskt
   };
 }
 
+/**
+ * Official list residual: keep archived rows so RecentsControls status=archived works.
+ * Default filter (includeByStatus / buildRecentsGroups) skips archived — do not hard-drop here.
+ */
 function normalizeSessionList(items: unknown, targetKind: SessionSummary["kind"]): SessionSummary[] {
   return (Array.isArray(items) ? items : [])
     .map((item) => normalizeSession(item, targetKind))
-    .filter((session) => !session.isArchived)
     .sort((left, right) => right.updatedAtMs - left.updatedAtMs);
 }
 
@@ -1672,14 +1679,17 @@ function normalizeSession(
     statusMessage: stringValue(raw.statusMessage) ?? stringValue(raw.sessionStatusMessage) ?? stringValue(original.statusMessage) ?? stringValue(original.sessionStatusMessage),
     postTurnSummary: normalizePostTurnSummary(raw.postTurnSummary ?? raw.post_turn_summary ?? original.postTurnSummary ?? original.post_turn_summary),
     promptSuggestion: stringValue(raw.promptSuggestion) ?? stringValue(original.promptSuggestion),
-    isPinned: Boolean(raw.isStarred),
-    isArchived: Boolean(raw.archived ?? raw.isArchived),
+    // Official frame pin uses pinnedOrder; host may also set isPinned / starred.
+    isPinned: Boolean(raw.isPinned ?? raw.pinned ?? raw.isStarred ?? original.isPinned ?? original.isStarred),
+    isArchived: Boolean(raw.archived ?? raw.isArchived ?? original.archived ?? original.isArchived),
     isAgentCompleted: booleanValue(raw.isAgentCompleted) ?? booleanValue(original.isAgentCompleted),
-    hasCompleted: booleanValue(raw.hasCompleted) ?? booleanValue(original.hasCompleted),
+    hasCompleted: booleanValue(raw.hasCompleted) ?? booleanValue(original.hasCompleted) ?? false,
     error: stringValue(raw.error) ?? stringValue(original.error),
     isRunning: isRunning(raw),
-    isUnread: Boolean(raw.isUnread),
+    isUnread: Boolean(raw.isUnread ?? original.isUnread),
     hasWorktree: hasWorktree(raw, original),
+    // Official session.prs residual — CodeStatusGlyph yje / AutoArchive.
+    prs: normalizeSessionPrRefs(raw.prs ?? original.prs),
     messages: includeMessages ? normalizeMessages(raw.messages) : undefined,
     pendingToolPermissions: normalizePendingToolPermissions(raw.pendingToolPermissions, id),
   };
@@ -2025,6 +2035,33 @@ function normalizeLocalPrState(value: unknown): import("./types").LocalPrState |
     draft: booleanValue(raw.draft),
     merged: booleanValue(raw.merged) ?? (raw.merged_at != null ? true : undefined),
   };
+}
+
+/** Official session.prs residual list for CodeStatusGlyph / AutoArchive. */
+function normalizeSessionPrRefs(value: unknown): SessionSummary["prs"] {
+  if (!Array.isArray(value)) return undefined;
+  const rows = value
+    .map((item) => {
+      const raw = asRecord(item);
+      if (!raw) return null;
+      const number = typeof raw.number === "number" ? raw.number : undefined;
+      const url = stringValue(raw.url) ?? stringValue(raw.html_url);
+      const state = stringValue(raw.state);
+      const draft = booleanValue(raw.draft);
+      const merged = booleanValue(raw.merged) ?? (raw.merged_at != null ? true : undefined);
+      if (number == null && !url && !state && draft == null && merged == null) return null;
+      return {
+        number,
+        state,
+        title: stringValue(raw.title),
+        url,
+        draft,
+        merged,
+        repo: stringValue(raw.repo),
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row != null);
+  return rows.length > 0 ? rows : undefined;
 }
 
 function normalizeEnvironmentMap(value: unknown): Record<string, string> {

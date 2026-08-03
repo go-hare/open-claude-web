@@ -41,6 +41,8 @@ import {
   organizationUuidFromBootstrap,
   postOrganizationResetRateLimits,
 } from "../../settings/accountSettingsApi";
+import { useErrorsOptional } from "../../settings/errorsToast";
+import { applyCoworkRateLimitToStore } from "../../cowork/session/rateLimit/coworkRateLimitStore";
 import { isOfficialMermaidMarkdownLanguage, OfficialMermaidDiagramCard } from "../OfficialMermaidDiagramCard";
 import { OfficialSearchTree, officialSearchTreeLanguage } from "../OfficialSearchTree";
 import {
@@ -50,6 +52,10 @@ import {
   officialUserMessageClass,
   type OfficialTranscriptMode,
 } from "../OfficialEpitaxyComponents";
+import {
+  officialTranscriptModeExpandsDetails,
+  officialTranscriptModeShowsThinking,
+} from "./officialTranscriptMode";
 import {
   OFFICIAL_DURABLE_UUID_RE,
   OfficialUserBashCommand,
@@ -1719,7 +1725,11 @@ function renderCodeAssistantEntryItem(
   return <div className="text-body text-t6 whitespace-pre-wrap break-words">{item.content}</div>;
 }
 
-/** Official Bb API Error card (c11959232) + Dh reset_rate_limits when gated. */
+/**
+ * Official Bb API Error card (c11959232) + Dh reset_rate_limits when gated.
+ * Dh residual: button children always "Reset limits"; busy:isPending;
+ * onSuccess → messageLimits within_limit + toast "Rate limits reset".
+ */
 function CodeApiErrorBlock({
   code,
   onRetry,
@@ -1732,9 +1742,10 @@ function CodeApiErrorBlock({
   text: string;
 }) {
   const isRateLimit = code === "rate_limit" || /hit your limit|out of (extra )?usage|usage allocation|monthly usage limit/i.test(text);
-  const [resetState, setResetState] = useState<"idle" | "pending" | "done" | "error">("idle");
+  const [isPending, setIsPending] = useState(false);
   const [canReset, setCanReset] = useState(false);
   const [orgUuid, setOrgUuid] = useState<string | null>(null);
+  const errors = useErrorsOptional();
 
   useEffect(() => {
     if (!isRateLimit) return undefined;
@@ -1743,6 +1754,7 @@ function CodeApiErrorBlock({
       if (!alive) return;
       const uuid = organizationUuidFromBootstrap(bootstrap);
       setOrgUuid(uuid);
+      // Official: el("can_reset_rate_limits") && org uuid — no soft-open.
       setCanReset(Boolean(uuid) && canResetRateLimitsFromBootstrap(bootstrap));
     });
     return () => {
@@ -1751,10 +1763,22 @@ function CodeApiErrorBlock({
   }, [isRateLimit]);
 
   const resetLimits = async () => {
-    if (!orgUuid || resetState === "pending") return;
-    setResetState("pending");
-    const result = await postOrganizationResetRateLimits(orgUuid);
-    setResetState(result.ok ? "done" : "error");
+    if (!orgUuid || isPending) return;
+    setIsPending(true);
+    try {
+      const result = await postOrganizationResetRateLimits(orgUuid);
+      if (result.ok) {
+        // Official Dh onSuccess: i({type:"within_limit"}, orgUuid, "") + toast.
+        applyCoworkRateLimitToStore({ type: "within_limit" }, { orgUuid });
+        errors?.addSuccess("Rate limits reset");
+      } else {
+        errors?.addError("Failed to reset rate limits", {
+          uniqueKey: "epitaxy.resetRateLimits",
+        });
+      }
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return (
@@ -1763,12 +1787,13 @@ function CodeApiErrorBlock({
         <span>API Error</span>
         {isRateLimit && canReset ? (
           <OfficialButton
-            disabled={resetState === "pending" || resetState === "done"}
+            // Official Dh: busy:isPending; OfficialButton residual uses disabled for pending.
+            disabled={isPending}
             onClick={() => void resetLimits()}
             size="small"
             variant="uncontained"
           >
-            {resetState === "pending" ? "Resetting…" : resetState === "done" ? "Limits reset" : resetState === "error" ? "Reset failed" : "Reset limits"}
+            Reset limits
           </OfficialButton>
         ) : null}
       </div>
@@ -1973,10 +1998,27 @@ function CodeOfficialChapterItem({
   );
 }
 
-function CodeThinkingBlock({ text, transcriptMode }: { text: string; transcriptMode: OfficialTranscriptMode }) {
+/**
+ * Official qb (c11959232): mode-gated plain italic thinking — not collapsible O9e ThinkingCell.
+ * Do not import CoworkThinkingCell / expand-collapse UX onto Code residual.
+ */
+const CodeThinkingBlock = memo(function CodeThinkingBlock({
+  text,
+  transcriptMode,
+}: {
+  text: string;
+  transcriptMode: OfficialTranscriptMode;
+}) {
   if (!officialTranscriptModeShowsThinking(transcriptMode)) return null;
-  return <div className="text-body text-t6 italic whitespace-pre-wrap break-words">{text}</div>;
-}
+  return (
+    <div
+      className="text-body text-t6 italic whitespace-pre-wrap break-words"
+      data-official-source="c11959232-h_zsw3wI.js:qb"
+    >
+      {text}
+    </div>
+  );
+});
 
 /** Official av (c11959232): italic qb-style lines for precedingThinking on tool groups. */
 function OfficialPrecedingThinkingLines({ lines }: { lines: string[] }) {
@@ -1992,13 +2034,11 @@ function OfficialPrecedingThinkingLines({ lines }: { lines: string[] }) {
   );
 }
 
-function officialTranscriptModeShowsThinking(mode: OfficialTranscriptMode) {
-  return mode === "thinking" || mode === "verbose";
-}
-
-function officialTranscriptModeExpandsDetails(mode: OfficialTranscriptMode) {
-  return mode === "verbose";
-}
+// Mode helpers live in officialTranscriptMode.ts (residual pr/xc; unit-tested).
+export {
+  officialTranscriptModeExpandsDetails,
+  officialTranscriptModeShowsThinking,
+} from "./officialTranscriptMode";
 
 function wrapStandaloneToolWithPrecedingThinking(
   tool: TranscriptToolUse,
@@ -3199,17 +3239,6 @@ function isVisibleAssistantEntryItem(
     && item.kind !== "file"
     && item.kind !== "image"
     && item.kind !== "peer";
-}
-
-function ThinkingActivity() {
-  return (
-    <div className="flex items-center gap-4 text-t7 select-none" data-testid="epitaxy-thinking-activity">
-      <div className="w-5 h-5 shrink-0">
-        <OfficialThinkingSpark className="!w-5 !h-5" size={20} />
-      </div>
-      <span className="text-sm text-t6">Thinking...</span>
-    </div>
-  );
 }
 
 function OfficialThinkingSpark({ className, size = 20 }: { className?: string; size?: number }) {

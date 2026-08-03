@@ -120,15 +120,20 @@ export function organizationUuidFromBootstrap(bootstrap: Record<string, unknown>
     ?? null;
 }
 
+/**
+ * Official Dh (c11959232): el("can_reset_rate_limits") && activeOrganization.uuid.
+ * Flag missing/false → no Reset control (do not soft-open on org uuid alone).
+ */
 export function canResetRateLimitsFromBootstrap(bootstrap: Record<string, unknown> | null | undefined): boolean {
   if (!bootstrap) return false;
+  if (!organizationUuidFromBootstrap(bootstrap)) return false;
   const flags = asRecord(bootstrap.feature_flags) ?? asRecord(bootstrap.featureFlags) ?? asRecord(bootstrap.flags);
   if (flags?.can_reset_rate_limits === true || flags?.canResetRateLimits === true) return true;
   const account = asRecord(bootstrap.account);
   const settings = account ? asRecord(account.settings) : null;
   if (settings?.can_reset_rate_limits === true) return true;
-  // Official GrowthBook key; when unknown, allow attempt if org uuid present (server enforces).
-  return Boolean(organizationUuidFromBootstrap(bootstrap));
+  // Official GrowthBook el(): missing key is false — no org-only fail-open.
+  return false;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

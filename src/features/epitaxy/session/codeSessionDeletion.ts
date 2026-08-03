@@ -29,6 +29,7 @@ import { previewAnnotationQueue } from "./previewAnnotationQueue";
 
 export const CODE_SESSION_DELETED_EVENT = "epitaxy:code-session-deleted";
 export const CODE_SESSION_ARCHIVED_EVENT = "epitaxy:code-session-archived";
+export const CODE_SESSION_UNARCHIVED_EVENT = "epitaxy:code-session-unarchived";
 
 export type CodeSessionIdDetail = {
   sessionId: string;
@@ -39,6 +40,7 @@ export type CodeSessionDeletedDetail = CodeSessionIdDetail;
 
 const inflightDelete = new Map<string, Promise<boolean>>();
 const inflightArchive = new Map<string, Promise<boolean>>();
+const inflightUnarchive = new Map<string, Promise<boolean>>();
 
 /** Official next → previous → /code selection over a frozen visible order. */
 export function resolveDeletedCodeSessionFallback(
@@ -152,4 +154,22 @@ export async function archiveCodeSession(sessionId: string): Promise<boolean> {
     emitSessionIdEvent(CODE_SESSION_ARCHIVED_EVENT, sessionId);
     return true;
   });
+}
+
+/** Official unarchive residual — restore row to active recents. */
+export async function unarchiveCodeSession(sessionId: string): Promise<boolean> {
+  return runExclusive(inflightUnarchive, sessionId, async () => {
+    try {
+      if (!desktopBridge.LocalSessions.unarchive) return false;
+      await desktopBridge.LocalSessions.unarchive(sessionId);
+    } catch {
+      return false;
+    }
+    emitSessionIdEvent(CODE_SESSION_UNARCHIVED_EVENT, sessionId);
+    return true;
+  });
+}
+
+export function subscribeCodeSessionUnarchived(listener: (sessionId: string) => void): () => void {
+  return subscribeSessionIdEvent(CODE_SESSION_UNARCHIVED_EVENT, listener);
 }

@@ -8,9 +8,15 @@ import { Icon } from "./icons";
  */
 type SidebarStatusSession = Pick<
   SessionSummary,
-  "isArchived" | "isRunning" | "isUnread" | "pendingToolPermissions"
+  | "hasCompleted"
+  | "isArchived"
+  | "isRunning"
+  | "isUnread"
+  | "kind"
+  | "pendingToolPermissions"
+  | "sessionKind"
 > & {
-  /** Optional PR aggregate state when repo PR data is available. */
+  /** Optional PR aggregate state when repo PR data is available (Code yje residual). */
   prState?: OfficialCodePrState;
 };
 
@@ -25,14 +31,25 @@ export type OfficialCodePrState =
   | "merged"
   | "closed";
 
-/** Official u_e status reducer (code kind). */
+/**
+ * Official u_e (index-BELzQL5P):
+ *   pendingPermissions>0 → awaiting
+ *   isRunning → running
+ *   hasCompleted && isUnread → ready
+ *   code && prState !== "none" → pr
+ *   else idle
+ *
+ * Code glyph residual also sets hasCompleted/isUnread from unreadIds (x=f||g&&!!c);
+ * product host now persists both fields on turn settle.
+ */
 function officialCodeStatusState(session: SidebarStatusSession): "awaiting" | "running" | "ready" | "pr" | "idle" {
   const pending = session.pendingToolPermissions?.length ?? 0;
   if (pending > 0) return "awaiting";
   if (session.isRunning) return "running";
-  // Official vje passes unread into u_e.hasCompleted; ready = unread activity.
-  if (session.isUnread) return "ready";
-  if (session.prState && session.prState !== "none") return "pr";
+  if (session.hasCompleted && session.isUnread) return "ready";
+  // Official u_e: kind==="code" && prState !== "none" → pr
+  const isCode = session.kind === "code" || session.sessionKind === "code";
+  if (isCode && session.prState && session.prState !== "none") return "pr";
   return "idle";
 }
 

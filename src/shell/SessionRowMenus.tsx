@@ -6,7 +6,7 @@ import { GroupSubmenu } from "./CustomGroups";
 import { isPinnedSession } from "./sessionPinning";
 import { canOpenSessionInSplit } from "./sessionPaths";
 
-export type RowAction = "pin" | "unpin" | "rename" | "archive" | "delete";
+export type RowAction = "pin" | "unpin" | "rename" | "archive" | "unarchive" | "delete";
 
 type SessionRowMenuContentProps = {
   frame: FrameStore;
@@ -32,7 +32,11 @@ export function SessionRowMenuContent({ frame, onAction, onCreateGroup, onOpenSp
       <BaseMenuItem icon="Edit" onClick={() => onAction(session, "rename")}>{text.rename}</BaseMenuItem>
       <GroupSubmenu frame={frame} onCreateGroup={onCreateGroup} session={session} />
       <BaseMenuSeparator />
-      <BaseMenuItem icon="Archive" onClick={() => onAction(session, "archive")}>{text.archive}</BaseMenuItem>
+      {session.isArchived ? (
+        <BaseMenuItem icon="Archive" onClick={() => onAction(session, "unarchive")}>{text.unarchive}</BaseMenuItem>
+      ) : (
+        <BaseMenuItem icon="Archive" onClick={() => onAction(session, "archive")}>{text.archive}</BaseMenuItem>
+      )}
       <BaseMenuItem icon="Trash" onClick={() => onAction(session, "delete")}>{text.delete}</BaseMenuItem>
     </>
   );

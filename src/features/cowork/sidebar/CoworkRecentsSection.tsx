@@ -73,7 +73,7 @@ export function CoworkRecentsSection({ frame, onNavigate }: CoworkRecentsSection
     const ok = await archiveCoworkSession(session.id);
     if (!ok) return;
     data.setSessions((current) => current.map((item) => (
-      item.id === session.id ? { ...item, isArchived: true } : item
+      item.id === session.id ? { ...item, isArchived: true, isPinned: false } : item
     )));
     frame.clearSessionSidebarMeta(coworkSessionPinKey(session));
     if (selectedSessionIdFromPath(window.location.pathname) === session.id) {
@@ -130,7 +130,7 @@ export function CoworkRecentsSection({ frame, onNavigate }: CoworkRecentsSection
         const target = current.find((item) => item.id === sessionId);
         if (target) frame.clearSessionSidebarMeta(coworkSessionPinKey(target));
         return current.map((item) => (
-          item.id === sessionId ? { ...item, isArchived: true } : item
+          item.id === sessionId ? { ...item, isArchived: true, isPinned: false } : item
         ));
       });
     });

@@ -1,3 +1,14 @@
+/**
+ * Official O5e ToolUse shell + residual tct dispatch subset (index-BELzQL5P).
+ *
+ * O5e residual (portable):
+ * 1. permission null for pending non-AskUserQuestion tools
+ * 2. keep AskUserQuestion visible
+ * 3. package props → inject renderToolUseCell (c2e)
+ *
+ * tct residual subset (product): specialized cells already ported — not full enterprise Map.
+ * Timeline (gst) and content paths share this shell; standalone flag selects rich/result branch.
+ */
 import { memo, type ReactNode } from "react";
 import { CoworkOfficialFileGlyph } from "../../ui/CoworkOfficialFileGlyph";
 import { CoworkEditGlyph, CoworkMemoryGlyph, CoworkSkillGlyph } from "../../ui/CoworkOfficialGlyphs";
@@ -10,7 +21,11 @@ import { CoworkFileToolCell } from "./CoworkFileToolCell";
 import { CoworkGenericToolCell } from "./CoworkGenericToolCell";
 import { CoworkToolRow } from "./CoworkToolRow";
 import { CoworkConnectorSuggestion, CoworkPluginSuggestion, CoworkSkillSuggestion } from "./CoworkOfficialSuggestions";
-import { hasPendingCoworkToolPermission, useCoworkMessageContext } from "./CoworkMessageContext";
+import {
+  hasPendingCoworkToolPermission,
+  useCoworkMessageContext,
+  type CoworkRenderToolUseCellProps,
+} from "./CoworkMessageContext";
 import { CoworkTaskToolCell } from "./CoworkTaskToolCell";
 import { CoworkSaveSkillResultCard, CoworkScheduledTaskResultCard } from "./CoworkStandaloneResultCards";
 import { CoworkToolCodeBlock } from "./CoworkToolPresentation";
@@ -33,28 +48,73 @@ export type CoworkOfficialToolRendererProps = {
 
 const fileTools = new Set(["create_file", "open_file", "update_file", "view", "read", "write", "edit", "str_replace", "str_replace_editor"]);
 
+/**
+ * Official O5e ToolUse shell.
+ * Cell choice lives in renderToolUseCell inject (default = residual tct subset).
+ */
 export const CoworkOfficialToolRenderer = memo(function CoworkOfficialToolRenderer(props: CoworkOfficialToolRendererProps) {
-  // Local stand-in for official O5e ToolUse: permission null + renderToolUseCell dispatch.
-  // Official O5e only nulls pending permission (except AskUserQuestion); cell choice is renderToolUseCell.
-  const { toolPermissionRequests } = useCoworkMessageContext();
+  const { renderToolUseCell, toolPermissionRequests } = useCoworkMessageContext();
   const normalizedName = normalizeToolName(props.block.name ?? "");
-  if (hasPendingCoworkToolPermission(toolPermissionRequests, props.block.id)) return null;
-  // Widget / rich tools render outside the timeline group (content segment, standalone=true).
-  // Keep AskUserQuestion widget even if a caller forgets standalone (official content path).
+
+  // Official: AskUserQuestion stays visible while pending (permission null excludes it).
   if (props.block.name === "AskUserQuestion") {
-    return <CoworkAskUserQuestionWidget input={asRecord(props.block.input)} result={props.toolResult} />;
+    return (
+      <div data-official-source="index-BELzQL5P.js:O5e+AskUserQuestion">
+        <CoworkAskUserQuestionWidget input={asRecord(props.block.input)} result={props.toolResult} />
+      </div>
+    );
   }
-  if (props.standalone) return <CoworkStandaloneTool {...props} normalizedName={normalizedName} />;
-  if (normalizedName === "web_search") return <CoworkWebSearchToolCell {...groupProps(props)} input={asRecord(props.block.input)} toolResult={props.toolResult} />;
-  if (normalizedName === "web_fetch") return <CoworkWebFetchToolCell {...groupProps(props)} input={asRecord(props.block.input)} toolResult={props.toolResult} />;
-  if (normalizedName === "task") return <CoworkTaskTool {...props} />;
-  if (normalizedName === "bash" || normalizedName === "bash_tool") return <CoworkBashToolCell {...groupProps(props)} input={asRecord(props.block.input)} toolResult={props.toolResult} />;
-  if (isFileTool(normalizedName, props.block.input)) return <CoworkFileTool {...props} normalizedName={normalizedName} />;
-  if (normalizedName === "present_files" || normalizedName === "send_user_file") return <CoworkPresentFilesTool {...props} normalizedName={normalizedName} />;
-  return <CoworkGenericTool {...props} normalizedName={normalizedName} />;
+
+  // Official O5e permission-null branch (local_session gate N/A for product host-loop residual).
+  if (hasPendingCoworkToolPermission(toolPermissionRequests, props.block.id)) return null;
+
+  const cellProps: CoworkRenderToolUseCellProps = {
+    block: props.block,
+    isFirstBlockOfMessage: props.isFirstBlockOfMessage,
+    isFirstItem: props.isFirstItem,
+    isLastBlockOfMessage: props.isLastBlockOfMessage,
+    isLastItem: props.isLastItem,
+    isStreaming: props.isStreaming,
+    message: props.message,
+    standalone: props.standalone,
+    toolResult: props.toolResult,
+    normalizedName,
+  };
+
+  const render = renderToolUseCell ?? renderCoworkToolUseCell;
+  return (
+    <div data-official-source="index-BELzQL5P.js:O5e" className="contents">
+      {render(cellProps)}
+    </div>
+  );
 });
 
-function CoworkFileTool(props: CoworkOfficialToolRendererProps & { normalizedName: string }) {
+/**
+ * Residual tct / gst dispatch subset — specialized cells only.
+ * Not a full official enterprise/lazy cell table invent.
+ */
+export function renderCoworkToolUseCell(props: CoworkRenderToolUseCellProps): ReactNode {
+  const { normalizedName } = props;
+  // Content/rich path: suggestions + result cards (official content segment tools).
+  if (props.standalone) return <CoworkStandaloneTool {...props} />;
+  if (normalizedName === "web_search") {
+    return <CoworkWebSearchToolCell {...groupProps(props)} input={asRecord(props.block.input)} toolResult={props.toolResult} />;
+  }
+  if (normalizedName === "web_fetch") {
+    return <CoworkWebFetchToolCell {...groupProps(props)} input={asRecord(props.block.input)} toolResult={props.toolResult} />;
+  }
+  if (normalizedName === "task") return <CoworkTaskTool {...props} />;
+  if (normalizedName === "bash" || normalizedName === "bash_tool") {
+    return <CoworkBashToolCell {...groupProps(props)} input={asRecord(props.block.input)} toolResult={props.toolResult} />;
+  }
+  if (isFileTool(normalizedName, props.block.input)) return <CoworkFileTool {...props} />;
+  if (normalizedName === "present_files" || normalizedName === "send_user_file") {
+    return <CoworkPresentFilesTool {...props} />;
+  }
+  return <CoworkGenericTool {...props} />;
+}
+
+function CoworkFileTool(props: CoworkRenderToolUseCellProps) {
   const input = asRecord(props.block.input);
   const path = stringValue(input.file_path) ?? stringValue(input.path) ?? "";
   const action = coworkFileAction(props.normalizedName, path);
@@ -98,7 +158,7 @@ function CoworkFileTool(props: CoworkOfficialToolRendererProps & { normalizedNam
   );
 }
 
-function CoworkFileEdit(props: CoworkOfficialToolRendererProps & { description?: string; handleClick?: () => void; input: Record<string, unknown>; path: string }) {
+function CoworkFileEdit(props: CoworkRenderToolUseCellProps & { description?: string; handleClick?: () => void; input: Record<string, unknown>; path: string }) {
   const isError = props.toolResult?.is_error === true;
   const complete = Boolean(props.toolResult);
   const displayName = coworkFileDisplayName(props.path);
@@ -117,7 +177,7 @@ function CoworkFileEdit(props: CoworkOfficialToolRendererProps & { description?:
   );
 }
 
-function CoworkGenericTool(props: CoworkOfficialToolRendererProps & { normalizedName: string }) {
+function CoworkGenericTool(props: CoworkRenderToolUseCellProps) {
   const input = asRecord(props.block.input);
   const request = serializeInput(props.block.input);
   const resultBlocks = Array.isArray(props.toolResult?.content) ? props.toolResult.content : [];
@@ -159,7 +219,7 @@ function GenericResultBlock({ block, index, isError }: { block: CoworkContentBlo
   return src ? <img alt="Tool result" className="max-w-md max-h-md h-auto rounded-md" key={index} src={src} /> : null;
 }
 
-function CoworkTaskTool(props: CoworkOfficialToolRendererProps) {
+function CoworkTaskTool(props: CoworkRenderToolUseCellProps) {
   const description = stringValue(asRecord(props.block.input).description) ?? "Running subagent";
   const childBlocks = props.message.content.filter((block) => block._isSubagentBlock && block._parentToolUseId === props.block.id);
   const childTools = childBlocks.filter((block) => block.type === "tool_use");
@@ -174,12 +234,12 @@ function CoworkTaskTool(props: CoworkOfficialToolRendererProps) {
   );
 }
 
-function renderSubagentBlock(block: CoworkContentBlock, blocks: CoworkContentBlock[], parent: CoworkOfficialToolRendererProps, flags: { isFirstItem: boolean; isLastItem: boolean }) {
+function renderSubagentBlock(block: CoworkContentBlock, blocks: CoworkContentBlock[], parent: CoworkRenderToolUseCellProps, flags: { isFirstItem: boolean; isLastItem: boolean }) {
   const result = blocks.find((candidate) => candidate.type === "tool_result" && candidate.tool_use_id === block.id);
   return <CoworkOfficialToolRenderer block={block} isFirstItem={flags.isFirstItem} isLastItem={flags.isLastItem} isStreaming={parent.isStreaming && !result} message={parent.message} toolResult={result} />;
 }
 
-function CoworkPresentFilesTool(props: CoworkOfficialToolRendererProps & { normalizedName: string }) {
+function CoworkPresentFilesTool(props: CoworkRenderToolUseCellProps) {
   // Official Klt (index-BELzQL5P.pretty.js): path from toolResult.content local_resource.file_path → SELECT_FILE.
   const actions = useCoworkTranscriptActions();
   const path = presentFilesPath(props.toolResult);
@@ -217,7 +277,7 @@ export function presentFilesPath(toolResult?: CoworkContentBlock) {
   return "";
 }
 
-function CoworkStandaloneTool(props: CoworkOfficialToolRendererProps & { normalizedName: string }): ReactNode {
+function CoworkStandaloneTool(props: CoworkRenderToolUseCellProps): ReactNode {
   const lower = (props.block.name ?? "").toLowerCase();
   if (lower.includes("create_scheduled_task") && props.toolResult?.is_error !== true) return <CoworkScheduledTaskResultCard block={props.block} />;
   if (lower.includes("save_skill") && props.toolResult?.is_error !== true) return <CoworkSaveSkillResultCard block={props.block} />;
@@ -227,7 +287,7 @@ function CoworkStandaloneTool(props: CoworkOfficialToolRendererProps & { normali
   return <CoworkGenericTool {...props} />;
 }
 
-function groupProps(props: CoworkOfficialToolRendererProps) {
+function groupProps(props: Pick<CoworkRenderToolUseCellProps, "isFirstBlockOfMessage" | "isFirstItem" | "isLastBlockOfMessage" | "isLastItem" | "isStreaming" | "standalone">) {
   return {
     isFirstBlockOfMessage: props.isFirstBlockOfMessage,
     isFirstItemInGroup: props.isFirstItem,

@@ -30,6 +30,9 @@ function sessionPinKind(session: Pick<SessionSummary, "kind" | "sessionKind">) {
 export function orderPinnedSessions(sessions: SessionSummary[], pinnedOrder: string[]) {
   const byKey = new Map<string, SessionSummary>();
   for (const session of sessions) {
+    // Official pin rail is active sessions only — archived rows stay in list for
+    // status=archived filter, but must not remain under Pinned after archive/unpin meta clear.
+    if (session.isArchived) continue;
     for (const key of sessionPinKeyAliases(session)) byKey.set(key, session);
   }
   const ordered: SessionSummary[] = [];
@@ -40,11 +43,14 @@ export function orderPinnedSessions(sessions: SessionSummary[], pinnedOrder: str
     seen.add(session.id);
     ordered.push(session);
   }
-  const fallback = sessions.filter((session) => session.isPinned && !seen.has(session.id));
+  const fallback = sessions.filter((session) => session.isPinned && !session.isArchived && !seen.has(session.id));
   return [...ordered, ...fallback];
 }
 
 export function isPinnedSession(session: SessionSummary, pinnedOrder: string[]) {
+  // Archived sessions leave the pin rail (orderPinnedSessions + archive meta clear).
+  // Treat as unpinned so they are not dual-excluded from both Pinned and Recents.
+  if (session.isArchived) return false;
   if (session.isPinned) return true;
   return sessionPinKeyAliases(session).some((key) => pinnedOrder.includes(key));
 }

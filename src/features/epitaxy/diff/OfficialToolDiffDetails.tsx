@@ -7,7 +7,15 @@
  */
 import { parseDiffFromFile, type FileContents, type FileDiffMetadata } from "@pierre/diffs";
 import { File, FileDiff } from "@pierre/diffs/react";
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
 import { officialPierreLangFromPath } from "./officialPierreLang";
 import { useOfficialPierreTheme, useWorkerPool } from "./OfficialPierreWorkerPool";
@@ -25,6 +33,211 @@ const TOOL_DIFF_METRICS = {
   hunkSeparatorHeight: 28,
   spacing: 6,
 };
+
+/**
+ * Collapse wrappers (framer-motion height 0→auto + overflow:hidden) can clip a
+ * child that still reports content height. Treat any zero-height overflow-hidden
+ * ancestor as "not ready" so Pierre does not hydrate into a clipped host.
+ */
+function isPierreHostLayoutReady(host: HTMLElement): boolean {
+  if (host.getBoundingClientRect().height < 1) return false;
+  let node: HTMLElement | null = host;
+  while (node) {
+    const style = window.getComputedStyle(node);
+    const overflowHidden =
+      style.overflow === "hidden" ||
+      style.overflowY === "hidden" ||
+      style.overflowX === "hidden";
+    if (overflowHidden && node.getBoundingClientRect().height < 1) return false;
+    node = node.parentElement;
+  }
+  return true;
+}
+
+/**
+ * Official tool rows mount under `OfficialCollapse` (framer-motion height 0→auto).
+ * Pierre `File`/`FileDiff` freezes worker + hydrates into `diffs-container` shadow on first
+ * attach; when that happens at height:0 the shadow can end with only the SVG sprite / empty
+ * `<pre>` and never re-paint lines.
+ *
+ * Strategy:
+ * - Keep plain pre mounted while waiting (gives host intrinsic height for measurement).
+ * - Promote to Pierre only when host + overflow-hidden collapse ancestors have height.
+ * - Never force-mount Pierre into a still-clipped collapse (that was the empty shell bug).
+ * - If layout never becomes ready, plain pre stays — content is never blank.
+ */
+function usePierreLayoutMountReady(hostRef: RefObject<HTMLElement | null>) {
+  const [ready, setReady] = useState(false);
+
+  useLayoutEffect(() => {
+    let cancelled = false;
+    let raf1 = 0;
+    let raf2 = 0;
+    let pollTimer = 0;
+
+    const markReady = () => {
+      if (cancelled) return;
+      // Double rAF: wait one paint after collapse spring starts measuring height:auto.
+      raf1 = window.requestAnimationFrame(() => {
+        raf2 = window.requestAnimationFrame(() => {
+          if (!cancelled) setReady(true);
+        });
+      });
+    };
+
+    setReady(false);
+
+    const tryReady = () => {
+      if (cancelled) return true;
+      const node = hostRef.current;
+      if (!node || !isPierreHostLayoutReady(node)) return false;
+      markReady();
+      return true;
+    };
+
+    if (tryReady()) {
+      return () => {
+        cancelled = true;
+        window.cancelAnimationFrame(raf1);
+        window.cancelAnimationFrame(raf2);
+      };
+    }
+
+    let observer: ResizeObserver | null = null;
+    const observeIfNeeded = () => {
+      const node = hostRef.current;
+      if (!node || observer) return;
+      observer = new ResizeObserver(() => {
+        if (tryReady()) {
+          observer?.disconnect();
+          observer = null;
+        }
+      });
+      observer.observe(node);
+    };
+    observeIfNeeded();
+    // Collapse spring is ~350ms; poll while height animates open / ref attaches.
+    // Also observe ancestors: host height can be non-zero from plain pre while the
+    // motion.div ancestor is still height:0 overflow:hidden.
+    const ancestorObservers: ResizeObserver[] = [];
+    const node = hostRef.current;
+    if (node) {
+      let ancestor: HTMLElement | null = node.parentElement;
+      while (ancestor) {
+        const style = window.getComputedStyle(ancestor);
+        const overflowHidden =
+          style.overflow === "hidden" ||
+          style.overflowY === "hidden" ||
+          style.overflowX === "hidden";
+        if (overflowHidden) {
+          const ao = new ResizeObserver(() => {
+            if (tryReady()) {
+              ao.disconnect();
+              observer?.disconnect();
+              window.clearInterval(pollTimer);
+            }
+          });
+          ao.observe(ancestor);
+          ancestorObservers.push(ao);
+        }
+        ancestor = ancestor.parentElement;
+      }
+    }
+    pollTimer = window.setInterval(() => {
+      observeIfNeeded();
+      if (tryReady()) {
+        observer?.disconnect();
+        observer = null;
+        for (const ao of ancestorObservers) ao.disconnect();
+        window.clearInterval(pollTimer);
+      }
+    }, 32);
+    // Soft stop polling after collapse should have settled; stay on plain pre if still
+    // clipped — do NOT mark Pierre ready (avoids sprite-only empty shells).
+    const fallbackTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      observer?.disconnect();
+      observer = null;
+      for (const ao of ancestorObservers) ao.disconnect();
+      window.clearInterval(pollTimer);
+      // One last chance if layout is actually ready by now.
+      tryReady();
+    }, 1200);
+
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+      for (const ao of ancestorObservers) ao.disconnect();
+      window.clearInterval(pollTimer);
+      window.clearTimeout(fallbackTimer);
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(raf2);
+    };
+  }, [hostRef]);
+
+  return ready;
+}
+
+function pierreShadowHasLines(host: HTMLElement | null | undefined): boolean {
+  if (!host) return false;
+  const container = host.querySelector("diffs-container") as HTMLElement | null;
+  const root = (container?.shadowRoot ?? container ?? host) as ParentNode;
+  if (root.querySelector("[data-line], [data-line-number-content]")) return true;
+  // Plain-text File path still paints code rows under [data-code]; empty sprite-only
+  // shells only have the SVG (+ optional empty pre).
+  const code = root.querySelector("[data-code]");
+  if (code && (code.textContent?.replace(/\s/g, "").length ?? 0) > 0) return true;
+  return false;
+}
+
+/**
+ * If Pierre mounts but shadow stays sprite-only / empty pre, remount once; then fail-open
+ * to plain pre. Product bridge for collapse/worker race — not official invent of new chrome.
+ */
+function usePierreEmptyRecovery(
+  hostRef: RefObject<HTMLElement | null>,
+  enabled: boolean,
+  remountKey: string,
+) {
+  const [generation, setGeneration] = useState(0);
+  const [failedOpen, setFailedOpen] = useState(false);
+
+  useEffect(() => {
+    setGeneration(0);
+    setFailedOpen(false);
+  }, [remountKey]);
+
+  useEffect(() => {
+    if (!enabled || failedOpen) return;
+    const started = Date.now();
+    // First remount after ~600ms empty; second fail-open ~600ms after remount.
+    const emptyBudgetMs = 600;
+    const timer = window.setInterval(() => {
+      if (pierreShadowHasLines(hostRef.current)) {
+        window.clearInterval(timer);
+        return;
+      }
+      if (Date.now() - started < emptyBudgetMs) return;
+      window.clearInterval(timer);
+      if (generation < 1) {
+        setGeneration((value) => value + 1);
+      } else {
+        setFailedOpen(true);
+      }
+    }, 80);
+    return () => window.clearInterval(timer);
+  }, [enabled, failedOpen, generation, hostRef, remountKey]);
+
+  return { failedOpen, generation };
+}
+
+function ToolDiffPlainPre({ text }: { text: string }) {
+  return (
+    <pre className="m-0 px-p6 pb-p8 text-code text-assistant-secondary whitespace-pre-wrap break-all">
+      {text}
+    </pre>
+  );
+}
 
 export type OfficialToolDiffMeta = {
   counts: { additions: number; deletions: number };
@@ -231,8 +444,14 @@ function OfficialToolPureSideFile({
 }) {
   const theme = useOfficialPierreTheme();
   const workerPool = useWorkerPool();
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const layoutReady = usePierreLayoutMountReady(hostRef);
   const isAdditions = diffMeta.pureSide === "additions";
   const file = isAdditions ? diffMeta.newFile : diffMeta.oldFile;
+  const plainText = file.contents;
+  const remountKey = file.cacheKey ?? `${file.name}:${file.contents.length}`;
+  const pierreEnabled = Boolean(workerPool) && layoutReady;
+  const { failedOpen, generation } = usePierreEmptyRecovery(hostRef, pierreEnabled, remountKey);
   const lineBg = isAdditions ? "var(--extended-20-green)" : "var(--extended-20-pink)";
   const numberColor = isAdditions ? "var(--extended-green)" : "var(--extended-pink)";
   const marker = isAdditions ? "+" : "−";
@@ -253,8 +472,17 @@ function OfficialToolPureSideFile({
     }),
     [baseUnsafeCSS, lineBg, marker, numberColor, theme],
   );
-  if (!workerPool) return null;
-  return <File file={file} options={options} />;
+  // Plain pre while layout springs open / recovery; promotes to Pierre once ready.
+  const showPierre = pierreEnabled && !failedOpen;
+  return (
+    <div ref={hostRef} data-pierre-host="tool-pure-side">
+      {showPierre ? (
+        <File file={file} key={`pure-${remountKey}-${generation}`} options={options} />
+      ) : (
+        <ToolDiffPlainPre text={plainText} />
+      )}
+    </div>
+  );
 }
 
 /** Official sx mixed diff branch (hh) — unified FileDiff. */
@@ -267,6 +495,15 @@ function OfficialToolUnifiedFileDiff({
 }) {
   const theme = useOfficialPierreTheme();
   const workerPool = useWorkerPool();
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const layoutReady = usePierreLayoutMountReady(hostRef);
+  const plainText =
+    diffMeta.pureSide === "deletions" ? diffMeta.oldFile.contents : diffMeta.newFile.contents;
+  const remountKey =
+    diffMeta.fileDiff.cacheKey ??
+    `${diffMeta.path}:${diffMeta.counts.additions}:${diffMeta.counts.deletions}`;
+  const pierreEnabled = Boolean(workerPool) && layoutReady;
+  const { failedOpen, generation } = usePierreEmptyRecovery(hostRef, pierreEnabled, remountKey);
   const options = useMemo(
     () => ({
       theme,
@@ -281,13 +518,20 @@ function OfficialToolUnifiedFileDiff({
     }),
     [baseUnsafeCSS, theme],
   );
-  if (!workerPool) return null;
+  const showPierre = pierreEnabled && !failedOpen;
   return (
-    <FileDiff
-      fileDiff={diffMeta.fileDiff}
-      metrics={TOOL_DIFF_METRICS}
-      options={options}
-    />
+    <div ref={hostRef} data-pierre-host="tool-unified">
+      {showPierre ? (
+        <FileDiff
+          fileDiff={diffMeta.fileDiff}
+          key={`unified-${remountKey}-${generation}`}
+          metrics={TOOL_DIFF_METRICS}
+          options={options}
+        />
+      ) : (
+        <ToolDiffPlainPre text={plainText} />
+      )}
+    </div>
   );
 }
 
@@ -339,6 +583,8 @@ export function OfficialToolReadFileDetails({
 }) {
   const theme = useOfficialPierreTheme();
   const workerPool = useWorkerPool();
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const layoutReady = usePierreLayoutMountReady(hostRef);
   const displayName = basename(path);
   const lang = officialPierreLangFromPath(displayName) as FileContents["lang"];
   // cacheKey enables worker LRU + stable highlight key (package getFileHighlightKey).
@@ -351,6 +597,9 @@ export function OfficialToolReadFileDetails({
       cacheKey: `read:${displayName}:${lang}:${hashOfficialToolCacheKey(body)}:${body.length}`,
     };
   }, [contents, displayName, lang]);
+  const remountKey = file.cacheKey ?? `read:${displayName}:${contents.length}`;
+  const pierreEnabled = Boolean(workerPool) && layoutReady;
+  const { failedOpen, generation } = usePierreEmptyRecovery(hostRef, pierreEnabled, remountKey);
   const options = useMemo(
     () => ({
       theme,
@@ -361,6 +610,8 @@ export function OfficialToolReadFileDetails({
     }),
     [theme],
   );
+  // Plain pre while collapse springs / pool missing / recovery; Pierre once layout-ready.
+  const showPierre = pierreEnabled && !failedOpen;
   return (
     <div className="group/body py-p6">
       <div className="bg-t1 rounded-r6 overflow-clip flex flex-col">
@@ -368,9 +619,11 @@ export function OfficialToolReadFileDetails({
           <ToolDiffPathButton onOpen={onOpenPath} path={path} />
           {copySlot ?? <ToolDiffCopyButton text={contents} />}
         </div>
-        <div className="epitaxy-diff">
-          {workerPool ? <File file={file} options={options} /> : (
-            <pre className="m-0 px-p6 pb-p8 text-code text-assistant-secondary whitespace-pre-wrap break-all">{contents}</pre>
+        <div className="epitaxy-diff" ref={hostRef} data-pierre-host="tool-read">
+          {showPierre ? (
+            <File file={file} key={`read-${remountKey}-${generation}`} options={options} />
+          ) : (
+            <ToolDiffPlainPre text={contents} />
           )}
         </div>
       </div>

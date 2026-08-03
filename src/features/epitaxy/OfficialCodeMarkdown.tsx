@@ -1,14 +1,19 @@
 /**
  * Official assistant markdown pipeline from c11959232:
- * - kb: structure-tracker streaming chunks (xd) + search_tree preprocess (ks)
+ * - kb: claude_ai_alluvium_main → wb (data-alluvium + vd committed/frontier);
+ *       else structure-tracker streaming chunks (xd) + search_tree preprocess (ks)
+ * - Jv.Provider value:isStreaming around both paths
  * - jb: react-markdown + remark-gfm + mb component map
  * - ab: Pierre File fence + copy (+ optional shell run hook later)
  * - ob/db: inline code / links
  */
 import {
   Children,
+  createContext,
+  Fragment,
   isValidElement,
   memo,
+  useContext,
   useId,
   useMemo,
   useState,
@@ -22,15 +27,55 @@ import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { evaluateCoworkMarkdownFeature } from "../cowork/session/transcript/CoworkAssistantMarkdown";
+import {
+  AlluviumMarkdown,
+  type AlluviumFenceBlock,
+} from "../cowork/session/transcript/AlluviumMarkdown";
 import { Icon } from "../../shell/icons";
 import { OfficialButton } from "./OfficialEpitaxyComponents";
 import { isOfficialMermaidMarkdownLanguage, OfficialMermaidDiagramCard } from "./OfficialMermaidDiagramCard";
 import { OfficialSearchTree, officialSearchTreeLanguage } from "./OfficialSearchTree";
+import {
+  looksLikeOfficialLocalPathHref,
+  needsOfficialBrSplit,
+  parseOfficialFileRef,
+  splitOfficialBrMarkers,
+  officialMarkdownUrlTransform as residualUrlTransform,
+} from "./officialMarkdownMbResidual";
 import { officialPierreLangFromPath } from "./diff/officialPierreLang";
 import { useOfficialPierreTheme, useWorkerPool } from "./diff/OfficialPierreWorkerPool";
 import { pierreTokenPaintOnPostRender } from "./diff/pierreTokenPaint";
 import "./diff/ensurePierreDiffsContainer";
 import "katex/dist/katex.min.css";
+
+/**
+ * Official c119 bb fence residual:
+ *   langSettled already gated by Alluvium code variant;
+ *   search_tree → Ex; else ab (Pierre) / mermaid product delta.
+ */
+function renderOfficialCodeAlluviumFence(block: AlluviumFenceBlock) {
+  const lang = block.lang
+    ? (OFFICIAL_MD_LANG_ALIAS[block.lang.toLowerCase()] ?? block.lang)
+    : "text";
+  if (lang === officialSearchTreeLanguage || block.lang === officialSearchTreeLanguage) {
+    return <OfficialSearchTree content={block.code} />;
+  }
+  if (isOfficialMermaidMarkdownLanguage(lang)) {
+    return <OfficialMermaidDiagramCard source={block.code} />;
+  }
+  return <OfficialAssistantCodeFence language={lang} text={block.code} />;
+}
+
+/**
+ * Official Jv (c11959232) — streaming context for markdown tree.
+ * `createContext(false)`; kb wraps children in Jv.Provider value:isStreaming.
+ */
+export const OfficialCodeMarkdownStreamingContext = createContext(false);
+
+export function useOfficialCodeMarkdownStreaming(): boolean {
+  return useContext(OfficialCodeMarkdownStreamingContext);
+}
 
 /** Official tb lang aliases. */
 const OFFICIAL_MD_LANG_ALIAS: Record<string, string> = {
@@ -50,22 +95,58 @@ const OFFICIAL_SEARCH_TREE_BLOCK_RE = /<search_tree>([\s\S]*?)<\/search_tree>/g;
 
 /**
  * Official kb (c11959232):
- * - preprocess (search_tree → fence)
- * - structure-tracker chunks while streaming (xd)
- * - each completed chunk + streaming frontier is its own jb markdown root
+ *   n = el("claude_ai_alluvium_main")
+ *   a = ks(children)
+ *   {completedChunks, streamingChunk} = xd(a, isStreaming && !n)
+ *   if (n) return Jv.Provider + epitaxy-markdown + wb({isStreaming, children:a})
+ *   else map jb chunks + frontier
+ *
+ * Product: AlluviumMarkdown residual engine = official vd/ae (c93fb40ec) used by
+ * c119 wb path; wrap with data-alluvium + contents to match c119 wb DOM.
  */
 export function OfficialCodeMarkdown({ isStreaming = false, text }: { isStreaming?: boolean; text: string }) {
   const normalized = useMemo(() => preprocessOfficialCodeMarkdown(text), [text]);
-  const { completedChunks, streamingChunk } = useOfficialCodeMarkdownChunks(normalized, isStreaming);
+  // Official el("claude_ai_alluvium_main") each render — missing/false → xd path.
+  const alluviumEnabled = evaluateCoworkMarkdownFeature("claude_ai_alluvium_main") === true;
+  // Official xd only when streaming && !alluvium.
+  const { completedChunks, streamingChunk } = useOfficialCodeMarkdownChunks(
+    normalized,
+    isStreaming && !alluviumEnabled,
+  );
   // Official: o = r || (0 === i.length ? a : "")
   const frontier = streamingChunk || (completedChunks.length === 0 ? normalized : "");
+
+  if (alluviumEnabled) {
+    return (
+      <OfficialCodeMarkdownStreamingContext.Provider value={isStreaming}>
+        <div className="epitaxy-markdown" data-official-source="c11959232-h_zsw3wI.js:kb+wb">
+          {/*
+            Official wb → bb (c119): bare tags under .epitaxy-markdown for UI font
+            (--family-ui / --text-body). NOT Cowork ye font-claude-response-body.
+            Fence inject = ab / search_tree (official bb case"fence").
+          */}
+          <AlluviumMarkdown
+            className="contents"
+            dataAlluvium
+            isStreaming={isStreaming}
+            renderFence={renderOfficialCodeAlluviumFence}
+            text={normalized}
+            variant="code"
+          />
+        </div>
+      </OfficialCodeMarkdownStreamingContext.Provider>
+    );
+  }
+
   return (
-    <div className="epitaxy-markdown" data-official-source="c11959232-h_zsw3wI.js:kb">
-      {completedChunks.map((chunk, index) => (
-        <OfficialCodeMarkdownChunk chunk={chunk} key={`c${index}`} />
-      ))}
-      {frontier ? <OfficialCodeMarkdownChunk chunk={frontier} key={`s${completedChunks.length}`} /> : null}
-    </div>
+    <OfficialCodeMarkdownStreamingContext.Provider value={isStreaming}>
+      <div className="epitaxy-markdown" data-official-source="c11959232-h_zsw3wI.js:kb+xd">
+        {completedChunks.map((chunk, index) => (
+          <OfficialCodeMarkdownChunk chunk={chunk} key={`c${index}`} />
+        ))}
+        {frontier ? <OfficialCodeMarkdownChunk chunk={frontier} key={`s${completedChunks.length}`} /> : null}
+      </div>
+    </OfficialCodeMarkdownStreamingContext.Provider>
   );
 }
 
@@ -99,7 +180,12 @@ const OfficialCodeMarkdownChunk = memo(function OfficialCodeMarkdownChunk({ chun
   );
 }, (previous, next) => previous.chunk === next.chunk);
 
-/** Official mb component map (c11959232) — simplified for local bridges. */
+/**
+ * Official mb component map (c11959232) keys only:
+ * code, pre, li, input, a, img, table, th, td.
+ * (No p/h1–h6/ul/ol/blockquote/hr — react-markdown defaults + .epitaxy-markdown CSS.)
+ * Product bridges: CustomEvent open-file for ru/mu; optional mermaid pre branch (index residual, not c119 mb).
+ */
 const officialMarkdownComponents = {
   code: OfficialMarkdownInlineCode,
   pre: OfficialMarkdownPre,
@@ -115,46 +201,53 @@ const officialMarkdownComponents = {
 /** Exported for official YN plan markdown (JN): spreads mb + mark/pre overrides. */
 export const officialMarkdownComponentsBase = officialMarkdownComponents;
 
-function OfficialMarkdownInlineCode({ children, className, ...rest }: ComponentPropsWithoutRef<"code">) {
+function OfficialMarkdownInlineCode({
+  children,
+  className,
+}: ComponentPropsWithoutRef<"code"> & { node?: unknown }) {
+  // Do not spread react-markdown's `node` AST (leaks node="[object Object]" on DOM).
   // Fenced blocks: className language-* lives on code inside pre — handled by pre.
   if (className?.includes("language-")) {
-    return (
-      <code className={className} {...rest}>
-        {children}
-      </code>
-    );
+    return <code className={className}>{children}</code>;
   }
-  // Official ob: plain inline code (file-ref bridge optional via looksLikePath + custom event).
-  const text = typeof children === "string" ? children : Array.isArray(children) ? children.join("") : null;
-  if (text && looksLikeFileRef(text)) {
+  // Official ob: string child only → hu file-ref → ru wrapper (product: CustomEvent open).
+  const text = typeof children === "string" ? children : null;
+  const fileRef = text ? parseOfficialFileRef(text) : null;
+  if (fileRef) {
     return (
       <button
         className={`${OFFICIAL_INLINE_CODE_CLASS} border-0 p-0 m-0 bg-transparent cursor-pointer`}
         data-official-source="c11959232-h_zsw3wI.js:ob+ru"
         onClick={() => {
-          window.dispatchEvent(new CustomEvent("epitaxy-open-file", { detail: { path: text } }));
+          window.dispatchEvent(
+            new CustomEvent("epitaxy-open-file", {
+              detail: { path: fileRef.path, line: fileRef.line },
+            }),
+          );
         }}
         type="button"
       >
-        <code>{children}</code>
+        {/* Official: rb on ru wrapper; bare <code> inside */}
+        <code>{text}</code>
       </button>
     );
   }
-  return (
-    <code className={OFFICIAL_INLINE_CODE_CLASS} {...rest}>
-      {children}
-    </code>
-  );
+  return <code className={OFFICIAL_INLINE_CODE_CLASS}>{children}</code>;
 }
 
 function OfficialMarkdownPre({ children }: { children?: ReactNode }) {
-  // Official pre: extract language + text, then ab or mermaid/search_tree.
+  // Official mb.pre: Jv streaming + empty → <pre />; else lang → Ex/ab.
+  const isStreaming = useOfficialCodeMarkdownStreaming();
   if (isValidElement(children)) {
     const props = children.props as { children?: ReactNode; className?: string };
     const raw = typeof props.children === "string" ? props.children.replace(/\n$/, "") : "";
+    if (isStreaming && raw === "") {
+      return <pre data-official-source="c11959232-h_zsw3wI.js:mb.pre empty" />;
+    }
     const lang = props.className
       ? parseLanguageClass(props.className)
       : "text";
+    // Product delta (index hit, not c119 mb): mermaid diagram card.
     if (isOfficialMermaidMarkdownLanguage(lang)) {
       return <OfficialMermaidDiagramCard source={raw} />;
     }
@@ -167,14 +260,30 @@ function OfficialMarkdownPre({ children }: { children?: ReactNode }) {
 }
 
 function OfficialMarkdownAnchor({ href, children }: { href?: string; children?: ReactNode }) {
-  // Official db simplified: external link chrome; file-path open via custom event when path-like.
-  if (href && looksLikeLocalPathHref(href)) {
+  // Official db: decodeURI-safe path / external; product bridge CustomEvent for local paths.
+  let resolvedHref = href;
+  if (resolvedHref) {
+    try {
+      resolvedHref = decodeURI(resolvedHref);
+    } catch {
+      // keep raw
+    }
+  }
+  if (resolvedHref && looksLikeOfficialLocalPathHref(resolvedHref)) {
+    const fileRef = parseOfficialFileRef(resolvedHref);
     return (
       <button
         className={OFFICIAL_MD_LINK_CLASS}
         data-official-source="c11959232-h_zsw3wI.js:db file"
         onClick={() => {
-          window.dispatchEvent(new CustomEvent("epitaxy-open-file", { detail: { path: href } }));
+          window.dispatchEvent(
+            new CustomEvent("epitaxy-open-file", {
+              detail: {
+                path: fileRef?.path ?? resolvedHref,
+                line: fileRef?.line,
+              },
+            }),
+          );
         }}
         type="button"
       >
@@ -192,10 +301,11 @@ function OfficialMarkdownAnchor({ href, children }: { href?: string; children?: 
 function OfficialMarkdownImage(props: ComponentPropsWithoutRef<"img">) {
   const src = typeof props.src === "string" ? props.src : undefined;
   if (!src) return null;
+  // Official pb classes (c119): block max-w-full h-auto rounded-r4 border border-[var(--border-default)]
   return (
     <img
       alt={props.alt ?? ""}
-      className="max-w-full rounded-r4 effect-contrast-stroke"
+      className="block max-w-full h-auto rounded-r4 border border-[var(--border-default)]"
       data-official-source="c11959232-h_zsw3wI.js:pb"
       src={src}
     />
@@ -210,18 +320,31 @@ function OfficialMarkdownTable({ children }: { children?: ReactNode }) {
   );
 }
 
+function renderOfficialBrChildren(children: ReactNode): ReactNode {
+  if (!needsOfficialBrSplit(children)) return children;
+  return splitOfficialBrMarkers(children).map((part, index) =>
+    typeof part === "string" ? (
+      <Fragment key={index}>{part}</Fragment>
+    ) : (
+      <br key={index} />
+    ),
+  );
+}
+
 function OfficialMarkdownTh({ children, style }: { children?: ReactNode; style?: CSSProperties }) {
-  return <th style={style}>{children}</th>;
+  // Official th: style + yl(children)
+  return <th style={style}>{renderOfficialBrChildren(children)}</th>;
 }
 
 function OfficialMarkdownTd({ children, style }: { children?: ReactNode; style?: CSSProperties }) {
-  return <td style={style}>{children}</td>;
+  // Official td: style + yl(children)
+  return <td style={style}>{renderOfficialBrChildren(children)}</td>;
 }
 
 function OfficialMarkdownListItem({ children, className }: { children?: ReactNode; className?: string }) {
-  // Official li: task-list-item flex layout.
+  // Official li: non-task drops className; task-list-item flex layout.
   if (!className?.includes("task-list-item")) {
-    return <li className={className}>{children}</li>;
+    return <li>{children}</li>;
   }
   const parts = Children.toArray(children);
   return (
@@ -243,7 +366,7 @@ function OfficialMarkdownInput({
   checked?: boolean;
   disabled?: boolean;
 }) {
-  // Official input: disabled checkbox → done / not-done glyphs.
+  // Official input: disabled checkbox → done / not-done glyphs; CheckSelection size "m".
   if (type !== "checkbox" || !disabled) {
     return <input checked={checked} disabled={disabled} readOnly type={type} />;
   }
@@ -251,7 +374,7 @@ function OfficialMarkdownInput({
   if (checked) {
     return (
       <span className={`${box} text-assistant-primary`} data-done>
-        <Icon name="CheckSelection" size="sm" />
+        <Icon name="CheckSelection" size="m" />
         <span className="sr-only">done</span>
       </span>
     );
@@ -264,15 +387,16 @@ function OfficialMarkdownInput({
   );
 }
 
-/** Official hb urlTransform: allow img src, sanitize others. */
-export function officialMarkdownUrlTransform(url: string): string {
-  if (!url) return url;
-  if (/^(https?:|mailto:|data:|blob:|#)/i.test(url)) return url;
-  // Allow relative / absolute filesystem-looking paths for db file bridge.
-  if (url.startsWith("/") || url.startsWith("./") || url.startsWith("../") || /^[A-Za-z]:[\\/]/.test(url)) {
-    return url;
-  }
-  return url;
+/**
+ * Official hb urlTransform — re-export residual with react-markdown signature.
+ * Strips javascript: etc.; img src pass; no-scheme paths allowed for db bridge.
+ */
+export function officialMarkdownUrlTransform(
+  url: string,
+  key?: string,
+  node?: { tagName?: string } | null,
+): string {
+  return residualUrlTransform(url, key ?? "href", node);
 }
 
 function parseLanguageClass(className: string) {
@@ -281,23 +405,10 @@ function parseLanguageClass(className: string) {
   return OFFICIAL_MD_LANG_ALIAS[raw.toLowerCase()] ?? raw;
 }
 
-function looksLikeFileRef(text: string) {
-  return text.includes("/") || text.includes("\\") || /\.[A-Za-z0-9]+$/.test(text);
-}
-
-function looksLikeLocalPathHref(href: string) {
-  if (/^(https?:|mailto:|data:|blob:|#)/i.test(href)) return false;
-  return looksLikeFileRef(href) || href.startsWith("/") || href.startsWith("./");
-}
-
 function resolveMarkdownLang(language?: string) {
   if (!language) return "text";
   const mapped = officialPierreLangFromPath(`file.${language}`);
   return mapped !== "text" ? mapped : language;
-}
-
-function ensureTrailingNewline(value: string) {
-  return value === "" || value.endsWith("\n") ? value : `${value}\n`;
 }
 
 function hashCodeCacheKey(value: string) {
@@ -318,6 +429,8 @@ function hashCodeCacheKey(value: string) {
 export function OfficialAssistantCodeFence({ language, text }: { language?: string; text: string }) {
   const theme = useOfficialPierreTheme();
   const workerPool = useWorkerPool();
+  // Official ab reads Jv streaming: cacheKey undefined while streaming.
+  const isStreaming = useOfficialCodeMarkdownStreaming();
   const [copied, setCopied] = useState(false);
   const runId = useId();
   const trimmed = text.trimEnd();
@@ -331,13 +444,14 @@ export function OfficialAssistantCodeFence({ language, text }: { language?: stri
   const rightPad = canRunShell
     ? "calc(var(--h3)*2 + var(--p2) + var(--p3)*2)"
     : "calc(var(--h3) + var(--p3)*2)";
-  // Official ab: cacheKey `${lang}:${sb(text)}:${text.length}` so worker LRU can reuse AST.
-  const cacheKey = `${lang}:${hashCodeCacheKey(text)}:${text.length}`;
+  // Official ab: cacheKey undefined while streaming (Jv); else `${lang}:${sb(text)}:${text.length}`.
+  const cacheKey = isStreaming ? undefined : `${lang}:${hashCodeCacheKey(text)}:${text.length}`;
   const file = useMemo<FileContents>(() => ({
     name: "code",
-    contents: ensureTrailingNewline(text),
+    // Official contents = raw text (no ensureTrailingNewline in residual paint path).
+    contents: text,
     lang: lang as FileContents["lang"],
-    cacheKey,
+    ...(cacheKey ? { cacheKey } : {}),
   }), [cacheKey, lang, text]);
   const options = useMemo(() => ({
     theme,
@@ -345,6 +459,7 @@ export function OfficialAssistantCodeFence({ language, text }: { language?: stri
     disableLineNumbers: true,
     overflow: "wrap" as const,
     unsafeCSS: `[data-file] { padding: var(--p6) ${rightPad} var(--p6) var(--p8); } [data-line]:hover { background: transparent; }`,
+    // Product paint assist (not c119 ab) — keep for local Pierre token fidelity.
     onPostRender: pierreTokenPaintOnPostRender,
   }), [rightPad, theme]);
   void runId;

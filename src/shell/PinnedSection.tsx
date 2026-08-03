@@ -8,6 +8,7 @@ import { OfficialSidebarStatusGlyph } from "./OfficialSidebarStatusGlyph";
 import { SidebarSectionHeader } from "./SidebarSectionHeader";
 import { orderPinnedSessions, sessionPinKey } from "./sessionPinning";
 import { sessionPath } from "./sessionPaths";
+import { useCodeSidebarPrState } from "./useCodeSidebarPrState";
 
 type PinnedSectionProps = {
   collapsed: boolean;
@@ -167,6 +168,8 @@ function sidebarRowWrapperClassName() {
 }
 
 function sidebarRowButtonClassName() {
+  // Official index-BELz uZt residual: base text-text-300; only data-selected=focused
+  // gets text-text-000. Open current session paints bg on the wrapper, not open text.
   return "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-center gap-[var(--df-row-gap)] h-[var(--df-row-h)] px-[var(--df-row-px)] hide-focus-ring focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--accent-100)),0_0_6px_0_hsl(var(--accent-100)/0.2)] rounded-[var(--df-radius-pill)] data-[selected=focused]:text-text-000";
 }
 
@@ -179,7 +182,9 @@ function OfficialSidebarTitle({ children }: { children: string }) {
 }
 
 function PinnedSessionGlyph({ session }: { session: SessionSummary }) {
-  return <OfficialSidebarStatusGlyph session={session} />;
+  // Official CodeStatusGlyph yje → prState (same residual as Recents SessionGlyph).
+  const prState = useCodeSidebarPrState(session);
+  return <OfficialSidebarStatusGlyph session={{ ...session, prState }} />;
 }
 
 export function writeSessionDragKey(event: DragEvent<HTMLElement>, key: string) {

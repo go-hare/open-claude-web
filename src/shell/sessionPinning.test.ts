@@ -46,4 +46,19 @@ describe("sessionPinKey (shared code/cowork)", () => {
     const ordered = orderPinnedSessions([s], ["epitaxy:x"]);
     expect(ordered.map((item) => item.id)).toEqual(["x"]);
   });
+
+  it("orderPinnedSessions drops archived sessions (including isPinned fallback)", () => {
+    const active = session({ id: "a", kind: "code", sessionKind: "code" });
+    const archivedPinned = session({ id: "b", kind: "code", sessionKind: "code", isArchived: true, isPinned: true });
+    const ordered = orderPinnedSessions(
+      [active, archivedPinned],
+      ["code:a", "code:b"],
+    );
+    expect(ordered.map((item) => item.id)).toEqual(["a"]);
+  });
+
+  it("isPinnedSession is false for archived even if pin key remains", () => {
+    const archived = session({ id: "b", kind: "code", sessionKind: "code", isArchived: true, isPinned: true });
+    expect(isPinnedSession(archived, ["code:b"])).toBe(false);
+  });
 });

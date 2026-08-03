@@ -8,6 +8,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { GroupNameDialog } from "./GroupNameDialog";
 import { OfficialSidebarStatusGlyph } from "./OfficialSidebarStatusGlyph";
 import { PinnedSection, readSessionDragKey, writeSessionDragKey } from "./PinnedSection";
+import { useCodeSidebarPrState } from "./useCodeSidebarPrState";
 import { buildRecentsGroups, defaultRecentsFilter, RecentsControls, type RecentsFilterState } from "./RecentsControls";
 import { isPinnedSession, orderPinnedSessions, sessionPinKey } from "./sessionPinning";
 import { SessionRowActions, useSessionRowActions } from "./SessionRowActions";
@@ -21,6 +22,8 @@ import {
   resolveDeletedCodeSessionFallback,
   subscribeCodeSessionArchived,
   subscribeCodeSessionDeleted,
+  subscribeCodeSessionUnarchived,
+  unarchiveCodeSession,
 } from "../features/epitaxy/session/codeSessionDeletion";
 import { officialCodeSessionStore } from "../features/epitaxy/session/officialCodeSessionStore";
 
@@ -118,14 +121,22 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
     const fallbackPath = resolveDeletedCodeSessionFallback(ordered, session.id);
     const ok = await archiveCodeSession(session.id);
     if (!ok) return;
+    // Drop pin flag + order so PinnedSection cannot re-surface via isPinned fallback.
     setSessions((current) => current.map((item) => (
-      item.id === session.id ? { ...item, isArchived: true } : item
+      item.id === session.id ? { ...item, isArchived: true, isPinned: false } : item
     )));
     frame.clearSessionSidebarMeta(sessionPinKey(session));
     if (selectedSessionIdFromPath(window.location.pathname) === session.id) {
       replaceAppNavigation(fallbackPath);
     }
   }, [frame, visibleNavigationOrder]);
+  const unarchiveSession = useCallback(async (session: SessionSummary) => {
+    const ok = await unarchiveCodeSession(session.id);
+    if (!ok) return;
+    setSessions((current) => current.map((item) => (
+      item.id === session.id ? { ...item, isArchived: false } : item
+    )));
+  }, []);
   const actions = useCallback((session: SessionSummary, action: RowAction) => {
     if (action === "rename") {
       setRenameTarget(session);
@@ -139,8 +150,12 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
       void archiveSession(session);
       return;
     }
+    if (action === "unarchive") {
+      void unarchiveSession(session);
+      return;
+    }
     rawActions(session, action);
-  }, [archiveSession, rawActions]);
+  }, [archiveSession, rawActions, unarchiveSession]);
   const confirmDelete = useCallback(async () => {
     const target = deleteTarget;
     if (!target) return;
@@ -177,11 +192,19 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
         const target = current.find((item) => item.id === sessionId);
         if (target) frame.clearSessionSidebarMeta(sessionPinKey(target));
         return current.map((item) => (
-          item.id === sessionId ? { ...item, isArchived: true } : item
+          item.id === sessionId ? { ...item, isArchived: true, isPinned: false } : item
         ));
       });
     });
   }, [frame]);
+
+  useEffect(() => {
+    return subscribeCodeSessionUnarchived((sessionId) => {
+      setSessions((current) => current.map((item) => (
+        item.id === sessionId ? { ...item, isArchived: false } : item
+      )));
+    });
+  }, []);
   const createGroupForSession = useCallback((session: SessionSummary, name: string) => {
     const group = frame.addCustomGroup(name);
     frame.assignToCustomGroup(sessionPinKey(session), group.id);
@@ -380,6 +403,9 @@ function sidebarRowWrapperClassName() {
 }
 
 function sidebarRowButtonClassName() {
+  // Official index-BELz uZt residual: base text-text-300; only data-selected=focused
+  // gets text-text-000 (keyboard focus). Open current session paints bg on the wrapper
+  // (data-[selected=open]:bg-bg-200 / fill-uncontained-selected), not open text color.
   return "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-center gap-[var(--df-row-gap)] h-[var(--df-row-h)] px-[var(--df-row-px)] hide-focus-ring focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--accent-100)),0_0_6px_0_hsl(var(--accent-100)/0.2)] rounded-[var(--df-radius-pill)] data-[selected=focused]:text-text-000";
 }
 
@@ -432,5 +458,7 @@ function insertBefore(keys: string[], droppedKey: string, beforeKey: string) {
 }
 
 function SessionGlyph({ session }: { session: SessionSummary }) {
-  return <OfficialSidebarStatusGlyph session={session} />;
+  // Official CodeStatusGlyph yje → prState into u_e (ready still wins over pr).
+  const prState = useCodeSidebarPrState(session);
+  return <OfficialSidebarStatusGlyph session={{ ...session, prState }} />;
 }

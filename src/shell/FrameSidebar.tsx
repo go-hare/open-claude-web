@@ -432,7 +432,12 @@ function useSidebarPeek(frame: FrameStore) {
   }, []);
 
   const onEnter = useCallback((event: ReactMouseEvent<HTMLElement>) => {
-    if (!event.currentTarget.contains(event.target as Node)) return;
+    // React synthetic enter always has currentTarget; CDP/tests may dispatch
+    // native mouseenter where target is the aside itself (still a valid peek enter).
+    const target = event.target as Node | null;
+    if (target && event.currentTarget && !event.currentTarget.contains(target) && event.currentTarget !== target) {
+      return;
+    }
     clearTimer();
     if (frame.sidebarCollapsed) {
       frame.setSidebarHovering(true);
