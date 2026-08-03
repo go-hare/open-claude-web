@@ -151,11 +151,38 @@ function linkElement(url: string, children: ReactNode, key: string, context: Ren
 }
 
 function renderSpecialParagraph(node: Extract<RootContent, { type: "paragraph" }>, key: string, context: RenderContext) {
-  const value = singleTextValue(node);
-  if (value === undefined) return null;
+  // Prefer full paragraph source (nodeSource) so GFM pipe tables that contain
+  // inline markers (**bold**, `code`, etc.) still parse. singleTextValue alone
+  // fails when remark splits the paragraph into strong/em/code children — live
+  // Cowork final replies then paint pipes as <p>+<br> instead of <table>.
+  const value = nodeSource(node, context.source) || singleTextValue(node);
+  if (!value) return null;
   const table = parseTable(value);
-  if (table) return <table key={key}><thead><tr>{table[0].map((cell, index) => <th key={index}>{renderCell(cell, `${key}-h-${index}`, context)}</th>)}</tr></thead><tbody>{table.slice(2).map((row, rowIndex) => <tr key={rowIndex}>{table[0].map((_cell, cellIndex) => <td key={cellIndex}>{renderCell(row[cellIndex] ?? "", `${key}-${rowIndex}-${cellIndex}`, context)}</td>)}</tr>)}</tbody></table>;
-  if (value.startsWith("$$\n") && value.endsWith("\n$$")) return <div className="math math-display" data-math-display key={key}>{value.slice(3, -3)}</div>;
+  if (table) {
+    return (
+      <table key={key}>
+        <thead>
+          <tr>
+            {table[0].map((cell, index) => (
+              <th key={index}>{renderCell(cell, `${key}-h-${index}`, context)}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.slice(2).map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {table[0].map((_cell, cellIndex) => (
+                <td key={cellIndex}>{renderCell(row[cellIndex] ?? "", `${key}-${rowIndex}-${cellIndex}`, context)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+  if (value.startsWith("$$\n") && value.endsWith("\n$$")) {
+    return <div className="math math-display" data-math-display key={key}>{value.slice(3, -3)}</div>;
+  }
   return null;
 }
 
@@ -197,6 +224,14 @@ function nextExtension(value: string, start: number) {
 function nextNewline(value: string, start: number) {
   const index = value.indexOf("\n", start);
   return index < 0 ? null : { end: index + 1, index, kind: "newline" as const, value: "" };
+}
+
+/**
+ * Recover GFM-looking pipe tables from a paragraph's raw source.
+ * Exported for residual tests — remark() has no table kind without remark-gfm.
+ */
+export function parseCoworkPipeTable(value: string) {
+  return parseTable(value);
 }
 
 function parseTable(value: string) {
