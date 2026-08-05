@@ -1,4 +1,5 @@
 import type {
+  AuthorizeDirectMcpResult,
   ChatMessage,
   CodeStats,
   CoworkSpaceSummary,
@@ -14,6 +15,7 @@ import type {
   DesktopBridge,
   DesktopPreferences,
   DiffFileContentResult,
+  DirectMcpServerStatus,
   OfficialGitDiffComparison,
   GitCommandResult,
   GetSupportedCommandsRequest,
@@ -126,6 +128,12 @@ type RawLocalSessionsBridge = {
   onOnEvent?: RawEventSubscription;
   onToolPermissionRequest?: RawEventSubscription;
   onOnToolPermissionRequest?: RawEventSubscription;
+  /** Residual Direct MCP (custom3p URL remotes) — not Anthropic login. */
+  getDirectMcpServerStatuses?: () => Promise<unknown>;
+  authorizeDirectMcpServer?: (name: string) => Promise<unknown>;
+  disconnectDirectMcpServer?: (name: string) => Promise<unknown>;
+  onDirectMcpServerStatusesChanged?: RawEventSubscription;
+  onOnDirectMcpServerStatusesChanged?: RawEventSubscription;
 };
 
 type CoworkQueryBridge = Pick<CoworkSessionsBridge,
@@ -1153,8 +1161,114 @@ function createCoworkSessionsBridge(raw: RawLocalSessionsBridge | undefined): Co
     ...createCoworkFileBridge(raw),
     ...createCoworkMutationBridge(raw),
     ...createCoworkLifecycleBridge(raw),
+    ...createCoworkDirectMcpBridge(raw),
     getSession: rawAccess.getRawSession,
     ...rawAccess,
+  };
+}
+
+/**
+ * Residual ion hT Direct MCP surface (mQe / hQe / disconnect):
+ * LocalAgentModeSessions.getDirectMcpServerStatuses / authorizeDirectMcpServer /
+ * disconnectDirectMcpServer / onOnDirectMcpServerStatusesChanged.
+ */
+function createCoworkDirectMcpBridge(raw: RawLocalSessionsBridge | undefined): Pick<
+  CoworkSessionsBridge,
+  | "getDirectMcpServerStatuses"
+  | "authorizeDirectMcpServer"
+  | "disconnectDirectMcpServer"
+  | "onDirectMcpServerStatusesChanged"
+> {
+  return {
+    getDirectMcpServerStatuses: async () => {
+      if (!raw?.getDirectMcpServerStatuses) return [];
+      return normalizeDirectMcpStatusList(await raw.getDirectMcpServerStatuses().catch(() => []));
+    },
+    authorizeDirectMcpServer: async (name) => {
+      if (!raw?.authorizeDirectMcpServer) {
+        return { ok: false, error: "Desktop bridge not available" };
+      }
+      return normalizeAuthorizeDirectMcpResult(await raw.authorizeDirectMcpServer(name));
+    },
+    disconnectDirectMcpServer: async (name) => {
+      if (!raw?.disconnectDirectMcpServer) return false;
+      return (await raw.disconnectDirectMcpServer(name)) === true;
+    },
+    onDirectMcpServerStatusesChanged: (listener) => {
+      // Residual ion Rrs uses onOnDirectMcpServerStatusesChanged (preload on* alias).
+      const subscribe =
+        raw?.onDirectMcpServerStatusesChanged ?? raw?.onOnDirectMcpServerStatusesChanged;
+      if (!subscribe) return () => {};
+      return subscribe((event) => {
+        listener(normalizeDirectMcpStatusList(event));
+      });
+    },
+  };
+}
+
+function normalizeDirectMcpStatusList(value: unknown): DirectMcpServerStatus[] {
+  if (!Array.isArray(value)) return [];
+  const out: DirectMcpServerStatus[] = [];
+  for (const entry of value) {
+    const bag = asRecord(entry);
+    const name = stringValue(bag.name);
+    const url = stringValue(bag.url);
+    if (!name || !url) continue;
+    const toolsRaw = Array.isArray(bag.tools) ? bag.tools : [];
+    const tools = toolsRaw
+      .map((tool) => {
+        const t = asRecord(tool);
+        const toolName = stringValue(t.name);
+        if (!toolName) return null;
+        return {
+          name: toolName,
+          ...(stringValue(t.description) ? { description: stringValue(t.description) } : {}),
+          ...(t.inputSchema !== undefined ? { inputSchema: t.inputSchema } : {}),
+          ...(stringValue(t.title) ? { title: stringValue(t.title) } : {}),
+          ...(t.annotations && typeof t.annotations === "object"
+            ? { annotations: t.annotations as { title?: string } }
+            : {}),
+          ...(t._meta !== undefined ? { _meta: t._meta } : {}),
+        };
+      })
+      .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
+    const toolPolicyBag = asRecord(bag.toolPolicy);
+    const toolPolicyEntries = Object.entries(toolPolicyBag).filter(
+      (pair): pair is [string, string] => typeof pair[1] === "string",
+    );
+    out.push({
+      name,
+      url,
+      isConnected: bag.isConnected === true,
+      hasAuth: bag.hasAuth === true,
+      tools,
+      ...(toolPolicyEntries.length > 0
+        ? { toolPolicy: Object.fromEntries(toolPolicyEntries) }
+        : {}),
+      ...(stringValue(bag.error) ? { error: stringValue(bag.error) } : {}),
+    });
+  }
+  return out;
+}
+
+function normalizeAuthorizeDirectMcpResult(value: unknown): AuthorizeDirectMcpResult {
+  const bag = asRecord(value);
+  if (bag.ok === true) {
+    const tools = normalizeDirectMcpStatusList([
+      {
+        name: "_",
+        url: "https://local.invalid",
+        isConnected: true,
+        hasAuth: true,
+        tools: bag.tools,
+      },
+    ])[0]?.tools;
+    return { ok: true, ...(tools ? { tools } : {}) };
+  }
+  return {
+    ok: false,
+    ...(stringValue(bag.error) ? { error: stringValue(bag.error) } : {}),
+    ...(bag.cancelled === true ? { cancelled: true } : {}),
   };
 }
 

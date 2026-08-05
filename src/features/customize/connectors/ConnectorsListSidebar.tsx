@@ -6,7 +6,7 @@ import { ConnectorsEmptyState } from "./ConnectorsEmptyState";
 
 /**
  * Official c63a78ed4 Rt — list sidebar with search + Web / Desktop / Not connected.
- * Host currently only stores local-custom items (all Not connected).
+ * Direct MCP remotes (source direct-mcp / local-custom) group under Desktop when connected.
  */
 export function ConnectorsListSidebar({
   items,
@@ -37,9 +37,19 @@ export function ConnectorsListSidebar({
     );
   }, [items, query]);
 
-  const connectedWeb = filtered.filter((item) => item.isConnected && item.source !== "extension" && item.source !== "local-custom");
-  const connectedDesktop = filtered.filter((item) => item.isConnected && (item.source === "extension" || item.source === "local-custom"));
-  // Local custom entries are not connected until host MCP wires them; official groups them under Not connected.
+  const connectedWeb = filtered.filter(
+    (item) =>
+      item.isConnected &&
+      item.source !== "extension" &&
+      item.source !== "local-custom" &&
+      item.source !== "direct-mcp",
+  );
+  const connectedDesktop = filtered.filter(
+    (item) =>
+      item.isConnected &&
+      (item.source === "extension" || item.source === "local-custom" || item.source === "direct-mcp"),
+  );
+  // Pending OAuth / not connected remotes — official Not connected group.
   const notConnected = filtered.filter((item) => !item.isConnected);
   const hasAny = connectedWeb.length > 0 || connectedDesktop.length > 0 || notConnected.length > 0;
   const searching = query.trim().length > 0;

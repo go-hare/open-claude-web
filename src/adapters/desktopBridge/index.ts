@@ -33,6 +33,7 @@ export const desktopBridge: DesktopBridge = window.claudeDesktopBridge
   ?? (officialWebBridge ? createDesktopBridgeFromOfficialNamespaces(officialWebBridge, window["claude.settings"], window["claude.officeAddin"]) : fakeDesktopBridge);
 
 export type {
+  AuthorizeDirectMcpResult,
   BrowserUseBridge,
   ChatMessage,
   CodeStats,
@@ -44,6 +45,7 @@ export type {
   CoworkSessionsBridge,
   CoworkSpaceSummary,
   CoworkMountedProject,
+  DirectMcpServerStatus,
   SpaceFolderEntry,
   DesktopBridge,
   DesktopPreferences,

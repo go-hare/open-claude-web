@@ -769,7 +769,49 @@ export type CoworkSessionsBridge = {
   onEvent?: (listener: (event: unknown) => void) => () => void;
   getRawSession: (id: string) => Promise<CoworkSessionSnapshot | null>;
   getRawTranscript: (id: string) => Promise<unknown[]>;
+  /**
+   * Residual Direct MCP (custom3p URL remotes) — ion hT / LocalAgentModeSessions:
+   * getDirectMcpServerStatuses + onOnDirectMcpServerStatusesChanged → mQe;
+   * authorizeDirectMcpServer(name) → hQe; disconnectDirectMcpServer(name).
+   * Not Anthropic account OAuth.
+   */
+  getDirectMcpServerStatuses?: () => Promise<DirectMcpServerStatus[]>;
+  authorizeDirectMcpServer?: (name: string) => Promise<AuthorizeDirectMcpResult>;
+  disconnectDirectMcpServer?: (name: string) => Promise<boolean>;
+  onDirectMcpServerStatusesChanged?: (
+    listener: (statuses: DirectMcpServerStatus[]) => void,
+  ) => () => void;
 };
+
+/** Residual Direct MCP status bag entry (mQe / getDirectMcpServerStatuses). */
+export type DirectMcpServerStatus = {
+  name: string;
+  url: string;
+  isConnected: boolean;
+  hasAuth: boolean;
+  tools: Array<{
+    name: string;
+    description?: string;
+    inputSchema?: unknown;
+    title?: string;
+    annotations?: { title?: string };
+    _meta?: unknown;
+  }>;
+  toolPolicy?: Record<string, string>;
+  error?: string;
+};
+
+/** Residual authorizeDirectMcpServer / hQe result. */
+export type AuthorizeDirectMcpResult =
+  | {
+      ok: true;
+      tools?: DirectMcpServerStatus["tools"];
+    }
+  | {
+      ok: false;
+      error?: string;
+      cancelled?: boolean;
+    };
 
 export type ScheduledTasksBridge = {
   list: () => Promise<ScheduledTaskSummary[]>;

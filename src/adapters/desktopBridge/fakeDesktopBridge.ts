@@ -858,6 +858,14 @@ function createCoworkSessionBridge(): CoworkSessionsBridge {
     // Official Jxi / jxi: skills + plugins reverse-RPC no-op success.
     respondSlashMenuSkills: async (_requestId, _skillsJson) => true,
     respondPluginSearch: async (_requestId, _resultsJson) => true,
+    // Residual Direct MCP surface (no remotes in fake host).
+    getDirectMcpServerStatuses: async () => [],
+    authorizeDirectMcpServer: async () => ({
+      ok: false,
+      error: "Desktop bridge not available",
+    }),
+    disconnectDirectMcpServer: async () => false,
+    onDirectMcpServerStatusesChanged: () => () => {},
   };
 }
 

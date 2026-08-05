@@ -11,6 +11,7 @@ import {
 } from "./useDesktopCoworkAccountSync";
 import { useDesktopQuickEntryRecentChatsSync } from "./useDesktopQuickEntryRecentChatsSync";
 import { useDesktopQuickEntrySubmit } from "./useDesktopQuickEntrySubmit";
+import { useDirectMcpStatusHydrate } from "./useDirectMcpStatusHydrate";
 
 const getLocation = () => window.location.pathname + window.location.search;
 
@@ -53,6 +54,8 @@ export function App() {
   useDesktopQuickEntryRecentChatsSync();
   // Official B0t residual: KI.onOnQuickEntrySubmit → q0t process payload.
   useDesktopQuickEntrySubmit();
+  // Residual Rrs: Direct MCP status subscribe + initial getDirectMcpServerStatuses.
+  useDirectMcpStatusHydrate();
   useEffect(() => subscribeResponseCompletionEvents(), []);
   const locationKey = useSyncExternalStore(subscribeLocation, getLocation);
   const route = useMemo(() => matchRoute(window.location.pathname), [locationKey]);
