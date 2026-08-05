@@ -30,7 +30,7 @@ export function officialSessionHeaderTitle(session: SessionSummary | null, initi
   return title!;
 }
 
-export function EpitaxyChatHeader({ activeView, canOpenBrowser = false, canOpenFramebuffer = false, canOpenRuns = false, dragHandle, hasRunningTasks, hideViews = false, isTitleLoading, isTopLeft, onClose, onSessionRemoved, onTranscriptModeChange, onViewSelect, openViews, paneIndex, session, sessionRef, title, transcriptMode = "normal" }: {
+export function EpitaxyChatHeader({ activeView, canOpenBrowser = false, canOpenFramebuffer = false, canOpenRuns = false, dragHandle, hasRunningTasks, hideViews = false, isTitleLoading, isTopLeft, onSessionRemoved, onTranscriptModeChange, onViewSelect, openViews, paneIndex, session, sessionRef, title, transcriptMode = "normal" }: {
   activeView?: OfficialViewPane;
   /** Official VC — Files (browser) Views item. */
   canOpenBrowser?: boolean;
@@ -43,7 +43,11 @@ export function EpitaxyChatHeader({ activeView, canOpenBrowser = false, canOpenF
   hideViews?: boolean;
   isTitleLoading: boolean;
   isTopLeft?: boolean;
-  onClose?: () => void;
+  /**
+   * Official eI Close pane residual (`onSessionRemoved:d`).
+   * Truthy → show XCrossCloseMedium "Close pane".
+   * Primary: only when extra panes exist. Secondary: pane close handler.
+   */
   onSessionRemoved?: () => void;
   onTranscriptModeChange?: (mode: OfficialTranscriptMode) => void;
   onViewSelect?: (view: OfficialViewPane) => void;

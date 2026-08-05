@@ -1,0 +1,31 @@
+/**
+ * Official dframe sidebar open/close residual (cbc59a8af-BCdfduO7.css).
+ *
+ * Shipped official CSS already has:
+ *   @property --df-sidebar-clearance { syntax: "<length>"; inherits: true; initial-value: 0px; }
+ *   .dframe-content-inner { --df-sidebar-clearance: calc(var(--df-sidebar-width) + 8px);
+ *     padding-left: calc(var(--df-sidebar-clearance) + var(--df-content-gutter)); }
+ *   .dframe-root[data-collapsed] .dframe-content-inner { --df-sidebar-clearance: 0px; }
+ *   .dframe-root[data-resizing] .dframe-sidebar,
+ *   .dframe-root[data-resizing] .dframe-content-inner { transition: none; }
+ *   .dframe-root[data-experiment] .dframe-content-inner { … transition: none; }
+ *
+ * Positive transition for clearance/padding is absent from the shipped chunk, but the
+ * resize/experiment `transition: none` overrides only make sense if a default transition
+ * exists — same residual shape as remote-agents:
+ *   .ra-content { transition: padding-left .26s var(--ra-sidebar-ease) }
+ *
+ * Tokens already defined on .dframe-root: --df-dur-slow (.3s), --df-ease-out.
+ * Do NOT invent new timing curves; only restore the missing positive transition.
+ */
+.dframe-content-inner {
+  transition:
+    --df-sidebar-clearance var(--df-dur-slow) var(--df-ease-out),
+    padding-left var(--df-dur-slow) var(--df-ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dframe-content-inner {
+    transition: none;
+  }
+}

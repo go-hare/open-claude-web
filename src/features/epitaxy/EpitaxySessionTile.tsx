@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { desktopBridge, type SessionSummary } from "../../adapters/desktopBridge";
 import type { ChatMessage } from "../../adapters/desktopBridge/types";
-import { selectedSessionIdFromPath, sessionHomePath } from "../../shell/sessionPaths";
-import type { PaneSlot } from "../../stores/paneStore";
+import { sessionHomePath } from "../../shell/sessionPaths";
+import {
+  paneRefToPath,
+  paneStore,
+  usePaneStoreSnapshot,
+  type PaneSlot,
+} from "../../stores/paneStore";
 import { EpitaxyTileLayout } from "./EpitaxyFrameSurface";
 import {
   OfficialChatTileShell,
@@ -40,7 +45,6 @@ import {
   useEpitaxySessionType,
   useFocusedSession,
 } from "./session/useEpitaxySessionData";
-import { replaceAppNavigation } from "./session/codeSessionDeletion";
 import { previewAnnotationQueue } from "./session/previewAnnotationQueue";
 import {
   loadOfficialThinkingSparkAnimation,
@@ -91,6 +95,9 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
   const activeSessionId = sessionId || undefined;
   const sessionType = useEpitaxySessionType(activeSessionId);
   const fallbackHome = sessionHomePath("code");
+  // Official c119 bE: $o() = extraPanesByMode[mode]; Close pane only when length > 0.
+  const paneSnapshot = usePaneStoreSnapshot();
+  const hasExtraCodePanes = (paneSnapshot.extraPanesByMode.code ?? []).length > 0;
 
   useEffect(() => {
     void loadOfficialThinkingSparkAnimation();
@@ -100,15 +107,17 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
   useFocusedSession(activeSessionId);
 
   /**
-   * Official primary titlebar delete residual:
-   * after successful delete, leave /code/:id — prefer replace home.
-   * Only act if URL still points at this session (user may have navigated away).
+   * Official primary Close pane residual (`cd` / `_l` in ca0135bc5):
+   *   Ue = $o().length > 0 ? cd() : void 0
+   * When split exists: close extra pane index 1 and navigate to that ref.
+   * Lone primary: no Close pane X — delete/archive leave via OfficialSessionTitle fallback home.
    */
-  const onSessionRemoved = useCallback(() => {
-    if (!activeSessionId) return;
-    if (selectedSessionIdFromPath(window.location.pathname) !== activeSessionId) return;
-    replaceAppNavigation(fallbackHome);
-  }, [activeSessionId, fallbackHome]);
+  const onCloseExtraPane = useCallback(() => {
+    const first = (paneStore.getState().extraPanesByMode.code ?? [])[0];
+    if (!first) return;
+    paneStore.closePane("code", 1);
+    onNavigate(paneRefToPath(first.ref));
+  }, [onNavigate]);
 
   // Official Ho fallback onBack → landing (uc Back to landing page).
   const onChatPanelBack = useCallback(() => {
@@ -133,13 +142,13 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
           landingActions={landingActions}
           landingBody={landingBody}
           onNavigate={onNavigate}
-          onSessionRemoved={activeSessionId ? onSessionRemoved : undefined}
+          onSessionRemoved={hasExtraCodePanes ? onCloseExtraPane : undefined}
           sessionRef={sessionRef}
           sessionType={activeSessionId ? sessionType : undefined}
         />
       </EpitaxyChatPanelErrorBoundary>
     </OfficialChatTileShell>
-  ), [activeSessionId, hideComposer, landingActions, landingBody, onChatPanelBack, onNavigate, onSessionRemoved, sessionRef, sessionType]);
+  ), [activeSessionId, hasExtraCodePanes, hideComposer, landingActions, landingBody, onChatPanelBack, onCloseExtraPane, onNavigate, sessionRef, sessionType]);
 
   return (
     <div className="epitaxy-root select-none h-full w-full flex flex-col">
@@ -150,21 +159,19 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
   );
 }
 
-export function EpitaxySessionTile({ isLonePane = false, onClose, onMovePane, onNavigate, paneIndex = 0, sessionId, slot }: EpitaxySessionTileProps) {
+export function EpitaxySessionTile({ onClose, onNavigate, paneIndex = 0, sessionId }: EpitaxySessionTileProps) {
+  // isLonePane / onMovePane / slot kept on props for PaneLayout API; secondary Close pane only needs onClose.
   return (
     <EpitaxySecondPane
-      isLonePane={isLonePane}
       onClose={onClose}
-      onMovePane={onMovePane}
       onNavigate={onNavigate}
       paneIndex={paneIndex}
       sessionId={sessionId}
-      slot={slot}
     />
   );
 }
 
-function EpitaxySecondPane({ isLonePane, onClose, onMovePane, onNavigate, paneIndex, sessionId, slot }: EpitaxySessionTileProps) {
+function EpitaxySecondPane({ onClose, onNavigate, paneIndex, sessionId }: EpitaxySessionTileProps) {
   const sessionType = useEpitaxySessionType(sessionId);
   const sessionRef = useMemo(() => ({ id: sessionId, type: sessionType }), [sessionId, sessionType]);
   // Secondary pane crash: close the pane if possible, else home (do not steal primary route on close alone).
@@ -175,7 +182,8 @@ function EpitaxySecondPane({ isLonePane, onClose, onMovePane, onNavigate, paneIn
     }
     onNavigate(sessionHomePath("code"));
   }, [onClose, onNavigate]);
-  // Official ZR residual: secondary delete/close only removes the pane by stable ref.
+  // Official yE: onSessionRemoved:a = onClose (Close pane X always on secondary).
+  // Official ZR residual: secondary delete also calls a (close pane by stable ref).
   // Never fall back to onNavigate(home) — that would steal the primary route.
   const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft?: boolean, dragHandle?: ReactNode) => (
     <OfficialChatTileShell>
@@ -184,21 +192,17 @@ function EpitaxySecondPane({ isLonePane, onClose, onMovePane, onNavigate, paneIn
           draftPersistKey={`epitaxy-pane-${sessionId}`}
           dragHandle={dragHandle}
           initialSessionId={sessionId}
-          isLonePane={isLonePane}
           isPanelActive={false}
           isTopLeft={isTopLeft}
-          onClose={onClose}
           onNavigate={onNavigate}
-          onMovePane={onMovePane}
           onSessionRemoved={onClose}
           paneIndex={paneIndex}
           sessionRef={sessionRef}
           sessionType={sessionType}
-          slot={slot}
         />
       </EpitaxyChatPanelErrorBoundary>
     </OfficialChatTileShell>
-  ), [isLonePane, onChatPanelBack, onClose, onMovePane, onNavigate, paneIndex, sessionId, sessionRef, sessionType, slot]);
+  ), [onChatPanelBack, onClose, onNavigate, paneIndex, sessionId, sessionRef, sessionType]);
 
   return (
     <div className="epitaxy-root select-none flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -212,38 +216,31 @@ type EpitaxyChatPanelProps = {
   dragHandle?: ReactNode;
   hideComposer?: boolean;
   initialSessionId?: string;
-  isLonePane?: boolean;
   isPanelActive: boolean;
   isTopLeft?: boolean;
   landingActions?: ReactNode;
   landingBody?: ReactNode;
-  onClose?: () => void;
-  onMovePane?: (slot: PaneSlot) => void;
   onNavigate: (path: string) => void;
+  /** Official eI Close pane handler — truthy shows header X. */
   onSessionRemoved?: () => void;
   paneIndex?: number;
   sessionRef: EpitaxySessionRef | null;
   sessionType?: EpitaxySessionType;
-  slot?: PaneSlot;
 };
 
 function EpitaxyChatPanel({
   dragHandle,
   hideComposer = false,
   initialSessionId,
-  isLonePane = false,
   isPanelActive,
   isTopLeft,
   landingActions,
   landingBody,
-  onClose,
   onNavigate,
-  onMovePane,
   onSessionRemoved,
   paneIndex = 0,
   sessionRef,
   sessionType = "local",
-  slot,
 }: EpitaxyChatPanelProps) {
   const {
     beginLocalUserTurn,
@@ -646,11 +643,13 @@ function EpitaxyChatPanel({
       <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
         {/* Official stack gap nE.gap=12 between chat tile and side column. */}
         <div className="relative h-full min-w-0 flex" style={{ gap: hasSidePanes ? 12 : 0 }}>
-          {/* Chat shell matches iE: h-full w-full min-w-0 relative isolate rounded-r6 + Nn sidebar elevation */}
+          {/* Chat shell matches iE: h-full w-full min-w-0 relative isolate rounded-r6 + Nn sidebar elevation.
+              Official c119 iE: Nn(elevation:"sidebar") is opacity-0 until .tiles-dragging — ring is NOT always on.
+              data-official-source: ion-dist c11959232 iE + Nn / k_e */}
           <div className="relative min-w-0 h-full flex flex-col rounded-r6 isolate" style={chatTileStyle}>
             <div
               aria-hidden="true"
-              className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated"
+              className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated opacity-0 transition-opacity duration-200 [.tiles-dragging_&]:opacity-100"
               data-surface="sidebar"
             />
             <EpitaxyChatHeader
@@ -662,7 +661,6 @@ function EpitaxyChatPanel({
               hasRunningTasks={hasRunningTasks}
               isTitleLoading={isLoading && !session}
               isTopLeft={isTopLeft}
-              onClose={onClose}
               onSessionRemoved={onSessionRemoved}
               onTranscriptModeChange={setTranscriptMode}
               onViewSelect={selectView}
