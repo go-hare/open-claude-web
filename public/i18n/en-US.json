@@ -13503,5 +13503,11 @@
   "__local.spaceSourcesOther": "{count} sources",
   "__local.spaceSaveInstructionsFailed": "Failed to save instructions. You can try again.",
   "__local.spaceAddFolderFailed": "Failed to add folder. You can try again.",
-  "__local.spaceRemoveFolderFailed": "Failed to remove folder. You can try again."
+  "__local.spaceRemoveFolderFailed": "Failed to remove folder. You can try again.",
+  "setupProv.openai": "OpenAI",
+  "setupProv.gemini": "Gemini",
+  "setupProv.grok": "Grok",
+  "setupProv.openai.sub": "OpenAI-compatible",
+  "setupProv.gemini.sub": "Google AI",
+  "setupProv.grok.sub": "xAI"
 }

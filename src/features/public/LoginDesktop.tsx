@@ -79,6 +79,12 @@ function providerShort(provider: string | null | undefined): string {
       return "Bedrock";
     case "foundry":
       return "Foundry";
+    case "openai":
+      return "OpenAI";
+    case "gemini":
+      return "Gemini";
+    case "grok":
+      return "Grok";
     default:
       return provider && provider.length > 0 ? provider : "your provider";
   }

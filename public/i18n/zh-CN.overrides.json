@@ -490,5 +490,11 @@
   "cldxQQtGrok": "xAI",
   "Hz3uf5n9Ga": "Claude 是 AI，可能会出错。请务必再次核对回复内容。",
   "JyEEg0ExZX": "Claude 是 AI，可能会出错。请务必再次核对回复内容。{giveFeedback}",
-  "aQPexOUJ+Y": "向我们反馈"
+  "aQPexOUJ+Y": "向我们反馈",
+  "setupProv.openai": "OpenAI",
+  "setupProv.gemini": "Gemini",
+  "setupProv.grok": "Grok",
+  "setupProv.openai.sub": "OpenAI 兼容",
+  "setupProv.gemini.sub": "Google AI",
+  "setupProv.grok.sub": "xAI"
 }

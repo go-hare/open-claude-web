@@ -13514,5 +13514,11 @@
   "zz6ObK7ZEM": "Restore",
   "zzAr6WXkVb": "Mini Claude",
   "zzOZLy0ngS": "There was an error verifying your code. If the problem persists <link>contact support</link> for assistance.",
-  "zzp3aYxskJ": "Couldn't start that chat. You can try again."
+  "zzp3aYxskJ": "Couldn't start that chat. You can try again.",
+  "setupProv.openai": "OpenAI",
+  "setupProv.gemini": "Gemini",
+  "setupProv.grok": "Grok",
+  "setupProv.openai.sub": "OpenAI 兼容",
+  "setupProv.gemini.sub": "Google AI",
+  "setupProv.grok.sub": "xAI"
 }

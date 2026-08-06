@@ -37,6 +37,8 @@ export const publicRoutes: AppRoute[] = [
     Component: LoginDesktopPage,
     match: (pathname) => pathname === "/login" || pathname.startsWith("/login/"),
   },
+  // setup-desktop-3p: desktop residual ion-dist (c71860c77) 1:1 UI — not product SPA.
+  // openCustom3pSetupWindow → app://localhost/setup-desktop-3p (RESIDUAL_APP_SPA_PATHS).
   { id: "ask-your-org", path: "/ask-your-org", title: "Ask your org", navKey: "new-session", kind: "settings", frame: "standalone", sourceChunk: "ce28369f9-C9QQvDN-.js:2962-3034", Component: RedirectPage, match: (pathname) => startsWithPath(pathname, "/ask-your-org") },
   { id: "security-root", path: "/security", title: "Security", navKey: "new-session", kind: "settings", frame: "standalone", sourceChunk: "index-BELzQL5P.js Nls + live redirect", Component: RedirectPage },
   { id: "crawl-root", path: "/crawl", title: "Crawl", navKey: "new-session", kind: "settings", frame: "standalone", sourceChunk: "index-BELzQL5P.js Els + live redirect", Component: RedirectPage },
