@@ -3,11 +3,13 @@
  *
  * Official attention (non-coordinator branch):
  *   working = f.has(id)  → product SessionSummary.isRunning
- *   CONDITION = working || (status !== requires_action && !pending_action && !kn(category))
- *     true  → maybe unread if !working && unread && status !== running
- *     false → blocked
- *   So pure "running" alone does NOT enter attention; blocked needs requires_action /
- *   pending_action / kn(status_category); unread is separate.
+ *   blocked: requires_action | pending_action | kn(status_category)
+ *   local unread: ONLY bn() unreadIds set membership (r.has(id)) — NOT bare
+ *     session.isUnread. Host isUnread is CodeStatusGlyph ready residual
+ *     (hasCompleted && isUnread); wiring it into Action Center made
+ *     allClear false → greetEmpty false → Welcome back instead of What's up next.
+ *   remote unread: ccr_unread_indicator_main && type==="remote" && isUnread
+ *     (product has no remote Action Center feed yet — do not invent)
  *   skip archived + starred (product: isPinned as star stand-in)
  *   PR list g: empty without PR BFF — do not invent
  *   allClear = attention empty && PR empty
@@ -36,6 +38,12 @@ export type EpitaxyActionCenterState = {
   isSessionsLoading: boolean;
 };
 
+/** Shared Pw list key — App may prefetch so Tw greets with warm allClear (official vn). */
+export const EPITAXY_ACTION_CENTER_SESSIONS_QUERY_KEY = [
+  "epitaxy",
+  "action-center-sessions",
+] as const;
+
 /** Official kn(status_category) for Action Center attention. */
 export function isActionCenterBlockedCategory(category?: string | null): boolean {
   return category === "blocked" || category === "need_input" || category === "failed";
@@ -43,13 +51,13 @@ export function isActionCenterBlockedCategory(category?: string | null): boolean
 
 /**
  * Map LocalSessions list → attention rows (Pw non-coordinator path).
- * No remote PR / triggerSessions / coordinator jn — those need residual data we do not invent.
+ * No remote PR / triggerSessions / coordinator jn / bn() unread store —
+ * those need residual data we do not invent.
  */
 export function buildEpitaxyActionCenterAttention(
   sessions: SessionSummary[],
 ): ActionCenterSessionRow[] {
   const blocked: ActionCenterSessionRow[] = [];
-  const unread: ActionCenterSessionRow[] = [];
 
   for (const session of sessions) {
     if (session.isArchived) continue;
@@ -59,28 +67,23 @@ export function buildEpitaxyActionCenterAttention(
     if (session.kind !== "epitaxy" && session.kind !== "code") continue;
     if (session.sessionKind === "cowork") continue;
 
-    const working = Boolean(session.isRunning);
     const needsAction = Boolean(session.postTurnSummary?.needsAction?.trim());
     const blockedCategory = isActionCenterBlockedCategory(session.postTurnSummary?.statusCategory);
     // Official non-coordinator blocked: requires_action | pending_action | kn(status_category)
-    // (working alone does not land in blocked — CONDITION short-circuits to unread branch which then no-ops).
-    const isBlocked = needsAction || blockedCategory;
-
-    if (isBlocked) {
+    // (working alone does not land in blocked).
+    if (needsAction || blockedCategory) {
       blocked.push({ session, kind: "blocked" });
-      continue;
     }
 
-    // Official unread: !working && unread && status !== "running"
-    if (!working && session.isUnread) {
-      unread.push({ session, kind: "unread" });
-    }
+    // Official local unread: bn().has(id) only — not host isUnread (ready glyph).
+    // Product has no bn()/clearAll unread store yet → do not invent unread rows
+    // from session.isUnread (that forced Welcome back when ready dots exist).
   }
 
   const byTimeDesc = (left: ActionCenterSessionRow, right: ActionCenterSessionRow) =>
     sessionTimestampMs(right.session) - sessionTimestampMs(left.session);
 
-  return [...blocked.sort(byTimeDesc), ...unread.sort(byTimeDesc)];
+  return blocked.sort(byTimeDesc);
 }
 
 export function sessionTimestampMs(session: SessionSummary): number {
@@ -119,7 +122,7 @@ export function useEpitaxyActionCenterState(options?: {
 }): EpitaxyActionCenterState {
   const enabled = options?.enabled !== false;
   const sessionsQuery = useQuery({
-    queryKey: ["epitaxy", "action-center-sessions"],
+    queryKey: EPITAXY_ACTION_CENTER_SESSIONS_QUERY_KEY,
     queryFn: async () => {
       try {
         return await desktopBridge.LocalSessions.list();
@@ -130,10 +133,15 @@ export function useEpitaxyActionCenterState(options?: {
     enabled,
     staleTime: 30_000,
     gcTime: Number.POSITIVE_INFINITY,
+    // Keep prior list while revalidating (official vn warm store) so Tw does not
+    // flip greetEmpty→false → "Welcome back" on every remount/refetch.
+    placeholderData: (previous) => previous,
   });
   const sessions = enabled ? (sessionsQuery.data ?? []) : [];
-  // Cold miss only — cached list paints immediately without isSessionsLoading gate.
-  const isSessionsLoading = enabled && sessionsQuery.isPending && !sessionsQuery.data;
+  // Official Pw: isSessionsLoading = isLoadingRemote || isLoadingLocal (cold only).
+  // Product: cold miss only — cached / placeholder list is not loading.
+  const isSessionsLoading =
+    enabled && sessionsQuery.isPending && sessionsQuery.data === undefined;
 
   const attentionSessions = useMemo(
     () => (enabled ? buildEpitaxyActionCenterAttention(sessions) : []),

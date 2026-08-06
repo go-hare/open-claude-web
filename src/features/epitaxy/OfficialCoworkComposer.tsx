@@ -569,6 +569,7 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
         class: "tiptap",
         "data-placeholder": placeholder,
       },
+      // Packaged app:// Chromium adaptation (d5f261d): transaction-owned insertText.
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
       },

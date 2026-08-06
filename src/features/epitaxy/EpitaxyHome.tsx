@@ -4,8 +4,9 @@ import { desktopBridge, type EffortLevel, type PermissionMode, type WorkspaceCon
 import type { RouteViewProps } from "../../app/routes";
 import { useI18nText, type MessageDescriptors } from "../../i18n/footerMenuMessages";
 import { fetchBootstrapPayload } from "../settings/accountSettingsApi";
+import { BOOTSTRAP_QUERY_KEY } from "../settings/bootstrapQuery";
 import { sessionPath } from "../../shell/sessionPaths";
-import { EpitaxyRouteFrame, EpitaxySessionLoading } from "./EpitaxyFrameSurface";
+import { EpitaxyRouteFrame } from "./EpitaxyFrameSurface";
 import { CodeStatsCard } from "./CodeStatsCard";
 import { EpitaxyActionCenter } from "./EpitaxyActionCenter";
 import { useEpitaxyActionCenterState } from "./epitaxyActionCenterState";
@@ -132,18 +133,31 @@ export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
     return subscribe?.(pick) ?? undefined;
   }, [workspace?.cwd]);
 
-  // Cold start only: no cached workspace yet. Return visits hit react-query cache → no skeleton.
-  if (!workspace) return <EpitaxySessionLoading />;
+  /**
+   * Official draft home mounts real Qj Prompt immediately (tipTap + RNt).
+   * Do NOT swap EpitaxySessionLoading fake PromptBox → live editor (blank
+   * ::before then data-placeholder flash). Seed empty workspace until host
+   * getWorkspaceContext resolves; CodeNewSessionPage syncs when data arrives.
+   */
+  const draftWorkspace = workspace ?? EMPTY_DRAFT_WORKSPACE;
 
   return (
     <CodeNewSessionPage
       initialEffort={effort}
       initialPermissionMode={permissionMode}
       onNavigate={onNavigate}
-      workspace={workspace}
+      workspace={draftWorkspace}
     />
   );
 }
+
+/** Host workspace not ready yet — same shape as bridge emptyWorkspace residual. */
+const EMPTY_DRAFT_WORKSPACE: WorkspaceContext = {
+  mode: "local",
+  projectName: "local",
+  branchName: "main",
+  hasWorktree: false,
+};
 
 function CodeNewSessionPage({
   initialEffort,
@@ -376,10 +390,15 @@ function CodeNewSessionPage({
 
 /**
  * Official c119 EpitaxyActionCenterGreeting residual (Tw):
- *   name = account.display_name || account.full_name?.split(" ")[0]
+ *   name = account.display_name || account.full_name?.split(" ")[0]  (Go())
  *   greetEmpty (Pw) → "What’s up next, {name}?" / "What’s up next?"
  *   else → "Welcome back, {name}" / "Welcome back"
  * ids: flLEnDzvfG / W8pMCdh9hq / UOxi8mioge / UKxoV8UIxo
+ * zh-CN flLEnDzvfG: "{name}，接下来做点什么？"
+ *
+ * Official Go is a store already hydrated when Tw paints. Product shares App
+ * login-gate bootstrap via react-query (BOOTSTRAP_QUERY_KEY) so name is not a
+ * second late useEffect after Welcome back / un-named What's up next flash.
  */
 const CODE_GREETING_MESSAGES = {
   whatsUpNextNamed: { defaultMessage: "What’s up next, {name}?", id: "flLEnDzvfG" },
@@ -397,30 +416,30 @@ function CodeGreeting({
 }) {
   void workspace;
   const text = useI18nText(CODE_GREETING_MESSAGES);
-  const [name, setName] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    void fetchBootstrapPayload().then((payload) => {
-      if (!alive || !payload) return;
-      const account =
-        payload.account && typeof payload.account === "object"
-          ? (payload.account as Record<string, unknown>)
-          : null;
-      const display =
-        typeof account?.display_name === "string" && account.display_name.trim()
-          ? account.display_name.trim()
-          : null;
-      const full =
-        typeof account?.full_name === "string" && account.full_name.trim()
-          ? account.full_name.trim().split(/\s+/)[0] ?? null
-          : null;
-      setName(display || full || null);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
+  // Official Go() account — shared bootstrap cache (App seeds on login gate).
+  const bootstrapQuery = useQuery({
+    queryKey: BOOTSTRAP_QUERY_KEY,
+    queryFn: async () => (await fetchBootstrapPayload()) ?? null,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+  });
+  const name = useMemo(() => {
+    const payload = bootstrapQuery.data;
+    if (!payload || typeof payload !== "object") return null;
+    const account =
+      "account" in payload && payload.account && typeof payload.account === "object"
+        ? (payload.account as Record<string, unknown>)
+        : null;
+    const display =
+      typeof account?.display_name === "string" && account.display_name.trim()
+        ? account.display_name.trim()
+        : null;
+    const full =
+      typeof account?.full_name === "string" && account.full_name.trim()
+        ? account.full_name.trim().split(/\s+/)[0] ?? null
+        : null;
+    return display || full || null;
+  }, [bootstrapQuery.data]);
 
   const title = greetEmpty
     ? name

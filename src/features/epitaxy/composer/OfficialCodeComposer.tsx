@@ -209,62 +209,74 @@ export function OfficialCodeComposer({
     void state.ensureTrusted(state.workspaceCwd, state.onSubmit);
   }, []);
 
+  /**
+   * Official c119 Ye.current?.focus residual.
+   * Draft gate is Mi.current once — NOT a window-focus / multi-second retry storm.
+   * Re-focus mid-IME cancels composition (packaged flash + stuck view.composing).
+   */
+  const draftAutofocusedRef = useRef(false);
   const focusPromptEditor = useCallback(() => {
-    // Base UI Menu returnFocus / FloatingFocusManager microtask can re-focus the
-    // folder Trigger *after* a single rAF/50ms. Retries cover close animation +
-    // native folder dialog returning focus to the pill.
-    // Official session surface: focusComposer (c119 Ye.current?.focus).
-    const run = () => {
-      promptEditorRef.current?.focus();
-      const dom =
-        document.querySelector<HTMLElement>(".epitaxy-prompt-input .tiptap")
-        ?? document.querySelector<HTMLElement>(".epitaxy-prompt .tiptap");
-      if (dom && document.activeElement !== dom) {
-        try {
-          dom.focus({ preventScroll: true });
-        } catch {
-          dom.focus();
-        }
-      }
-    };
-    run();
-    requestAnimationFrame(() => {
-      requestAnimationFrame(run);
-    });
-    for (const ms of [0, 16, 50, 100, 200, 400, 700]) {
-      window.setTimeout(run, ms);
-    }
+    const ed = promptEditorRef.current?.getEditor?.() ?? null;
+    if (ed?.view?.composing) return;
+    const dom =
+      (ed?.view?.dom as HTMLElement | undefined)
+      ?? document.querySelector<HTMLElement>('[aria-label="Prompt"]')
+      ?? document.querySelector<HTMLElement>(".epitaxy-prompt-input .tiptap");
+    if (dom && document.activeElement === dom) return true;
+    if (!ed && !dom) return false;
+    promptEditorRef.current?.focus();
+    return document.activeElement === (ed?.view?.dom ?? dom);
   }, []);
 
   // Official Ase residual (index-BELzQL5P): printable keys while focus is on folder /
   // env pill still go into TipTap — matches Code home after folder select.
+  // Official Ase: not gated on busy — busy is Stop chrome, editor stays editable.
   useOfficialTypeToComposer(
     useCallback((key: string) => {
       // Official: T.current?.getEditor()?.chain().insertContent(e).focus().run()
       const ed = promptEditorRef.current?.getEditor?.();
+      if (ed?.view?.composing) return;
       if (ed) {
         ed.chain().insertContent(key).focus("end").run();
         return;
       }
       promptEditorRef.current?.insertText?.(key);
     }, []),
-    !busy,
+    true,
   );
 
-  // Folder / env change leaves focus on the pill trigger (Base UI Menu residual).
-  // Official session surface exposes focusComposer; draft home needs the same return path.
+  // Official c119 draft residual (exact):
+  //   Mi.current||"draft"===Os&&x&&(Mi.current=!0,Ye.current?.focus())
+  // aYt: focus when editor A is ready (useEffect on A), not on first empty ref tick.
   useEffect(() => {
-    if (!workspace.cwd) return;
-    focusPromptEditor();
-  }, [focusPromptEditor, workspace.cwd, workspace.mode]);
+    if (draftAutofocusedRef.current) return;
+    let cancelled = false;
+    const tryFocus = () => {
+      if (cancelled || draftAutofocusedRef.current) return;
+      const ed = promptEditorRef.current?.getEditor?.();
+      if (!ed || ed.isDestroyed) return;
+      draftAutofocusedRef.current = true;
+      focusPromptEditor();
+    };
+    tryFocus();
+    // One rAF if editor not mounted yet — not a multi-second storm.
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(tryFocus);
+    });
+    const t = window.setTimeout(tryFocus, 50);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+    };
+  }, [focusPromptEditor]);
 
+  // Official returns focus to Ye after folder drop / image / file picker — not on
+  // every window focus or footer menu open (those cancel IME).
   const handleWorkspaceChange = useCallback((next: WorkspaceContext) => {
     onWorkspaceChange(next);
-    // Immediate focus attempt for menu-select path (cwd may be unchanged if re-picked).
     focusPromptEditor();
-  }, [focusPromptEditor, onWorkspaceChange]);
-
-  return (
+  }, [focusPromptEditor, onWorkspaceChange]);  return (
     <div className="flex flex-col gap-g5">
       <OfficialWorkspaceControls
         disabled={busy}

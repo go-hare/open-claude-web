@@ -82,6 +82,7 @@ export function ScheduledPromptEditor({
           enterkeyhint: "enter",
         },
         handleDOMEvents: {
+          // Packaged app:// Chromium adaptation (d5f261d): transaction-owned insertText.
           beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
         },
       },

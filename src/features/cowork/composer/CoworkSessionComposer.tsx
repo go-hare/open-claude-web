@@ -4,12 +4,12 @@ import StarterKit from "@tiptap/starter-kit";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
 import type { CoworkImagePayload, CoworkToolState, SendMessageInput, SessionSummary } from "../../../adapters/desktopBridge/types";
-import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
 import { createCoworkAddMenuItems } from "../newTask/CoworkAddMenuItems";
 import { mergeCoworkUploadedFiles, type CoworkUploadedFile } from "../newTask/coworkUploadedFiles";
 import { coworkSessionsBridge } from "../session/coworkSessionBridge";
 import { stopCoworkSession } from "../session/coworkSessionStop";
 import type { CoworkDropdownItem } from "../ui/CoworkMenuTypes";
+import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
 import { createCoworkComposerSubmission } from "./coworkComposerSubmission";
 import { registerCoworkSessionComposerActions } from "./coworkSessionComposerActions";
 import type { CoworkClaudeAvatarState } from "../session/transcript/CoworkClaudeAvatar";
@@ -221,6 +221,7 @@ function useCoworkComposerEditor(input: { disabled: boolean; session: SessionSum
         "data-testid": "chat-input",
         role: "textbox",
       },
+      // Packaged app:// Chromium adaptation (d5f261d): transaction-owned insertText.
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
       },

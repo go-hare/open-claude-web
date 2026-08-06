@@ -1,15 +1,11 @@
 import type { Editor } from "@tiptap/core";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import type { LocalSessionsBridge } from "../../adapters/desktopBridge/types";
+import { OfficialRNtPlaceholder } from "../shared/officialRNtPlaceholder";
 import { handleEmptyDocBeforeInput } from "../shared/tiptapEmptyDocBeforeInput";
-import {
-  markControlledTiptapUserEdit,
-  syncControlledTiptapValue,
-  type ControlledTiptapEmitState,
-} from "../shared/syncControlledTiptapValue";
 import { OfficialButton, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
@@ -23,6 +19,9 @@ export type OfficialPromptEditorHandle = {
   insertSlashCommand: () => void;
   /** Insert plain text at cursor and focus (Ase residual). */
   insertText: (text: string) => void;
+  /** Official aYt setText / clear — imperative only, not continuous controlled value. */
+  setText: (text: string) => void;
+  clear: () => void;
 };
 
 type OfficialPromptEditorProps = {
@@ -35,9 +34,24 @@ type OfficialPromptEditorProps = {
   session?: SessionSummary | null;
   sessionRef?: OfficialSessionRef | null;
   slashCwd?: string;
+  /**
+   * Parent mirror of prompt text (submit / draft restore).
+   * Official Qj/vTt: tipTap owns the doc; parent is notified via onUpdate only.
+   * Continuous value→setContent is NOT residual — only clear / external hydrate.
+   */
   value: string;
 };
 
+/**
+ * Official residual:
+ * - c11959232 Qj: EpitaxyComposer Prompt shell + wa EditorContent classes
+ * - index vTt: tipTapEditorState + RNt Placeholder; onUpdate → text + hasText
+ * - index aYt CodeTipTapEditor: setEditable(!disabled); setText imperative
+ * - Qj `_e` absolute span is **only** promptSuggestion — product has none
+ * - setEditable(!disabled) only; busy = Stop / Enter-gate
+ *
+ * Host packaged app:// only: handleEmptyDocBeforeInput (empty trailingBreak).
+ */
 export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, OfficialPromptEditorProps>(function OfficialPromptEditor({
   bridge,
   busy = false,
@@ -52,34 +66,43 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
 }, ref) {
   const editorRef = useRef<Editor | null>(null);
   const submitRef = useRef(onSubmit);
-  const disabledRef = useRef(disabled || busy);
+  const disabledRef = useRef(disabled);
+  const submitBlockedRef = useRef(disabled || busy);
   const onChangeRef = useRef(onChange);
   const bashModeRef = useRef(false);
   const slashMenuStateRef = useRef({ bridge, session, sessionRef, slashCwd });
+  /** Official vTt `g` / `x.current` — live placeholder string for RNt. */
+  const placeholderRef = useRef(placeholder);
+  /** Official vTt `k.current` — user has edited; block hydrate overwrite. */
+  const userEditedRef = useRef(false);
+  /** Pending setText before editor ready (aYt `z.current`). */
+  const pendingTextRef = useRef<string | null>(null);
   /**
-   * Official c119 / vTt residual:
-   * TipTap owns the doc while typing. Parent `value` is a submit/placeholder
-   * mirror only — continuous value→setContent is non-official and wipes lagging
-   * keystrokes. After first onUpdate (userEdited), only honor parent clear.
+   * Last text we emitted / accepted from parent clear.
+   * Used only to detect external clear (value → "") and initial hydrate — not every keystroke setContent.
    */
-  const emitRef = useRef<ControlledTiptapEmitState>({
-    lastEmittedValue: value,
-    userEdited: false,
-  });
+  const lastParentValueRef = useRef(value);
+
+  // Official Qj `he`: has non-empty tipTap text (from onUpdate), not React placeholder.
+  const [hasText, setHasText] = useState(() => value.trim().length > 0);
+  const hasTextRef = useRef(hasText);
+
   const isBashMode = value.trimStart().startsWith("!");
-  const canSubmit = value.trim().length > 0 && !disabled && !busy;
+  // Official Te = (he||m)&&!z — Send enabled when has text (and not disabled/busy).
+  const canSubmit = hasText && !disabled && !busy;
 
   submitRef.current = onSubmit;
-  disabledRef.current = disabled || busy;
+  disabledRef.current = disabled;
+  submitBlockedRef.current = disabled || busy;
   onChangeRef.current = onChange;
   bashModeRef.current = isBashMode;
   slashMenuStateRef.current = { bridge, session, sessionRef, slashCwd };
+  // Official: bash → "Enter a shell command"; else prop placeholder.
+  placeholderRef.current = isBashMode ? "Enter a shell command" : placeholder;
+  hasTextRef.current = hasText;
 
   const slashMenuComponent = useMemo(() => function OfficialComposerSlashCommandMenuRenderer(props: OfficialSlashCommandMenuProps) {
     const state = slashMenuStateRef.current;
-    // New-session draft residual (no open session id): still resolve / commands against
-    // the selected folder cwd, and treat the draft as a local Code session so the same
-    // local extras (model, btw, schedule, …) surface. clear is gated off __draft__ in the menu.
     const draftSession = state.session ?? (state.slashCwd ? {
       id: "__draft__",
       title: "Draft",
@@ -94,31 +117,41 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
     return <OfficialEpitaxySlashCommandMenu {...props} bridge={state.bridge} session={draftSession} sessionRef={draftSessionRef} />;
   }, []);
 
+  const applyPlainText = (editor: Editor, text: string) => {
+    if (!text) {
+      editor.commands.clearContent(false);
+      return;
+    }
+    editor.commands.setContent(tiptapDocFromPlainText(text), { emitUpdate: false });
+  };
+
   const editor = useEditor({
-    // TipTap + React 19: avoid SSR/hydration double-mount wiping the first keystrokes.
-    immediatelyRender: false,
-    // Prefer live emit if parent value lags (editor recreate mid-keystroke).
-    content: tiptapDocFromPlainText(value || emitRef.current.lastEmittedValue),
-    editable: !disabled && !busy,
+    // Official vTt: immediatelyRender: typeof document !== "undefined" (browser/Electron = true).
+    // false leaves a non-editable empty ProseMirror shell for a frame → placeholder flash.
+    immediatelyRender: typeof document !== "undefined",
+    content: tiptapDocFromPlainText(value || ""),
+    // Official c119 Qj / aYt: setEditable(!disabled) only.
+    editable: !disabled,
     editorProps: {
       attributes: {
         "aria-label": "Prompt",
-        // epitaxy-root is select-none; contenteditable must opt back into text selection/input.
+        // epitaxy-root is select-none; contenteditable must opt back into text selection.
         class: "tiptap select-text",
-        "data-placeholder": placeholder,
+        enterkeyhint: "enter",
       },
+      // Host packaged app:// empty trailingBreak only (d5f261d) — not UI residual invent.
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
       },
       handleKeyDown: (_view, event) => {
-        // Enter submit is handled in onKeyDownCapture (official wTt residual).
-        // ProseMirror skips handleKeyDown while view.composing / keyCode 229, so
-        // capture is the source of truth; keep Escape here for bash-mode exit.
         const slashStorage = (editorRef.current?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
         const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
         if (event.key === "Escape" && bashModeRef.current && !hasSlashMenu) {
           event.preventDefault();
-          emitRef.current = { lastEmittedValue: "", userEdited: false };
+          userEditedRef.current = false;
+          hasTextRef.current = false;
+          setHasText(false);
+          lastParentValueRef.current = "";
           onChangeRef.current("");
           editorRef.current?.commands.clearContent(true);
           return true;
@@ -136,6 +169,14 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         listItem: false,
         orderedList: false,
       }),
+      // Official index vTt RNt (= INt) — simple decorations, NO TipTap 3.27 viewport plugin.
+      OfficialRNtPlaceholder.configure({
+        emptyEditorClass: "is-editor-empty before:!text-text-500 before:whitespace-nowrap",
+        emptyNodeClass: "is-empty",
+        placeholder: () => placeholderRef.current,
+        showOnlyCurrent: true,
+        showOnlyWhenEditable: true,
+      }),
       OfficialSkillChip,
       OfficialSlashCommandSuggestion.configure({ placement: "onpage", menuComponent: slashMenuComponent }),
     ],
@@ -143,20 +184,27 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       editorRef.current = editor;
     },
     onUpdate: ({ editor }) => {
-      // Official vTt: k.current = true on first user edit.
+      // Official vTt: k.current = true; setTipTapEditorState(json); Qj: he from trim.
+      userEditedRef.current = true;
       const next = editor.getText({ blockSeparator: "\n" });
-      emitRef.current = markControlledTiptapUserEdit(next);
+      const nextHas = next.trim().length > 0;
+      if (nextHas !== hasTextRef.current) {
+        hasTextRef.current = nextHas;
+        setHasText(nextHas);
+      }
+      lastParentValueRef.current = next;
       onChangeRef.current(next);
     },
-    // Avoid TipTap re-render storms on each keystroke; parent owns submit mirror only.
     shouldRerenderOnTransaction: false,
   }, [slashMenuComponent]);
 
   useImperativeHandle(ref, () => ({
     focus: () => {
-      // Prefer DOM focus first so Base UI returnFocus cannot leave the folder
-      // pill as activeElement while PM thinks it is focused.
-      const dom = editor?.view?.dom as HTMLElement | undefined;
+      const ed = editor ?? editorRef.current;
+      const dom = (ed?.view?.dom ?? null) as HTMLElement | null;
+      // Official Pe / aYt O: focus end — never thrash mid-composition.
+      if (ed?.view?.composing) return;
+      if (dom && document.activeElement === dom) return;
       if (dom && typeof dom.focus === "function") {
         try {
           dom.focus({ preventScroll: true });
@@ -164,38 +212,113 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
           dom.focus();
         }
       }
-      editor?.commands.focus("end");
+      try {
+        ed?.commands.focus("end");
+      } catch {
+        /* destroyed */
+      }
     },
     getEditor: () => editor ?? editorRef.current,
     insertSlashCommand: () => {
       editor?.chain().focus("start").insertContent("/").run();
     },
-    // Official Ase residual: insertContent(key).focus() when focus was on a pill.
     insertText: (text: string) => {
       const ed = editor ?? editorRef.current;
       if (!ed || !text) return;
+      if (ed.view?.composing) return;
       ed.chain().insertContent(text).focus("end").run();
+    },
+    setText: (text: string) => {
+      const ed = editor ?? editorRef.current;
+      if (!ed) {
+        pendingTextRef.current = text;
+        return;
+      }
+      pendingTextRef.current = null;
+      userEditedRef.current = false;
+      applyPlainText(ed, text);
+      const nextHas = text.trim().length > 0;
+      hasTextRef.current = nextHas;
+      setHasText(nextHas);
+      lastParentValueRef.current = text;
+    },
+    clear: () => {
+      const ed = editor ?? editorRef.current;
+      pendingTextRef.current = null;
+      userEditedRef.current = false;
+      ed?.commands.clearContent(false);
+      hasTextRef.current = false;
+      setHasText(false);
+      lastParentValueRef.current = "";
     },
   }), [editor]);
 
   useEffect(() => {
-    editor?.setEditable(!disabled && !busy);
-  }, [busy, disabled, editor]);
+    // Official c119: ve?.setEditable(!l)
+    editor?.setEditable(!disabled);
+  }, [disabled, editor]);
 
   useEffect(() => {
     const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { disabled?: boolean } | undefined;
     if (slashStorage) slashStorage.disabled = isBashMode;
   }, [editor, isBashMode]);
 
+  // Official vTt: g.current = a; dispatch placeholderUpdate meta (not full setContent).
   useEffect(() => {
-    if (!editor) return;
-    // Official vTt hydrate: after userEdited only clear; never setContent over typing.
-    emitRef.current = syncControlledTiptapValue({
-      editor,
-      value,
-      emit: emitRef.current,
-      docFromPlainText: tiptapDocFromPlainText,
-    });
+    if (!editor || editor.isDestroyed) return;
+    if (editor.view?.composing) return;
+    editor.view.dispatch(editor.state.tr.setMeta("placeholderUpdate", true));
+  }, [editor, isBashMode, placeholder]);
+
+  // Official aYt: pending setText once editor mounts.
+  useEffect(() => {
+    if (!editor || pendingTextRef.current === null) return;
+    const text = pendingTextRef.current;
+    pendingTextRef.current = null;
+    userEditedRef.current = false;
+    applyPlainText(editor, text);
+    const nextHas = text.trim().length > 0;
+    hasTextRef.current = nextHas;
+    setHasText(nextHas);
+    lastParentValueRef.current = text;
+  }, [editor]);
+
+  /**
+   * Official residual: tipTap owns doc after first edit (vTt k.current).
+   * Parent `value` only:
+   *  - clear after submit (value → "")
+   *  - hydrate before userEdited (draft restore)
+   * Never setContent on every keystroke (that is product invent and IME-hostile).
+   */
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    if (value === lastParentValueRef.current) return;
+    if (editor.view?.composing) return;
+
+    // Clear after send / Escape handled parent-side.
+    if (value === "") {
+      if (!editor.isEmpty) editor.commands.clearContent(false);
+      userEditedRef.current = false;
+      hasTextRef.current = false;
+      setHasText(false);
+      lastParentValueRef.current = "";
+      return;
+    }
+
+    // Hydrate only before first user edit into empty editor (official vTt).
+    if (userEditedRef.current) {
+      lastParentValueRef.current = value;
+      return;
+    }
+    if (!editor.isEmpty) {
+      lastParentValueRef.current = value;
+      return;
+    }
+    applyPlainText(editor, value);
+    const nextHas = value.trim().length > 0;
+    hasTextRef.current = nextHas;
+    setHasText(nextHas);
+    lastParentValueRef.current = value;
   }, [editor, value]);
 
   return (
@@ -203,7 +326,12 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       className={`epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300 ${isBashMode ? "[&_.tiptap]:font-mono [&_.tiptap]:text-[length:var(--text-code)]" : ""}`}
       onClick={(event) => {
         if (event.target instanceof HTMLElement && event.target.closest("button")) return;
-        editor?.commands.focus();
+        // Official Pe: focus end.
+        try {
+          editor?.commands.focus("end");
+        } catch {
+          /* destroyed */
+        }
       }}
     >
       <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" data-surface="prompt" />
@@ -214,31 +342,47 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       </div>
       <div className="relative flex w-full">
         {isBashMode ? <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
+        {/*
+          Official c119 Qj wa EditorContent className (exact residual string):
+            epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9
+            [&_.tiptap]:min-h-[var(--h8)] … [&_.tiptap_p]:m-0
+            + (_e ? "[&_.is-editor-empty]:before:!content-['']" : "")
+          _e = promptSuggestion only — product has none → no suppress class.
+          float-left / pointer-events-none live in residual base CSS
+          (.ProseMirror p.is-editor-empty:first-child:before), NOT on Qj wa.
+        */}
         <EditorContent
-          className={`epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0 ${value.trim().length === 0 ? "[&_.is-editor-empty]:before:!content-['']" : ""}`}
+          className="epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0"
           editor={editor}
           onKeyDownCapture={(event) => {
             const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
             const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
             if (event.key === "Escape" && isBashMode && !hasSlashMenu) {
               event.preventDefault();
-              emitRef.current = { lastEmittedValue: "", userEdited: false };
+              userEditedRef.current = false;
+              hasTextRef.current = false;
+              setHasText(false);
+              lastParentValueRef.current = "";
               onChangeRef.current("");
               editor?.commands.clearContent(true);
               return;
             }
-            // Official wTt residual: Enter submits in capture so PM composition skip
-            // (view.composing / keyCode 229) cannot swallow the key. Manual Send still
-            // works via onClick. Never submit while IME is actively composing.
-            if (event.key !== "Enter" || event.shiftKey || event.altKey || event.isComposing || event.keyCode === 229 || hasSlashMenu) {
+            // Official Qj: Enter + !shift + !alt + !nativeEvent.isComposing (no keyCode 229 invent).
+            if (
+              event.key !== "Enter"
+              || event.shiftKey
+              || event.altKey
+              || event.nativeEvent.isComposing
+              || hasSlashMenu
+            ) {
               return;
             }
             event.preventDefault();
             event.stopPropagation();
-            if (!disabledRef.current) submitRef.current();
+            if (!submitBlockedRef.current) submitRef.current();
           }}
         />
-        {value.trim().length === 0 ? <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5">{isBashMode ? "Enter a shell command" : placeholder}</span> : null}
+        {/* Official Qj: absolute placeholder span ONLY when _e (promptSuggestion). No default value span. */}
         <div className="flex self-end p-p7 pl-p3">
           <OfficialButton
             ariaLabel="Send"

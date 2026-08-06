@@ -126,6 +126,7 @@ function useCoworkPromptEditor(input: CoworkPromptEditorInput) {
     editable: !input.disabled,
     editorProps: {
       attributes: { "aria-label": "Prompt", class: "tiptap", "data-placeholder": input.placeholder },
+      // Packaged app:// Chromium adaptation (d5f261d): transaction-owned insertText.
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
       },

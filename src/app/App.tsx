@@ -12,6 +12,11 @@ import {
 import { useDesktopQuickEntryRecentChatsSync } from "./useDesktopQuickEntryRecentChatsSync";
 import { useDesktopQuickEntrySubmit } from "./useDesktopQuickEntrySubmit";
 import { useDirectMcpStatusHydrate } from "./useDirectMcpStatusHydrate";
+import { useApplyRelaunchFromSetup } from "../shell/useApplyRelaunchFromSetup";
+import { desktopBridge } from "../adapters/desktopBridge";
+import { queryClient } from "./queryClient";
+import { BOOTSTRAP_QUERY_KEY } from "../features/settings/bootstrapQuery";
+import { EPITAXY_ACTION_CENTER_SESSIONS_QUERY_KEY } from "../features/epitaxy/epitaxyActionCenterState";
 
 const getLocation = () => window.location.pathname + window.location.search;
 
@@ -56,6 +61,8 @@ export function App() {
   useDesktopQuickEntrySubmit();
   // Residual Rrs: Direct MCP status subscribe + initial getDirectMcpServerStatuses.
   useDirectMcpStatusHydrate();
+  // Setup Apply → close small window → main SPA apply countdown → process relaunch.
+  const { overlay: applyRelaunchOverlay } = useApplyRelaunchFromSetup();
   useEffect(() => subscribeResponseCompletionEvents(), []);
   const locationKey = useSyncExternalStore(subscribeLocation, getLocation);
   const route = useMemo(() => matchRoute(window.location.pathname), [locationKey]);
@@ -91,6 +98,7 @@ export function App() {
     };
     // Sign-out / clear: force logged_out so shell cannot stick with account null.
     const onLoggedOut = () => {
+      queryClient.removeQueries({ queryKey: BOOTSTRAP_QUERY_KEY });
       setLoginGate("logged_out");
       setBootstrapInFlight(false);
       setAuthEpoch((n) => n + 1);
@@ -113,6 +121,19 @@ export function App() {
   useEffect(() => {
     const controller = new AbortController();
     setBootstrapInFlight(true);
+    // Official vn sessions load in parallel with account (Go) — warm Pw list before
+    // Code Tw first paint so greetEmpty is not forced false on hard reload.
+    void queryClient.prefetchQuery({
+      queryKey: EPITAXY_ACTION_CENTER_SESSIONS_QUERY_KEY,
+      queryFn: async () => {
+        try {
+          return await desktopBridge.LocalSessions.list();
+        } catch {
+          return [];
+        }
+      },
+      staleTime: 30_000,
+    });
     void (async () => {
       try {
         let payload: unknown = null;
@@ -143,6 +164,11 @@ export function App() {
           setLoginGate("unknown");
           setBootstrapInFlight(false);
           return;
+        }
+        // Seed shared bootstrap cache so Code Tw (Go residual) reads account.display_name
+        // synchronously after login-gate fetch — no second CodeGreeting-only effect.
+        if (payload && typeof payload === "object") {
+          queryClient.setQueryData(BOOTSTRAP_QUERY_KEY, payload as Record<string, unknown>);
         }
         const details = accountDetailsFromBootstrap(payload);
         setLoginGate(details.isLoggedOut ? "logged_out" : "signed_in");
@@ -228,7 +254,12 @@ export function App() {
   }, []);
 
   if (route.frame === "standalone") {
-    return <route.Component route={route} onNavigate={navigate} />;
+    return (
+      <>
+        <route.Component route={route} onNavigate={navigate} />
+        {applyRelaunchOverlay}
+      </>
+    );
   }
 
   if (isDesktopBridgeMissingInElectron) {
@@ -249,7 +280,12 @@ export function App() {
   // LoginDesktop directly (same end state as replaceState → /login).
   if (loginGate === "logged_out" && !isLoginGateExempt(window.location.pathname)) {
     const loginRoute = matchRoute("/login");
-    return <loginRoute.Component route={loginRoute} onNavigate={navigate} />;
+    return (
+      <>
+        <loginRoute.Component route={loginRoute} onNavigate={navigate} />
+        {applyRelaunchOverlay}
+      </>
+    );
   }
 
   // Official does NOT paint LoginDesktop while auth is still pending.
@@ -258,19 +294,28 @@ export function App() {
   // remounted DesktopFrame + resize 1200×800 → "login window then flash to main".
   // Pending here is brief null over createMainWindow backgroundColor (I8) — residual-like.
   if (loginGate === "pending") {
-    return null;
+    // Still mount apply overlay so Setup→Relaunch can paint over blank shell if needed.
+    return <>{applyRelaunchOverlay}</>;
   }
 
   // Official Vis/Pos bootstrapFailed → Yrs connection error (not main shell).
   // Product loginGate "unknown": /api/bootstrap returned no usable JSON.
   // Never mount DesktopFrame without a resolved identity.
   if (loginGate === "unknown") {
-    return <BootstrapConnectionErrorPage />;
+    return (
+      <>
+        <BootstrapConnectionErrorPage />
+        {applyRelaunchOverlay}
+      </>
+    );
   }
 
   return (
-    <DesktopFrame currentRoute={route} onNavigate={navigate}>
-      <route.Component route={route} onNavigate={navigate} />
-    </DesktopFrame>
+    <>
+      <DesktopFrame currentRoute={route} onNavigate={navigate}>
+        <route.Component route={route} onNavigate={navigate} />
+      </DesktopFrame>
+      {applyRelaunchOverlay}
+    </>
   );
 }

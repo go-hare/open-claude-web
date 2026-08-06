@@ -167,17 +167,32 @@ function LoadingConversation() {
   );
 }
 
+/**
+ * Cold-load Prompt shell (EpitaxySessionLoading only).
+ * Official empty Prompt uses RNt ::before via data-placeholder on p.is-editor-empty.
+ * Skeleton must paint the same string so swap to live TipTap does not blank ::before.
+ * Copy matches Code draft residual (zh-CN overrides / OfficialCodeComposer placeholder).
+ */
 function PromptBox() {
+  const draftPlaceholder = "描述一个任务，或提一个问题";
   return (
     <div className="epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300 ">
-      <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" />
-      <span className="sr-only" role="status" />
+      <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" data-surface="prompt" />
+      <span className="sr-only" role="status">Chat mode</span>
       <div className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}><div className="min-h-0 overflow-hidden" /></div>
       <div className="relative flex w-full">
         <div className="epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0 ">
-          <div className="tiptap ProseMirror ProseMirror-focused" aria-label="Prompt"><p className="is-empty is-editor-empty before:!text-text-500 before:whitespace-nowrap"><br className="ProseMirror-trailingBreak" /></p></div>
+          {/* Match live RNt decoration: data-placeholder + is-editor-empty (not a React absolute invent). */}
+          <div className="tiptap ProseMirror select-text" aria-label="Prompt">
+            <p
+              className="is-empty is-editor-empty before:!text-text-500 before:whitespace-nowrap"
+              data-placeholder={draftPlaceholder}
+            >
+              <br className="ProseMirror-trailingBreak" />
+            </p>
+          </div>
         </div>
-        <div className="flex self-end p-p7 pl-p3"><button className={iconButtonClass} aria-label="Send" type="button"><span className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)] group-hover/btn:bg-[var(--fill-uncontained-hover)]" /></button></div>
+        <div className="flex self-end p-p7 pl-p3"><button className={iconButtonClass} aria-label="Send" type="button" disabled><span className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)] group-hover/btn:bg-[var(--fill-uncontained-hover)]" /></button></div>
       </div>
     </div>
   );

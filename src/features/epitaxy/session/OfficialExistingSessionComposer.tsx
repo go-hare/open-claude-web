@@ -8,6 +8,7 @@ import type { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { desktopBridge, type SessionSummary } from "../../../adapters/desktopBridge";
 import type { LocalSessionsBridge, SendMessageInput } from "../../../adapters/desktopBridge/types";
+import { OfficialRNtPlaceholder } from "../../shared/officialRNtPlaceholder";
 import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
 import { useOfficialTypeToComposer } from "../../shared/useOfficialTypeToComposer";
 import { Icon } from "../../../shell/icons";
@@ -161,7 +162,9 @@ export function ExistingSessionComposer({
   const bashModeRef = useRef(false);
   const respondingRef = useRef(isResponding);
   const isBashMode = text.trimStart().startsWith("!");
-  const placeholder = "Type / for commands";
+  // Official Qj: bash → shell placeholder; else chat. Ref-backed for RNt without remount.
+  const placeholderRef = useRef("Type / for commands");
+  placeholderRef.current = isBashMode ? "Enter a shell command" : "Type / for commands";
   const canStop = isResponding && Boolean(sessionRef && bridge.stop);
   const readyImageCount = stagedImages.filter((image) => image.status === "ready" && image.base64).length;
   // Official: allow send with images only (text optional when d.length > 0).
@@ -171,14 +174,18 @@ export function ExistingSessionComposer({
     && !isSubmitting
     && !isResponding;
   const editor = useEditor({
+    // Official vTt: immediatelyRender when document exists (Electron renderer).
+    immediatelyRender: typeof document !== "undefined",
     content: "",
-    editable: !disabled && !isSubmitting && !isResponding,
+    // Official c119 Qj: setEditable(!disabled) only. busy/isResponding → Stop, not lock typing.
+    editable: !disabled,
     editorProps: {
       attributes: {
         "aria-label": "Prompt",
         class: "tiptap select-text",
-        "data-placeholder": placeholder,
+        enterkeyhint: "enter",
       },
+      // Host packaged app:// empty trailingBreak only (d5f261d).
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
       },
@@ -208,23 +215,80 @@ export function ExistingSessionComposer({
         listItem: false,
         orderedList: false,
       }),
+      // Official index vTt RNt (= INt) — simple decorations, no TipTap 3.27 viewport.
+      OfficialRNtPlaceholder.configure({
+        emptyEditorClass: "is-editor-empty before:!text-text-500 before:whitespace-nowrap",
+        emptyNodeClass: "is-empty",
+        placeholder: () => placeholderRef.current,
+        showOnlyCurrent: true,
+        showOnlyWhenEditable: true,
+      }),
       OfficialSkillChip,
       OfficialSlashCommandSuggestion.configure({ placement: "onpage", menuComponent: slashMenuComponent }),
     ],
     onUpdate: ({ editor: nextEditor }) => {
       setText(nextEditor.getText({ blockSeparator: "\n" }));
     },
-  }, [placeholder, slashMenuComponent]);
+    shouldRerenderOnTransaction: false,
+  }, [slashMenuComponent]);
+
+  bashModeRef.current = isBashMode;
+  respondingRef.current = isResponding;
 
   // Official Ase residual: printable keys while focus is on chrome still insert into TipTap.
+  // Official does not gate Ase on busy/isResponding — only disabled locks the editor.
   useOfficialTypeToComposer(
     useCallback((key: string) => {
       const ed = tiptapEditorRef.current ?? editor;
-      if (!ed || disabled || isSubmitting || isResponding) return;
+      if (!ed || disabled) return;
+      if (ed.view?.composing) return;
       ed.chain().insertContent(key).focus("end").run();
-    }, [disabled, editor, isResponding, isSubmitting]),
-    !disabled && !isSubmitting && !isResponding,
+    }, [disabled, editor]),
+    !disabled,
   );
+
+  useEffect(() => {
+    // Official c119: ve?.setEditable(!l)
+    editor?.setEditable(!disabled);
+  }, [disabled, editor]);
+
+  useEffect(() => {
+    const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { disabled?: boolean } | undefined;
+    if (slashStorage) slashStorage.disabled = isBashMode;
+  }, [editor, isBashMode]);
+
+  // Bash/chat placeholder string change: nudge decorations (RNt reads placeholderRef).
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    editor.view.dispatch(editor.state.tr.setMeta("addToHistory", false));
+  }, [editor, isBashMode]);
+
+  // Official c119: Ye.current?.focus() once — never re-focus storm mid-IME.
+  const sessionAutofocusedRef = useRef(false);
+  useEffect(() => {
+    if (disabled || sessionAutofocusedRef.current) return;
+    if (!editor) return;
+    sessionAutofocusedRef.current = true;
+    const run = () => {
+      if (editor.view?.composing) return;
+      const dom = editor.view?.dom as HTMLElement | undefined;
+      if (dom && document.activeElement === dom) return;
+      try {
+        editor.commands.focus("end");
+      } catch {
+        /* ignore */
+      }
+      if (dom) {
+        try {
+          dom.focus({ preventScroll: true });
+        } catch {
+          dom.focus();
+        }
+      }
+    };
+    run();
+    for (const ms of [50, 150, 400]) window.setTimeout(run, ms);
+  }, [disabled, editor]);
 
   useEffect(() => {
     setModel(normalizeSelectorModelValue(session?.model, allowedModelValues));
@@ -355,8 +419,9 @@ export function ExistingSessionComposer({
   }, [editor, isBashMode]);
 
   useEffect(() => {
-    editor?.setEditable(!disabled && !isSubmitting && !isResponding);
-  }, [disabled, editor, isResponding, isSubmitting]);
+    // Official c119: ve?.setEditable(!l) — disabled prop only.
+    editor?.setEditable(!disabled);
+  }, [disabled, editor]);
 
   const clearComposer = useCallback(() => {
     editor?.commands.clearContent(true);
@@ -770,7 +835,12 @@ export function ExistingSessionComposer({
         className={`epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300 ${isBashMode ? "[&_.tiptap]:font-mono [&_.tiptap]:text-[length:var(--text-code)]" : ""}`}
         onClick={(event) => {
           if (event.target instanceof HTMLElement && event.target.closest("button")) return;
-          editor?.commands.focus();
+          // Official Pe: focus end.
+          try {
+            editor?.commands.focus("end");
+          } catch {
+            /* destroyed */
+          }
         }}
       >
         <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" data-surface="prompt" />
@@ -780,8 +850,14 @@ export function ExistingSessionComposer({
         <OfficialComposerStagedImages images={stagedImages} onRemove={removeStagedImage} />
         <div className="relative flex w-full">
           {isBashMode ? <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
+          {/*
+            Official c119 Qj wa EditorContent className (exact residual):
+              epitaxy-prompt-input … [&_.tiptap_p]:m-0
+              + (_e ? suppress : "") — product has no promptSuggestion.
+              float-left/height:0 from residual base CSS, not Qj class invent.
+          */}
           <EditorContent
-            className={`epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0 ${text.trim().length === 0 ? "[&_.is-editor-empty]:before:!content-['']" : ""}`}
+            className="epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0"
             editor={editor}
             onKeyDownCapture={(event) => {
               const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
@@ -791,9 +867,14 @@ export function ExistingSessionComposer({
                 clearComposer();
                 return;
               }
-              // Official wTt residual: Enter submit in capture so PM composition skip
-              // cannot swallow the key after IME gets stuck (view.composing sticky).
-              if (event.key !== "Enter" || event.shiftKey || event.altKey || event.isComposing || event.keyCode === 229 || hasSlashMenu) {
+              // Official Qj: Enter + !shift + !alt + !nativeEvent.isComposing (no keyCode 229 invent).
+              if (
+                event.key !== "Enter"
+                || event.shiftKey
+                || event.altKey
+                || event.nativeEvent.isComposing
+                || hasSlashMenu
+              ) {
                 return;
               }
               event.preventDefault();
@@ -801,7 +882,6 @@ export function ExistingSessionComposer({
               if (!respondingRef.current) void submitRef.current();
             }}
           />
-          {text.trim().length === 0 ? <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5">{placeholder}</span> : null}
           <div className="flex self-end p-p7 pl-p3">
             <OfficialButton
               ariaLabel={canStop ? "Stop response" : "Send"}
