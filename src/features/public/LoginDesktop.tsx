@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { RouteViewProps } from "../../app/routes";
-import { accountDetailsFromBootstrap } from "../../app/useDesktopCoworkAccountSync";
 import { RelaunchInterstitialBody } from "../../shell/RelaunchInterstitial";
-import { persistDFrameState } from "../../stores/frameStoreHelpers";
 import { CoworkClaudeAvatar } from "../cowork/session/transcript/CoworkClaudeAvatar";
 import { primaryButtonClass, secondaryButtonClass } from "../shared/buttonClasses";
 
@@ -17,11 +16,12 @@ import { primaryButtonClass, secondaryButtonClass } from "../shared/buttonClasse
  *
  * M5t (index-BELzQL5P.js):
  *   hide1p = hide1p ?? !status.enabled
- *   sVt shell + Ace static !w-12
- *   dual: Continue with {short} (N5t + E5t pill + ›) + Sign in to Anthropic (Lce)
- *   footnote under dual
- *   Sign in → relaunching interstitial → setDeploymentMode("1p")
- *   Continue 3p → setDeploymentMode("3p")
+ *   x5t() = Gbe.interactiveAuthStore (needsAuth / pendingUserCode / kind)
+ *   phases: idle | relaunching | sso-pending | applying
+ *   needsAuth → Continue triggers b5t=triggerInteractiveAuth (not NQt("3p"))
+ *   plain 3p → NQt("3p"); 1p → relaunching d2t → NQt("1p")
+ *   applying d2t signed-in → relaunchApp
+ *   E5t bootstrapHost only when kind==="bootstrap" (product: bootstrapOidc)
  *
  * T5t portal is separate (hide1p:true, needsAuth). Not the LoginRoute dual chooser.
  * Verify sign-in code BrowserWindow is 520×340 — different residual.
@@ -44,11 +44,33 @@ export type LoginDesktop3pStatus = {
   };
 };
 
+/**
+ * Official lcA / interactiveAuth store residual (x5t).
+ * null = no interactive step; else needsAuth drives SSO card path.
+ */
+export type InteractiveAuthState = {
+  needsAuth: boolean;
+  kind?: "vertex" | "bedrockSso" | "bootstrapOidc" | "bootstrap" | string | null;
+  pendingUserCode?: string | null;
+  error?: string | null;
+  source?: "managed" | "local" | "none" | string;
+} | null;
+
 type BridgeCustom3p = {
   getLoginDesktop3pStatus?: () => Promise<LoginDesktop3pStatus | null>;
   setDeploymentMode?: (mode: string) => Promise<unknown>;
   openSetupWindow?: () => Promise<unknown>;
   relaunchApp?: () => Promise<unknown>;
+};
+
+type InteractiveAuthStore = {
+  getState?: () => Promise<InteractiveAuthState> | InteractiveAuthState;
+  onStateChange?: (listener: (state: InteractiveAuthState) => void) => (() => void) | void;
+};
+
+type LocalAgentModeSessionsBridge = {
+  interactiveAuthStore?: InteractiveAuthStore;
+  triggerInteractiveAuth?: () => Promise<{ ok: boolean; error?: string } | unknown>;
 };
 
 type WindowControlBridge = {
@@ -63,10 +85,73 @@ function custom3pBridge(): BridgeCustom3p | undefined {
   return settings?.Custom3pSetup;
 }
 
+function localAgentSessionsBridge(): LocalAgentModeSessionsBridge | undefined {
+  return (window as unknown as { "claude.web"?: { LocalAgentModeSessions?: LocalAgentModeSessionsBridge } })[
+    "claude.web"
+  ]?.LocalAgentModeSessions;
+}
+
 function windowControl(): WindowControlBridge | undefined {
   return (window as unknown as { electronWindowControl?: WindowControlBridge }).electronWindowControl
     ?? (window as unknown as { "claude.web"?: { WindowControl?: WindowControlBridge } })["claude.web"]
       ?.WindowControl;
+}
+
+/**
+ * Official x5t residual: subscribe Gbe.interactiveAuthStore.
+ * Returns undefined while loading (M5t shows empty sVt); null when ready and no auth needed.
+ */
+function useInteractiveAuthState(): InteractiveAuthState | undefined {
+  const [state, setState] = useState<InteractiveAuthState | undefined>(undefined);
+
+  useEffect(() => {
+    const store = localAgentSessionsBridge()?.interactiveAuthStore;
+    if (!store?.getState) {
+      // No store (web-only / missing preload) — treat as ready with no interactive auth.
+      setState(null);
+      return;
+    }
+    let cancelled = false;
+    void Promise.resolve(store.getState())
+      .then((value) => {
+        if (!cancelled) setState(value ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setState(null);
+      });
+    const unsub = store.onStateChange?.((next) => {
+      if (!cancelled) setState(next ?? null);
+    });
+    return () => {
+      cancelled = true;
+      if (typeof unsub === "function") unsub();
+    };
+  }, []);
+
+  return state;
+}
+
+async function triggerInteractiveAuthResidual(): Promise<{ ok: boolean; error?: string }> {
+  const bridge = localAgentSessionsBridge();
+  try {
+    const result = await Promise.resolve(bridge?.triggerInteractiveAuth?.());
+    if (result && typeof result === "object" && "ok" in result) {
+      const bag = result as { ok: boolean; error?: string };
+      return { ok: Boolean(bag.ok), error: typeof bag.error === "string" ? bag.error : undefined };
+    }
+    // Missing IPC — honest fail (official b5t fallback string).
+    return { ok: false, error: "Interactive sign-in is not available in this app version" };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Sign-in failed unexpectedly. Try again.",
+    };
+  }
+}
+
+/** Official E5t: show bootstrapHost only for bootstrap kind. */
+function isBootstrapAuthKind(kind: string | null | undefined): boolean {
+  return kind === "bootstrap" || kind === "bootstrapOidc";
 }
 
 function providerShort(provider: string | null | undefined): string {
@@ -187,10 +272,17 @@ function Chevron() {
   );
 }
 
+type M5tPhase = "idle" | "relaunching" | "sso-pending" | "applying";
+
 /**
- * Official M5t residual (chooser / single org card).
+ * Official M5t residual (chooser / single org card + SSO phases).
  * hide1p: only third-party card (T5t portal).
  * !hide1p: dual cards including "Sign in to Anthropic".
+ *
+ * Interactive auth (x5t / b5t):
+ *   needsAuth → Continue runs triggerInteractiveAuth, not NQt("3p")
+ *   pendingUserCode → sso-pending device-code UI
+ *   applying → d2t signed-in → relaunchApp
  */
 export function LoginDesktopChooser({
   status,
@@ -199,6 +291,8 @@ export function LoginDesktopChooser({
   onChoose3p,
   onChooseDotClaude,
   onOpenSetup,
+  interactiveAuth,
+  onRelaunchApp,
 }: {
   status: LoginDesktop3pStatus;
   hide1p?: boolean;
@@ -207,6 +301,10 @@ export function LoginDesktopChooser({
   onChooseDotClaude?: () => void;
   /** Product: open setup-desktop-3p when no configLibrary bag yet (not official M5t footer). */
   onOpenSetup?: () => void;
+  /** Official x5t result; undefined = still loading store. */
+  interactiveAuth?: InteractiveAuthState | undefined;
+  /** Official applying onDone → RW.relaunchApp. */
+  onRelaunchApp?: () => void;
 }) {
   const provider = status.provider ?? null;
   const short = providerShort(provider);
@@ -221,12 +319,170 @@ export function LoginDesktopChooser({
   // Product: detected ~/.claude is a real local choice even when chooser mode is void
   // (enabled stays false until user picks dotClaude / 3p). Keep Anthropic dual card.
   const single = hide1p ?? !(status.enabled || Boolean(dotClaude));
-  const continueTitle = `Continue with ${short}`;
   const managed = status.source?.type === "managed";
   // Product: AnthropicEntry had "Configure third-party…". Entering chooser only because
   // ~/.claude was found must not remove that path — Setup still creates configLibrary bag.
   const showConfigureSetup = Boolean(onOpenSetup) && !hasProviderCard;
 
+  // Official M5t local phase machine (d / u).
+  const [phase, setPhase] = useState<M5tPhase>("idle");
+  const [ssoError, setSsoError] = useState<string | undefined>(undefined);
+  const requestGen = useRef(0);
+  const userBackedOut = useRef(false);
+  const ssoInFlight = useRef(false);
+
+  const pendingUserCode =
+    interactiveAuth && typeof interactiveAuth === "object"
+      ? interactiveAuth.pendingUserCode ?? null
+      : null;
+  const needsAuth = Boolean(
+    interactiveAuth && typeof interactiveAuth === "object" && interactiveAuth.needsAuth,
+  );
+  const authKind =
+    interactiveAuth && typeof interactiveAuth === "object" ? interactiveAuth.kind ?? null : null;
+  const isBootstrap = isBootstrapAuthKind(authKind);
+  // Official E5t: bootstrapHost only when kind === "bootstrap".
+  const pillBootstrapHost = isBootstrap ? status.bootstrapHost : null;
+  const continueTitle = isBootstrap
+    ? "Sign in to your organization"
+    : `Continue with ${short}`;
+  // Official S: needsAuth → ssoSub (or last error); else noAccount.
+  const continueSub = needsAuth
+    ? ssoError ?? "Sign in with your work account"
+    : "No Anthropic account needed";
+  const continueSubClass = ssoError ? "text-xs text-brand-000" : "text-xs text-text-400";
+
+  // Official: pendingUserCode drives sso-pending; clearing it while in sso-pending → applying
+  // (unless user backed out or trigger still in flight).
+  useEffect(() => {
+    if (!pendingUserCode) {
+      userBackedOut.current = false;
+      if (phase === "sso-pending" && !ssoInFlight.current) {
+        setPhase("applying");
+      }
+      return;
+    }
+    if (phase === "idle" && !userBackedOut.current) {
+      setPhase("sso-pending");
+    }
+  }, [pendingUserCode, phase]);
+
+  const startSso = useCallback(async () => {
+    // Official w: gen++, clear error, sso-pending, trigger b5t.
+    const gen = ++requestGen.current;
+    setSsoError(undefined);
+    setPhase("sso-pending");
+    ssoInFlight.current = true;
+    let result: { ok: boolean; error?: string };
+    try {
+      result = await triggerInteractiveAuthResidual();
+    } catch {
+      result = { ok: false, error: "Sign-in failed unexpectedly. Try again." };
+    } finally {
+      ssoInFlight.current = false;
+    }
+    if (gen !== requestGen.current) return;
+    if (result.ok) {
+      setPhase("applying");
+    } else {
+      setSsoError(result.error ?? "Sign-in failed unexpectedly. Try again.");
+      setPhase("idle");
+    }
+  }, []);
+
+  const onSsoBack = useCallback(() => {
+    // Official k: gen++, g=true, idle.
+    requestGen.current += 1;
+    userBackedOut.current = true;
+    setPhase("idle");
+  }, []);
+
+  const onApplyingDone = useCallback(() => {
+    // Official _: RW.relaunchApp — not NQt (session already authorized).
+    onRelaunchApp?.();
+  }, [onRelaunchApp]);
+
+  const onApplyingCancel = useCallback(() => {
+    setPhase("idle");
+  }, []);
+
+  // Official: void 0 === r → empty sVt while interactiveAuth store still loading.
+  if (interactiveAuth === undefined) {
+    return (
+      <LoginDesktopShell>
+        <div className="flex h-full w-full flex-col items-center justify-center gap-5 px-14 text-center">
+          <CoworkClaudeAvatar state="thinking" className="!w-12" isInteractive={false} />
+        </div>
+      </LoginDesktopShell>
+    );
+  }
+
+  // Official: "relaunching" | "applying" → d2t (signin | signed-in).
+  if (phase === "relaunching") {
+    return (
+      <LoginDesktopShell>
+        <RelaunchInterstitialBody
+          variant="signin"
+          onDone={onChoose1p}
+          onCancel={() => setPhase("idle")}
+        />
+      </LoginDesktopShell>
+    );
+  }
+  if (phase === "applying") {
+    return (
+      <LoginDesktopShell>
+        <RelaunchInterstitialBody
+          variant="signed-in"
+          onDone={onApplyingDone}
+          onCancel={onApplyingCancel}
+        />
+      </LoginDesktopShell>
+    );
+  }
+
+  // Official sso-pending: device code / browser approve UI.
+  if (phase === "sso-pending") {
+    return (
+      <LoginDesktopShell>
+        <div className="flex h-full w-full flex-col items-center justify-center gap-4 text-center">
+          <CoworkClaudeAvatar state="thinking" className="!w-12" isInteractive={false} />
+          <h1 className="font-ui-serif text-2xl font-medium tracking-tight text-text-100">
+            Opening your browser to sign in…
+          </h1>
+          {pendingUserCode ? (
+            <>
+              <div
+                aria-describedby="sso-code-hint"
+                className="rounded-lg border-0.5 border-border-300 bg-bg-000 px-4 py-2 font-mono text-2xl tracking-[0.3em] text-text-100"
+              >
+                {pendingUserCode}
+              </div>
+              <p
+                id="sso-code-hint"
+                className="max-w-sm text-balance text-sm leading-normal text-text-400"
+              >
+                Confirm this code matches the one shown in your browser.
+              </p>
+            </>
+          ) : (
+            <p className="max-w-sm text-balance text-sm leading-normal text-text-400">
+              Approve the request in your browser, then return here.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={onSsoBack}
+            className="mt-2 text-xs text-text-400 underline underline-offset-2 hover:text-text-100"
+          >
+            Back
+          </button>
+        </div>
+      </LoginDesktopShell>
+    );
+  }
+
+  // Official M5t idle dual/single cards.
   return (
     <LoginDesktopShell>
       <div className="flex h-full w-full flex-col items-center">
@@ -243,15 +499,25 @@ export function LoginDesktopChooser({
         </div>
         <div className="flex w-full max-w-md flex-col gap-3 pb-2">
           {hasProviderCard ? (
-            <ChoiceCard ariaLabel={continueTitle} onClick={onChoose3p}>
+            <ChoiceCard
+              ariaLabel={continueTitle}
+              onClick={() => {
+                // Official M = needsAuth ? w : v (SSO vs NQt("3p")).
+                if (needsAuth) {
+                  void startSso();
+                } else {
+                  onChoose3p();
+                }
+              }}
+            >
               <div className="flex items-center gap-3.5">
                 <ProviderGlyph />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="text-sm font-semibold text-text-100">{continueTitle}</span>
-                  <span className="text-xs text-text-400">No Anthropic account needed</span>
+                  <span className={continueSubClass}>{continueSub}</span>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <SourcePill managed={managed} bootstrapHost={null} />
+                  <SourcePill managed={managed} bootstrapHost={pillBootstrapHost} />
                   <Chevron />
                 </div>
               </div>
@@ -279,7 +545,13 @@ export function LoginDesktopChooser({
             </ChoiceCard>
           ) : null}
           {!single ? (
-            <ChoiceCard ariaLabel="Sign in to Anthropic" onClick={onChoose1p}>
+            <ChoiceCard
+              ariaLabel="Sign in to Anthropic"
+              onClick={() => {
+                // Official: Sign in card only sets phase relaunching (d2t), NQt onDone.
+                setPhase("relaunching");
+              }}
+            >
               <div className="flex items-center gap-3.5">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border-0.5 border-border-300 bg-bg-100">
                   <ClaudeMark className="size-5 shrink-0 text-accent-brand" />
@@ -312,7 +584,12 @@ export function LoginDesktopChooser({
   );
 }
 
-/** Official LoginRoute residual when no 3p provider/bootstrapHost — honest 1p entry, no OAuth invent. */
+/**
+ * Official LoginRoute pure-1p residual (`c632c9594` `pn`):
+ *   Avatar !w-16, "Claude for Windows/Mac", "The fastest way to talk with Claude",
+ *   primary CTA **Get started** (`/aBLH2Kytu`) → onNext (Sign In step).
+ * Product: honest 1p (no OAuth invent) + secondary Configure third-party (product extension).
+ */
 function LoginDesktopAnthropicEntry({
   onChoose1p,
   onOpenSetup,
@@ -320,31 +597,28 @@ function LoginDesktopAnthropicEntry({
   onChoose1p: () => void;
   onOpenSetup: () => void;
 }) {
+  const platformLabel =
+    typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent)
+      ? "Mac"
+      : "Windows";
   return (
     <LoginDesktopShell>
-      <div className="flex h-full w-full flex-col items-center">
+      <div className="relative flex h-full w-full flex-col items-center">
         <div className="flex w-full flex-1 flex-col items-center justify-center gap-3.5 text-center">
-          <CoworkClaudeAvatar state="static" className="!w-12" isInteractive={false} />
-          <h1 className="whitespace-nowrap font-ui-serif text-3xl font-medium tracking-tight text-text-100">
-            Sign in to continue
+          <CoworkClaudeAvatar state="static" className="!w-16 mb-14" isInteractive={false} />
+          <h1 className="text-center justify-start text-text-100 text-3xl font-medium font-ui-serif">
+            Claude <em className="italic">for</em> {platformLabel}
           </h1>
-          <p className="max-w-sm text-balance text-sm leading-normal text-text-400">
-            Use your Claude account, or configure third-party inference.
-          </p>
+          <p className="text-text-400 text-lg pt-4">The fastest way to talk with Claude</p>
         </div>
-        <div className="flex w-full max-w-md flex-col gap-3 pb-2">
-          <ChoiceCard ariaLabel="Sign in to Anthropic" onClick={onChoose1p}>
-            <div className="flex items-center gap-3.5">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border-0.5 border-border-300 bg-bg-100">
-                <ClaudeMark className="size-5 shrink-0 text-accent-brand" />
-              </div>
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="text-sm font-semibold text-text-100">Sign in to Anthropic</span>
-                <span className="text-xs text-text-400">Use your Claude account</span>
-              </div>
-              <Chevron />
-            </div>
-          </ChoiceCard>
+        <div className="absolute bottom-12 left-20 right-20 flex flex-col gap-3">
+          <button
+            type="button"
+            className={`${primaryButtonClass} h-11 w-full !rounded-xl text-sm`}
+            onClick={onChoose1p}
+          >
+            Get started
+          </button>
           <button
             type="button"
             className={`${secondaryButtonClass} h-10 w-full rounded-[0.6rem] text-sm`}
@@ -359,15 +633,16 @@ function LoginDesktopAnthropicEntry({
 }
 
 /**
- * Official LoginRoute jn residual:
+ * Official LoginRoute jn residual (c632c9594-Bv5AdbQY.js):
  *   electronWindowControl.resize(600, 600, { center: true })
- *   pagehide → resize(1200, 800)
+ *   pagehide + cleanup → resize(1200, 800)
  *
- * Product bug (login dual-card became 1200×800): React cleanup always called
- * restore() on unmount. App can remount LoginDesktop (gate /login exempt →
- * DesktopFrame wrap, Strict Mode, HMR) so cleanup restore races after the new
- * mount's 600 resize → stuck large while still showing chooser.
- * Also leaveLoginForShell must not pre-resize to 1200 while login UI is painted.
+ * Official 3p leave is mainView.loadURL (got soft path) → full document tear-down →
+ * pagehide fires restore. Product soft SPA history.replace must NOT leave /login
+ * without loadURL — that paints DesktopFrame at 600 and flashes.
+ *
+ * Product gate remounts: defer cleanup restore and cancel if still on /login so
+ * Strict Mode / gate remounts do not blow size back to 1200 while chooser is up.
  */
 let loginWindowSizeEpoch = 0;
 
@@ -375,9 +650,7 @@ function useLoginWindowSize() {
   useLayoutEffect(() => {
     const epoch = ++loginWindowSizeEpoch;
     const control = windowControl();
-    // Official jn: resize(600,600,{center:true}). IPC is async — main process cloaks
-    // opacity for soft center (mnr + createMainWindow opacity residual) so the SPA
-    // does not paint dual-card at 1200 while bounds apply.
+    // Official jn: resize(600,600,{center:true}).
     void Promise.resolve(control?.resize?.(600, 600, { center: true })).then(() => {
       if (loginWindowSizeEpoch !== epoch) return;
       void control?.focus?.();
@@ -387,9 +660,7 @@ function useLoginWindowSize() {
       void control?.resize?.(1200, 800);
     };
 
-    // Official: pagehide restores (full document leave). Cleanup also calls restore
-    // (official jn: return () => { removeListener; e() }) — we defer + cancel on
-    // remount / still-/login so product gate remounts do not blow size back to 1200.
+    // Official: pagehide restores (full document leave via loadURL/relaunch).
     const onPageHide = () => {
       restoreMain();
     };
@@ -410,11 +681,10 @@ function useLoginWindowSize() {
 /** Route: /login — official LoginDesktop residual for product shell. */
 export function LoginDesktopPage(_props: RouteViewProps) {
   const [status, setStatus] = useState<LoginDesktop3pStatus | null | undefined>(undefined);
-  // Official M5t residual (index-BELzQL5P.js):
-  //   Sign in to Anthropic → u("relaunching") → d2t variant "signin"
-  //   onDone → NQt("1p"); onCancel → u("idle")
-  //   plain Gateway 3p: NQt("3p") with no apply overlay.
+  // AnthropicEntry-only 1p path still uses page-level d2t (chooser owns its own phase).
   const [phase, setPhase] = useState<"idle" | "relaunching-1p">("idle");
+  // Official x5t — M5t needsAuth / sso-pending / applying.
+  const interactiveAuth = useInteractiveAuthState();
 
   useLoginWindowSize();
 
@@ -438,137 +708,44 @@ export function LoginDesktopPage(_props: RouteViewProps) {
     };
   }, []);
 
-  const leaveLoginForShell = useCallback(() => {
-    const params = new URLSearchParams(window.location.search);
-    const returnTo = params.get("returnTo");
-    // Official Pos residual: uAe(home) → /task/new (Cowork), not `/` (product `/` was Code).
-    // index-BELzQL5P.js Pos → N$t to uAe; uAe returns "/task/new" when past onboarding.
-    const target =
-      returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") && !returnTo.startsWith("/login")
-        ? returnTo
-        : "/task/new";
-    // Align sidebar mode with official WK residual before shell mounts.
+  /**
+   * Official NQt(mode) — only writes deployment mode.
+   * 3p/dotClaude: soft loadURL. 1p: clear session + relaunch (after d2t onDone).
+   */
+  const setMode = useCallback(async (mode: "1p" | "3p" | "dotClaude") => {
+    const bridge = custom3pBridge();
     try {
-      persistDFrameState({ mode: "cowork" });
+      await Promise.resolve(bridge?.setDeploymentMode?.(mode));
     } catch {
-      /* ignore */
+      /* main may still loadURL/relaunch; keep current UI if write fails */
     }
-    void (
-      window as unknown as {
-        "claude.settings"?: {
-          AppPreferences?: { setPreference?: (key: string, value: unknown) => Promise<unknown> };
-        };
-      }
-    )["claude.settings"]?.AppPreferences?.setPreference?.("sidebarMode", "task");
-    // Soft SPA leave (not location.replace full reload) — official 3p soft path is
-    // mainView.loadURL / shell remount, not a multi-second blank "Applying" page.
-    // Do NOT resize(1200) while chooser is still painted; useLoginWindowSize deferred
-    // unmount restore handles shell size after /login unmounts.
-    if (window.location.pathname + window.location.search !== target) {
-      window.history.replaceState({}, "", target);
-    }
-    window.dispatchEvent(new Event("app:navigation"));
   }, []);
 
-  const setMode = useCallback(async (mode: "1p" | "3p" | "dotClaude") => {
-    // Official M5t residual (index-BELzQL5P.js):
-    //   whole S5t card onClick → NQt("3p") only for 3p card.
-    //   1p card → local phase "relaunching" first (d2t), NQt("1p") only onDone.
-    // Official NQt: await RW?.setDeploymentMode?.(e) — wait for write, then shell reload.
-    // Product extension: "dotClaude" follows the 3p soft-leave flow (no relaunch).
-    const bridge = custom3pBridge();
-
-    if (mode === "3p" || mode === "dotClaude") {
-      // Official M5t → NQt("3p"): await setDeploymentMode then shell remount.
-      // Must finish jsA write before leave: eMA synthesizes account only when the
-      // persisted chooser mode is a 3p-shell mode. Leaving early → bootstrap
-      // account null → App gate paints LoginDesktop on /task/new (click "does nothing").
-      try {
-        await Promise.resolve(bridge?.setDeploymentMode?.(mode));
-      } catch {
-        /* poll bootstrap below — leave only when uuid is visible */
-      }
-      // Confirm synthetic account is visible before soft SPA leave (no process relaunch).
-      let hasAccount = false;
-      for (let i = 0; i < 12; i++) {
-        try {
-          const response = await fetch("app://localhost/api/bootstrap", {
-            credentials: "include",
-            cache: "no-store",
-          });
-          if (response.ok) {
-            const payload = (await response.json()) as { account?: { uuid?: string } | null };
-            if (payload?.account && typeof payload.account.uuid === "string" && payload.account.uuid) {
-              hasAccount = true;
-              break;
-            }
-          }
-        } catch {
-          /* retry */
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 50));
-      }
-      // Soft SPA must not leave /login until bootstrap has a uuid. Leaving early
-      // paints /task/new while loginGate is still logged_out → chooser remount
-      // (first click looks dead). Official NQt waits mode write / remount.
-      if (!hasAccount) {
-        window.dispatchEvent(new Event("app:deployment-mode-changed"));
-        return;
-      }
-      // Optimistic signed-in BEFORE leave so App does not keep rendering LoginDesktop
-      // while path is already /task/new.
-      // Also push Account.setAccountDetails now so Cowork getAll initialize does not
-      // wait waitForIdentity(5s) on sticky logged-out / missing org ("Loading Cowork").
-      try {
-        const boot = await fetch("app://localhost/api/bootstrap", {
-          credentials: "include",
-          cache: "no-store",
-        });
-        if (boot.ok) {
-          const payload = await boot.json();
-          void window["claude.web"]?.Account?.setAccountDetails?.(
-            accountDetailsFromBootstrap(payload),
-          );
-        }
-      } catch {
-        /* useDesktopCoworkAccountSync will re-publish on app:auth-signed-in */
-      }
-      window.dispatchEvent(new Event("app:auth-signed-in"));
-      window.dispatchEvent(new Event("app:deployment-mode-changed"));
-      leaveLoginForShell();
-      return;
-    }
-
-    // Official M5t: Sign in card only enters d2t — does NOT call NQt until countdown onDone.
-    setPhase("relaunching-1p");
-  }, [leaveLoginForShell]);
+  /** Official M5t applying onDone: RW.relaunchApp (not NQt). */
+  const onRelaunchApp = useCallback(() => {
+    void Promise.resolve(custom3pBridge()?.relaunchApp?.());
+  }, []);
 
   /**
-   * Official M5t d2t onDone for signin: NQt("1p") only.
-   * Official got("1p"): jsA write + resetMainWindowBounds + process relaunch — no
-   * soft loadURL and no pre-resize of the live chooser (that double-paints Sign In).
-   * Keep interstitial until process exits (same as official d2t still mounted).
+   * AnthropicEntry path only: Sign in → page-level d2t → NQt("1p") onDone.
+   * Chooser path handles relaunching internally; onChoose1p is already NQt("1p").
    */
-  const onSignInRelaunchDone = useCallback(() => {
-    const bridge = custom3pBridge();
-    void (async () => {
-      try {
-        await Promise.resolve(bridge?.setDeploymentMode?.("1p"));
-      } catch {
-        /* main may still relaunch; keep interstitial */
-      }
-    })();
+  const onAnthropicEntryChoose1p = useCallback(() => {
+    setPhase("relaunching-1p");
   }, []);
 
+  const onSignInRelaunchDone = useCallback(() => {
+    void setMode("1p");
+  }, [setMode]);
+
   const onSignInRelaunchCancel = useCallback(() => {
-    // Official M5t: onCancel → u("idle") — return to dual cards without writing 1p.
     setPhase("idle");
   }, []);
 
-  // If chooser already has krA==="3p" account (bootstrap uuid), do not keep dual cards —
-  // official Pos would already be past /login. Covers remount after soft write without click.
+  // If bootstrap already has a 3p-shell account, official Pos is past /login.
+  // Re-invoke NQt so main got soft loadURL remounts shell (no renderer soft SPA).
   useEffect(() => {
-    if (phase !== "idle") return;
+    if (phase !== "idle" || !status) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -579,8 +756,17 @@ export function LoginDesktopPage(_props: RouteViewProps) {
         if (!response.ok || cancelled) return;
         const payload = (await response.json()) as { account?: { uuid?: string } | null };
         if (cancelled) return;
-        if (payload?.account && typeof payload.account.uuid === "string" && payload.account.uuid) {
-          leaveLoginForShell();
+        if (!(payload?.account && typeof payload.account.uuid === "string" && payload.account.uuid)) {
+          return;
+        }
+        const mode: "3p" | "dotClaude" =
+          status.deploymentMode === "dotClaude" || status.dotClaude?.available
+            ? "dotClaude"
+            : "3p";
+        try {
+          await Promise.resolve(custom3pBridge()?.setDeploymentMode?.(mode));
+        } catch {
+          /* stay on chooser */
         }
       } catch {
         /* stay on chooser */
@@ -589,7 +775,7 @@ export function LoginDesktopPage(_props: RouteViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [phase, leaveLoginForShell]);
+  }, [phase, status]);
 
   const openSetup = useCallback(() => {
     void custom3pBridge()?.openSetupWindow?.();
@@ -606,7 +792,7 @@ export function LoginDesktopPage(_props: RouteViewProps) {
     );
   }
 
-  // Official M5t: "relaunching" → sVt + d2t(variant:"signin", onDone:NQt("1p"), onCancel:idle)
+  // AnthropicEntry-only path: page-level d2t (chooser owns its own relaunching phase).
   if (phase === "relaunching-1p") {
     return (
       <LoginDesktopShell>
@@ -621,8 +807,6 @@ export function LoginDesktopPage(_props: RouteViewProps) {
 
   // Official LoginRoute: status && (provider || bootstrapHost) → M5t dual/single
   // Product extension: detected ~/.claude alone must also enter chooser (not AnthropicEntry).
-  // Prior bug: hasChooser ignored status.dotClaude → fresh package userData with a live
-  // ~/.claude/settings.json still painted only "Sign in to Anthropic" + Configure.
   const hasChooser =
     Boolean(status)
     && Boolean(
@@ -637,7 +821,9 @@ export function LoginDesktopPage(_props: RouteViewProps) {
     return (
       <LoginDesktopChooser
         status={status}
+        interactiveAuth={interactiveAuth}
         // Official LoginRoute passes no hide1p → M5t uses !status.enabled
+        // onChoose1p = NQt("1p") after chooser-internal d2t onDone.
         onChoose1p={() => {
           void setMode("1p");
         }}
@@ -648,17 +834,108 @@ export function LoginDesktopPage(_props: RouteViewProps) {
           void setMode("dotClaude");
         }}
         onOpenSetup={openSetup}
+        onRelaunchApp={onRelaunchApp}
       />
     );
   }
 
   return (
     <LoginDesktopAnthropicEntry
-      onChoose1p={() => {
-        void setMode("1p");
-      }}
+      onChoose1p={onAnthropicEntryChoose1p}
       onOpenSetup={openSetup}
     />
+  );
+}
+
+/**
+ * Official T5t residual (index-BELzQL5P.js):
+ *   Mount when shell is up and interactiveAuth.needsAuth (parent gate).
+ *   EQt status truthy → #root.inert + createPortal z-overlay → M5t({status, hide1p:true}).
+ * Not the LoginRoute dual chooser.
+ */
+export function LoginDesktopT5tPortal() {
+  const [status, setStatus] = useState<LoginDesktop3pStatus | null | undefined>(undefined);
+  const interactiveAuth = useInteractiveAuthState();
+
+  useEffect(() => {
+    let cancelled = false;
+    const bridge = custom3pBridge();
+    if (!bridge?.getLoginDesktop3pStatus) {
+      setStatus(null);
+      return;
+    }
+    void bridge
+      .getLoginDesktop3pStatus()
+      .then((value) => {
+        if (!cancelled) setStatus(value ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const needsAuth = Boolean(
+    interactiveAuth && typeof interactiveAuth === "object" && interactiveAuth.needsAuth,
+  );
+  // Official: T5t only when EQt status truthy AND parent needsAuth.
+  const open = Boolean(status) && needsAuth;
+
+  useEffect(() => {
+    if (!open) return;
+    const root = document.getElementById("root");
+    if (!root) return;
+    root.inert = true;
+    return () => {
+      root.inert = false;
+    };
+  }, [open]);
+
+  const setMode = useCallback(async (mode: "1p" | "3p" | "dotClaude") => {
+    try {
+      await Promise.resolve(custom3pBridge()?.setDeploymentMode?.(mode));
+    } catch {
+      /* main may still loadURL */
+    }
+  }, []);
+
+  const onRelaunchApp = useCallback(() => {
+    void Promise.resolve(custom3pBridge()?.relaunchApp?.());
+  }, []);
+
+  if (!open || !status) return null;
+
+  // Portal to body like residual T5t createPortal(..., document.body).
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Sign in to your organization"
+      className="fixed inset-0 z-overlay"
+      data-official-source="index-BELzQL5P:T5t"
+    >
+      <LoginDesktopChooser
+        status={status}
+        hide1p
+        interactiveAuth={interactiveAuth}
+        onChoose1p={() => {
+          void setMode("1p");
+        }}
+        onChoose3p={() => {
+          void setMode("3p");
+        }}
+        onChooseDotClaude={() => {
+          void setMode("dotClaude");
+        }}
+        onOpenSetup={() => {
+          void custom3pBridge()?.openSetupWindow?.();
+        }}
+        onRelaunchApp={onRelaunchApp}
+      />
+    </div>,
+    document.body,
   );
 }
 

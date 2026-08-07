@@ -32,11 +32,13 @@ function delay(ms: number) {
 }
 
 /**
- * Official zE.task waits `PE` (1000/60) via setTimeout when visible.
- * In Electron / Chromium, short setTimeouts are often clamped to ~1s when the
- * renderer is backgrounded, occluded, or timer-throttled — that collapses the
- * 60fps reveal into a handful of paints (paragraph-sized jumps: 33→88→114).
- * When visible, prefer rAF (fires with the paint cycle, not clamped like timers).
+ * Official zE.task waits `PE` (1000/60 ≈ 16.67ms) via setTimeout when visible.
+ * Residual PE target cadence is one frame. In Electron / Chromium, short
+ * setTimeouts are often clamped to ~1s when the renderer is backgrounded,
+ * occluded, or timer-throttled — that collapses the 60fps reveal into a handful
+ * of paints (paragraph-sized jumps: 33→88→114).
+ * Product bridge: when visible, prefer rAF (fires with the paint cycle ≈ PE)
+ * so cadence stays residual-like without timer clamp; hidden still uses delay(100).
  */
 function delayRevealTick(isVisible: boolean) {
   if (!isVisible) return delay(100);
@@ -50,6 +52,7 @@ function delayRevealTick(isVisible: boolean) {
       raf(() => resolve());
     });
   }
+  // Residual PE fallback when rAF unavailable (node tests).
   return delay(officialFrameMs);
 }
 

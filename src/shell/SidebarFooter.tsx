@@ -190,29 +190,17 @@ const openExternal = (href: string) => {
 
 /**
  * Official NQt("clear") residual after m2t signed-out countdown onDone.
- * pot/got: jsA(void) + process relaunch. Product soft SPA host: write clear then
- * leave to /login immediately — do NOT wait multi-seconds and do NOT also call
- * relaunchApp (IPC never resolves; double-exit flash). Keep signed-out overlay
- * mounted until route is /login (onSignOutDone does not clear pending first).
- * LoginDesktop jn resize(600,{center}) on mount; no pre-resize during overlay.
+ * pot/got: jsA(void) + clear session credentials + process relaunch.
+ * Renderer only awaits setDeploymentMode("clear") — keep signed-out d2t overlay
+ * mounted until process exits (same as official h2t; do not soft-nav /login).
  */
 async function signOutDesktop3pAfterInterstitial(): Promise<void> {
   const bridge = custom3pSetupBridge();
   try {
     await Promise.resolve(bridge?.setDeploymentMode?.("clear"));
   } catch {
-    /* fall through — bag may already be void; still force chooser */
+    /* main may still relaunch; keep overlay until exit */
   }
-  // Soft SPA host: clear is write-only (no process kill). Force login immediately
-  // after countdown — official relaunch lands on chooser; we soft-nav /login.
-  // Optimistic logged_out so DesktopFrame cannot stick with account null on /task/new.
-  window.dispatchEvent(new Event("app:auth-logged-out"));
-  window.dispatchEvent(new Event("app:deployment-mode-changed"));
-  if (window.location.pathname === "/login" || window.location.pathname.startsWith("/login/")) {
-    return;
-  }
-  window.history.replaceState({}, "", "/login");
-  window.dispatchEvent(new Event("app:navigation"));
 }
 
 function UserMenu({

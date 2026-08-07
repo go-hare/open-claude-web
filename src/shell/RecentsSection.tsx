@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { desktopBridge, type SessionSummary } from "../adapters/desktopBridge";
-import { useShellText } from "../i18n/shellMessages";
+import { setSelectedFolder } from "../features/customize/selectedFolderStore";
+import { useShellText, type ShellText } from "../i18n/shellMessages";
 import type { FrameStore } from "../stores/frameStore";
 import { BaseContextMenuPopup, ContextMenu } from "./BaseMenu";
 import { buildCustomGroups, CustomGroupHeader, type RecentDisplayGroup } from "./CustomGroups";
@@ -14,7 +15,8 @@ import { isPinnedSession, orderPinnedSessions, sessionPinKey } from "./sessionPi
 import { SessionRowActions, useSessionRowActions } from "./SessionRowActions";
 import { SessionRowMenuContent, type RowAction } from "./SessionRowMenus";
 import { SidebarSectionHeader } from "./SidebarSectionHeader";
-import { canOpenSessionInSplit, selectedSessionIdFromPath, sessionPath } from "./sessionPaths";
+import { canOpenSessionInSplit, selectedSessionIdFromPath, sessionHomePath, sessionPath } from "./sessionPaths";
+import { Icon } from "./icons";
 import {
   archiveCodeSession,
   deleteCodeSession,
@@ -221,6 +223,9 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
     <SessionRowMenuContent frame={frame} onAction={actions} onCreateGroup={onCreateGroup} onOpenSplit={() => openSplit(session)} session={session} />
   ), [actions, frame, openSplit]);
   const recentsCollapsed = frame.collapsedGroups.includes("recents");
+  const filterControls = (
+    <RecentsControls mode="code" sessions={sessions} value={filter} onChange={updateFilter} />
+  );
 
   return (
     <div className="dframe-recents-by-mode contents" data-mode="code">
@@ -243,30 +248,86 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
         onNavigate={onNavigate}
       />
       {/*
-        Official ca0135 recents residual:
-        div.group/section.flex.flex-col.gap-px → Fo(label:recents) → ie(SidebarSectionHeader)
-        Caret uses group-hover/section:opacity-100 — parent MUST be group/section.
+        Official ca0135 Ml residual:
+          div.flex-1.min-h-[120px]
+            empty → ie(最近, trailing=filter, no onToggle)
+            groupBy none → Cl: group/section → Fo(label:recents) → ie + list hidden|contents
+            groupBy project/date/... → fl/cl/… → dl buckets only (NO outer 最近)
+        Caret uses group-hover/section:opacity-100 — each collapsible parent MUST be group/section.
       */}
-      <section data-kind="code" className="group/section flex min-h-0 flex-1 flex-col gap-px">
-        <SidebarSectionHeader
-          collapsed={recentsCollapsed}
-          onToggle={() => frame.toggleGroupCollapsed("recents")}
-          trailing={recentsCollapsed ? undefined : <RecentsControls mode="code" sessions={sessions} value={filter} onChange={updateFilter} />}
-        >
-          {text.recent}
-        </SidebarSectionHeader>
-        <div className={recentsCollapsed ? "hidden" : "flex min-h-0 flex-1 flex-col overflow-hidden"}>
-          {isLoadingLocal && sessions.length === 0
-            ? <div className="px-[var(--df-row-px)] py-2 text-xs text-text-500" role="status">Loading…</div>
-            : rows.length > 0
-              ? <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-                  <RecentRows filter={filter} frame={frame} groups={groups} onAction={actions} renderActions={renderActions} selectedSessionId={openSessionId} onNavigate={onNavigate} rows={rows} />
+      <div className="flex-1 min-h-[120px] overflow-y-auto overflow-x-hidden" data-kind="code">
+        {isLoadingLocal && sessions.length === 0 ? (
+          <div className="px-[var(--df-row-px)] py-2 text-xs text-text-500" role="status">Loading…</div>
+        ) : rows.length === 0 ? (
+          <>
+            {/* Official: empty recents still shows 最近 + filter (no caret toggle). */}
+            <div data-row-key="label:recents" className="df-drag-shiftable">
+              <SidebarSectionHeader trailing={filterControls}>{text.recent}</SidebarSectionHeader>
+            </div>
+            {sessions.length > 0 ? (
+              <div className="px-[var(--df-row-px)] py-1 text-xs text-text-500">{text.noFilteredSessions}</div>
+            ) : null}
+          </>
+        ) : filter.groupBy === "none" ? (
+          <div className="group/section flex flex-col gap-px">
+            <div data-row-key="label:recents" className="df-drag-shiftable">
+              <SidebarSectionHeader
+                collapsed={recentsCollapsed}
+                onToggle={() => frame.toggleGroupCollapsed("recents")}
+                trailing={recentsCollapsed ? undefined : filterControls}
+              >
+                {text.recent}
+              </SidebarSectionHeader>
+            </div>
+            <div className={recentsCollapsed ? "hidden" : "contents"}>
+              {rows.map((session) => (
+                <RecentSessionRow
+                  frame={frame}
+                  key={session.id}
+                  onAction={actions}
+                  renderActions={renderActions}
+                  selected={session.id === openSessionId}
+                  session={session}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </div>
+          </div>
+        ) : (
+          groups.map((group, index) => {
+            // Official ca0135 fl residual (project/homespace buckets):
+            // trailing Add with aria-label `New session in ${label}` + Te customSize 14;
+            // skip only for `__no_project__` when no cwd target; first bucket also keeps filter.
+            const projectAdd =
+              filter.groupBy === "project" || filter.groupBy === "homespace"
+                ? projectGroupNewSessionTrailing(group, text, onNavigate)
+                : null;
+            const filterTrailing = index === 0 ? filterControls : undefined;
+            const trailing =
+              projectAdd && filterTrailing ? (
+                <div className="flex items-center gap-1">
+                  {projectAdd}
+                  {filterTrailing}
                 </div>
-              : sessions.length > 0
-                ? <div className="px-[var(--df-row-px)] py-1 text-xs text-text-500">{text.noFilteredSessions}</div>
-                : null}
-        </div>
-      </section>
+              ) : (
+                projectAdd ?? filterTrailing
+              );
+            return (
+              <RecentSessionGroup
+                filter={filter}
+                frame={frame}
+                group={group}
+                key={group.key}
+                onAction={actions}
+                onNavigate={onNavigate}
+                renderActions={renderActions}
+                selectedSessionId={openSessionId}
+                trailing={trailing}
+              />
+            );
+          })
+        )}
+      </div>
       <ConfirmDialog
         confirmText={text.delete}
         isOpen={deleteTarget !== null}
@@ -300,19 +361,93 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
   );
 }
 
-function RecentRows({ filter, frame, groups, onAction, onNavigate, renderActions, rows, selectedSessionId }: { filter: RecentsFilterState; frame: FrameStore; groups: RecentDisplayGroup[]; onAction: (session: SessionSummary, action: RowAction) => void; onNavigate: (path: string) => void; renderActions: (session: SessionSummary, onCreateGroup: () => void) => ReactNode; rows: SessionSummary[]; selectedSessionId: string | null }) {
-  if (filter.groupBy === "none") {
-    return rows.map((session) => <RecentSessionRow frame={frame} key={session.id} onAction={onAction} renderActions={renderActions} selected={session.id === selectedSessionId} session={session} onNavigate={onNavigate} />);
+/**
+ * Official ca0135 fl: project bucket Add — set folder (local cwd) then
+ * `epitaxy:reset-draft` + navigate code home. Residual skips `__no_project__`
+ * unless a cwd/target mapping exists.
+ */
+function projectGroupFolder(sessions: SessionSummary[]): string | null {
+  for (const session of sessions) {
+    const cwd = session.cwd?.trim();
+    if (!cwd || cwd.startsWith("remote-control:")) continue;
+    return cwd;
   }
-  return groups.map((group) => <RecentSessionGroup filter={filter} frame={frame} group={group} key={group.key} onAction={onAction} renderActions={renderActions} selectedSessionId={selectedSessionId} onNavigate={onNavigate} />);
+  return null;
 }
 
-function RecentSessionGroup({ filter, frame, group, onAction, onNavigate, renderActions, selectedSessionId }: { filter: RecentsFilterState; frame: FrameStore; group: RecentDisplayGroup; onAction: (session: SessionSummary, action: RowAction) => void; onNavigate: (path: string) => void; renderActions: (session: SessionSummary, onCreateGroup: () => void) => ReactNode; selectedSessionId: string | null }) {
+function isNoProjectGroup(group: RecentDisplayGroup, text: ShellText): boolean {
+  const other = text.other || "Other";
+  return group.key === other || group.label === other || group.key === "__no_project__";
+}
+
+function projectGroupNewSessionTrailing(
+  group: RecentDisplayGroup,
+  text: ShellText,
+  onNavigate: (path: string) => void,
+): ReactNode {
+  const folder = projectGroupFolder(group.sessions);
+  // Residual: f = c || !(e === project-__no_project__)
+  if (!folder && isNoProjectGroup(group, text)) return null;
+  const label = group.label || group.key;
+  return (
+    <span className="opacity-0 group-hover/section:opacity-60 has-[button:focus-visible]:opacity-100 hover:!opacity-100 transition-opacity duration-150">
+      <button
+        type="button"
+        aria-label={`New session in ${label}`}
+        className="inline-flex size-6 items-center justify-center rounded-md text-text-400 hover:bg-bg-200 hover:text-text-100"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (folder) setSelectedFolder(folder);
+          window.dispatchEvent(new CustomEvent("epitaxy:reset-draft"));
+          onNavigate(sessionHomePath("code"));
+        }}
+      >
+        <Icon name="Add" customSize={14} />
+      </button>
+    </span>
+  );
+}
+
+function RecentSessionGroup({
+  filter,
+  frame,
+  group,
+  onAction,
+  onNavigate,
+  renderActions,
+  selectedSessionId,
+  trailing,
+}: {
+  filter: RecentsFilterState;
+  frame: FrameStore;
+  group: RecentDisplayGroup;
+  onAction: (session: SessionSummary, action: RowAction) => void;
+  onNavigate: (path: string) => void;
+  renderActions: (session: SessionSummary, onCreateGroup: () => void) => ReactNode;
+  selectedSessionId: string | null;
+  trailing?: ReactNode;
+}) {
   const collapsed = frame.collapsedGroups.includes(group.key);
   const customDrop = filter.groupBy === "custom" ? customGroupDropHandler(frame, group, frame.mode) : undefined;
+  const header = group.customGroupId ? (
+    <CustomGroupHeader frame={frame} groupId={group.customGroupId} label={group.label ?? ""} trailing={trailing} />
+  ) : group.label ? (
+    <SidebarSectionHeader
+      collapsed={collapsed}
+      onToggle={() => frame.toggleGroupCollapsed(group.key)}
+      trailing={trailing}
+    >
+      {group.label}
+    </SidebarSectionHeader>
+  ) : null;
   return (
     <div className="group/section flex flex-col gap-px rounded-lg transition-colors" onDragOver={customDrop?.onDragOver} onDrop={customDrop?.onDropEnd}>
-      {group.customGroupId ? <CustomGroupHeader frame={frame} groupId={group.customGroupId} label={group.label ?? ""} /> : group.label ? <SidebarSectionHeader collapsed={collapsed} onToggle={() => frame.toggleGroupCollapsed(group.key)}>{group.label}</SidebarSectionHeader> : null}
+      {header ? (
+        <div data-row-key={`label:${group.key}`} className="df-drag-shiftable">
+          {header}
+        </div>
+      ) : null}
       <div className={collapsed ? "hidden" : "contents"}>
         {group.sessions.map((session) => (
           <RecentSessionRow

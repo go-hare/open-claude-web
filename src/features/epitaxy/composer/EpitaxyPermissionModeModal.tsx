@@ -59,10 +59,15 @@ export function EpitaxyPermissionModeModal({ mode, onCancel, onConfirm, workspac
       }}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop forceRender className="fixed inset-0 z-50 bg-always-black/50 draggable-none" />
-        <Dialog.Popup className="epitaxy-root fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[28rem] max-w-[calc(100vw-2rem)] draggable-none outline-none">
+        <Dialog.Backdrop forceRender className="fixed inset-0 z-modal bg-always-black/50 draggable-none" />
+        <Dialog.Popup className="epitaxy-root fixed left-1/2 top-1/2 z-modal -translate-x-1/2 -translate-y-1/2 w-[28rem] max-w-[calc(100vw-2rem)] draggable-none outline-none">
           <div className="relative isolate rounded-r6 p-p8 flex flex-col gap-g6">
-            <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
+            {/* Official c119 Fk / Nn elevation:"popover" residual surface (not effect-hud). */}
+            <span
+              aria-hidden="true"
+              className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-stroke-shadow"
+              data-surface="popover"
+            />
             <Dialog.Title className="text-heading-semibold text-t9">{title}</Dialog.Title>
             <p className="text-body text-t7">{message}</p>
             {workspace ? <div className="text-code text-t8 break-all">{workspace}</div> : null}
@@ -70,10 +75,11 @@ export function EpitaxyPermissionModeModal({ mode, onCancel, onConfirm, workspac
               <SecurityGuideMessage template={footnoteTemplate} />
             </p>
             <div className="flex justify-end gap-g4">
-              <OfficialButton onClick={onCancel} size="small" variant="contained">
+              {/* Official ConfirmationModal (c36ba223f je): K without size → default base */}
+              <OfficialButton onClick={onCancel} variant="contained">
                 {text.cancel}
               </OfficialButton>
-              <OfficialButton onClick={onConfirm} size="small" variant="primary">
+              <OfficialButton onClick={onConfirm} variant="primary">
                 {confirmText}
               </OfficialButton>
             </div>

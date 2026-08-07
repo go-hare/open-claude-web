@@ -187,7 +187,11 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   }
   if (error && entries.length === 0) return <SessionError error={error} />;
   if (!initialSessionId) return <div className="h-full overflow-y-auto overflow-x-hidden">{landingBody ?? null}</div>;
-  const transcriptKey = `${initialSessionId}:messages`;
+  // Official Xb/Gb remounts with session; product keys by session so Fu state does not leak.
+  // Official c119 Gb → Fu(...) does NOT pass restoreKey (only general je list does).
+  // Passing restoreKey here desynced estimate-based initialOffset vs stale measurementsCache
+  // and caused vertical thrash when reopening a prior session.
+  const transcriptKey = initialSessionId;
   // Official Ja: Boolean(D) && 0===Ya.length && (B||J). Za delays spinner 20ms.
   // Do NOT gate on !session — Recents openSession seeds meta before getTranscript;
   // that used to skip Ja and flash "No messages yet." / empty→full jump.
@@ -202,7 +206,7 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   if (entries.length === 0 && !isResponding) {
     return <div className="h-full flex flex-col items-center justify-center gap-g4 text-body text-t5">No messages yet.</div>;
   }
-  return <Transcript key={transcriptKey} entries={entries} isAwaitingReply={officialIsAwaitingReply(session, isResponding)} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} restoreKey={transcriptKey} scrollRef={scrollRef} sessionId={initialSessionId} spawnLabel={spawnLabel} streamTokenEstimate={streamTokenEstimate} tasks={tasks} transcriptMode={transcriptMode} />;
+  return <Transcript key={transcriptKey} entries={entries} isAwaitingReply={officialIsAwaitingReply(session, isResponding)} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} scrollRef={scrollRef} sessionId={initialSessionId} spawnLabel={spawnLabel} streamTokenEstimate={streamTokenEstimate} tasks={tasks} transcriptMode={transcriptMode} />;
 }
 
 /** Official c119 remote tR empty pending residual (L2r8A2+O5x). */
@@ -246,7 +250,6 @@ type TranscriptProps = {
   isResponding: boolean;
   onScrollState: (state: OfficialTranscriptScrollState) => void;
   pendingTurnStartedAt?: number | null;
-  restoreKey?: string;
   scrollRef: MutableRefObject<HTMLDivElement | null>;
   sessionId?: string;
   spawnLabel?: string;
@@ -269,7 +272,7 @@ const emptyCodeUserChaptersByAfterId = new Map<string, CodeUserChapter[]>();
  *   DOM: scrollRef > sizerRef(height) > absolute translateY(virtualItems[0].start) > measureElement rows
  *   scrollToBottom: setPinned(true); scrollTo({ top: scrollHeight })
  */
-const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isAwaitingReply, isResponding, onScrollState, pendingTurnStartedAt, restoreKey, scrollRef, sessionId, spawnLabel, streamTokenEstimate, tasks, transcriptMode }, ref) {
+const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isAwaitingReply, isResponding, onScrollState, pendingTurnStartedAt, scrollRef, sessionId, spawnLabel, streamTokenEstimate, tasks, transcriptMode }, ref) {
   const rowsRef = useRef<TranscriptRow[]>([]);
   const initialCount = useRef(entries.length);
   const [userChapters, setUserChapters] = useState<CodeUserChapter[]>([]);
@@ -277,6 +280,8 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
   const userChaptersByAfterId = useMemo(() => groupCodeUserChaptersByAfterId(userChapters), [userChapters]);
   const lastEntryIdx = entries.length - 1;
 
+  // Official c119 Gb: Fu({ items, getKey, estimateSize:Wb, overscan:6, paddingStart:48, paddingEnd:48, useFlushSync:!1 })
+  // — no restoreKey on Code transcript path.
   const officialVirtualizer = useOfficialTranscriptVirtualizer({
     estimateSize: estimateTranscriptRowSize,
     getKey: (row) => row.id,
@@ -284,7 +289,6 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
     overscan: 6,
     paddingEnd: 48,
     paddingStart: 48,
-    restoreKey,
   });
   const virtualItems = officialVirtualizer.virtualItems;
   const translateY = virtualItems[0]?.start ?? 0;

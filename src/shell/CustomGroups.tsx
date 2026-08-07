@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from "react";
+import { useState, type DragEvent, type ReactNode } from "react";
 import type { SessionSummary } from "../adapters/desktopBridge";
 import { type ShellText, useShellText } from "../i18n/shellMessages";
 import type { FrameStore } from "../stores/frameStore";
@@ -36,9 +36,31 @@ export function GroupSubmenu({ frame, onCreateGroup, session }: { frame: FrameSt
   );
 }
 
-export function CustomGroupHeader({ frame, groupId, label }: { frame: FrameStore; groupId: string; label: string }) {
+export function CustomGroupHeader({
+  frame,
+  groupId,
+  label,
+  trailing,
+}: {
+  frame: FrameStore;
+  groupId: string;
+  label: string;
+  /** Official dl residual: first custom bucket may host filter trailing next to group menu. */
+  trailing?: ReactNode;
+}) {
   const text = useShellText();
   const [renameOpen, setRenameOpen] = useState(false);
+  const menu = (
+    <Menu.Root>
+      <Menu.Trigger aria-label={`Group options for ${label}`} className="df-chrome-btn relative -my-1 opacity-0 transition-opacity group-hover/labelrow:opacity-100 focus:opacity-100" type="button">
+        <Icon name="DotsHorizontal" customSize={14} />
+      </Menu.Trigger>
+      <BaseMenuPopup align="end" side="right" sideOffset={4}>
+        <BaseMenuItem icon="Edit" onClick={() => setRenameOpen(true)}>{text.renameGroup}</BaseMenuItem>
+        <BaseMenuItem icon="Trash" onClick={() => frame.deleteCustomGroup(groupId)}>{text.deleteGroup}</BaseMenuItem>
+      </BaseMenuPopup>
+    </Menu.Root>
+  );
   return (
     <>
       <div
@@ -50,17 +72,7 @@ export function CustomGroupHeader({ frame, groupId, label }: { frame: FrameStore
       <SidebarSectionHeader
         collapsed={frame.collapsedGroups.includes(`custom-${groupId}`)}
         onToggle={() => frame.toggleGroupCollapsed(`custom-${groupId}`)}
-        trailing={(
-          <Menu.Root>
-            <Menu.Trigger aria-label={`Group options for ${label}`} className="df-chrome-btn relative -my-1 opacity-0 transition-opacity group-hover/labelrow:opacity-100 focus:opacity-100" type="button">
-              <Icon name="DotsHorizontal" customSize={14} />
-            </Menu.Trigger>
-            <BaseMenuPopup align="end" side="right" sideOffset={4}>
-              <BaseMenuItem icon="Edit" onClick={() => setRenameOpen(true)}>{text.renameGroup}</BaseMenuItem>
-              <BaseMenuItem icon="Trash" onClick={() => frame.deleteCustomGroup(groupId)}>{text.deleteGroup}</BaseMenuItem>
-            </BaseMenuPopup>
-          </Menu.Root>
-        )}
+        trailing={trailing ? <div className="flex items-center gap-1">{trailing}{menu}</div> : menu}
       >{label}</SidebarSectionHeader>
       </div>
       <GroupNameDialog initialName={label} isOpen={renameOpen} onClose={() => setRenameOpen(false)} onSubmit={(name) => frame.renameCustomGroup(groupId, name)} placeholder={text.groupName} title={text.renameGroup} />
