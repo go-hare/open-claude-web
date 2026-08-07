@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { RouteViewProps } from "../../app/routes";
 import { RelaunchInterstitialBody } from "../../shell/RelaunchInterstitial";
@@ -634,46 +634,39 @@ function LoginDesktopAnthropicEntry({
 
 /**
  * Official LoginRoute jn residual (c632c9594-Bv5AdbQY.js):
- *   electronWindowControl.resize(600, 600, { center: true })
- *   pagehide + cleanup → resize(1200, 800)
+ *   e.useEffect(()=>{
+ *     window.electronWindowControl?.resize?.(600,600,{center:!0}),
+ *     window.electronWindowControl?.focus?.();
+ *     const e=()=>window.electronWindowControl?.resize?.(1200,800);
+ *     return window.addEventListener("pagehide",e),
+ *       ()=>{window.removeEventListener("pagehide",e),e()}
+ *   },[])
  *
- * Official 3p leave is mainView.loadURL (got soft path) → full document tear-down →
- * pagehide fires restore. Product soft SPA history.replace must NOT leave /login
- * without loadURL — that paints DesktopFrame at 600 and flashes.
- *
- * Product gate remounts: defer cleanup restore and cancel if still on /login so
- * Strict Mode / gate remounts do not blow size back to 1200 while chooser is up.
+ * pagehide always restores (full document leave via loadURL / process exit).
+ * Product React Strict Mode (Vite dev) remounts LoginRoute while still on /login;
+ * official production ion-dist does not double-invoke this effect. Cleanup must
+ * not restore to 1200 while pathname is still /login (would paint large chooser).
+ * Real leave still hits pagehide → restore.
  */
-let loginWindowSizeEpoch = 0;
-
 function useLoginWindowSize() {
-  useLayoutEffect(() => {
-    const epoch = ++loginWindowSizeEpoch;
+  // Official jn uses useEffect (not useLayoutEffect) — match residual timing.
+  useEffect(() => {
     const control = windowControl();
-    // Official jn: resize(600,600,{center:true}).
-    void Promise.resolve(control?.resize?.(600, 600, { center: true })).then(() => {
-      if (loginWindowSizeEpoch !== epoch) return;
-      void control?.focus?.();
-    });
+    // Official jn: resize(600,600,{center:true}) + focus (sync call shape).
+    void control?.resize?.(600, 600, { center: true });
+    void control?.focus?.();
 
     const restoreMain = () => {
       void control?.resize?.(1200, 800);
     };
 
-    // Official: pagehide restores (full document leave via loadURL/relaunch).
-    const onPageHide = () => {
-      restoreMain();
-    };
-    window.addEventListener("pagehide", onPageHide);
-
+    window.addEventListener("pagehide", restoreMain);
     return () => {
-      window.removeEventListener("pagehide", onPageHide);
-      window.setTimeout(() => {
-        if (loginWindowSizeEpoch !== epoch) return;
-        const path = window.location.pathname;
-        if (path === "/login" || path.startsWith("/login/")) return;
-        restoreMain();
-      }, 0);
+      window.removeEventListener("pagehide", restoreMain);
+      const path = window.location.pathname;
+      // Strict Mode remount: still on /login — skip cleanup restore (pagehide handles leave).
+      if (path === "/login" || path.startsWith("/login/")) return;
+      restoreMain();
     };
   }, []);
 }
