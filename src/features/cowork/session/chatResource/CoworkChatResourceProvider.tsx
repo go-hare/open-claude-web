@@ -18,6 +18,15 @@ import {
 import { useFrameContext } from "../../../../stores/frameContext";
 import type { CoworkFileTarget } from "../transcript/CoworkTranscriptActions";
 import {
+  aggregateCoworkArtifacts,
+  type CoworkArtifact,
+} from "../transcript/coworkMessageArtifacts";
+import { buildCoworkChatMessages } from "../transcript/coworkMessageModel";
+import { coworkMessagePathStore } from "../transcript/coworkMessagePathStore";
+import type { CoworkStreamSnapshot } from "../stream/coworkStreamTypes";
+import type { CoworkRawMessage } from "../types";
+import { useCoworkSessionData } from "../useCoworkSessionData";
+import {
   initialCoworkChatResourceState,
   isCoworkFileDrawerOpen,
   reduceCoworkChatResource,
@@ -256,13 +265,37 @@ export function useCoworkOpenSkill() {
  * Official conversation path residual (index-BELzQL5P):
  * `onOpenArtifact: showArtifacts ? gt : void 0` where
  * `showArtifacts = Boolean(ve?.preview_feature_uses_artifacts || ue)`.
- * Opens cFt drawer with SELECT_ARTIFACT / SELECT_COWORK_ARTIFACT.
+ * Opens cFt drawer with SELECT_ARTIFACT (chat g6e) / SELECT_COWORK_ARTIFACT (host disk).
+ *
+ * Product routing:
+ *   - message-level antArtifact / artifacts tool with type+content → SELECT_CHAT_ARTIFACT (b6e/g6e)
+ *   - disk cowork artifact id without chat payload → SELECT_COWORK_ARTIFACT (showArtifact)
  */
 export function useCoworkOpenArtifact() {
   const { dispatchChatResource } = useCoworkChatResource();
   const { setIsDrawerExpanded } = useCoworkDrawerExpanded();
+  const session = useCoworkSessionData();
+  const messagesRef = useRef(session.messages);
+  const streamSnapshotRef = useRef(session.streamSnapshot);
+  messagesRef.current = session.messages;
+  streamSnapshotRef.current = session.streamSnapshot;
+
   return useCallback(
-    (artifact: { id?: string; identifier?: string; messageUuid?: string } | unknown) => {
+    (
+      artifact:
+        | {
+            id?: string;
+            identifier?: string;
+            messageUuid?: string;
+            title?: string;
+            type?: string;
+            language?: string;
+            content?: string;
+            versions?: Array<{ resultState?: string; content?: string }>;
+            source?: string;
+          }
+        | unknown,
+    ) => {
       const record =
         artifact && typeof artifact === "object" ? (artifact as Record<string, unknown>) : {};
       const id =
@@ -270,14 +303,94 @@ export function useCoworkOpenArtifact() {
         || (typeof record.identifier === "string" && record.identifier)
         || "";
       if (!id) return;
-      dispatchChatResource({ type: "SELECT_COWORK_ARTIFACT", id });
-      if (typeof record.messageUuid === "string" && record.messageUuid) {
-        dispatchChatResource({ type: "SET_ACTIVE_MESSAGE_UUID", uuid: record.messageUuid });
+
+      const messageUuid =
+        typeof record.messageUuid === "string" ? record.messageUuid : undefined;
+      let title = typeof record.title === "string" ? record.title : undefined;
+      let artifactType = typeof record.type === "string" ? record.type : undefined;
+      let language = typeof record.language === "string" ? record.language : undefined;
+      let content = typeof record.content === "string" ? record.content : undefined;
+      if (!content && Array.isArray(record.versions) && record.versions.length > 0) {
+        const last = record.versions[record.versions.length - 1] as {
+          resultState?: string;
+          content?: string;
+        };
+        content =
+          (typeof last?.resultState === "string" && last.resultState)
+          || (typeof last?.content === "string" && last.content)
+          || undefined;
+      }
+
+      // Bare id: resolve from path-store aggregates (CoworkChatMessage[]), not raw envelopes.
+      // Path store is published by coworkSessionRuntime via buildCoworkChatMessages.
+      if ((!content || !artifactType) && record.source !== "cowork_disk") {
+        const fromMessages = resolveChatArtifactFromSession(
+          id,
+          messagesRef.current,
+          streamSnapshotRef.current,
+        );
+        if (fromMessages) {
+          const last = fromMessages.versions.at(-1);
+          content =
+            content
+            ?? last?.resultState
+            ?? last?.content
+            ?? undefined;
+          artifactType = artifactType ?? fromMessages.type;
+          title = title ?? fromMessages.title;
+          language = language ?? fromMessages.language;
+        }
+      }
+
+      // Prefer Chat g6e when type and/or content exist (payload or message aggregate).
+      // Disk-only cowork artifacts typically open with bare id and no aggregate hit.
+      const isChatPayload =
+        Boolean(artifactType || content)
+        && record.source !== "cowork_disk";
+
+      if (isChatPayload) {
+        dispatchChatResource({
+          type: "SELECT_CHAT_ARTIFACT",
+          id,
+          messageUuid,
+          title,
+          artifactType,
+          content,
+          language,
+        });
+      } else {
+        dispatchChatResource({ type: "SELECT_COWORK_ARTIFACT", id });
+      }
+      if (messageUuid) {
+        dispatchChatResource({ type: "SET_ACTIVE_MESSAGE_UUID", uuid: messageUuid });
       }
       setIsDrawerExpanded(true);
     },
     [dispatchChatResource, setIsDrawerExpanded],
   );
+}
+
+/**
+ * Resolve message-level antArtifact / artifacts tool by id.
+ * Prefer path store (already aggregated from normalized CoworkChatMessage[]).
+ * Fall back to buildCoworkChatMessages + aggregate when path store is cold.
+ * Never cast CoworkMessageEnvelope[] → CoworkChatMessage[].
+ */
+function resolveChatArtifactFromSession(
+  id: string,
+  messages: CoworkRawMessage[] | undefined,
+  streamSnapshot: CoworkStreamSnapshot,
+): CoworkArtifact | undefined {
+  const pathState = coworkMessagePathStore.getState();
+  const fromPath = pathState.streamingArtifacts[id] ?? pathState.artifacts[id];
+  if (fromPath) return fromPath;
+  if (!messages?.length) return undefined;
+  try {
+    const chatMessages = buildCoworkChatMessages(messages, streamSnapshot);
+    return aggregateCoworkArtifacts(chatMessages)[id];
+  } catch {
+    return undefined;
+  }
 }
 
 /** Official Gzt/cFt onClose: clear selection + collapse drawer. */

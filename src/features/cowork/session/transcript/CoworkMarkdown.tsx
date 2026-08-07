@@ -1,6 +1,10 @@
 import { Fragment, createElement, useMemo, type MouseEvent, type ReactNode } from "react";
 import type { Link, Parent, PhrasingContent, Root, RootContent } from "mdast";
 import { remark } from "remark";
+import {
+  isOfficialMermaidMarkdownLanguage,
+  OfficialMermaidDiagramCard,
+} from "../../../epitaxy/OfficialMermaidDiagramCard";
 
 export type CoworkMarkdownCallbacks = {
   blockCitations?: readonly unknown[];
@@ -104,6 +108,14 @@ function renderBlock(node: RootContent, key: string, context: RenderContext): Re
     return createElement(tag, { className, key, start: node.ordered ? node.start ?? undefined : undefined }, node.children.map((item, index) => <li className={context.profile === "assistant" ? "whitespace-normal break-words pl-2" : undefined} key={index}>{item.children.map((child, childIndex) => renderListChild(child, `${key}-${index}-${childIndex}`, context))}</li>));
   }
   if (node.type === "code") {
+    // Product delta (align Code hit→eit): assistant mermaid fences use OfficialMermaidDiagramCard.
+    // Residual Cowork StandardMarkDown ye/AST is plain pre; progressive/fade path needs same inject.
+    if (
+      context.profile === "assistant"
+      && isOfficialMermaidMarkdownLanguage(node.lang ?? undefined)
+    ) {
+      return <OfficialMermaidDiagramCard key={key} source={node.value} />;
+    }
     return <pre className={node.lang ? `language-${node.lang}` : undefined} key={key}><code>{node.value}</code></pre>;
   }
   if (node.type === "thematicBreak") return <hr className="border-border-200 border-t-0.5 my-3 mx-1.5" key={key} />;
@@ -274,13 +286,40 @@ function isTableDelimiter(value: string) {
 function renderHtml(value: string, key: string, context: RenderContext) {
   const artifact = artifactFromHtml(value);
   if (!artifact || !context.onOpenArtifact) return <Fragment key={key}>{value}</Fragment>;
-  return <button className="underline" key={key} onClick={() => context.onOpenArtifact?.({ ...artifact, messageUuid: context.messageUuid })} type="button">{artifact.title ?? "Open artifact"}</button>;
+  // Product: pass type/content so openArtifact routes to SELECT_CHAT_ARTIFACT (g6e), not disk host.
+  return (
+    <button
+      className="underline"
+      key={key}
+      onClick={() =>
+        context.onOpenArtifact?.({
+          ...artifact,
+          id: artifact.identifier,
+          messageUuid: context.messageUuid,
+        })
+      }
+      type="button"
+    >
+      {artifact.title ?? "Open artifact"}
+    </button>
+  );
 }
 
 function artifactFromHtml(value: string) {
   if (!value.startsWith("<antArtifact")) return null;
   const identifier = htmlAttribute(value, "identifier") ?? htmlAttribute(value, "id");
-  return identifier ? { identifier, title: htmlAttribute(value, "title") } : null;
+  if (!identifier) return null;
+  const title = htmlAttribute(value, "title");
+  const type = htmlAttribute(value, "type");
+  const language = htmlAttribute(value, "language");
+  // Closed tag body as content snapshot for g6e SetContent when aggregate not yet wired.
+  let content: string | undefined;
+  const closeIdx = value.indexOf(">");
+  const endTag = value.lastIndexOf("</antArtifact>");
+  if (closeIdx >= 0 && endTag > closeIdx) {
+    content = value.slice(closeIdx + 1, endTag).trimStart() || undefined;
+  }
+  return { identifier, title, type, language, content };
 }
 
 function htmlAttribute(value: string, name: string) {

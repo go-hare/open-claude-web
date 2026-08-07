@@ -319,11 +319,18 @@ function CoworkAlluviumBlockView({
   handlers,
   headingLevelOffset,
   onCodeDetected,
+  renderFence,
 }: {
   block: AlluviumBlock;
   handlers: InlineHandlers;
   headingLevelOffset: number;
   onCodeDetected?: () => void;
+  /**
+   * Product delta (not c93 ye residual): optional inject so Cowork can share
+   * Code eit MermaidIframe (OfficialMermaidDiagramCard) when caller provides it.
+   * Residual ye keeps plain pre when omitted.
+   */
+  renderFence?: AlluviumMarkdownProps["renderFence"];
 }) {
   switch (block.kind) {
     case "paragraph":
@@ -380,6 +387,9 @@ function CoworkAlluviumBlockView({
       );
     case "fence":
       if (onCodeDetected) queueMicrotask(() => onCodeDetected());
+      // Product: optional renderFence (mermaid eit) mirrors Code bb inject path.
+      // Residual c93 ye is plain pre when inject omitted.
+      if (renderFence) return <>{renderFence(block)}</>;
       return (
         <pre className={block.lang ? `language-${block.lang}` : undefined}>
           {block.code}
@@ -421,6 +431,7 @@ function AlluviumBlockView({
       handlers={handlers}
       headingLevelOffset={headingLevelOffset}
       onCodeDetected={onCodeDetected}
+      renderFence={renderFence}
     />
   );
 }

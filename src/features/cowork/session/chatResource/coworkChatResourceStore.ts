@@ -62,6 +62,22 @@ export type CoworkSelectedCoworkArtifactItem = {
   id: string;
 };
 
+/**
+ * Official Chat artifact selection (l8e / b6e / g6e path) — message-level
+ * antArtifact / artifacts tool content rendered via claudeusercontent RichSandbox.
+ * Distinct from cowork_artifact (disk host showArtifact).
+ */
+export type CoworkSelectedChatArtifactItem = {
+  type: "chat_artifact";
+  id: string;
+  messageUuid?: string;
+  /** Optional snapshot when open payload already carries content/type. */
+  title?: string;
+  artifactType?: string;
+  content?: string;
+  language?: string;
+};
+
 export type CoworkSelectedAttachmentItem = {
   type: "attachment";
   attachment: unknown;
@@ -75,6 +91,7 @@ export type CoworkSelectedItem =
   | CoworkSelectedSkillItem
   | CoworkSelectedSkillProposalItem
   | CoworkSelectedCoworkArtifactItem
+  | CoworkSelectedChatArtifactItem
   | CoworkSelectedAttachmentItem;
 
 export type CoworkChatResourceState = {
@@ -107,6 +124,15 @@ export type CoworkChatResourceAction =
       proposal: CoworkSelectedSkillProposalItem["proposal"];
     }
   | { type: "SELECT_COWORK_ARTIFACT"; id: string }
+  | {
+      type: "SELECT_CHAT_ARTIFACT";
+      id: string;
+      messageUuid?: string;
+      title?: string;
+      artifactType?: string;
+      content?: string;
+      language?: string;
+    }
   | { type: "SELECT_ATTACHMENT"; attachment: unknown }
   | { type: "CLEAR_SELECTED" }
   | { type: "SET_ACTIVE_MESSAGE_UUID"; uuid?: string }
@@ -175,6 +201,19 @@ export function reduceCoworkChatResource(
       return { ...state, selectedItem: { type: "skill_proposal", proposal: action.proposal } };
     case "SELECT_COWORK_ARTIFACT":
       return { ...state, selectedItem: { type: "cowork_artifact", id: action.id } };
+    case "SELECT_CHAT_ARTIFACT":
+      return {
+        ...state,
+        selectedItem: {
+          type: "chat_artifact",
+          id: action.id,
+          messageUuid: action.messageUuid,
+          title: action.title,
+          artifactType: action.artifactType,
+          content: action.content,
+          language: action.language,
+        },
+      };
     case "SELECT_ATTACHMENT":
       return { ...state, selectedItem: { type: "attachment", attachment: action.attachment } };
     case "CLEAR_SELECTED":

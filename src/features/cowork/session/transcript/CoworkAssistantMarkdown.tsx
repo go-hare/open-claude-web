@@ -4,7 +4,11 @@
  * Progressive path uses official Le/Oe line chunker (not AST frontier).
  */
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { AlluviumMarkdown } from "./AlluviumMarkdown";
+import {
+  isOfficialMermaidMarkdownLanguage,
+  OfficialMermaidDiagramCard,
+} from "../../../epitaxy/OfficialMermaidDiagramCard";
+import { AlluviumMarkdown, type AlluviumFenceBlock } from "./AlluviumMarkdown";
 import {
   CoworkMarkdownTree,
   hasCoworkMarkdownNode,
@@ -70,6 +74,7 @@ export function CoworkAssistantMarkdown(props: CoworkAssistantMarkdownProps) {
 
   if (alluviumEnabled) {
     // Official ProgressiveStandardMarkDown → AlluviumMarkDown (`be` / `ae` / `ve`).
+    // Product delta: renderFence injects Code eit MermaidIframe (not residual yP SVG).
     return (
       <AlluviumMarkdown
         className={className}
@@ -78,6 +83,7 @@ export function CoworkAssistantMarkdown(props: CoworkAssistantMarkdownProps) {
         onCodeDetected={onCodeDetected}
         onLinkClick={props.onLinkClick}
         onLinkDetected={props.onLinkDetected}
+        renderFence={renderCoworkAlluviumFence}
         text={text}
       />
     );
@@ -140,6 +146,21 @@ function treeProps(props: CoworkAssistantMarkdownProps, headingLevelOffset: numb
     onLinkClick: props.onLinkClick,
     onOpenArtifact: props.onOpenArtifact,
   };
+}
+
+/**
+ * Product fence inject for Cowork alluvium (ye residual has plain pre only).
+ * Aligns mermaid fences with Code hit→eit OfficialMermaidDiagramCard; other langs stay residual pre.
+ */
+function renderCoworkAlluviumFence(block: AlluviumFenceBlock) {
+  if (isOfficialMermaidMarkdownLanguage(block.lang ?? undefined)) {
+    return <OfficialMermaidDiagramCard source={block.code} />;
+  }
+  return (
+    <pre className={block.lang ? `language-${block.lang}` : undefined}>
+      {block.code}
+    </pre>
+  );
 }
 
 /**

@@ -5,12 +5,25 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useStore } from "zustand";
 import { desktopBridge } from "../../../../adapters/desktopBridge";
 import { Icon } from "../../../../shell/icons";
 import { CoworkBrowserExtensionDetailPanel } from "../activity/CoworkBrowserExtensionDetailPanel";
 import type { CoworkResourceActivity } from "../activity/coworkResourceActivity";
+import { OfficialArtifactSandboxBody } from "../../../epitaxy/sandbox/OfficialArtifactSandboxBody";
+import {
+  normalizeOfficialArtifactType,
+} from "../../../epitaxy/sandbox/officialSandboxConstants";
+import { useCoworkSessionData } from "../useCoworkSessionData";
+import {
+  aggregateCoworkArtifacts,
+  type CoworkArtifact,
+} from "../transcript/coworkMessageArtifacts";
+import { buildCoworkChatMessages } from "../transcript/coworkMessageModel";
+import { coworkMessagePathStore } from "../transcript/coworkMessagePathStore";
 import type {
   CoworkSelectedBrowserExtensionItem,
+  CoworkSelectedChatArtifactItem,
   CoworkSelectedCoworkArtifactItem,
   CoworkSelectedItem,
   CoworkSelectedMcpServerItem,
@@ -53,6 +66,8 @@ export function CoworkChatResourcePanel({
       return <CoworkSkillProposalDetailPanel onClose={onClose} selectedItem={selectedItem} />;
     case "cowork_artifact":
       return <CoworkArtifactDetailPanel onClose={onClose} selectedItem={selectedItem} />;
+    case "chat_artifact":
+      return <CoworkChatArtifactDetailPanel onClose={onClose} selectedItem={selectedItem} />;
     case "attachment":
       return (
         <CoworkUnavailableResourcePanel
@@ -428,6 +443,103 @@ function CoworkUnavailableResourcePanel({
       <div className="flex flex-1 items-center justify-center text-sm text-text-400 pr-5">{message}</div>
     </div>
   );
+}
+
+/**
+ * Official Chat SELECT_ARTIFACT drawer body residual (l8e → b6e → g6e):
+ * message artifact content in claudeusercontent RichSandbox — not cowork-artifact:// host.
+ */
+function CoworkChatArtifactDetailPanel({
+  onClose,
+  selectedItem,
+}: {
+  onClose: () => void;
+  selectedItem: CoworkSelectedChatArtifactItem;
+}) {
+  const data = useCoworkSessionData();
+  // Path store holds aggregate from normalized CoworkChatMessage[] (runtime publish).
+  // Prefer streamingArtifacts during live write; never cast raw envelopes.
+  const pathArtifact = useStore(
+    coworkMessagePathStore,
+    (state) =>
+      state.streamingArtifacts[selectedItem.id] ?? state.artifacts[selectedItem.id],
+  );
+  const resolved = useMemo(() => {
+    const fromMessages =
+      pathArtifact
+      ?? resolveChatArtifactFromNormalizedMessages(
+        data.messages,
+        data.streamSnapshot,
+        selectedItem.id,
+      );
+    const content =
+      selectedItem.content
+      ?? fromMessages?.versions.at(-1)?.resultState
+      ?? fromMessages?.versions.at(-1)?.content
+      ?? "";
+    const artifactType = normalizeOfficialArtifactType(
+      selectedItem.artifactType ?? fromMessages?.type,
+    );
+    const title =
+      selectedItem.title
+      || fromMessages?.title
+      || selectedItem.id;
+    const language = selectedItem.language ?? fromMessages?.language;
+    return { content, artifactType, title, language };
+  }, [pathArtifact, data.messages, data.streamSnapshot, selectedItem]);
+
+  return (
+    <div
+      className="flex h-full flex-col pb-1 pl-5 pt-3"
+      data-official-source="index-BELzQL5P.js:l8e→b6e→g6e Chat artifact"
+      data-cft-type="chat_artifact"
+    >
+      <div className="sticky flex items-center gap-1 pr-5">
+        <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-bg-000 rounded-md border border-border-300 text-text-400">
+          <Icon name="Plugin" customSize={16} />
+        </div>
+        <h2 className="font-ui flex-1 truncate text-lg font-medium">{resolved.title}</h2>
+        <button
+          aria-label="Close panel"
+          className="-mr-2 inline-flex size-8 items-center justify-center rounded text-text-400 hover:bg-bg-200 hover:text-text-200"
+          onClick={onClose}
+          type="button"
+        >
+          <Icon name="Add" className="rotate-45" customSize={20} />
+        </button>
+      </div>
+      <div className="mb-1 flex min-h-0 flex-1 flex-col pb-3 pr-5">
+        {resolved.content && resolved.artifactType ? (
+          <OfficialArtifactSandboxBody
+            className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border-300 bg-bg-100"
+            content={resolved.content}
+            type={resolved.artifactType}
+            language={resolved.language}
+            title={resolved.title}
+          />
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-sm text-text-400">
+            Artifact content is not available.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Fallback when path store has not published yet — normalize envelopes first. */
+function resolveChatArtifactFromNormalizedMessages(
+  messages: Parameters<typeof buildCoworkChatMessages>[0],
+  streamSnapshot: Parameters<typeof buildCoworkChatMessages>[1],
+  id: string,
+): CoworkArtifact | undefined {
+  if (!messages?.length) return undefined;
+  try {
+    const chatMessages = buildCoworkChatMessages(messages, streamSnapshot);
+    return aggregateCoworkArtifacts(chatMessages)[id];
+  } catch {
+    return undefined;
+  }
 }
 
 /**
