@@ -3,6 +3,7 @@
  * Extracted from EpitaxySessionTile — behavior unchanged.
  */
 import {
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -38,11 +39,10 @@ import {
   officialStreamActiveMessageId,
   officialStreamClear,
   officialStreamFeed,
-  officialStreamGetSnapshot,
   officialStreamHasListeners,
   officialStreamSetVisibility,
   officialStreamSettleAfterReveal,
-  officialStreamSubscribeStore,
+  officialStreamSubscribe,
 } from "./officialStreamSessionStore";
 import {
   acknowledgeOfficialToolDecision,
@@ -152,26 +152,21 @@ export function useEpitaxySessionData(sessionId?: string) {
   // Never mutate the store during render (ensureBucket → set would break useSyncExternalStore).
   // Bucket is created in effects / beginPendingTurn / reload / openSession from Recents.
   const bucket = useOfficialCodeSessionBucket(sessionId);
-  // Official Va is Pe.subscribe → local state. c119 uses startTransition for same-messageId
-  // ticks, but React 19 concurrent scheduling in Electron drops intermediate 60fps lengths
-  // (paragraph dumps). Subscribe with useSyncExternalStore so every Oke emit is committed.
-  const streamSnapshot = useSyncExternalStore(
-    useCallback((onStoreChange) => {
-      if (!sessionId) return () => undefined;
-      return officialStreamSubscribeStore(sessionId, onStoreChange);
-    }, [sessionId]),
-    useCallback(() => officialStreamGetSnapshot(sessionId), [sessionId]),
-    () => null,
-  );
+  // Residual c119 Va: Pe.subscribe → useState; same messageId ticks via startTransition;
+  // messageId change / null clear are sync setState. Visibility is a boolean ref (default true).
+  // Do not invent useSyncExternalStore for Va — denser commits amplify Fu pin re-stick while streaming.
+  const [streamSnapshot, setStreamSnapshot] = useState<OfficialStreamSnapshot>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [streamActivityMode, setStreamActivityMode] = useState<StreamActivityMode>(idleStreamActivityMode);
   const streamMessageIdRef = useRef<string | null>(null);
   const streamSnapshotRef = useRef<OfficialStreamSnapshot>(null);
   const streamActivityModeRef = useRef<StreamActivityMode>(idleStreamActivityMode);
+  // Residual Va visibility arg `n` (default true) — ref so setVisibility(() => r.current) tracks live.
+  const transcriptVisibleRef = useRef(true);
   streamSnapshotRef.current = streamSnapshot;
   streamActivityModeRef.current = streamActivityMode;
 
-  // Keep Qa/eke suppress + char budget in lockstep with Va without startTransition lag.
+  // Keep Qa/eke suppress + char budget in lockstep with Va.
   useEffect(() => {
     if (!sessionId) {
       setStreamingMessageId(null);
@@ -203,6 +198,7 @@ export function useEpitaxySessionData(sessionId?: string) {
 
   useEffect(() => {
     if (!sessionId) {
+      setStreamSnapshot(null);
       setStreamActivityMode(idleStreamActivityMode);
       streamMessageIdRef.current = null;
       return undefined;
@@ -241,10 +237,24 @@ export function useEpitaxySessionData(sessionId?: string) {
       tick();
     };
     store.getState().ensureBucket(sessionId);
-    // Official Pe.setVisibility — transcript is visible while this tile is mounted.
-    const transcriptVisibleRef = { current: true };
+    // Residual Va(sessionId, enabled, visible=true): Pe.subscribe + setVisibility(() => r.current)
+    let lastMessageId: string | null = null;
+    const unsubscribe = officialStreamSubscribe(sessionId, (snapshot) => {
+      if (snapshot === null) {
+        lastMessageId = null;
+        setStreamSnapshot(null);
+        return;
+      }
+      if (snapshot.messageId !== lastMessageId) {
+        lastMessageId = snapshot.messageId;
+        setStreamSnapshot(snapshot);
+        return;
+      }
+      startTransition(() => setStreamSnapshot(snapshot));
+    });
     officialStreamSetVisibility(sessionId, () => transcriptVisibleRef.current);
     return () => {
+      unsubscribe();
       // Official: if no listeners left, setVisibility(() => false)
       if (!officialStreamHasListeners(sessionId)) {
         officialStreamSetVisibility(sessionId, () => false);
@@ -258,6 +268,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     if (!sessionId) return;
     officialStreamClear(sessionId);
     clearOfficialEkeCache(sessionId);
+    setStreamSnapshot(null);
     setStreamingMessageId(null);
     setStreamActivityMode(idleStreamActivityMode);
     streamMessageIdRef.current = null;
@@ -274,6 +285,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     // Official Jwe(sessionId) drops Xwe cache when stream settles / clears.
     clearOfficialEkeCache(sessionId);
     if (markSessionSettled) officialClearTurnStarted(sessionId);
+    setStreamSnapshot(null);
     setStreamingMessageId(null);
     setStreamActivityMode(idleStreamActivityMode);
     streamMessageIdRef.current = null;

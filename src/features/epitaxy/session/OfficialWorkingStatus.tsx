@@ -74,16 +74,22 @@ export function OfficialSparkSpinner({
  * - l = isWorking && !suppressed; meta opacity when (spawnLabel || elapsed>=2 || compacting) && l
  * - spark stays mounted; meta uses opacity transition (does not unmount on brief content updates)
  */
+/**
+ * Residual Gv (c119): tokens/elapsed polled from je/_e maps on a 1s interval.
+ * Do NOT accept a stream-tick tokenEstimate prop in the interval deps — that restarts
+ * the timer every PE paint and re-renders the loader row under Fu pin.
+ */
 export function OfficialWorkingStatus({
   isWorking,
   sessionId,
   spawnLabel,
-  tokenEstimate = 0,
 }: {
   isWorking: boolean;
   sessionId?: string;
   spawnLabel?: string;
+  /** @deprecated residual Gv ignores prop; kept optional for call-site compat */
   startedAt?: number | null;
+  /** @deprecated residual Gv reads _e map; kept optional for call-site compat */
   tokenEstimate?: number;
 }) {
   // Official d_e(t): bucket.compactionStatus for this session.
@@ -96,23 +102,25 @@ export function OfficialWorkingStatus({
   const [elapsedSeconds, setElapsedSeconds] = useState(() => (
     startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0
   ));
-  const [tokens, setTokens] = useState(tokenEstimate);
+  const [tokens, setTokens] = useState(0);
 
   useEffect(() => {
     // Official je(t): only zero when there is no turn-start timestamp for the session.
     // Do NOT clear elapsed merely because isWorking briefly flickers when text appears.
     if (startedAt == null || !sessionId) {
       setElapsedSeconds(0);
+      setTokens(0);
       return undefined;
     }
     const update = () => {
       setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
-      setTokens(officialGetStreamTokenEstimate(sessionId) || tokenEstimate);
+      // Residual Gv: r(Math.round(_e.get(t)/4)) — no prop fallback that restarts the interval.
+      setTokens(officialGetStreamTokenEstimate(sessionId));
     };
     update();
     const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
-  }, [sessionId, startedAt, tokenEstimate]);
+  }, [sessionId, startedAt]);
 
   // Official Gv: o = js(sessionId) = Jve/Efe — true while any tool permission is pending
   // (index Efe: requestsBySession[id] has status==="pending"). Product stores the pending

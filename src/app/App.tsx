@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { matchRoute } from "./routes";
 import { isDesktopBridgeMissingInElectron } from "../adapters/desktopBridge";
 import { BootstrapConnectionErrorPage } from "../features/public/AccessPages";
@@ -184,7 +184,10 @@ export function App() {
     return () => controller.abort();
   }, [locationKey, authEpoch]);
 
-  useEffect(() => {
+  // useLayoutEffect: commit URL to /login before child LoginDesktop jn effects run.
+  // useEffect would leave one paint of LoginDesktop under /task/new → Strict cleanup
+  // restores 1200 while chooser is still up (Win soft 3p grow flash).
+  useLayoutEffect(() => {
     // Official soft leave: wait for bootstrap result before bouncing /task/new → /login.
     if (bootstrapInFlight) return;
     if (loginGate !== "logged_out") return;

@@ -21,10 +21,12 @@ type OfficialSmootherBlockOps<TBlock> = {
   stopBlockEvent: (event: Record<string, unknown>, block: TBlock) => TBlock;
 };
 
-const officialFrameMs = 1000 / 60;
+/** Residual PE = 1e3/60 (index-BELzQL5P zE). */
+const PE = 1000 / 60;
 
 function delay(ms: number) {
-  // Prefer global setTimeout so node tests / non-window hosts still run the 60fps task.
+  // Residual zE.task: await new Promise(e => setTimeout(e, s)).
+  // Prefer global setTimeout so node tests / non-window hosts still run the PE task.
   const schedule = typeof globalThis.setTimeout === "function"
     ? globalThis.setTimeout.bind(globalThis)
     : window.setTimeout.bind(window);
@@ -32,28 +34,15 @@ function delay(ms: number) {
 }
 
 /**
- * Official zE.task waits `PE` (1000/60 ≈ 16.67ms) via setTimeout when visible.
- * Residual PE target cadence is one frame. In Electron / Chromium, short
- * setTimeouts are often clamped to ~1s when the renderer is backgrounded,
- * occluded, or timer-throttled — that collapses the 60fps reveal into a handful
- * of paints (paragraph-sized jumps: 33→88→114).
- * Product bridge: when visible, prefer rAF (fires with the paint cycle ≈ PE)
- * so cadence stays residual-like without timer clamp; hidden still uses delay(100).
+ * Residual zE.task tick (index-BELzQL5P):
+ *   const s = checkVisibility ? PE : 100;
+ *   await new Promise(e => setTimeout(e, s));
+ * Visible → PE (1000/60); not visible (checkVisibility false) → 100.
+ * document.hidden path is separate (setTimeout 200) in task().
+ * No rAF — product previously invented rAF as "PE-equivalent"; residual is setTimeout only.
  */
 function delayRevealTick(isVisible: boolean) {
-  if (!isVisible) return delay(100);
-  const raf = typeof globalThis.requestAnimationFrame === "function"
-    ? globalThis.requestAnimationFrame.bind(globalThis)
-    : typeof requestAnimationFrame === "function"
-      ? requestAnimationFrame
-      : null;
-  if (raf) {
-    return new Promise<void>((resolve) => {
-      raf(() => resolve());
-    });
-  }
-  // Residual PE fallback when rAF unavailable (node tests).
-  return delay(officialFrameMs);
+  return delay(isVisible ? PE : 100);
 }
 
 function sliceBlocks<TBlock>(ops: OfficialSmootherBlockOps<TBlock>, blocks: TBlock[], size: number) {
@@ -192,21 +181,16 @@ class OfficialCompletionSmoother<TBlock> {
         break;
     }
 
+    // Residual zE.onMessage (index-BELzQL5P): always stamp start on first message,
+    // always set totalCompletionLength + push arrivals — even when blockSize sum is 0
+    // (e.g. thinking-only; Lke thinking size = 0).
+    //   0===this.start&&(this.start=Date.now());
+    //   const t = reduce blockSize; this.totalCompletionLength=t;
+    //   this.arrivals.push([(Date.now()-this.start)/1e3,t]);
+    if (this.start === 0) this.start = Date.now();
     const totalLength = this.blocksList.reduce((sum, block) => sum + this.blockOperations.blockSize(block), 0);
-    // Official Lke: thinking blockSize = 0 (code path does not typewriter thinking).
-    // Official zE still stamps start on the first onMessage, including size-0 thinking.
-    // That leaves t stuck at 0 while the task spins, so after a long thinking wait the first
-    // text burst + message_stop lands with large dt and model_done+100 — bisect dumps full
-    // length in one paint (live "一卡一卡 / 整段吐出").
-    // Only start the reveal clock once there is smoothable content (totalLength > 0), matching
-    // Lke's size-0 semantics without changing the 0.9*elapsed deadline math.
-    if (totalLength > 0) {
-      if (this.start === 0) this.start = Date.now();
-      this.totalCompletionLength = totalLength;
-      this.arrivals.push([(Date.now() - this.start) / 1000, totalLength]);
-    } else {
-      this.totalCompletionLength = 0;
-    }
+    this.totalCompletionLength = totalLength;
+    this.arrivals.push([(Date.now() - this.start) / 1000, totalLength]);
     if (this.dontSmooth && this.onCompletion) this.onCompletion(structuredClone(this.blocksList));
   }
 
@@ -246,7 +230,7 @@ class OfficialCompletionSmoother<TBlock> {
         }
         isVisible = this.cachedVisibility;
       }
-      // Visible: rAF (not setTimeout) so Electron timer clamping cannot collapse typewriter.
+      // Residual: const s = t ? PE : 100; await new Promise(e => setTimeout(e, s))
       await delayRevealTick(isVisible);
     }
   }

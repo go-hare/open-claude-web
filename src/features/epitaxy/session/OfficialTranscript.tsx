@@ -134,18 +134,9 @@ export type OfficialTranscriptScrollState = {
   showScrollButton: boolean;
 };
 
+/** Residual Gb scrollToBottom body (no 450ms hard-snap invent). */
 export function scrollElementToBottom(node: HTMLElement, behavior?: OfficialTranscriptScrollBehavior) {
   node.scrollTo({ top: node.scrollHeight, behavior: (behavior ?? "instant") as ScrollBehavior });
-  node.dispatchEvent(new Event("scroll", { bubbles: true }));
-  if (behavior === "smooth") {
-    window.setTimeout(() => {
-      const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-      if (distanceFromBottom > 8) {
-        node.scrollTo({ top: node.scrollHeight, behavior: "auto" });
-      }
-      node.dispatchEvent(new Event("scroll", { bubbles: true }));
-    }, 450);
-  }
 }
 
 let officialThinkingSparkAnimationCache: OfficialSparkAnimation | null = null;
@@ -153,7 +144,7 @@ let officialThinkingSparkAnimationPromise: Promise<OfficialSparkAnimation | null
 type OfficialBackgroundTask = OfficialBackgroundTaskImported;
 
 
-export function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onNavigate, onScrollState, pendingTurnStartedAt, ref, reload, scrollRef, session, sessionType, spawnLabel, streamTokenEstimate, tasks, transcriptMode }: {
+export function renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onNavigate, onScrollState, ref, reload, scrollRef, session, sessionType, spawnLabel, tasks, transcriptMode }: {
   entries: TranscriptEntry[];
   error: Error | null;
   initialSessionId?: string;
@@ -164,6 +155,7 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   /** Official CC "Start a new session" navigates home (Rs / sessionHomePath). */
   onNavigate?: (path: string) => void;
   onScrollState: (state: OfficialTranscriptScrollState) => void;
+  /** Residual Gv reads turn start from je map — accepted for call-site compat only. */
   pendingTurnStartedAt?: number | null;
   ref: Ref<OfficialTranscriptHandle>;
   reload: (options?: { silent?: boolean }) => Promise<void>;
@@ -172,7 +164,8 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   /** Official remote tR uses Connecting empty; local Ja uses delayed Loading spark. */
   sessionType?: "local" | "remote" | "bridge" | "pool" | "ssh";
   spawnLabel?: string;
-  streamTokenEstimate: number;
+  /** Residual Gv polls _e map — accepted for call-site compat only; not piped into Transcript. */
+  streamTokenEstimate?: number;
   tasks: OfficialBackgroundTask[];
   transcriptMode: OfficialTranscriptMode;
 }) {
@@ -206,7 +199,22 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   if (entries.length === 0 && !isResponding) {
     return <div className="h-full flex flex-col items-center justify-center gap-g4 text-body text-t5">No messages yet.</div>;
   }
-  return <Transcript key={transcriptKey} entries={entries} isAwaitingReply={officialIsAwaitingReply(session, isResponding)} isResponding={isResponding} onScrollState={onScrollState} pendingTurnStartedAt={pendingTurnStartedAt} ref={ref} scrollRef={scrollRef} sessionId={initialSessionId} spawnLabel={spawnLabel} streamTokenEstimate={streamTokenEstimate} tasks={tasks} transcriptMode={transcriptMode} />;
+  // Residual Gb/Gv: tokens/elapsed from session maps inside Gv — do not pipe streamTokenEstimate into Transcript props.
+  return (
+    <Transcript
+      key={transcriptKey}
+      entries={entries}
+      isAwaitingReply={officialIsAwaitingReply(session, isResponding)}
+      isResponding={isResponding}
+      onScrollState={onScrollState}
+      ref={ref}
+      scrollRef={scrollRef}
+      sessionId={initialSessionId}
+      spawnLabel={spawnLabel}
+      tasks={tasks}
+      transcriptMode={transcriptMode}
+    />
+  );
 }
 
 /** Official c119 remote tR empty pending residual (L2r8A2+O5x). */
@@ -249,11 +257,9 @@ type TranscriptProps = {
   isAwaitingReply: boolean;
   isResponding: boolean;
   onScrollState: (state: OfficialTranscriptScrollState) => void;
-  pendingTurnStartedAt?: number | null;
   scrollRef: MutableRefObject<HTMLDivElement | null>;
   sessionId?: string;
   spawnLabel?: string;
-  streamTokenEstimate: number;
   tasks: OfficialBackgroundTask[];
   transcriptMode: OfficialTranscriptMode;
 };
@@ -272,7 +278,8 @@ const emptyCodeUserChaptersByAfterId = new Map<string, CodeUserChapter[]>();
  *   DOM: scrollRef > sizerRef(height) > absolute translateY(virtualItems[0].start) > measureElement rows
  *   scrollToBottom: setPinned(true); scrollTo({ top: scrollHeight })
  */
-const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isAwaitingReply, isResponding, onScrollState, pendingTurnStartedAt, scrollRef, sessionId, spawnLabel, streamTokenEstimate, tasks, transcriptMode }, ref) {
+// Residual Xb = memo(Gb) — skip re-render when only parent noise (e.g. streamTokenEstimate) changes.
+const Transcript = memo(forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isAwaitingReply, isResponding, onScrollState, scrollRef, sessionId, spawnLabel, tasks, transcriptMode }, ref) {
   const rowsRef = useRef<TranscriptRow[]>([]);
   const initialCount = useRef(entries.length);
   const [userChapters, setUserChapters] = useState<CodeUserChapter[]>([]);
@@ -289,6 +296,7 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
     overscan: 6,
     paddingEnd: 48,
     paddingStart: 48,
+    useFlushSync: false,
   });
   const virtualItems = officialVirtualizer.virtualItems;
   const translateY = virtualItems[0]?.start ?? 0;
@@ -388,11 +396,9 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
                     lastEntryIdx={lastEntryIdx}
                     onPinUserChapter={pinUserChapter}
                     onUnpinUserChapters={unpinUserChapters}
-                    pendingTurnStartedAt={pendingTurnStartedAt}
                     row={row}
                     sessionId={sessionId}
                     spawnLabel={spawnLabel}
-                    streamTokenEstimate={streamTokenEstimate}
                     tasks={tasks}
                     transcriptMode={transcriptMode}
                     userChaptersByAfterId={userChaptersByAfterId}
@@ -405,7 +411,7 @@ const Transcript = forwardRef<OfficialTranscriptHandle, TranscriptProps>(functio
       </div>
     </div>
   );
-});
+}));
 
 function groupCodeUserChaptersByAfterId(chapters: CodeUserChapter[]) {
   const grouped = new Map<string, CodeUserChapter[]>();
@@ -423,10 +429,40 @@ function officialChapterTitleFromText(text: string) {
   return firstLine.length > 40 ? `${title}…` : title || "Chapter";
 }
 
+/** Residual c119 Wb — product rows currently only assistant/user/running-tasks/loader. */
 function estimateTranscriptRowSize(row: TranscriptRow) {
-  if (row.kind === "assistant") return 400;
-  if (row.kind === "user") return 80;
-  return 48;
+  switch (row.kind) {
+    case "assistant":
+      return 400;
+    case "user":
+      return 80;
+    case "running-tasks":
+    case "loader":
+      return 48;
+  }
+}
+
+/**
+ * Residual c43 `qs._measureElement` always `resizeItem` when the node is connected.
+ * Product `@tanstack/virtual-core@3.14` gates:
+ *   if ((!this.isScrolling || this.scrollState) && this.shouldMeasureDuringScroll(index))
+ * so ref/RO measure is dropped for ~isScrollingResetDelay(150ms) after programmatic
+ * initialOffset/pin scrollTop — totalSize stays on estimateSize and pin sticks to a
+ * short sizer (scrollbar gap / Jump to bottom). Clear isScrolling only for the
+ * measure call so resizeItem runs; restore immediately after (residual has no gate).
+ */
+function measureVirtualRowLikeResidual(
+  virtualizer: ReturnType<typeof useVirtualizer<HTMLDivElement, Element>>,
+  node: Element,
+) {
+  const instance = virtualizer as typeof virtualizer & { isScrolling: boolean };
+  const wasScrolling = instance.isScrolling;
+  if (wasScrolling) instance.isScrolling = false;
+  try {
+    virtualizer.measureElement(node);
+  } finally {
+    if (wasScrolling) instance.isScrolling = wasScrolling;
+  }
 }
 
 /**
@@ -445,6 +481,8 @@ function useOfficialTranscriptVirtualizer<TItem>({
   paddingEnd = 48,
   paddingStart = 48,
   restoreKey,
+  /** Residual c119 Gb: Fu({ ..., useFlushSync:!1 }). Cold-start only. */
+  useFlushSync = false,
 }: {
   estimateSize: (item: TItem, index: number) => number;
   getKey: (item: TItem) => string;
@@ -453,6 +491,7 @@ function useOfficialTranscriptVirtualizer<TItem>({
   paddingEnd?: number;
   paddingStart?: number;
   restoreKey?: string;
+  useFlushSync?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sizerRef = useRef<HTMLDivElement | null>(null);
@@ -510,6 +549,7 @@ function useOfficialTranscriptVirtualizer<TItem>({
     overscan,
     paddingEnd,
     paddingStart,
+    useFlushSync,
   });
   // Official Fu assigns this on the instance (not as a useVirtualizer option).
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => (
@@ -581,10 +621,12 @@ function useOfficialTranscriptVirtualizer<TItem>({
   }, []);
 
   // Official Fu layout: restore anchor once, else while pinned stick to totalSize (skip if user is mid-scroll).
+  // Residual only writes sizer height on pin/restore paths (plus React style={{height:sizerHeight}}).
   useLayoutEffect(() => {
     if (itemCount === 0) return;
     const vz = virtualizerRef.current;
     const node = scrollRef.current;
+    const liveTotal = vz.getTotalSize();
 
     if (!didInitRestoreRef.current) {
       didInitRestoreRef.current = true;
@@ -608,6 +650,7 @@ function useOfficialTranscriptVirtualizer<TItem>({
     }
 
     if (restoreTargetIndexRef.current !== null && node) {
+      // Residual ve: if(N && e.scrollTop !== R.current) return
       if (isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
       const targetItem = vz.measurementsCache[restoreTargetIndexRef.current];
       if (targetItem) {
@@ -618,25 +661,27 @@ function useOfficialTranscriptVirtualizer<TItem>({
           restoreTargetIndexRef.current = null;
           return;
         }
-        applySizerHeight(vz.getTotalSize());
+        applySizerHeight(liveTotal);
         node.scrollTop = targetTop;
         lastProgrammaticScrollTopRef.current = node.scrollTop;
         lastObservedScrollTopRef.current = node.scrollTop;
-        lastObservedTotalSizeRef.current = vz.getTotalSize();
+        lastObservedTotalSizeRef.current = liveTotal;
       }
       return;
     }
 
     if (!pinnedRef.current || !node) return;
-    // Official: if user is actively scrolling away from our last programmatic top, do not re-pin.
+    // Residual ve (c3d5): if(N && e.scrollTop !== R.current) return
+    // R starts at -1; while isScrolling and scrollTop is any real value, residual skips.
+    // First pin requires isScrolling=false (or scrollTop still === R after a prior pin).
     if (isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
 
-    const nextTotal = vz.getTotalSize();
-    applySizerHeight(nextTotal);
-    node.scrollTop = nextTotal;
+    // Residual: sizer height then e.scrollTop = n (n = getTotalSize()). Browser clamps.
+    applySizerHeight(liveTotal);
+    node.scrollTop = liveTotal;
     lastProgrammaticScrollTopRef.current = node.scrollTop;
     lastObservedScrollTopRef.current = node.scrollTop;
-    lastObservedTotalSizeRef.current = nextTotal;
+    lastObservedTotalSizeRef.current = liveTotal;
   }, [applySizerHeight, isScrolling, itemCount, totalSize, tryRestoreAnchorKey]);
 
   // Residual ve: when list head key changes (prepend / history union), adjust scroll by totalSize delta.
@@ -692,10 +737,12 @@ function useOfficialTranscriptVirtualizer<TItem>({
     lastObservedScrollTopRef.current = node.scrollTop;
   }, [isScrolling]);
 
-  useLayoutEffect(() => {
-    const sizer = sizerRef.current;
-    if (sizer) sizer.style.height = `${sizerHeight}px`;
-  }, [sizerHeight]);
+  // Residual ve/Fu: sizer height is React style={{ height: sizerHeight }} plus
+  // imperative writes only on pin / restore / measureElement RO paths.
+  // Do NOT invent a layout effect that always assigns sizer.style.height from
+  // render sizerHeight — it can run after pin/RO and overwrite a fresher
+  // getTotalSize()-based height, causing a one-frame collapse then re-pin
+  // (「被撑开往下掉了一下」).
 
   // Official Fu unmount save: isPinned + anchor + measurements for session switch restore.
   const restoreKeyRef = useRef(restoreKey);
@@ -720,20 +767,24 @@ function useOfficialTranscriptVirtualizer<TItem>({
     });
   }, []);
 
-  // Residual ve measureElement: tanstack measure + ResizeObserver so nested reflow re-pins
-  // (first-load markdown / font / tool rows that grow after estimateSize).
+  // Residual ve measureElement: always measure (c43 qs._measureElement) + RO re-pin on size change.
+  // Product @tanstack/virtual-core@3.14 skips resizeItem while isScrolling; residual qs does not.
+  // measureVirtualRowLikeResidual bridges that package delta so estimate→actual still updates
+  // during the isScrollingResetDelay window after initialOffset / pin scrollTop writes.
   const resizeObserveBag = useMemo(() => {
     if (typeof ResizeObserver === "undefined") return null;
     const observed = new Set<Element>();
     const ro = new ResizeObserver((entries) => {
       const vz = virtualizerRef.current;
-      for (const entry of entries) vz.measureElement(entry.target as Element);
+      for (const entry of entries) measureVirtualRowLikeResidual(vz, entry.target as Element);
       if (!pinnedRef.current) return;
       const node = scrollRef.current;
       const sizer = sizerRef.current;
       if (!node || !sizer) return;
+      // Residual RO: if(S.isScrolling && t.scrollTop !== R.current) return
       if (vz.isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
       const nextTotal = vz.getTotalSize();
+      // Residual RO: if(r === E.current) return — no maxScroll invent restick
       if (nextTotal === lastObservedTotalSizeRef.current) return;
       const height = vz.scrollRect?.height ?? 0;
       sizer.style.height = `${Math.max(nextTotal, height)}px`;
@@ -755,7 +806,8 @@ function useOfficialTranscriptVirtualizer<TItem>({
 
   const measureElement = useCallback((node: HTMLElement | null) => {
     const vz = virtualizerRef.current;
-    vz.measureElement(node);
+    if (node) measureVirtualRowLikeResidual(vz, node);
+    else vz.measureElement(node);
     if (!resizeObserveBag) return;
     if (node) {
       if (!resizeObserveBag.observed.has(node)) {
@@ -827,11 +879,9 @@ function TranscriptRowContent({
   lastEntryIdx,
   onPinUserChapter,
   onUnpinUserChapters,
-  pendingTurnStartedAt,
   row,
   sessionId,
   spawnLabel,
-  streamTokenEstimate,
   tasks,
   transcriptMode = "normal",
   userChaptersByAfterId,
@@ -842,24 +892,21 @@ function TranscriptRowContent({
   lastEntryIdx: number;
   onPinUserChapter: (afterId: string, text: string) => void;
   onUnpinUserChapters: (afterId: string) => void;
-  pendingTurnStartedAt?: number | null;
   row: TranscriptRow;
   sessionId?: string;
   spawnLabel?: string;
-  streamTokenEstimate: number;
   tasks: OfficialBackgroundTask[];
   transcriptMode?: OfficialTranscriptMode;
   userChaptersByAfterId: Map<string, CodeUserChapter[]>;
 }) {
   if (row.kind === "running-tasks") return <OfficialRunningTasks isResponding={isResponding} tasks={tasks} />;
   if (row.kind === "loader") {
+    // Residual Gv: sessionId + isWorking + spawnLabel only (tokens/elapsed from maps).
     return (
       <OfficialWorkingStatus
         isWorking={isResponding}
         sessionId={sessionId}
         spawnLabel={spawnLabel}
-        startedAt={pendingTurnStartedAt}
-        tokenEstimate={streamTokenEstimate}
       />
     );
   }

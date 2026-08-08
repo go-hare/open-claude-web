@@ -643,14 +643,25 @@ function LoginDesktopAnthropicEntry({
  *   },[])
  *
  * pagehide always restores (full document leave via loadURL / process exit).
- * Product React Strict Mode (Vite dev) remounts LoginRoute while still on /login;
- * official production ion-dist does not double-invoke this effect. Cleanup must
- * not restore to 1200 while pathname is still /login (would paint large chooser).
- * Real leave still hits pagehide → restore.
+ *
+ * Product dual-root bridges (not in residual Strict production ion-dist):
+ * 1) Vite Strict Mode double-invokes effects → cleanup must not restore to 1200
+ *    before the remount re-applies 600 (chooser painted large = empty right half).
+ * 2) App logged_out gate can mount LoginDesktop while pathname is still /task/new
+ *    (replaceState to /login is a later effect). Pathname-only skip is wrong:
+ *    cleanup sees /task/new → resize(1200) while chooser is still up → Windows
+ *    soft 3p leave misses loginSized(600×600) and animates grow top-left.
+ *
+ * Session counter + microtask: if another LoginRoute instance mounts in the same
+ * turn (Strict remount / gate), keep 600; only the last unmount restores.
+ * pagehide still restores immediately (official full leave).
  */
+let loginWindowSizeSessions = 0;
+
 function useLoginWindowSize() {
   // Official jn uses useEffect (not useLayoutEffect) — match residual timing.
   useEffect(() => {
+    loginWindowSizeSessions += 1;
     const control = windowControl();
     // Official jn: resize(600,600,{center:true}) + focus (sync call shape).
     void control?.resize?.(600, 600, { center: true });
@@ -663,10 +674,15 @@ function useLoginWindowSize() {
     window.addEventListener("pagehide", restoreMain);
     return () => {
       window.removeEventListener("pagehide", restoreMain);
-      const path = window.location.pathname;
-      // Strict Mode remount: still on /login — skip cleanup restore (pagehide handles leave).
-      if (path === "/login" || path.startsWith("/login/")) return;
-      restoreMain();
+      loginWindowSizeSessions = Math.max(0, loginWindowSizeSessions - 1);
+      // Defer: Strict Mode remount increments sessions again before microtask.
+      queueMicrotask(() => {
+        if (loginWindowSizeSessions > 0) return;
+        // Still on LoginRoute URL (gate may have replaceState'd by now) — keep 600.
+        const path = window.location.pathname;
+        if (path === "/login" || path.startsWith("/login/")) return;
+        restoreMain();
+      });
     };
   }, []);
 }

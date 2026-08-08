@@ -38,16 +38,19 @@ import { coworkMessagePathStore } from "./transcript/coworkMessagePathStore";
 import { CoworkTranscriptActions } from "./transcript/CoworkTranscriptActions";
 import { useCoworkSessionData } from "./useCoworkSessionData";
 import { CoworkSessionStoreProvider, createCoworkSessionStore } from "./coworkSessionStore";
+import { OfficialPierreWorkerPool } from "../../epitaxy/diff/OfficialPierreWorkerPool";
 
 export function CoworkSessionView({ onNavigate, sessionId }: Pick<RouteViewProps, "onNavigate"> & { sessionId: string }) {
   const store = useMemo(() => createCoworkSessionStore(sessionId), [sessionId]);
   return (
-    <CoworkSessionStoreProvider store={store}>
-      <CoworkChatResourceProvider conversationUuid={sessionId}>
-        <CoworkSessionController sessionId={sessionId} store={store} />
-        <CoworkSessionRenderer onNavigate={onNavigate} sessionId={sessionId} />
-      </CoworkChatResourceProvider>
-    </CoworkSessionStoreProvider>
+    <OfficialPierreWorkerPool>
+      <CoworkSessionStoreProvider store={store}>
+        <CoworkChatResourceProvider conversationUuid={sessionId}>
+          <CoworkSessionController sessionId={sessionId} store={store} />
+          <CoworkSessionRenderer onNavigate={onNavigate} sessionId={sessionId} />
+        </CoworkChatResourceProvider>
+      </CoworkSessionStoreProvider>
+    </OfficialPierreWorkerPool>
   );
 }
 
