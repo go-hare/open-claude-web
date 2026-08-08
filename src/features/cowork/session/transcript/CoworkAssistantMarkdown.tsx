@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
   isOfficialMermaidMarkdownLanguage,
-  OfficialMermaidDiagramCard,
+  OfficialMermaidHit,
 } from "../../../epitaxy/OfficialMermaidDiagramCard";
 import { AlluviumMarkdown, type AlluviumFenceBlock } from "./AlluviumMarkdown";
 import {
@@ -153,8 +153,9 @@ function treeProps(props: CoworkAssistantMarkdownProps, headingLevelOffset: numb
  * Aligns mermaid fences with Code hit→eit OfficialMermaidDiagramCard; other langs stay residual pre.
  */
 function renderCoworkAlluviumFence(block: AlluviumFenceBlock) {
+  // Residual hit: div.mb-2 > eit.
   if (isOfficialMermaidMarkdownLanguage(block.lang ?? undefined)) {
-    return <OfficialMermaidDiagramCard source={block.code} />;
+    return <OfficialMermaidHit source={block.code} />;
   }
   return (
     <pre className={block.lang ? `language-${block.lang}` : undefined}>

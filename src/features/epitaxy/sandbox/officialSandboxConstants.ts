@@ -3,12 +3,41 @@
  *   index-BELzQL5P A4e / U4e / userContentRendererUrl
  *   c5f4e1303 zL / xm MIME enum
  *
- * Shared by eit MermaidIframe and g6e RichSandbox — no product invent.
+ * Product decision C: C-slice paint (Html|Svg|Mermaid|React) runs on
+ * product-local `/sandbox-runtime` with residual p6e/A4e protocol.
+ * Remote claudeusercontent.com is residual production URL; product uses local.
  */
 
-/** Official config userContentRendererUrl (index-BELzQL5P). */
-export const OFFICIAL_USER_CONTENT_RENDERER_URL =
+/** Residual config userContentRendererUrl (index-BELzQL5P) — remote official. */
+export const OFFICIAL_REMOTE_USER_CONTENT_RENDERER_URL =
   "https://www.claudeusercontent.com";
+
+/**
+ * Product-local sandbox frame base (same residual handshake/MIME).
+ * Served from Vite `public/sandbox-runtime` and packaged `product-web/sandbox-runtime`.
+ */
+export const PRODUCT_LOCAL_SANDBOX_RUNTIME_PATH = "/sandbox-runtime/frame.html";
+
+/**
+ * Active iframe origin base for eit/g6e.
+ * Product: local runtime. Residual remote kept as OFFICIAL_REMOTE_* for docs/bridges.
+ */
+export function resolveOfficialUserContentRendererUrl(): string {
+  if (typeof window === "undefined") {
+    return PRODUCT_LOCAL_SANDBOX_RUNTIME_PATH;
+  }
+  // Same-origin path so parentOrigin + frame origin match residual handshake rules.
+  return new URL(
+    PRODUCT_LOCAL_SANDBOX_RUNTIME_PATH,
+    window.location.origin,
+  ).href.replace(/\/frame\.html$/, "");
+}
+
+/** @deprecated use resolveOfficialUserContentRendererUrl — kept as absolute path base for allowedOrigin */
+export const OFFICIAL_USER_CONTENT_RENDERER_URL =
+  typeof window !== "undefined"
+    ? `${window.location.origin}/sandbox-runtime`
+    : "/sandbox-runtime";
 
 /** Official A4e (index-BELzQL5P). */
 export const OFFICIAL_SANDBOX = {
@@ -42,8 +71,11 @@ export const OFFICIAL_SANDBOX_CONTENT_TYPE =
   "type.googleapis.com/anthropic.claude.usercontent.sandbox.SandboxContent";
 
 /**
- * Official U4e alwaysPermitted methods (D4e residual).
- * Host accepts these without permission UI.
+ * Official U4e alwaysPermitted methods (D4e residual, alwaysPermitted:!0 only):
+ *   ReadyForContent, ReportError, OpenExternal, DownloadFile,
+ *   TrackInteraction, DOMContentLoaded
+ * NOT always permitted (residual !1): BroadcastContentSize, GetScreenshot,
+ * CopyHtmlContent, GetDOMSnapshot, SetContent, GetFile, Storage*, ProxyFetch, …
  */
 export const OFFICIAL_ALWAYS_PERMITTED = new Set<string>([
   OFFICIAL_SANDBOX.ReadyForContent,
@@ -52,10 +84,6 @@ export const OFFICIAL_ALWAYS_PERMITTED = new Set<string>([
   OFFICIAL_SANDBOX.DownloadFile,
   OFFICIAL_SANDBOX.TrackInteraction,
   OFFICIAL_SANDBOX.DOMContentLoaded,
-  OFFICIAL_SANDBOX.BroadcastContentSize,
-  OFFICIAL_SANDBOX.GetScreenshot,
-  OFFICIAL_SANDBOX.CopyHtmlContent,
-  OFFICIAL_SANDBOX.GetDOMSnapshot,
 ]);
 
 /**
@@ -84,18 +112,12 @@ const RICH_TYPES = new Set<string>([
 /**
  * Residual b6e rich gate for Chat g6e path (this product slice):
  * Html | Svg | Mermaid | React only.
- * Residual isRichType also includes Pdf/Office/Csv — those stay out of this slice
- * (no invent local preview; do not treat every application/vnd.ant.* as g6e).
  */
 export function isOfficialRichSandboxType(type: string | undefined): boolean {
   if (!type) return false;
   return RICH_TYPES.has(type);
 }
 
-/**
- * Map artifact `type` strings from antArtifact / artifacts tool to residual xm.
- * Accepts full MIME or short residual aliases (html, react, mermaid, …).
- */
 export function normalizeOfficialArtifactType(
   type: string | undefined | null,
 ): OfficialXmType | string | undefined {
@@ -125,31 +147,50 @@ export function normalizeOfficialArtifactType(
   return aliases[lower] ?? raw;
 }
 
-/** Build residual g6e / eit iframe src query. */
+/**
+ * Build residual g6e / eit iframe src query.
+ * Product base = local /sandbox-runtime (frame.html).
+ * Residual remote used same query: domain + theme + parentOrigin [+ formattedSpreadsheets].
+ */
 export function buildOfficialSandboxIframeSrc(options?: {
   theme?: "dark" | "light";
   /** g6e sets formattedSpreadsheets=true; eit mermaid does not. */
   formattedSpreadsheets?: boolean;
   publishedArtifactUuid?: string;
 }): string {
-  const base = options?.publishedArtifactUuid
-    ? `${OFFICIAL_USER_CONTENT_RENDERER_URL}/artifact/${options.publishedArtifactUuid}`
-    : OFFICIAL_USER_CONTENT_RENDERER_URL;
+  if (typeof window === "undefined") {
+    return PRODUCT_LOCAL_SANDBOX_RUNTIME_PATH;
+  }
+
+  // Local frame path (product). published artifact UUID residual path is remote-only;
+  // product C-slice always paints via SetContent, not published UUID route.
+  const base = new URL(
+    PRODUCT_LOCAL_SANDBOX_RUNTIME_PATH,
+    window.location.origin,
+  ).href;
+
   const params = new URLSearchParams();
-  const domain =
-    typeof window !== "undefined" ? window.location.hostname : "";
-  params.set("domain", domain);
+  params.set("domain", window.location.hostname);
   if (options?.theme) {
     params.set("theme", options.theme);
   }
-  if (typeof window !== "undefined") {
-    params.set("parentOrigin", window.location.origin);
-  }
+  params.set("parentOrigin", window.location.origin);
   if (options?.formattedSpreadsheets) {
     params.set("formattedSpreadsheets", "true");
   }
+  // Keep residual query shape; local frame ignores unknown flags.
+  if (options?.publishedArtifactUuid) {
+    params.set("publishedArtifactUuid", options.publishedArtifactUuid);
+  }
   const qs = params.toString();
   return qs ? `${base}?${qs}` : base;
+}
+
+/** allowedOrigin for p6e — must match iframe contentWindow origin. */
+export function resolveOfficialSandboxAllowedOrigin(): string {
+  if (typeof window === "undefined") return "null";
+  // sandbox="allow-scripts allow-same-origin" → iframe origin = parent origin for same-origin src
+  return window.location.origin;
 }
 
 export function resolveOfficialTheme(): "dark" | "light" {

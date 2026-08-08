@@ -2,11 +2,11 @@
  * Official g6e RichSandbox (index-BELzQL5P.displayName="RichSandbox"):
  * iframe → ReadyForContent → SetContent({ content, type, tailwindStylesEnabled, @type SandboxContent })
  *
- * Host bridges (proxy / frame-ancestors / allowedParentOrigins) already cover
- * www.claudeusercontent.com under Vite; packaged app://localhost is residual-native.
+ * Product: iframe src = local `/sandbox-runtime/frame.html` (residual A4e/p6e).
+ * C-slice paint only (Html|Svg|Mermaid|React). Non-alwaysPermitted stay denied
+ * (no invent MCP modal / storage / completion / Excel-Pdf-Repl host).
  *
- * This slice: render path only. Non-alwaysPermitted capabilities stay denied
- * (no invent MCP modal / storage / completion host).
+ * Residual refresh re-appends the iframe node.
  */
 
 import {
@@ -24,7 +24,7 @@ import {
   OFFICIAL_EMPTY_PAYLOAD,
   OFFICIAL_SANDBOX,
   OFFICIAL_SANDBOX_CONTENT_TYPE,
-  OFFICIAL_USER_CONTENT_RENDERER_URL,
+  resolveOfficialSandboxAllowedOrigin,
 } from "./officialSandboxConstants";
 import { useOfficialSandboxCommunicator } from "./useOfficialSandboxCommunicator";
 
@@ -69,8 +69,10 @@ export const OfficialRichSandbox = memo(
     ) {
       const iframeRef = useRef<HTMLIFrameElement | null>(null);
       const [readyForContent, setReadyForContent] = useState(false);
-      const [iframeEpoch, setIframeEpoch] = useState(0);
+      // Residual refresh re-appends iframe; bump key so m6e rebinds p6e to the same element after src reset.
+      const [bindEpoch, setBindEpoch] = useState(0);
 
+      // Residual g6e: formattedSpreadsheets=true (+ optional errorReportingMode/routeHandlerPdf out of slice).
       const iframeSrc = useMemo(
         () =>
           buildOfficialSandboxIframeSrc({
@@ -81,7 +83,6 @@ export const OfficialRichSandbox = memo(
 
       const onCapabilityAction = useCallback(
         async (method: string) => {
-          // Residual g6e: ReadyForContent → set ready + onSandboxConfirmation
           if (method === OFFICIAL_SANDBOX.ReadyForContent) {
             setReadyForContent(true);
             onSandboxConfirmation?.();
@@ -92,7 +93,6 @@ export const OfficialRichSandbox = memo(
             return OFFICIAL_EMPTY_PAYLOAD;
           }
           if (method === OFFICIAL_SANDBOX.ReportError) {
-            // payload handled by communicator path; host may log
             return OFFICIAL_EMPTY_PAYLOAD;
           }
           return OFFICIAL_EMPTY_PAYLOAD;
@@ -100,36 +100,28 @@ export const OfficialRichSandbox = memo(
         [onDOMContentLoaded, onSandboxConfirmation],
       );
 
-      const { communicatorRef, restartListening } = useOfficialSandboxCommunicator({
+      const allowedOrigin = resolveOfficialSandboxAllowedOrigin();
+      const { sendRequest } = useOfficialSandboxCommunicator({
         iframeRef,
-        allowedOrigin: OFFICIAL_USER_CONTENT_RENDERER_URL,
+        allowedOrigin,
         onCapabilityAction,
-        bindKey: `${iframeSrc}#${iframeEpoch}`,
-        // g6e residual has no hard SetContent timeout; keep 30s safety for hung handshake
-        requestTimeoutMs: 30_000,
+        bindKey: `${iframeSrc}#${bindEpoch}`,
+        requestTimeoutMs: 0,
       });
 
-      const onIframeLoad = useCallback(() => {
-        if (!restartListening()) {
-          setIframeEpoch((n) => n + 1);
-        }
-      }, [restartListening]);
-
-      // Residual g6e: when ready + content + type → SetContent
+      // Residual g6e: when ready + content + type → SetContent (fire-and-forget; product keeps error callback).
       useEffect(() => {
-        if (!readyForContent || content == null || !type) return;
-        const communicator = communicatorRef.current;
-        if (!communicator) return;
+        if (!readyForContent || !sendRequest || content == null || !type) return;
         let cancelled = false;
         void (async () => {
           try {
-            await communicator.sendRequest(OFFICIAL_SANDBOX.SetContent, {
+            onSetContent?.();
+            await sendRequest(OFFICIAL_SANDBOX.SetContent, {
               "@type": OFFICIAL_SANDBOX_CONTENT_TYPE,
               content,
               type,
               tailwindStylesEnabled,
             });
-            if (!cancelled) onSetContent?.();
           } catch (error) {
             if (!cancelled) onReportError?.(error);
           }
@@ -138,11 +130,11 @@ export const OfficialRichSandbox = memo(
           cancelled = true;
         };
       }, [
-        communicatorRef,
         content,
         onReportError,
         onSetContent,
         readyForContent,
+        sendRequest,
         tailwindStylesEnabled,
         type,
       ]);
@@ -151,17 +143,33 @@ export const OfficialRichSandbox = memo(
         ref,
         () => ({
           refresh: () => {
+            // Residual g6e.refresh: clear ready, re-append iframe with same src.
             onRefresh?.();
             setReadyForContent(false);
-            setIframeEpoch((n) => n + 1);
+            const iframe = iframeRef.current;
+            if (iframe) {
+              const parent = iframe.parentNode;
+              if (parent) {
+                parent.removeChild(iframe);
+                iframe.removeAttribute("src");
+                iframe.sandbox.value = "allow-scripts allow-same-origin";
+                iframe.setAttribute("data-no-service-worker", "true");
+                iframe.setAttribute("referrerpolicy", "no-referrer");
+                iframe.src = iframeSrc;
+                parent.appendChild(iframe);
+              } else {
+                iframe.src = iframeSrc;
+              }
+            }
+            setBindEpoch((n) => n + 1);
           },
         }),
-        [onRefresh],
+        [iframeSrc, onRefresh],
       );
 
       const iframeTitle = title || "Claude content";
 
-      // Residual g6e return: relative + iframe full size + loading overlay until ready.
+      // Residual g6e return: relative + iframe full size + overlay until ready.
       return (
         <div
           className={className ? `relative ${className}` : "relative"}
@@ -170,14 +178,13 @@ export const OfficialRichSandbox = memo(
           <iframe
             ref={iframeRef}
             className="h-full w-full"
-            style={{ zoom, border: "none" }}
+            style={{ zoom }}
             sandbox="allow-scripts allow-same-origin"
             title={iframeTitle}
             loading={lazy ? "lazy" : undefined}
             src={iframeSrc}
             allow="fullscreen; clipboard-write"
             referrerPolicy="no-referrer"
-            onLoad={onIframeLoad}
           />
           {!readyForContent ? (
             <div className="bg-bg-000 absolute inset-0 z-10" aria-hidden />

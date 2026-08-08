@@ -1,6 +1,10 @@
 /**
  * Official p6e communicator (index-BELzQL5P) for claudeusercontent sandbox.
  * Shared by eit MermaidIframe and g6e RichSandbox.
+ *
+ * Residual anchors:
+ *   class p6e — MessageChannel handshake, rate limit 30/5s, contentWindow sendRequest
+ *   m6e hook constructs p6e after iframe ref ready
  */
 
 import {
@@ -15,8 +19,9 @@ export type OfficialSandboxCapabilityHandler = (
 ) => Promise<unknown>;
 
 /**
- * Minimal official p6e:
+ * Residual p6e:
  * handshake port transfer + request/response over iframe postMessage / MessageChannel.
+ * Rate limit: MAX_MESSAGES_PER_INTERVAL=30, RESET_INTERVAL=5000.
  */
 export class OfficialSandboxCommunicator {
   private iframe: HTMLIFrameElement;
@@ -27,26 +32,40 @@ export class OfficialSandboxCommunicator {
     string,
     { resolve: (payload: unknown) => void; reject: (error: Error) => void }
   >();
+  /** Residual requestLog is Map; product keeps Set of requestIds for dup detect. */
   private requestLog = new Set<string>();
   private onCapabilityAction: OfficialSandboxCapabilityHandler;
   private boundHandleWindowMessage: (event: MessageEvent) => void;
   private boundHandlePortMessage: (event: MessageEvent) => void;
   private messageQueue: Array<Record<string, unknown>> = [];
   private isConsumerRunning = false;
-  /** Product safety: reject hang when sandbox never answers (mermaid residual string). */
+  /**
+   * Residual p6e.sendRequest has no hang timeout.
+   * 0 = disabled (default). Non-zero is product-only hang guard.
+   */
   private requestTimeoutMs: number;
+
+  // Residual p6e rate limit
+  private messageCount = 0;
+  private lastResetTime = Date.now();
+  private readonly MAX_MESSAGES_PER_INTERVAL = 30;
+  private readonly RESET_INTERVAL = 5_000;
+  private onRateLimited: (() => void) | null;
 
   constructor(args: {
     iframe: HTMLIFrameElement;
     allowedOrigin: string;
     onCapabilityAction: OfficialSandboxCapabilityHandler;
-    /** Default 20s for mermaid eit; g6e can pass 0 to disable. */
+    /** Residual default: 0 (no timeout). */
     requestTimeoutMs?: number;
+    /** Residual p6e onRateLimited (g6e “I’m still here” path). */
+    onRateLimited?: (() => void) | null;
   }) {
     this.iframe = args.iframe;
     this.allowedOrigin = args.allowedOrigin;
     this.onCapabilityAction = args.onCapabilityAction;
-    this.requestTimeoutMs = args.requestTimeoutMs ?? 20_000;
+    this.requestTimeoutMs = args.requestTimeoutMs ?? 0;
+    this.onRateLimited = args.onRateLimited ?? null;
     this.boundHandleWindowMessage = this.handleWindowMessage.bind(this);
     this.boundHandlePortMessage = this.handlePortMessage.bind(this);
     window.addEventListener("message", this.boundHandleWindowMessage, false);
@@ -59,6 +78,47 @@ export class OfficialSandboxCommunicator {
   private setupMessageChannel() {
     this.messageChannel = new MessageChannel();
     this.messageChannel.port1.onmessage = this.boundHandlePortMessage;
+  }
+
+  /** Residual p6e: tick rate limit; return true if over limit (caller should stop). */
+  private hitRateLimit(requestId?: string, viaPort?: boolean): boolean {
+    const now = Date.now();
+    if (now - this.lastResetTime > this.RESET_INTERVAL) {
+      this.messageCount = 0;
+      this.lastResetTime = now;
+    }
+    this.messageCount++;
+    if (this.messageCount <= this.MAX_MESSAGES_PER_INTERVAL) return false;
+
+    if (requestId) {
+      const payload = {
+        "@type":
+          "type.googleapis.com/anthropic.claude.usercontent.ErrorResponse",
+        error: "Message rate limit exceeded. Reload to continue.",
+      };
+      if (viaPort && this.messageChannel) {
+        try {
+          this.messageChannel.port1.postMessage({
+            channel: "response",
+            status: 429,
+            requestId,
+            payload,
+          });
+        } catch {
+          /* ignore */
+        }
+      } else {
+        this.postResponse(requestId, 429, payload);
+      }
+    }
+    try {
+      this.messageChannel?.port1.close();
+    } catch {
+      /* ignore */
+    }
+    window.removeEventListener("message", this.boundHandleWindowMessage);
+    this.onRateLimited?.();
+    return true;
   }
 
   /** Official p6e.sendHandshakeWithPort residual. */
@@ -80,7 +140,7 @@ export class OfficialSandboxCommunicator {
     }
   }
 
-  /** Official p6e.restartListening residual (after iframe load). */
+  /** Official p6e.restartListening residual (after iframe load / rate-limit recovery). */
   restartListening() {
     window.removeEventListener("message", this.boundHandleWindowMessage);
     this.messageChannel?.port1.close();
@@ -89,6 +149,8 @@ export class OfficialSandboxCommunicator {
     this.messageQueue = [];
     this.isConsumerRunning = false;
     this.requestLog.clear();
+    this.messageCount = 0;
+    this.lastResetTime = Date.now();
     window.addEventListener("message", this.boundHandleWindowMessage, false);
     this.setupMessageChannel();
     if (this.iframe.contentWindow && this.allowedOrigin) {
@@ -108,10 +170,31 @@ export class OfficialSandboxCommunicator {
       this.sendHandshakeWithPort();
       return;
     }
+
+    // Residual applies rate limit on window messages too
+    const envelope = data as { channel?: string; requestId?: string } | null;
+    const rid =
+      envelope &&
+      typeof envelope === "object" &&
+      envelope.channel === "request" &&
+      typeof envelope.requestId === "string"
+        ? envelope.requestId
+        : undefined;
+    if (this.hitRateLimit(rid, false)) return;
+
     this.routeEnvelope(data);
   }
 
   private handlePortMessage(event: MessageEvent) {
+    const data = event.data as { channel?: string; requestId?: string } | null;
+    const rid =
+      data &&
+      typeof data === "object" &&
+      data.channel === "request" &&
+      typeof data.requestId === "string"
+        ? data.requestId
+        : undefined;
+    if (this.hitRateLimit(rid, true)) return;
     this.routeEnvelope(event.data);
   }
 
@@ -149,7 +232,7 @@ export class OfficialSandboxCommunicator {
   }
 
   /**
-   * Official p6e.consumeMessages residual (simplified):
+   * Official p6e.consumeMessages residual (C-slice simplified):
    * always-permitted gate → onCapabilityAction → response to iframe contentWindow.
    */
   private async consumeMessages() {
@@ -208,7 +291,7 @@ export class OfficialSandboxCommunicator {
     this.iframe.contentWindow?.postMessage(response, this.allowedOrigin);
   }
 
-  /** Official p6e.sendRequest residual. */
+  /** Official p6e.sendRequest residual (no timeout in residual). */
   sendRequest(method: string, payload: unknown): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const requestId = Date.now().toString();
@@ -219,6 +302,7 @@ export class OfficialSandboxCommunicator {
         requestId,
         payload,
       };
+      // Residual: always contentWindow.postMessage (not port)
       this.iframe.contentWindow?.postMessage(request, this.allowedOrigin);
       if (this.requestTimeoutMs > 0) {
         window.setTimeout(() => {
@@ -239,5 +323,6 @@ export class OfficialSandboxCommunicator {
     this.messageQueue = [];
     this.isConsumerRunning = false;
     this.requestLog.clear();
+    this.messageCount = 0;
   }
 }

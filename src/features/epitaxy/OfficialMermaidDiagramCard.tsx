@@ -1,17 +1,11 @@
 /**
- * Official code-markdown mermaid block:
- *   index-BELzQL5P `hit` → language === "mermaid" → `eit` MermaidIframe
- *   c5f4e1303 `zL.Mermaid` = "application/vnd.ant.mermaid"
- *   sandbox URL: userContentRendererUrl = "https://www.claudeusercontent.com"
- *   handshake: p6e MessageChannel (`__sandbox_handshake__`) + m6e sendRequest
- *   capability: ReadyForContent → SetContent(SandboxContent { content, type: xm.Mermaid })
+ * Official code-markdown mermaid block (index-BELzQL5P):
+ *   hit → language === "mermaid" → eit MermaidIframe
+ *   eit: ReadyForContent → SetContent(SandboxContent { content, type: xm.Mermaid })
+ *   iframe height 600px; error chrome "Unable to render diagram."
  *
- * Communicator shared with g6e via ./sandbox/* — eit chrome stays residual-local.
- *
- * Host notes (product, not residual invent of UI):
- *   - Packaged SPA origin is app://localhost (in sandbox frame-ancestors).
- *   - Dev MAIN_VIEW http://127.0.0.1:5176 needs desktop
- *     artifactSandboxFrameAncestorBridge + bag proxy for egress.
+ * Residual hit wraps eit in `div.mb-2` — callers must wrap; eit itself has no mb-2.
+ * Product iframe src: local `/sandbox-runtime/frame.html` (residual protocol + 3817/65255 UI).
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,14 +14,17 @@ import {
   OFFICIAL_EMPTY_PAYLOAD,
   OFFICIAL_SANDBOX,
   OFFICIAL_SANDBOX_CONTENT_TYPE,
-  OFFICIAL_USER_CONTENT_RENDERER_URL,
   OFFICIAL_XM,
+  resolveOfficialSandboxAllowedOrigin,
   resolveOfficialTheme,
 } from "./sandbox/officialSandboxConstants";
 import { useOfficialSandboxCommunicator } from "./sandbox/useOfficialSandboxCommunicator";
 
+/**
+ * Residual hit: /language-(\w+)/ → n === "mermaid" only.
+ * Product also accepts bare "mermaid" / "mmd" from fence lang without language- prefix.
+ */
 function isMermaidLanguage(language?: string) {
-  // Official hit only checks language-mermaid; mmd also maps to xm.Mermaid via HL/VL.
   const lang = language?.trim().toLowerCase() ?? "";
   return lang === "mermaid" || lang === "mmd";
 }
@@ -37,26 +34,27 @@ export function isOfficialMermaidMarkdownLanguage(language?: string) {
 }
 
 /**
- * Official eit MermaidIframe (index-BELzQL5P):
- * iframe → ReadyForContent → SetContent(type: application/vnd.ant.mermaid)
- * error path: border card + "Unable to render diagram." + <pre> source
- *
- * Official m6e waits for iframeRef (retry up to 20 × 500ms) then constructs p6e.
+ * Official eit MermaidIframe (index-BELzQL5P, displayName="MermaidIframe"):
+ *   loading i=true; ready l=false; error u=null
+ *   m6e sendRequest g — effect if (!l || !g || !e) return; SetContent; catch → error chrome
+ *   No source remount / iframeEpoch invent; error unmounts iframe (sticky until parent remount).
+ *   No onLoad invent; m6e binds p6e after iframe ref (retry 20×500ms).
  */
-export function OfficialMermaidDiagramCard({
+function OfficialMermaidDiagramCardImpl({
   source,
 }: {
   source: string;
+  /** Product fence prop; residual eit ignores streaming for paint. */
   isStreaming?: boolean;
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [readyForContent, setReadyForContent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [iframeEpoch, setIframeEpoch] = useState(0);
   const theme = resolveOfficialTheme();
   const backgroundColor = theme === "dark" ? "#1f1e1d" : "#f5f4ef";
 
+  // Residual eit: domain + theme + parentOrigin only (no formattedSpreadsheets).
   const iframeSrc = useMemo(
     () =>
       buildOfficialSandboxIframeSrc({
@@ -65,8 +63,8 @@ export function OfficialMermaidDiagramCard({
     [theme],
   );
 
+  // Residual eit: (e) => e.method === ReadyForContent ? (d(!0), Promise.resolve(void 0)) : Promise.resolve(void 0)
   const onCapabilityAction = useCallback(async (method: string) => {
-    // Official eit: (e) => e.method === ReadyForContent → set ready
     if (method === OFFICIAL_SANDBOX.ReadyForContent) {
       setReadyForContent(true);
       return OFFICIAL_EMPTY_PAYLOAD;
@@ -74,33 +72,25 @@ export function OfficialMermaidDiagramCard({
     return OFFICIAL_EMPTY_PAYLOAD;
   }, []);
 
-  const { communicatorRef, restartListening } = useOfficialSandboxCommunicator({
+  // Residual m6e: sendRequest is undefined until p6e constructed; no invent timeout on p6e.sendRequest.
+  const allowedOrigin = resolveOfficialSandboxAllowedOrigin();
+  const { sendRequest } = useOfficialSandboxCommunicator({
     iframeRef,
-    allowedOrigin: OFFICIAL_USER_CONTENT_RENDERER_URL,
+    allowedOrigin,
     onCapabilityAction,
-    bindKey: `${iframeSrc}#${iframeEpoch}`,
-    requestTimeoutMs: 20_000,
+    bindKey: iframeSrc,
+    requestTimeoutMs: 0,
   });
 
-  // Residual: re-handshake after iframe finishes loading.
-  const onIframeLoad = useCallback(() => {
-    if (!restartListening()) {
-      setIframeEpoch((n) => n + 1);
-      return;
-    }
-  }, [restartListening]);
-
-  // Official eit effect: when ready + sendRequest + content → SetContent(type: xm.Mermaid).
+  // Residual eit effect: [l, g, e] — ready + sendRequest + content.
   useEffect(() => {
-    if (!readyForContent || !source.trim()) return;
-    const communicator = communicatorRef.current;
-    if (!communicator) return;
+    if (!readyForContent || !sendRequest || !source) return;
     let cancelled = false;
     void (async () => {
       try {
         setLoading(true);
         setError(null);
-        await communicator.sendRequest(OFFICIAL_SANDBOX.SetContent, {
+        await sendRequest(OFFICIAL_SANDBOX.SetContent, {
           "@type": OFFICIAL_SANDBOX_CONTENT_TYPE,
           content: source,
           type: OFFICIAL_XM.Mermaid,
@@ -116,22 +106,13 @@ export function OfficialMermaidDiagramCard({
     return () => {
       cancelled = true;
     };
-  }, [communicatorRef, readyForContent, source]);
+  }, [readyForContent, sendRequest, source]);
 
-  // When source changes after a prior error, clear error so residual iframe path
-  // can remount (error branch unmounts iframe — same as official eit).
-  useEffect(() => {
-    setError(null);
-    setReadyForContent(false);
-    setLoading(true);
-    setIframeEpoch((n) => n + 1);
-  }, [source]);
-
-  // Official eit error chrome.
+  // Residual eit error chrome (no mb-2 — hit wrapper owns spacing).
   if (error) {
     return (
       <div
-        className="mb-2 p-4 rounded border border-border-300"
+        className="p-4 rounded border border-border-300"
         style={{ backgroundColor }}
         data-official-source="index-BELzQL5P.js:eit"
       >
@@ -143,10 +124,10 @@ export function OfficialMermaidDiagramCard({
     );
   }
 
-  // Official eit body: relative min-h-[100px] rounded + spinner overlay + iframe height 600px.
+  // Residual eit body: relative min-h-[100px] rounded + spinner + iframe height 600px.
   return (
     <div
-      className="mb-2 relative min-h-[100px] rounded"
+      className="relative min-h-[100px] rounded"
       style={{ backgroundColor }}
       data-official-source="index-BELzQL5P.js:eit MermaidIframe"
     >
@@ -170,10 +151,29 @@ export function OfficialMermaidDiagramCard({
         title="Mermaid diagram"
         referrerPolicy="no-referrer"
         allow="fullscreen; clipboard-write"
-        onLoad={onIframeLoad}
       />
     </div>
   );
 }
 
-export const OfficialMermaidIframe = memo(OfficialMermaidDiagramCard);
+/** Residual eit = memo(MermaidIframe). */
+export const OfficialMermaidDiagramCard = memo(OfficialMermaidDiagramCardImpl);
+export const OfficialMermaidIframe = OfficialMermaidDiagramCard;
+
+/**
+ * Residual hit mermaid branch: div.mb-2 > eit.
+ * Use at markdown fence call sites so eit chrome stays residual-exact.
+ */
+export function OfficialMermaidHit({
+  source,
+  isStreaming,
+}: {
+  source: string;
+  isStreaming?: boolean;
+}) {
+  return (
+    <div className="mb-2" data-official-source="index-BELzQL5P.js:hit mermaid">
+      <OfficialMermaidDiagramCard source={source} isStreaming={isStreaming} />
+    </div>
+  );
+}

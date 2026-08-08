@@ -429,7 +429,11 @@ function officialChapterTitleFromText(text: string) {
   return firstLine.length > 40 ? `${title}…` : title || "Chapter";
 }
 
-/** Residual c119 Wb — product rows currently only assistant/user/running-tasks/loader. */
+/**
+ * Residual c119 Wb (c11959232):
+ *   assistant 400 | init/pool 200 | user 80 | chapter/running-tasks/loader 48
+ * Product rows: assistant/user/running-tasks/loader only (no invent mermaid estimate).
+ */
 function estimateTranscriptRowSize(row: TranscriptRow) {
   switch (row.kind) {
     case "assistant":
@@ -508,32 +512,28 @@ function useOfficialTranscriptVirtualizer<TItem>({
   const estimateSizeRef = useRef(estimateSize);
   estimateSizeRef.current = estimateSize;
 
-  // Official Fu refs: last observed scroll / total, last programmatic top, restore target index, missing anchor.
-  const lastObservedScrollTopRef = useRef(0);
-  const lastObservedTotalSizeRef = useRef(0);
-  const lastProgrammaticScrollTopRef = useRef(-1);
-  const restoreTargetIndexRef = useRef<number | null>(null);
-  const pendingMissingAnchorKeyRef = useRef<string | null>(null);
-  const didInitRestoreRef = useRef(false);
-  const lastItemCountForMissingRef = useRef(0);
-  // Residual ve: mid-scroll size compensation (I/z) so content does not jump under the finger.
-  const midScrollShiftPxRef = useRef(0);
-  const skipNextPrependAdjustRef = useRef(false);
-  const firstItemKeyRef = useRef<string | null>(null);
-  const lastTotalSizeForPrependRef = useRef(0);
-  const paddingStartRef = useRef(paddingStart ?? 0);
-  const prependAdjustedThisPassRef = useRef(false);
+  // Residual ve refs (c3d5): w/E/R/T/C/M/z — names below keep product clarity.
+  const lastObservedScrollTopRef = useRef(0); // w
+  const lastObservedTotalSizeRef = useRef(0); // E
+  const lastProgrammaticScrollTopRef = useRef(-1); // R
+  const restoreTargetIndexRef = useRef<number | null>(null); // T
+  const pendingMissingAnchorKeyRef = useRef<string | null>(null); // C
+  const didInitRestoreRef = useRef(false); // O
+  const lastItemCountForMissingRef = useRef(0); // _
+  const midScrollShiftPxRef = useRef(0); // z
+  const skipNextPrependAdjustRef = useRef(false); // M
+  const firstItemKeyRef = useRef<string | null>(null); // F
+  const lastTotalSizeForPrependRef = useRef(0); // L
+  const paddingStartRef = useRef(paddingStart ?? 0); // $
+  const prependAdjustedThisPassRef = useRef(false); // A
 
+  // Residual ve x: pinned → sum(estimate)+padding; else 0 (restore anchor path sets later).
   const initialOffsetRef = useRef<number | undefined>(undefined);
   if (initialOffsetRef.current === undefined) {
-    const restored = restoreRef.current;
     if (pinnedRef.current) {
       initialOffsetRef.current = (paddingStart ?? 0)
         + items.reduce((total, item, index) => total + estimateSize(item, index), 0)
         + (paddingEnd ?? 0);
-    } else if (restored?.anchorKey && restored.measurements?.length) {
-      const anchor = restored.measurements.find((item) => String(item.key) === restored.anchorKey);
-      initialOffsetRef.current = anchor ? Math.max(0, anchor.start + (restored.anchorOffsetPx ?? 0)) : 0;
     } else {
       initialOffsetRef.current = 0;
     }
@@ -551,30 +551,23 @@ function useOfficialTranscriptVirtualizer<TItem>({
     paddingStart,
     useFlushSync,
   });
-  // Official Fu assigns this on the instance (not as a useVirtualizer option).
+  // Residual: S.shouldAdjustScrollPositionOnItemSizeChange = (e,t,n) => !p.current && e.end <= (n.scrollOffset??0)
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => (
     !pinnedRef.current && item.end <= (instance.scrollOffset ?? 0)
   );
 
   const virtualizerRef = useRef(virtualizer);
   virtualizerRef.current = virtualizer;
-  const totalSize = virtualizer.getTotalSize();
-  const viewportHeight = virtualizer.scrollRect?.height ?? 0;
-  const isScrolling = virtualizer.isScrolling;
-  // Official sizerHeight: max(totalSize, viewport) so short transcripts still fill and pin-to-bottom works.
+  const totalSize = virtualizer.getTotalSize(); // k
+  const viewportHeight = virtualizer.scrollRect?.height ?? 0; // H
+  const isScrolling = virtualizer.isScrolling; // N
+  // Residual: sizerHeight: Math.max(k, H) — no invent floor.
   const sizerHeight = Math.max(totalSize, viewportHeight);
 
-  const applySizerHeight = useCallback((size: number) => {
-    const sizer = sizerRef.current;
-    if (!sizer) return;
-    const height = virtualizerRef.current.scrollRect?.height ?? 0;
-    sizer.style.height = `${Math.max(size, height)}px`;
-  }, []);
-
+  // Residual I: mid-scroll size compensation via sizer translateY.
   const applyScrollDelta = useCallback((delta: number, node: HTMLElement) => {
     const vz = virtualizerRef.current;
     if (vz.isScrolling) {
-      // Residual I: while user is scrolling, shift sizer via translateY instead of scrollTop.
       midScrollShiftPxRef.current += delta;
       const sizer = sizerRef.current;
       if (sizer) sizer.style.transform = `translateY(${-midScrollShiftPxRef.current}px)`;
@@ -584,6 +577,7 @@ function useOfficialTranscriptVirtualizer<TItem>({
     }
   }, []);
 
+  // Residual t(e) inside pin layout: resolve anchor key → T index, unpin, skip prepend once.
   const tryRestoreAnchorKey = useCallback((anchorKey: string) => {
     const index = itemsRef.current.findIndex((item) => getKeyRef.current(item) === anchorKey);
     if (index < 0) return false;
@@ -594,35 +588,30 @@ function useOfficialTranscriptVirtualizer<TItem>({
     return true;
   }, []);
 
-  // Official Fu scroll handler: direction vs content shrink decides pin — never distance-from-bottom alone.
-  // Residual P: effective scrollTop includes mid-scroll translate compensation (z).
-  useEffect(() => {
-    const node = scrollRef.current;
-    if (!node) return undefined;
-    const onScroll = () => {
-      const vz = virtualizerRef.current;
-      const nextTotal = vz.getTotalSize();
-      const scrollTop = node.scrollTop + midScrollShiftPxRef.current;
-      const deltaUp = lastObservedScrollTopRef.current - scrollTop;
-      const shrinkAllowance = Math.max(0, lastObservedTotalSizeRef.current - nextTotal);
-      lastObservedScrollTopRef.current = scrollTop;
-      lastObservedTotalSizeRef.current = nextTotal;
-      if (Math.abs(deltaUp) > shrinkAllowance + 8) {
-        restoreTargetIndexRef.current = null;
-        pendingMissingAnchorKeyRef.current = null;
-      }
-      const scrollingUp = deltaUp > shrinkAllowance + 1;
-      const distanceFromBottom = nextTotal - scrollTop - node.clientHeight;
-      if (distanceFromBottom < 8 && !scrollingUp) pinnedRef.current = true;
-      else if (scrollingUp) pinnedRef.current = false;
-    };
-    node.addEventListener("scroll", onScroll, { passive: true });
-    return () => node.removeEventListener("scroll", onScroll);
+  // Residual P: scroll direction vs content shrink decides pin.
+  const onScrollPin = useCallback((node: HTMLElement) => {
+    const vz = virtualizerRef.current;
+    const nextTotal = vz.getTotalSize();
+    const scrollTop = node.scrollTop + midScrollShiftPxRef.current;
+    const deltaUp = lastObservedScrollTopRef.current - scrollTop;
+    const shrinkAllowance = Math.max(0, lastObservedTotalSizeRef.current - nextTotal);
+    lastObservedScrollTopRef.current = scrollTop;
+    lastObservedTotalSizeRef.current = nextTotal;
+    if (Math.abs(deltaUp) > shrinkAllowance + 8) {
+      restoreTargetIndexRef.current = null;
+      pendingMissingAnchorKeyRef.current = null;
+    }
+    const scrollingUp = deltaUp > shrinkAllowance + 1;
+    // Residual P: distanceFromBottom < 8 && !scrollingUp → pin; scrollingUp → unpin.
+    // Code Gb Fu call has no onNearTop — residual y.current is undefined there too.
+    if (nextTotal - scrollTop - node.clientHeight < 8 && !scrollingUp) pinnedRef.current = true;
+    else if (scrollingUp) pinnedRef.current = false;
   }, []);
 
-  // Official Fu layout: restore anchor once, else while pinned stick to totalSize (skip if user is mid-scroll).
-  // Residual only writes sizer height on pin/restore paths (plus React style={{height:sizerHeight}}).
+  // Residual pin layout (c3d5 ve useLayoutEffect [h,k,N,P,S]):
+  // restore anchor once; while pinned: if(N && scrollTop !== R) return; else sizer + scrollTop=total.
   useLayoutEffect(() => {
+    skipNextPrependAdjustRef.current = false;
     if (itemCount === 0) return;
     const vz = virtualizerRef.current;
     const node = scrollRef.current;
@@ -637,7 +626,6 @@ function useOfficialTranscriptVirtualizer<TItem>({
         } else {
           pendingMissingAnchorKeyRef.current = anchorKey;
           lastItemCountForMissingRef.current = itemCount;
-          // Official falls back to pin until the missing anchor appears.
           pinnedRef.current = true;
         }
       }
@@ -650,7 +638,7 @@ function useOfficialTranscriptVirtualizer<TItem>({
     }
 
     if (restoreTargetIndexRef.current !== null && node) {
-      // Residual ve: if(N && e.scrollTop !== R.current) return
+      // Residual: if(N && e.scrollTop !== R.current) return
       if (isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
       const targetItem = vz.measurementsCache[restoreTargetIndexRef.current];
       if (targetItem) {
@@ -661,7 +649,11 @@ function useOfficialTranscriptVirtualizer<TItem>({
           restoreTargetIndexRef.current = null;
           return;
         }
-        applySizerHeight(liveTotal);
+        const sizer = sizerRef.current;
+        if (sizer) {
+          const height = vz.scrollRect?.height ?? 0;
+          sizer.style.height = `${Math.max(liveTotal, height)}px`;
+        }
         node.scrollTop = targetTop;
         lastProgrammaticScrollTopRef.current = node.scrollTop;
         lastObservedScrollTopRef.current = node.scrollTop;
@@ -671,20 +663,20 @@ function useOfficialTranscriptVirtualizer<TItem>({
     }
 
     if (!pinnedRef.current || !node) return;
-    // Residual ve (c3d5): if(N && e.scrollTop !== R.current) return
-    // R starts at -1; while isScrolling and scrollTop is any real value, residual skips.
-    // First pin requires isScrolling=false (or scrollTop still === R after a prior pin).
+    // Residual: if(N && e.scrollTop !== R.current) return
     if (isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
-
-    // Residual: sizer height then e.scrollTop = n (n = getTotalSize()). Browser clamps.
-    applySizerHeight(liveTotal);
+    const sizer = sizerRef.current;
+    if (sizer) {
+      const height = vz.scrollRect?.height ?? 0;
+      sizer.style.height = `${Math.max(liveTotal, height)}px`;
+    }
     node.scrollTop = liveTotal;
     lastProgrammaticScrollTopRef.current = node.scrollTop;
     lastObservedScrollTopRef.current = node.scrollTop;
     lastObservedTotalSizeRef.current = liveTotal;
-  }, [applySizerHeight, isScrolling, itemCount, totalSize, tryRestoreAnchorKey]);
+  }, [isScrolling, itemCount, totalSize, tryRestoreAnchorKey, virtualizer]);
 
-  // Residual ve: when list head key changes (prepend / history union), adjust scroll by totalSize delta.
+  // Residual prepend layout: head key change → I(delta) when unpinned.
   useLayoutEffect(() => {
     const firstKey = itemCount > 0 ? getKeyRef.current(itemsRef.current[0]) : null;
     const previousFirstKey = firstItemKeyRef.current;
@@ -694,10 +686,8 @@ function useOfficialTranscriptVirtualizer<TItem>({
     prependAdjustedThisPassRef.current = false;
     if (previousFirstKey === null || firstKey === previousFirstKey) return;
     if (pinnedRef.current) return;
-    if (skipNextPrependAdjustRef.current) {
-      skipNextPrependAdjustRef.current = false;
-      return;
-    }
+    // Residual M: skip once after anchor restore (cleared at next pin layout start).
+    if (skipNextPrependAdjustRef.current) return;
     if (restoreTargetIndexRef.current !== null) {
       const previousIndex = itemsRef.current.findIndex((item) => getKeyRef.current(item) === previousFirstKey);
       if (previousIndex > 0) restoreTargetIndexRef.current += previousIndex;
@@ -710,7 +700,7 @@ function useOfficialTranscriptVirtualizer<TItem>({
     }
   }, [applyScrollDelta, itemCount, totalSize]);
 
-  // Residual ve: paddingStart changes shift unpinned scroll.
+  // Residual paddingStart layout.
   useLayoutEffect(() => {
     const previous = paddingStartRef.current;
     const next = paddingStart ?? 0;
@@ -723,7 +713,7 @@ function useOfficialTranscriptVirtualizer<TItem>({
     if (node) applyScrollDelta(next - previous, node);
   }, [applyScrollDelta, paddingStart]);
 
-  // Residual ve: flush mid-scroll translateY into scrollTop when scroll ends.
+  // Residual: flush mid-scroll translateY when isScrolling ends.
   useLayoutEffect(() => {
     if (isScrolling) return;
     const shift = midScrollShiftPxRef.current;
@@ -737,14 +727,16 @@ function useOfficialTranscriptVirtualizer<TItem>({
     lastObservedScrollTopRef.current = node.scrollTop;
   }, [isScrolling]);
 
-  // Residual ve/Fu: sizer height is React style={{ height: sizerHeight }} plus
-  // imperative writes only on pin / restore / measureElement RO paths.
-  // Do NOT invent a layout effect that always assigns sizer.style.height from
-  // render sizerHeight — it can run after pin/RO and overwrite a fresher
-  // getTotalSize()-based height, causing a one-frame collapse then re-pin
-  // (「被撑开往下掉了一下」).
+  // Residual scroll listener → P.
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return undefined;
+    const onScroll = () => onScrollPin(node);
+    node.addEventListener("scroll", onScroll, { passive: true });
+    return () => node.removeEventListener("scroll", onScroll);
+  }, [onScrollPin]);
 
-  // Official Fu unmount save: isPinned + anchor + measurements for session switch restore.
+  // Residual unmount save (restoreKey path; Code Gb does not pass restoreKey).
   const restoreKeyRef = useRef(restoreKey);
   restoreKeyRef.current = restoreKey;
   useEffect(() => () => {
@@ -756,7 +748,7 @@ function useOfficialTranscriptVirtualizer<TItem>({
     }
     const vz = virtualizerRef.current;
     const shift = midScrollShiftPxRef.current;
-    const scrollOffset = (scrollRef.current?.scrollTop ?? vz.scrollOffset ?? 0) + shift;
+    const scrollOffset = (vz.scrollOffset ?? 0) + shift;
     const measurements = vz.measurementsCache;
     const anchor = measurements.find((item) => item.end > scrollOffset);
     officialTranscriptScrollRestores.set(key, {
@@ -767,10 +759,10 @@ function useOfficialTranscriptVirtualizer<TItem>({
     });
   }, []);
 
-  // Residual ve measureElement: always measure (c43 qs._measureElement) + RO re-pin on size change.
-  // Product @tanstack/virtual-core@3.14 skips resizeItem while isScrolling; residual qs does not.
-  // measureVirtualRowLikeResidual bridges that package delta so estimate→actual still updates
-  // during the isScrollingResetDelay window after initialOffset / pin scrollTop writes.
+  // Residual Q RO (c3d5): for each entry S.measureElement; if pinned && size changed → sizer + scrollTop.
+  // Residual gate: if(S.isScrolling && t.scrollTop !== R.current) return; if(r === E.current) return.
+  // Package-only bridge: residual c43 qs._measureElement has no isScrolling gate; product
+  // @tanstack/virtual-core@3.14 does — measureVirtualRowLikeResidual mirrors residual qs.
   const resizeObserveBag = useMemo(() => {
     if (typeof ResizeObserver === "undefined") return null;
     const observed = new Set<Element>();
@@ -784,7 +776,7 @@ function useOfficialTranscriptVirtualizer<TItem>({
       // Residual RO: if(S.isScrolling && t.scrollTop !== R.current) return
       if (vz.isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
       const nextTotal = vz.getTotalSize();
-      // Residual RO: if(r === E.current) return — no maxScroll invent restick
+      // Residual RO: if(r === E.current) return
       if (nextTotal === lastObservedTotalSizeRef.current) return;
       const height = vz.scrollRect?.height ?? 0;
       sizer.style.height = `${Math.max(nextTotal, height)}px`;
@@ -804,6 +796,7 @@ function useOfficialTranscriptVirtualizer<TItem>({
     return () => resizeObserveBag.ro.disconnect();
   }, [resizeObserveBag]);
 
+  // Residual B: S.measureElement(e) + observe; no re-pin here (RO owns re-pin).
   const measureElement = useCallback((node: HTMLElement | null) => {
     const vz = virtualizerRef.current;
     if (node) measureVirtualRowLikeResidual(vz, node);
@@ -824,13 +817,14 @@ function useOfficialTranscriptVirtualizer<TItem>({
     }
   }, [resizeObserveBag]);
 
+  // Residual W: unpin + clear T + scrollToIndex.
   const scrollToIndex = useCallback((index: number, align: "start" | "center" | "end" | "auto" = "start") => {
     pinnedRef.current = false;
     restoreTargetIndexRef.current = null;
     virtualizerRef.current.scrollToIndex(index, { align });
   }, []);
 
-  // Official setPinned: only flips the flag (and clears restore target when unpinning). Does NOT scroll.
+  // Residual V: setPinned only flips flag.
   const setPinned = useCallback((value: boolean) => {
     pinnedRef.current = value;
     if (!value) restoreTargetIndexRef.current = null;

@@ -34,7 +34,7 @@ import {
 } from "../cowork/session/transcript/AlluviumMarkdown";
 import { Icon } from "../../shell/icons";
 import { OfficialButton } from "./OfficialEpitaxyComponents";
-import { isOfficialMermaidMarkdownLanguage, OfficialMermaidDiagramCard } from "./OfficialMermaidDiagramCard";
+import { isOfficialMermaidMarkdownLanguage, OfficialMermaidHit } from "./OfficialMermaidDiagramCard";
 import { OfficialSearchTree, officialSearchTreeLanguage } from "./OfficialSearchTree";
 import {
   looksLikeOfficialLocalPathHref,
@@ -61,8 +61,9 @@ function renderOfficialCodeAlluviumFence(block: AlluviumFenceBlock) {
   if (lang === officialSearchTreeLanguage || block.lang === officialSearchTreeLanguage) {
     return <OfficialSearchTree content={block.code} />;
   }
+  // Residual hit: div.mb-2 > eit (OfficialMermaidHit).
   if (isOfficialMermaidMarkdownLanguage(lang)) {
-    return <OfficialMermaidDiagramCard source={block.code} />;
+    return <OfficialMermaidHit source={block.code} />;
   }
   return <OfficialAssistantCodeFence language={lang} text={block.code} />;
 }
@@ -247,9 +248,9 @@ function OfficialMarkdownPre({ children }: { children?: ReactNode }) {
     const lang = props.className
       ? parseLanguageClass(props.className)
       : "text";
-    // Product delta (index hit, not c119 mb): mermaid diagram card.
+    // Residual index hit (not c119 mb): mermaid → div.mb-2 > eit.
     if (isOfficialMermaidMarkdownLanguage(lang)) {
-      return <OfficialMermaidDiagramCard source={raw} />;
+      return <OfficialMermaidHit source={raw} />;
     }
     if (lang === officialSearchTreeLanguage) {
       return <OfficialSearchTree content={raw} />;

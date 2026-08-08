@@ -3,7 +3,7 @@ import type { Link, Parent, PhrasingContent, Root, RootContent } from "mdast";
 import { remark } from "remark";
 import {
   isOfficialMermaidMarkdownLanguage,
-  OfficialMermaidDiagramCard,
+  OfficialMermaidHit,
 } from "../../../epitaxy/OfficialMermaidDiagramCard";
 
 export type CoworkMarkdownCallbacks = {
@@ -108,13 +108,13 @@ function renderBlock(node: RootContent, key: string, context: RenderContext): Re
     return createElement(tag, { className, key, start: node.ordered ? node.start ?? undefined : undefined }, node.children.map((item, index) => <li className={context.profile === "assistant" ? "whitespace-normal break-words pl-2" : undefined} key={index}>{item.children.map((child, childIndex) => renderListChild(child, `${key}-${index}-${childIndex}`, context))}</li>));
   }
   if (node.type === "code") {
-    // Product delta (align Code hit→eit): assistant mermaid fences use OfficialMermaidDiagramCard.
+    // Align Code residual hit→eit: assistant mermaid fences use OfficialMermaidHit (mb-2 > eit).
     // Residual Cowork StandardMarkDown ye/AST is plain pre; progressive/fade path needs same inject.
     if (
       context.profile === "assistant"
       && isOfficialMermaidMarkdownLanguage(node.lang ?? undefined)
     ) {
-      return <OfficialMermaidDiagramCard key={key} source={node.value} />;
+      return <OfficialMermaidHit key={key} source={node.value} />;
     }
     return <pre className={node.lang ? `language-${node.lang}` : undefined} key={key}><code>{node.value}</code></pre>;
   }
