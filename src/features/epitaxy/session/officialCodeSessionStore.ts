@@ -96,7 +96,17 @@ function sessionWithLiveMeta(session: SessionSummary | null, liveMeta: OfficialL
   if (!session || !liveMeta) return session;
   const next = { ...session };
   if (liveMeta.permissionMode) next.permissionMode = liveMeta.permissionMode;
-  if (liveMeta.model) next.model = liveMeta.model;
+  // densable system/init (and root assistant) may report a resolved id that differs
+  // from bag/host selection (e.g. grok-4.5 → grok-4.5-build). Footer/composer seed
+  // from session.model — only gap-fill empty/default, never clobber user bag id.
+  // Same spirit as sessionForLoad model path + Mode init policy.
+  if (
+    liveMeta.model
+    && liveMeta.model !== "<synthetic>"
+    && (!session.model || session.model === "default")
+  ) {
+    next.model = liveMeta.model;
+  }
   return next;
 }
 
