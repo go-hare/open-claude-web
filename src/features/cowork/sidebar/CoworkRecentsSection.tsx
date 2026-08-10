@@ -158,12 +158,19 @@ function CoworkRecentSection({ frame, onAction, onNavigate, selectedSessionId, s
   const text = useShellText();
   const collapsed = frame.collapsedGroups.includes("recents");
   if (sessions.length === 0) return null;
-  // Official ca0135 Cl residual for non-code kinds:
-  //   group/section → ie(SidebarSectionHeader) trailing = Na("查看全部") when !collapsed && onViewAll
-  // Cap already applied in buildCoworkSidebarModel (R=20 for cowork).
+  /**
+   * Official ca0135 residual:
+   *   Ml wraps recents in `div.flex-1.min-h-[120px]` (no overflow-hidden)
+   *   Cl: `group/section flex flex-col gap-px` (NOT min-h-0 flex-1)
+   *     header ie + list in `contents` | `hidden`
+   * Parent `.dframe-nav-scroll` (FrameSidebar overflow-y-auto) scrolls the full stack.
+   * Product had invent `overflow-hidden` + section `min-h-0 flex-1` → list clipped,
+   * scrollHeight===clientHeight, wheel no-op.
+   * Cap already applied in buildCoworkSidebarModel (R=20 for cowork).
+   */
   return (
-    <section className="group/section flex min-h-0 flex-1 flex-col gap-px" data-cowork-sidebar-section="recents" data-kind="cowork">
-      <div className="flex-1 min-h-[120px] overflow-hidden">
+    <div className="flex-1 min-h-[120px]" data-cowork-sidebar-section="recents">
+      <section className="group/section flex flex-col gap-px" data-kind="cowork">
         <SidebarSectionHeader
           collapsed={collapsed}
           onToggle={() => frame.toggleGroupCollapsed("recents")}
@@ -171,9 +178,17 @@ function CoworkRecentSection({ frame, onAction, onNavigate, selectedSessionId, s
         >
           {text.recent}
         </SidebarSectionHeader>
-        {!collapsed ? <CoworkRecentList frame={frame} onAction={onAction} onNavigate={onNavigate} selectedSessionId={selectedSessionId} sessions={sessions} /> : null}
-      </div>
-    </section>
+        <div className={collapsed ? "hidden" : "contents"}>
+          <CoworkRecentList
+            frame={frame}
+            onAction={onAction}
+            onNavigate={onNavigate}
+            selectedSessionId={selectedSessionId}
+            sessions={sessions}
+          />
+        </div>
+      </section>
+    </div>
   );
 }
 
