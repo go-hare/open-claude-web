@@ -141,6 +141,13 @@ const ELEVATION_TEXT: Record<"purple" | "yellow", string> = {
 };
 
 /**
+ * Sticky last branch row per session — same spirit as OfficialComposerUsageIndicator
+ * context cache. Leave/return first paint reuses last row so composer footer does not
+ * jump when git IPC resolves (null → row → layout shift).
+ */
+const officialBranchRowCache = new Map<string, BranchRowState | null>();
+
+/**
  * Official EpitaxyBranchRow (_Component109 / aM / c11959232):
  * baseBranch = defaultBranch ?? main|master ?? current;
  * nM labels Create PR / View PR / Create draft PR / Manually create PR;
@@ -149,7 +156,12 @@ const ELEVATION_TEXT: Record<"purple" | "yellow", string> = {
 export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows({ bridge, onOpenDiff, session, sessionRef }: OfficialEpitaxyBranchRowsProps) {
   // Official PC() toast carrier for LSaIX82GfM create-PR failures.
   const errors = useErrorsOptional();
-  const [state, setState] = useState<BranchRowState | null>(null);
+  const sessionId = sessionRef?.id;
+  const [state, setState] = useState<BranchRowState | null>(() =>
+    sessionId && officialBranchRowCache.has(sessionId)
+      ? (officialBranchRowCache.get(sessionId) ?? null)
+      : null,
+  );
   const [prBusy, setPrBusy] = useState(false);
   const [prError, setPrError] = useState<string | null>(null);
   const [prMode, setPrMode] = useState<OfficialPrMode>(() => (readCreateAsDraft() ? "draft" : "create"));
@@ -166,6 +178,10 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
       }
 
       const sessionId = sessionRef.id;
+      // Keep sticky row while IPC runs — do not clear to null (footer jump).
+      if (officialBranchRowCache.has(sessionId)) {
+        setState(officialBranchRowCache.get(sessionId) ?? null);
+      }
       const [gitInfoRaw, branchesRaw, workingTree, prState] = await Promise.all([
         bridge.getGitInfo?.(sessionId).catch(() => null),
         bridge.getLocalBranches?.(sessionId).catch(() => null),
@@ -211,12 +227,13 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
 
       // Official: hide row when no changes and no open PR stack.
       if (!branchName || !repoName || (!hasChanges && !prUrl)) {
+        officialBranchRowCache.set(sessionId, null);
         setState(null);
         setCiStatus(null);
         return;
       }
 
-      setState({
+      const nextState: BranchRowState = {
         additions: stat.additions,
         baseBranch,
         branchName,
@@ -232,7 +249,9 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
         prVisual,
         remoteSlug,
         repoName,
-      });
+      };
+      officialBranchRowCache.set(sessionId, nextState);
+      setState(nextState);
 
       if (prUrl && prVisual !== "merged" && bridge.getPrChecks) {
         setCiStatus("loading");

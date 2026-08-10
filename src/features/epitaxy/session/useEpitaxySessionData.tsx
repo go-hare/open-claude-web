@@ -1095,6 +1095,9 @@ function normalizeSessionSummaryPatch(current: SessionSummary | null, patch: unk
     : current?.pendingToolPermissions;
   const permissionMode = stringValue(raw.permissionMode) ?? current?.permissionMode;
   const model = stringValue(raw.model) ?? current?.model;
+  // Residual jR session meta effort (He): sparse session_updated must not drop effort —
+  // switch-back re-seed uses session.effort / ultracode; missing field was inventing medium.
+  const effort = stringValue(raw.effort) ?? current?.effort;
   // Official initialization_status / session_updated may carry init step for Gv spawnLabel.
   const initializationStatus = raw.initializationStatus !== undefined
     ? raw.initializationStatus
@@ -1112,6 +1115,7 @@ function normalizeSessionSummaryPatch(current: SessionSummary | null, patch: unk
       pendingToolPermissions,
       permissionMode,
       model,
+      effort,
       initializationStatus,
       hasWorktree,
     } as SessionSummary;
@@ -1129,6 +1133,7 @@ function normalizeSessionSummaryPatch(current: SessionSummary | null, patch: unk
     pendingToolPermissions,
     permissionMode,
     model,
+    effort,
     initializationStatus,
     hasWorktree,
   };

@@ -63,6 +63,17 @@ function tiptapDocFromPlainText(value: string) {
   };
 }
 
+/** Stable ladder identity so setEffortLevels does not thrash when content is equal. */
+function sameEffortLevels(a: readonly string[] | null | undefined, b: readonly string[] | null | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 export function ExistingSessionComposer({
   attachRef,
   bridge,
@@ -103,7 +114,20 @@ export function ExistingSessionComposer({
   );
   const [text, setText] = useState("");
   const [isSubmitting, setSubmitting] = useState(false);
-  const [model, setModel] = useState(() => normalizeSelectorModelValue(session?.model, []));
+  /**
+   * Residual jR model seed: keep host/live session model id as-is.
+   * Do NOT normalize against empty bag on first paint — that mapped 3p ids (grok/kimi/…)
+   * to "default" and the follow-up effect even wrote setModel("default") to host
+   * (switch-back footer → Default). Residual never auto-setModel("default").
+   */
+  const [model, setModel] = useState(() => {
+    const liveModel = sessionRef?.id
+      ? officialCodeSessionStore.getState().buckets[sessionRef.id]?.liveMeta?.model
+      : undefined;
+    const raw = session?.model ?? liveModel;
+    if (typeof raw === "string" && raw.length > 0 && raw !== "<synthetic>") return raw;
+    return "default";
+  });
   /**
    * Seed Mode from host session, then liveMeta (user menu / system status already
    * mirrored). Do NOT force "default" when both are missing mid-load — that flash
@@ -120,7 +144,14 @@ export function ExistingSessionComposer({
   const [effort, setEffort] = useState(() =>
     clampEffortToCatalog(
       session?.effort === "ultracode" ? catalogTopEffort(null) : session?.effort,
-      null,
+      // Seed ladder from session model (not empty → invent grok 3-stop) so switch-back
+      // does not clamp real effort off the wrong provisional catalog.
+      cliEffortLevelsForModel(
+        session?.model
+        ?? (sessionRef?.id
+          ? officialCodeSessionStore.getState().buckets[sessionRef.id]?.liveMeta?.model
+          : undefined),
+      ),
     ),
   );
   /** Official yR session ultracode map — session-only; new chats start without it. */
@@ -130,7 +161,14 @@ export function ExistingSessionComposer({
    * null/empty → buildOfficialEffortMenuItems keeps full residual ladder (5f75ff4);
    * never lock to a single stop (106e129 regression). Catalog present → filter only.
    */
-  const [effortLevels, setEffortLevels] = useState<string[] | null>(null);
+  const [effortLevels, setEffortLevels] = useState<string[] | null>(() =>
+    cliEffortLevelsForModel(
+      session?.model
+      ?? (sessionRef?.id
+        ? officialCodeSessionStore.getState().buckets[sessionRef.id]?.liveMeta?.model
+        : undefined),
+    ),
+  );
   const [ultracodeOfferable, setUltracodeOfferable] = useState<boolean | null>(null);
   /**
    * Official cn.images residual — staged image attachments (max 5).
@@ -149,7 +187,20 @@ export function ExistingSessionComposer({
    */
   const effortLocalLockRef = useRef<string | null>(null);
   const [isConfigBusy, setConfigBusy] = useState(false);
-  const selectedModel = normalizeSelectorModelValue(model, allowedModelValues);
+  /**
+   * Residual selector value: collapse only residual aliases when bag is ready.
+   * Keep raw session model id when bag is empty or omits it — never paint "Default"
+   * over a live 3p model (switch-back regression).
+   */
+  const selectedModel = useMemo(() => {
+    if (!model || model === "default" || model === "opus-4") return "default";
+    if (model === "sonnet-4") {
+      return allowedModelValues.includes("sonnet") ? "sonnet" : "default";
+    }
+    if (allowedModelValues.length === 0) return model;
+    if (allowedModelValues.includes(model)) return model;
+    return model;
+  }, [allowedModelValues, model]);
   const submitRef = useRef<() => Promise<void>>(async () => {});
   const clearComposerRef = useRef<() => void>(() => {});
   const tiptapEditorRef = useRef<Editor | null>(null);
@@ -291,7 +342,30 @@ export function ExistingSessionComposer({
   }, [disabled, editor]);
 
   useEffect(() => {
-    setModel(normalizeSelectorModelValue(session?.model, allowedModelValues));
+    // Residual: keep host/live model id. Only map to selector "default" when bag is
+    // ready and the id is the residual default aliases — never invent default over a
+    // real session model just because the bag list is empty or mid-load.
+    const liveModel = sessionRef?.id
+      ? officialCodeSessionStore.getState().buckets[sessionRef.id]?.liveMeta?.model
+      : undefined;
+    const hostModel =
+      typeof session?.model === "string" && session.model.length > 0 && session.model !== "<synthetic>"
+        ? session.model
+        : undefined;
+    const nextModel = hostModel ?? (typeof liveModel === "string" && liveModel.length > 0 && liveModel !== "<synthetic>" ? liveModel : undefined);
+    if (nextModel) {
+      if (codeModelOptions.ready && allowedModelValues.length > 0) {
+        // In-list → keep; out-of-list still keep raw id for label (residual st/Fm path),
+        // only collapse residual aliases (opus-4 / empty) via normalize.
+        if (allowedModelValues.includes(nextModel) || nextModel === "default" || nextModel === "opus-4" || nextModel === "sonnet-4") {
+          setModel(normalizeSelectorModelValue(nextModel, allowedModelValues));
+        } else {
+          setModel(nextModel);
+        }
+      } else {
+        setModel(nextModel);
+      }
+    }
     // Host session Mode is authoritative when present (official be(n.permissionMode)).
     // When sparse session_updated / mid-load omits the field, keep liveMeta or current
     // pill — never invent "default" here (that wiped bypass after leave/return).
@@ -315,11 +389,12 @@ export function ExistingSessionComposer({
       // Prefer catalog top when ladder already known; else residual normalize until probe.
       setEffort(clampEffortToCatalog(catalogTopEffort(effortLevels), effortLevels));
       setUltracode(true);
-    } else {
-      setEffort(clampEffortToCatalog(session?.effort, effortLevels));
+    } else if (session?.effort) {
+      setEffort(clampEffortToCatalog(session.effort, effortLevels));
       setUltracode(false);
     }
-  }, [allowedModelValues, effortLevels, session?.effort, session?.model, session?.permissionMode, sessionRef?.id]);
+    // Sparse session_updated without effort: keep local effort (do not invent medium).
+  }, [allowedModelValues, codeModelOptions.ready, effortLevels, session?.effort, session?.model, session?.permissionMode, sessionRef?.id]);
 
   // New session id: drop official N lock so meta T can seed again.
   useEffect(() => {
@@ -345,11 +420,14 @@ export function ExistingSessionComposer({
     const getEffortCatalogDefaults = bridge.getEffortCatalogDefaults;
     if (!sessionId || !getEffort) return;
     let cancelled = false;
-    // Immediate CLI-catalog residual for model — never flash invent 5-stop while probing.
-    const provisional = cliEffortLevelsForModel(
-      selectedModel === "default" ? undefined : selectedModel,
-    );
-    setEffortLevels(provisional);
+    // Provisional ladder from the real model id (not selector "default" collapse).
+    // Using selectedModel when it was wrongly "default" re-clamped effort on switch-back.
+    const modelForCatalog =
+      model && model !== "default" ? model : (session?.model && session.model !== "default" ? session.model : undefined);
+    const provisional = cliEffortLevelsForModel(modelForCatalog);
+    // Only replace ladder when content changes — identical provisional re-set caused
+    // session-sync effect re-run + Effort chip remount (first-open footer jitter).
+    setEffortLevels((prev) => (sameEffortLevels(prev, provisional) ? prev : provisional));
     if (effortLocalLockRef.current !== sessionId) {
       setEffort((prev) => clampEffortToCatalog(prev, provisional));
     }
@@ -360,9 +438,7 @@ export function ExistingSessionComposer({
         let levels = applied.effortLevels ?? null;
         let ultracode = applied.ultracodeOfferable ?? null;
         if ((!levels || levels.length === 0) && getEffortCatalogDefaults) {
-          const catalog = await getEffortCatalogDefaults(
-            selectedModel === "default" ? undefined : selectedModel,
-          ).catch(() => null);
+          const catalog = await getEffortCatalogDefaults(modelForCatalog).catch(() => null);
           if (cancelled) return;
           if (catalog && typeof catalog !== "string") {
             if (catalog.effortLevels && catalog.effortLevels.length > 0) {
@@ -377,10 +453,12 @@ export function ExistingSessionComposer({
         // CLI wins; if still empty keep provisional (CLI catalog residual for model).
         const resolved =
           levels && levels.length > 0 ? levels : provisional;
-        setEffortLevels(resolved);
+        setEffortLevels((prev) => (sameEffortLevels(prev, resolved) ? prev : resolved));
         setUltracodeOfferable(ultracode);
         if (effortLocalLockRef.current === sessionId) return;
-        if (applied.effort === "ultracode") {
+        // Prefer host session wire for Ultracode. CLI densable often returns catalog-top
+        // (high) while product store keeps effort === "ultracode" — do not clear the flag.
+        if (applied.effort === "ultracode" || session?.effort === "ultracode") {
           setEffort(clampEffortToCatalog(catalogTopEffort(resolved), resolved));
           setUltracode(true);
         } else if (applied.effort) {
@@ -394,19 +472,10 @@ export function ExistingSessionComposer({
       }
     })();
     return () => { cancelled = true; };
-  }, [bridge, sessionRef?.id, selectedModel]);
+  }, [bridge, model, session?.effort, session?.model, sessionRef?.id]);
 
-  // Drop shell-leaked session model (grok/kimi) once bag list is known.
-  useEffect(() => {
-    if (!codeModelOptions.ready) return;
-    const normalized = normalizeSelectorModelValue(model, allowedModelValues);
-    if (normalized !== model) {
-      setModel(normalized);
-      if (sessionRef && bridge.setModel && normalized === "default") {
-        void bridge.setModel(sessionRef.id, "default").catch(() => undefined);
-      }
-    }
-  }, [allowedModelValues, bridge, codeModelOptions.ready, model, sessionRef]);
+  // Residual: never auto bridge.setModel("default") when bag list omits a session id.
+  // Display may still show Default only for residual aliases via labelFor/normalize.
 
   useEffect(() => {
     bashModeRef.current = isBashMode;

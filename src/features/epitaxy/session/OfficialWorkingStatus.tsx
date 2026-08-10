@@ -2,7 +2,7 @@
  * Official Gv working status + spinners (c11959232).
  * Extracted from EpitaxySessionTile for componentization — behavior unchanged.
  */
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Icon } from "../../../shell/icons";
 import { useOfficialCodeSessionBucket } from "./officialCodeSessionStore";
 import {
@@ -10,8 +10,10 @@ import {
   officialGetTurnStartedAt,
   officialMarkTurnStarted,
 } from "./officialStreamSessionStore";
+import { OFFICIAL_SPARK_MASK_IMAGE } from "./officialSparkMaskUrl";
 
-const officialSparkMaskPath = "/assets/v1/epitaxy-spark-mask.webp";
+/** Residual c7fe8135c size map. */
+const OFFICIAL_SPARK_SIZE = { s: 12, m: 16, l: 20 } as const;
 
 export function OfficialSpinner({
   animate = true,
@@ -35,7 +37,16 @@ export function OfficialSpinner({
   );
 }
 
-export function OfficialSparkSpinner({
+/**
+ * Residual SparkSpinner (c7fe8135c-COEBAMcZ):
+ * - A.memo — Gv re-renders every 1s for elapsed/tokens; memo keeps sprite DOM stable so
+ *   residual CSS animation (transform steps) is not interrupted by inline style re-apply
+ * - mask is inline data:image/webp (not /assets path)
+ * - outer span overflow-hidden; inner **div** with class epitaxy-spark-working when working
+ * - CSS vars --spark-frames:84 / --spark-duration:5040ms drive residual cca089 keyframes
+ * - static transform translateY(-400/84%) is residual resting frame (animation overrides while working)
+ */
+export const OfficialSparkSpinner = memo(function OfficialSparkSpinner({
   className = "",
   isWorking = true,
   size = "m",
@@ -44,17 +55,21 @@ export function OfficialSparkSpinner({
   isWorking?: boolean;
   size?: "s" | "m" | "l";
 }) {
-  const box = size === "s" ? 12 : size === "l" ? 20 : 16;
+  const box = OFFICIAL_SPARK_SIZE[size];
   return (
-    <span className={`inline-block overflow-hidden shrink-0 ${className}`} style={{ width: box, height: box, color: "var(--accent-brand)" }} aria-hidden="true">
-      <span
-        className={`block ${isWorking ? "epitaxy-spark-working" : ""}`}
+    <span
+      className={`inline-block overflow-hidden shrink-0 ${className ?? ""}`}
+      style={{ width: box, height: box, color: "var(--accent-brand)" }}
+      aria-hidden="true"
+    >
+      <div
+        className={isWorking ? "epitaxy-spark-working" : undefined}
         style={{
           width: box,
           height: 84 * box,
           background: "currentColor",
-          WebkitMaskImage: `url("${officialSparkMaskPath}")`,
-          maskImage: `url("${officialSparkMaskPath}")`,
+          WebkitMaskImage: OFFICIAL_SPARK_MASK_IMAGE,
+          maskImage: OFFICIAL_SPARK_MASK_IMAGE,
           WebkitMaskSize: "100% 100%",
           maskSize: "100% 100%",
           "--spark-frames": 84,
@@ -64,7 +79,8 @@ export function OfficialSparkSpinner({
       />
     </span>
   );
-}
+});
+OfficialSparkSpinner.displayName = "SparkSpinner";
 
 /**
  * Official Gv (c11959232):

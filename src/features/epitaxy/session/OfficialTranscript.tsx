@@ -22,6 +22,7 @@ import {
   type ReactElement,
   type ReactNode,
   type Ref,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
@@ -933,9 +934,9 @@ function OfficialRunningTasks({ isResponding, tasks }: { isResponding: boolean; 
   if (isResponding || !summary) return null;
   const content = (
     <>
-      <span className={`text-body truncate min-w-0 ${summary.waiting ? "epitaxy-text-shine" : "text-assistant-secondary"}`}>
+      <OfficialTextShine className={`text-body truncate min-w-0 ${summary.waiting ? "epitaxy-text-shine" : "text-assistant-secondary"}`}>
         {formatOfficialRunningTasksSummary(summary)}
-      </span>
+      </OfficialTextShine>
       <ToolChevron expanded={false} />
     </>
   );
@@ -2364,7 +2365,7 @@ function OfficialToolGroup({
         <OfficialAnimatedToolLabel className="inline-flex items-center gap-g3 min-w-0" mode="wait" morphKey={runningSummary ? debouncedRunningToolId : "settled"}>
           {runningSummary ? (
             <>
-              <span className="text-body epitaxy-text-shine shrink-0">{runningSummary.runningVerb}</span>
+              <OfficialTextShine className="text-body epitaxy-text-shine shrink-0">{runningSummary.runningVerb}</OfficialTextShine>
               {runningSummary.meta ? <span className="text-body text-assistant-secondary truncate min-w-0">{runningSummary.meta}</span> : null}
             </>
           ) : (
@@ -2510,9 +2511,63 @@ function OfficialCollapse({ children, expanded }: { children: ReactNode; expande
   );
 }
 
+/**
+ * Residual cca089 epitaxy-text-shine is pure CSS. After leave/return or compositor
+ * freeze, infinite CSS animation can stick while WAAPI spark re-arms — re-kick the
+ * residual animation without inventing a second shimmer class.
+ */
+function useResidualTextShineKick(active: boolean) {
+  const ref = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!active) return undefined;
+    const kick = () => {
+      const node = ref.current;
+      if (!node) return;
+      const prev = node.style.animation;
+      node.style.animation = "none";
+      void node.offsetWidth;
+      node.style.animation = prev;
+    };
+    kick();
+    const onVis = () => {
+      if (document.visibilityState === "visible") kick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", kick);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", kick);
+    };
+  }, [active]);
+  return ref;
+}
+
+/** Residual plain shine span (grouped running verb / waiting tasks). */
+function OfficialTextShine({ children, className }: { children: ReactNode; className: string }) {
+  const shine = className.includes("epitaxy-text-shine");
+  const ref = useResidualTextShineKick(shine);
+  return (
+    <span className={className} ref={ref as RefObject<HTMLSpanElement>}>
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Residual Kg (c119): morph label + className that may include epitaxy-text-shine.
+ */
 function OfficialAnimatedToolLabel({ children, className, mode = "popLayout", morphKey }: { children: ReactNode; className: string; mode?: "popLayout" | "sync" | "wait"; morphKey: string }) {
   const reducedMotion = useReducedMotion();
-  if (reducedMotion) return <span className={className}>{children}</span>;
+  const hasShine = className.includes("epitaxy-text-shine");
+  const shineRef = useResidualTextShineKick(hasShine && !reducedMotion);
+
+  if (reducedMotion) {
+    return (
+      <span className={className} ref={shineRef as RefObject<HTMLSpanElement>}>
+        {children}
+      </span>
+    );
+  }
   return (
     <AnimatePresence initial={false} mode={mode}>
       <motion.span
@@ -2521,6 +2576,7 @@ function OfficialAnimatedToolLabel({ children, className, mode = "popLayout", mo
         exit={{ opacity: 0, y: -3 }}
         initial={{ opacity: 0, y: 3 }}
         key={morphKey}
+        ref={shineRef as never}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
       >
         {children}
