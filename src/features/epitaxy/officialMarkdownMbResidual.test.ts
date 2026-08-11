@@ -92,6 +92,25 @@ describe("OfficialCodeMarkdown mb residual locks", () => {
     expect(markdownSource).not.toMatch(/<code className=\{OFFICIAL_INLINE_CODE_CLASS\} \{\.\.\.rest\}/);
   });
 
+  it("file pane uses official Sb residual (epitaxy-file-prose + jb, not alluvium)", () => {
+    // Official vN S preview: max-w-[72ch] > Sb; Sb = epitaxy-markdown epitaxy-file-prose + pl/mb.
+    // Must not route file preview through kb/Alluvium (bb has no table case).
+    expect(markdownSource).toMatch(/OfficialFileMarkdownContent/);
+    expect(markdownSource).toMatch(/epitaxy-markdown epitaxy-file-prose/);
+    expect(markdownSource).toMatch(/c11959232-h_zsw3wI\.js:Sb/);
+    expect(markdownSource).toMatch(/parseOfficialFileMarkdownFrontmatter/);
+    const filePane = readFileSync(
+      path.join(here, "session/OfficialFilePane.tsx"),
+      "utf8",
+    );
+    expect(filePane).toMatch(/OfficialFileMarkdownContent/);
+    // Must not import chat MarkdownContent for the S preview body (Sb only).
+    expect(filePane).not.toMatch(/import \{[^}]*\bMarkdownContent\b/);
+    // Shell still residual: data-file-viewer + max-w-[72ch] only (no invent overflow CSS).
+    expect(filePane).toMatch(/data-file-viewer=""/);
+    expect(filePane).toMatch(/max-w-\[72ch\]/);
+  });
+
   it("pb uses official border residual not effect-contrast-stroke", () => {
     expect(markdownSource).toMatch(
       /block max-w-full h-auto rounded-r4 border border-\[var\(--border-default\)\]/,

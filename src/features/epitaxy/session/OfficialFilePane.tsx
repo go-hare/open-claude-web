@@ -12,7 +12,7 @@ import {
   OfficialDropdownButton,
   type OfficialDropdownItem,
 } from "../OfficialEpitaxyComponents";
-import { MarkdownContent } from "../OfficialCodeMarkdown";
+import { OfficialFileMarkdownContent } from "../OfficialCodeMarkdown";
 import { officialPierreLangFromPath } from "../diff/officialPierreLang";
 import { useOfficialPierreTheme, useWorkerPool } from "../diff/OfficialPierreWorkerPool";
 import { pierreTokenPaintOnPostRender } from "../diff/pierreTokenPaint";
@@ -472,15 +472,18 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
     );
   }
 
-  // Official yu(c9a): editorItems under header "Open in"; showInFolder as extraItems ("Show in Finder/Explorer").
-  const canOpenInEditor = Boolean(bridge.openInEditor);
-  const canShowInFolder = Boolean(desktopBridge.FileSystem.showInFolder);
+  // Official yu(c9a / c9a932a07): first arg is host absPath (`$?_?.absPath`), not tool-row relative path.
+  // showInFolder / openInEditor both receive that abs path: T?.showInFolder?.(e), P?.openInEditor?.(e,…).
+  // Relative `docs/foo.md` makes shell.showItemInFolder a no-op on Windows → "Show in Explorer" looks dead.
+  const openInPath = state.absPath ?? filePath;
+  const canOpenInEditor = Boolean(bridge.openInEditor) && Boolean(openInPath);
+  const canShowInFolder = Boolean(desktopBridge.FileSystem.showInFolder) && Boolean(openInPath);
   const editorItems: OfficialDropdownItem[] = canOpenInEditor
     ? [
         {
           label: "Editor",
           onSelect: () => {
-            void bridge.openInEditor?.(filePath, undefined, fileView.line);
+            void bridge.openInEditor?.(openInPath, undefined, fileView.line);
           },
         },
       ]
@@ -490,7 +493,7 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
         {
           label: officialShowInFolderLabel(),
           onSelect: () => {
-            void desktopBridge.FileSystem.showInFolder?.(filePath);
+            void desktopBridge.FileSystem.showInFolder?.(openInPath)?.catch(() => undefined);
           },
         },
       ]
@@ -626,12 +629,10 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
           aria-label="Edit file contents"
         />
       ) : markdownPreview ? (
-        // Official S: data-file-viewer flex-1 overflow-y-auto select-text px-[24px] py-[16px] > max-w-[72ch] markdown
+        // Official S: data-file-viewer … > max-w-[72ch] > Sb (epitaxy-markdown epitaxy-file-prose + mb tables)
         <div data-file-viewer="" className="flex-1 min-h-0 overflow-y-auto select-text px-[24px] py-[16px]">
           <div className="max-w-[72ch]">
-            <div className="epitaxy-markdown">
-              <MarkdownContent text={state.text ?? ""} />
-            </div>
+            <OfficialFileMarkdownContent text={state.text ?? ""} />
           </div>
         </div>
       ) : isHtmlPreviewPath(filePath) && state.text !== undefined ? (

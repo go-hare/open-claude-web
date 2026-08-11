@@ -151,9 +151,160 @@ export function OfficialCodeMarkdown({ isStreaming = false, text }: { isStreamin
   );
 }
 
-/** Non-streaming / secondary surfaces (file viewer, task result) share the same jb root. */
+/**
+ * Chat / streaming surfaces still use OfficialCodeMarkdown (kb: alluvium or xd).
+ * Prefer OfficialFileMarkdownContent for side-pane file preview (c119 `Sb`).
+ */
 export function MarkdownContent({ isStreaming = false, text }: { isStreaming?: boolean; text: string }) {
   return <OfficialCodeMarkdown isStreaming={isStreaming} text={text} />;
+}
+
+/**
+ * Official c119 `Sb` — side-pane file markdown (vN when S preview).
+ *
+ * Residual structure:
+ *   [optional YAML frontmatter dl]
+ *   div.epitaxy-markdown.epitaxy-file-prose > pl(jb/mb)
+ *
+ * Must NOT use kb/Alluvium (`wb`/`bb`): official bb has no table kind; GFM tables
+ * are mb residual (`div.overflow-x-auto > table`). `.epitaxy-file-prose` is
+ * `display:block` (official CSS) so wide tables adapt via overflow-x inside
+ * `max-w-[72ch]` instead of stretching the flex chat column shell.
+ */
+export const OfficialFileMarkdownContent = memo(function OfficialFileMarkdownContent({
+  text,
+}: {
+  text: string;
+}) {
+  const parsed = useMemo(() => parseOfficialFileMarkdownFrontmatter(text), [text]);
+  const body = parsed?.body ?? text;
+  return (
+    <>
+      {parsed && parsed.fields.length > 0 ? (
+        <dl
+          className="grid grid-cols-[max-content_1fr] items-baseline gap-x-[28px] gap-y-g8 mb-[24px] pb-[20px] border-b border-t3"
+          data-official-source="c11959232-h_zsw3wI.js:Sb.frontmatter"
+        >
+          {parsed.fields.map(({ key, value }) => (
+            <Fragment key={key}>
+              <dt className="text-footnote text-t5">{formatOfficialFrontmatterKey(key)}</dt>
+              <dd className="text-body text-assistant-primary min-w-0 break-words">{value}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      ) : null}
+      <div
+        className="epitaxy-markdown epitaxy-file-prose"
+        data-official-source="c11959232-h_zsw3wI.js:Sb"
+      >
+        <OfficialCodeMarkdownChunk chunk={body} />
+      </div>
+    </>
+  );
+});
+
+/** Official Mb — stringify frontmatter field values for the file-pane dl. */
+function formatOfficialFrontmatterValue(value: unknown): string {
+  if (Array.isArray(value)) return value.map(formatOfficialFrontmatterValue).join(", ");
+  if (value == null) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+/** Official Cb — title-case frontmatter keys (`foo_bar` → `Foo bar`). */
+function formatOfficialFrontmatterKey(key: string): string {
+  const spaced = key.replace(/[-_]/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * Official Sb frontmatter split (`---` … `---`).
+ * Residual uses full YAML (`As`); product bridge parses a plain scalar object map
+ * without adding a yaml dependency. Parse failure → `{ fields: [], body }` (official catch).
+ */
+function parseOfficialFileMarkdownFrontmatter(
+  source: string,
+): { fields: Array<{ key: string; value: string }>; body: string } | null {
+  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!match) return null;
+  const body = match[2].replace(/^\n+/, "");
+  try {
+    const raw = parseOfficialSimpleFrontmatterObject(match[1]);
+    if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+      return { fields: [], body };
+    }
+    return {
+      fields: Object.entries(raw).map(([key, value]) => ({
+        key,
+        value: formatOfficialFrontmatterValue(value),
+      })),
+      body,
+    };
+  } catch {
+    return { fields: [], body };
+  }
+}
+
+/** Minimal YAML-like map for residual As bridge (scalar / nested-object-as-JSON only). */
+function parseOfficialSimpleFrontmatterObject(yamlLike: string): Record<string, unknown> | null {
+  const trimmed = yamlLike.trim();
+  if (!trimmed) return {};
+  // Prefer JSON object when authors used JSON frontmatter.
+  if (trimmed.startsWith("{")) {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  }
+  const out: Record<string, unknown> = {};
+  for (const line of yamlLike.split(/\r?\n/)) {
+    if (!line.trim() || line.trimStart().startsWith("#")) continue;
+    // Nested / list YAML → residual As handles; product leaves fields empty via throw.
+    if (/^\s/.test(line) || line.trimStart().startsWith("-")) {
+      throw new Error("nested frontmatter");
+    }
+    const m = line.match(/^([A-Za-z0-9_.-]+)\s*:\s*(.*)$/);
+    if (!m) continue;
+    const key = m[1];
+    let raw = m[2].trim();
+    if (raw === "" || raw === "|" || raw === ">") {
+      out[key] = "";
+      continue;
+    }
+    if (
+      (raw.startsWith('"') && raw.endsWith('"')) ||
+      (raw.startsWith("'") && raw.endsWith("'"))
+    ) {
+      out[key] = raw.slice(1, -1);
+      continue;
+    }
+    if (raw === "true") {
+      out[key] = true;
+      continue;
+    }
+    if (raw === "false") {
+      out[key] = false;
+      continue;
+    }
+    if (raw === "null" || raw === "~") {
+      out[key] = null;
+      continue;
+    }
+    if (/^-?\d+(\.\d+)?$/.test(raw)) {
+      out[key] = Number(raw);
+      continue;
+    }
+    // Inline [a, b] / {a: b} JSON-ish
+    if ((raw.startsWith("[") && raw.endsWith("]")) || (raw.startsWith("{") && raw.endsWith("}"))) {
+      try {
+        out[key] = JSON.parse(raw.replace(/(['"])?([A-Za-z0-9_]+)\1\s*:/g, '"$2":').replace(/'/g, '"'));
+        continue;
+      } catch {
+        // fall through as string
+      }
+    }
+    out[key] = raw;
+  }
+  return out;
 }
 
 /** Official jb (memoized react-markdown root) + eb plugins (gfm always; math/katex when `$`). */
