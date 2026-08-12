@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   coworkComputerAccessApprovalKind,
+  coworkComputerTeachApprovalKind,
   coworkPermissionApprovalKindFromRequest,
   coworkWriteToolWarningFromRequest,
   visibleCoworkPermissions,
@@ -39,13 +40,28 @@ describe("Age residual computer access routing", () => {
     ).toBe("computer-access");
   });
 
-  it("teach tool stays computer-teach", () => {
+  it("teach tool without tcc stays computer-teach (Wge)", () => {
+    expect(coworkComputerTeachApprovalKind({})).toBe("computer-teach");
     expect(
       coworkPermissionApprovalKindFromRequest({
         toolName: "computer:request_teach_access",
         input: {},
       }),
     ).toBe("computer-teach");
+  });
+
+  it("$ge teach with tccState → computer-tcc (Fge)", () => {
+    expect(
+      coworkComputerTeachApprovalKind({
+        tccState: { accessibility: "denied" },
+      }),
+    ).toBe("computer-tcc");
+    expect(
+      coworkPermissionApprovalKindFromRequest({
+        toolName: "computer:request_teach_access",
+        input: { tccState: { accessibility: "denied" } },
+      }),
+    ).toBe("computer-tcc");
   });
 });
 

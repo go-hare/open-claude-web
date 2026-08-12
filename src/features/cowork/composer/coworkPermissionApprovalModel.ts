@@ -52,11 +52,26 @@ export function coworkComputerAccessApprovalKind(
   return "computer-access";
 }
 
+/**
+ * Official $ge residual (index-BELzQL5P) for computer:request_teach_access:
+ *   tccState → Fge (ComputerUseTccPanel)
+ *   else → Wge (ComputerUseTeachPanel / computer-teach)
+ */
+export function coworkComputerTeachApprovalKind(
+  input: Record<string, unknown> | undefined,
+): "computer-tcc" | "computer-teach" {
+  if (input?.tccState !== undefined) return "computer-tcc";
+  return "computer-teach";
+}
+
 export function coworkPermissionApprovalKindFromRequest(
   request: Pick<CoworkPermissionRequest, "toolName" | "input">,
 ): CoworkPermissionApprovalKind {
   if (request.toolName === "computer:request_access") {
     return coworkComputerAccessApprovalKind(request.input);
+  }
+  if (request.toolName === "computer:request_teach_access") {
+    return coworkComputerTeachApprovalKind(request.input);
   }
   return coworkPermissionApprovalKind(request.toolName);
 }

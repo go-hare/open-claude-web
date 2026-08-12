@@ -24,6 +24,8 @@ import {
   useCoworkDisclaimerText,
 } from "./coworkDisclaimerMessages";
 import { CoworkComposerButton } from "./CoworkComposerPrimitives";
+import type { CoworkStagedImage } from "./coworkComposerStagedImages";
+import { CoworkStagedImageStrip } from "./CoworkStagedImageStrip";
 
 type CoworkSessionComposerSurfaceProps = {
   /** Official t$t avatarState (v$t Et) for Ace blur glow. */
@@ -46,6 +48,8 @@ type CoworkSessionComposerSurfaceProps = {
   onContainerClick: (event: MouseEvent<HTMLElement>) => void;
   onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => void;
   onRemoveFile: (filePath: string) => void;
+  /** Official ImageBlockThumbnail remove (OHe). */
+  onRemoveStagedImage: (id: string) => void;
   /** Official kAt onRetryNow — only mount kAt when provided (session path `ee && P`). */
   onRetryConnection?: () => void;
   onScrollToBottom: () => void;
@@ -55,6 +59,8 @@ type CoworkSessionComposerSurfaceProps = {
   plusMenuItems: CoworkDropdownItem[];
   selectedFiles: CoworkUploadedFile[];
   showScrollButton: boolean;
+  /** Official imageBlocks / stagedImages residual strip. */
+  stagedImages: CoworkStagedImage[];
   text: string;
 };
 
@@ -64,7 +70,15 @@ export function CoworkSessionComposerSurface(props: CoworkSessionComposerSurface
   // Official AYe writer: measure sticky chat input top → viewport bottom.
   useLayoutEffect(
     () => bindCoworkChatInputTopMeasure(props.containerRef?.current ?? null),
-    [props.containerRef, props.canStop, props.canSubmit, props.selectedFiles.length, props.showScrollButton, props.text],
+    [
+      props.containerRef,
+      props.canStop,
+      props.canSubmit,
+      props.selectedFiles.length,
+      props.showScrollButton,
+      props.stagedImages.length,
+      props.text,
+    ],
   );
   // Official v$t sticky: t$t then (ee && P) kAt in px-4 pb-2, then aboveComposer / input.
   const showReconnectBanner = Boolean(props.onRetryConnection);
@@ -94,7 +108,12 @@ export function CoworkSessionComposerSurface(props: CoworkSessionComposerSurface
               className={`!box-content flex flex-col bg-bg-000 mx-2 md:mx-0 items-stretch transition-all duration-200 relative z-10 rounded-[20px] relative z-[1] border border-transparent md:w-full shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-300)/0.15)] hover:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] focus-within:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/7.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] hover:focus-within:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/7.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] ${props.disabled ? "cursor-default" : "cursor-text"}`}
               onClick={props.onContainerClick}
             >
-              <SelectedFiles files={props.selectedFiles} onRemove={props.onRemoveFile} />
+              <SelectedFiles
+                files={props.selectedFiles}
+                onRemove={props.onRemoveFile}
+                onRemoveStagedImage={props.onRemoveStagedImage}
+                stagedImages={props.stagedImages}
+              />
               <div className="flex flex-col m-3.5 gap-3">
                 <div className="relative font-large">
                   <EditorContent
@@ -160,10 +179,38 @@ function CoworkDisclaimer() {
   );
 }
 
-function SelectedFiles({ files, onRemove }: { files: CoworkUploadedFile[]; onRemove: (filePath: string) => void }) {
+/**
+ * Official zWe attachments residual: p-3.5 pb-2.5 row for imageBlocks + files.
+ * ImageBlockThumbnail (UHe) first, then path chips.
+ */
+function SelectedFiles({
+  files,
+  onRemove,
+  onRemoveStagedImage,
+  stagedImages,
+}: {
+  files: CoworkUploadedFile[];
+  onRemove: (filePath: string) => void;
+  onRemoveStagedImage: (id: string) => void;
+  stagedImages: CoworkStagedImage[];
+}) {
+  const hasAttachments = files.length > 0 || stagedImages.length > 0;
   return (
     <AnimatePresence initial={false}>
-      {files.length ? <motion.div animate={{ height: "auto" }} className="overflow-hidden" exit={{ height: 0 }} initial={{ height: 0 }} key="attachments"><div className="p-3.5 pb-2.5"><CoworkSelectedFiles files={files} onRemove={onRemove} /></div></motion.div> : null}
+      {hasAttachments ? (
+        <motion.div
+          animate={{ height: "auto" }}
+          className="overflow-hidden"
+          exit={{ height: 0 }}
+          initial={{ height: 0 }}
+          key="attachments"
+        >
+          <div className="flex flex-col gap-2 p-3.5 pb-2.5">
+            <CoworkStagedImageStrip images={stagedImages} onRemove={onRemoveStagedImage} />
+            <CoworkSelectedFiles files={files} onRemove={onRemove} />
+          </div>
+        </motion.div>
+      ) : null}
     </AnimatePresence>
   );
 }

@@ -6,6 +6,7 @@ import {
 } from "../../settings/artifactsPreference";
 import { CoworkPermissionApprovals } from "../composer/CoworkPermissionApprovals";
 import { CoworkSessionComposer } from "../composer/CoworkSessionComposer";
+import { resolveCoworkComposerToolStates } from "../composer/coworkModelContextStore";
 import { CoworkActivityPanelHeaderToggle } from "./activity/CoworkActivityPanelShell";
 import { parseCoworkBackgroundTasks } from "./activity/coworkBackgroundTasks";
 import { parseCoworkConversationStatus } from "./activity/CoworkConversationStatus";
@@ -265,15 +266,20 @@ function CoworkChatBody({ autoscrollRef, composerRef, data, onNavigate, scrollSt
   }, [data.setPermissionRequests, data.toolPermissionRequests]);
   const lastUserText = useMemo(() => lastVisibleUserText(data.messageUuids), [data.messageUuids]);
   const retryingRef = useRef(false);
+  // Official Re: Ae=V7 then Kte.getModelContextStates(conversationUuid) on try-again.
   const onTryAgain = useCallback(async () => {
     if (!lastUserText || retryingRef.current) return;
     retryingRef.current = true;
     try {
-      await data.submitMessage(lastUserText);
+      const toolStates = resolveCoworkComposerToolStates(sessionId);
+      await data.submitMessage(
+        lastUserText,
+        toolStates ? { toolStates } : undefined,
+      );
     } finally {
       retryingRef.current = false;
     }
-  }, [data.submitMessage, lastUserText]);
+  }, [data.submitMessage, lastUserText, sessionId]);
   // Official kAt onRetryNow — product has no ensureConnected/retryNow bridge method;
   // reload rehydrates session + connectionState from host (showRetryButton residual path).
   const onRetryConnection = useCallback(() => {
