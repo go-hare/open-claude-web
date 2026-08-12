@@ -17,6 +17,7 @@ import { OfficialButton } from "../OfficialEpitaxyComponents";
 import {
   buildOfficialComputerUseGrantsPayload,
   officialComputerAccessAgeKind,
+  officialComputerTeachKind,
   officialComputerUseSentinelKind,
   officialComputerUseSentinelLabel,
   officialComputerUseTierLabel,
@@ -190,7 +191,10 @@ export const OfficialComputerUseAgeApproval = memo(function OfficialComputerUseA
   return <CoworkComputerAccessApproval {...props} />;
 });
 
-/** Official Vge / ho — computer:request_teach_access. */
+/**
+ * Official Vge / ho → $ge for computer:request_teach_access.
+ * Residual (index-BELzQL5P): tccState → Fge else Wge.
+ */
 export const OfficialComputerUseTeachApproval = memo(function OfficialComputerUseTeachApproval({
   busy,
   onDecide,
@@ -206,18 +210,19 @@ export const OfficialComputerUseTeachApproval = memo(function OfficialComputerUs
   toolInput: Record<string, unknown>;
   toolName: string;
 }) {
+  const kind = officialComputerTeachKind(toolInput);
   const request = useMemo(
     () => toCoworkPermissionRequest(requestId, sessionId, toolName, toolInput),
     [requestId, sessionId, toolInput, toolName],
   );
-  return (
-    <CoworkComputerTeachApproval
-      busy={busy === true}
-      disableKeyboardShortcuts={busy === true}
-      onDecide={onDecide}
-      request={request}
-    />
-  );
+  const props = {
+    busy: busy === true,
+    disableKeyboardShortcuts: busy === true,
+    onDecide,
+    request,
+  };
+  if (kind === "computer-tcc") return <CoworkComputerTccApproval {...props} />;
+  return <CoworkComputerTeachApproval {...props} />;
 });
 
 function OfficialCuWkTitle({

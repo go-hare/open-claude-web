@@ -70,6 +70,20 @@ export function officialComputerAccessAgeKind(
   return "computer-access";
 }
 
+/**
+ * Official $ge residual (index-BELzQL5P) for computer:request_teach_access:
+ *   tccState → Fge (ComputerUseTccPanel)
+ *   else → Wge (ComputerUseTeachPanel)
+ * Vge wraps $ge; Hge matches tool name.
+ */
+export function officialComputerTeachKind(
+  input: Record<string, unknown> | undefined | null,
+): "computer-tcc" | "computer-teach" {
+  const record = asRecord(input);
+  if (record.tccState !== undefined) return "computer-tcc";
+  return "computer-teach";
+}
+
 export function parseOfficialComputerUseInput(
   input: Record<string, unknown> | undefined | null,
 ): OfficialComputerUseParsedInput {

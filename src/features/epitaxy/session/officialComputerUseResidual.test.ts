@@ -5,12 +5,13 @@ import {
   isOfficialComputerTeachAccessTool,
   isOfficialComputerUseWkTool,
   officialComputerAccessAgeKind,
+  officialComputerTeachKind,
   officialComputerUseSentinelKind,
   officialComputerUseWkTitle,
   parseOfficialComputerUseInput,
 } from "./officialComputerUseModel";
 
-describe("official Computer Use residual (yk/wk / fo/Age / mo/Vge)", () => {
+describe("official Computer Use residual (yk/wk / fo/Age / mo/Vge / $ge)", () => {
   it("matches tool names", () => {
     expect(isOfficialComputerRequestAccessTool("computer:request_access")).toBe(true);
     expect(isOfficialComputerTeachAccessTool("computer:request_teach_access")).toBe(true);
@@ -28,6 +29,14 @@ describe("official Computer Use residual (yk/wk / fo/Age / mo/Vge)", () => {
     expect(officialComputerAccessAgeKind({ featureDisabled: true })).toBe("computer-enable");
     expect(officialComputerAccessAgeKind({ tccState: {} })).toBe("computer-tcc");
     expect(officialComputerAccessAgeKind({ apps: [] })).toBe("computer-access");
+  });
+
+  it("$ge teach kind: tccState → Fge else Wge", () => {
+    expect(officialComputerTeachKind({ tccState: { accessibility: "denied" } })).toBe("computer-tcc");
+    expect(officialComputerTeachKind({})).toBe("computer-teach");
+    expect(officialComputerTeachKind({ apps: [] })).toBe("computer-teach");
+    // featureDisabled alone does not route teach to enable (Age only); $ge only checks tcc.
+    expect(officialComputerTeachKind({ featureDisabled: true })).toBe("computer-teach");
   });
 
   it("parses apps + flags and builds _cuGrants like wk", () => {
