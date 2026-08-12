@@ -9,7 +9,7 @@ import { clearSessionSidebarMetaState, type FrameState } from "./frameStoreHelpe
 
 function baseState(partial: Partial<FrameState> = {}): FrameState {
   return {
-    collapsedGroups: [],
+    collapsedGroupsByMode: {},
     customGroupAssignments: {},
     customGroupOrder: {},
     customGroups: [],

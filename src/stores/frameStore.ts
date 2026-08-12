@@ -3,10 +3,12 @@ import {
   assignToCustomGroupState,
   clampSidebarWidth,
   clearSessionSidebarMetaState,
+  collapsedGroupsForMode,
   createInitialFrameState,
   deleteCustomGroupState,
   moveCustomGroupState,
   persistDFrameState,
+  toggleGroupCollapsedState,
 } from "./frameStoreHelpers";
 
 export { SIDEBAR_WIDTH_BOUNDS } from "./frameStoreHelpers";
@@ -20,7 +22,12 @@ export type DFrameSortByByMode = Partial<Record<FrameMode, DFrameSortBy>>;
 
 export type FrameState = {
   mode: FrameMode;
-  collapsedGroups: string[];
+  /**
+   * Product delta: official H6t uses one global collapsedGroups[]; we store per mode
+   * so cowork/code sidebar sections fold independently. Call sites still read
+   * `collapsedGroups` (derived for current mode) via FrameStore.
+   */
+  collapsedGroupsByMode: Partial<Record<FrameMode, string[]>>;
   customGroupAssignments: Record<string, string>;
   customGroupOrder: Record<string, string[]>;
   customGroups: DFrameCustomGroup[];
@@ -68,13 +75,17 @@ export type FrameActions = {
   toggleSidebar: () => void;
 };
 
-export type FrameStore = FrameState & FrameActions;
+export type FrameStore = FrameState & FrameActions & {
+  /** Current-mode collapsed section ids (product: mode-scoped; mirrors official key names). */
+  collapsedGroups: string[];
+};
 
 export function useFrameStore(): FrameStore {
   const [state, setState] = useState<FrameState>(createInitialFrameState);
 
   return useMemo(() => ({
     ...state,
+    collapsedGroups: collapsedGroupsForMode(state.collapsedGroupsByMode, state.mode),
     addCustomGroup: (name) => {
       const group = { id: `cg-${crypto.randomUUID()}`, name };
       setState((current) => {
@@ -151,13 +162,7 @@ export function useFrameStore(): FrameStore {
       persistDFrameState({ systemFont });
       return { ...current, systemFont };
     }),
-    toggleGroupCollapsed: (id) => setState((current) => {
-      const collapsedGroups = current.collapsedGroups.includes(id)
-        ? current.collapsedGroups.filter((item) => item !== id)
-        : [...current.collapsedGroups, id];
-      persistDFrameState({ collapsedGroups });
-      return { ...current, collapsedGroups };
-    }),
+    toggleGroupCollapsed: (id) => setState((current) => toggleGroupCollapsedState(current, id)),
     toggleMore: () => setState((current) => ({ ...current, moreOpen: !current.moreOpen })),
     toggleSidebar: () => setState((current) => {
       const sidebarCollapsed = !current.sidebarCollapsed;

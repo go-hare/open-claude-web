@@ -8,7 +8,15 @@ const SORT_BY_VALUES = ["recency", "alpha", "created"] as const;
 const FRAME_MODE_VALUES = ["cowork", "code"] as const;
 
 type PersistedDFrameState = {
-  collapsed?: unknown; collapsedGroups?: unknown; customGroupAssignments?: unknown; customGroupOrder?: unknown; customGroups?: unknown;
+  collapsed?: unknown;
+  /** Legacy flat list (pre mode-split). Migrated into collapsedGroupsByMode once. */
+  collapsedGroups?: unknown;
+  /**
+   * Product delta vs official H6t: official keeps one global collapsedGroups array
+   * shared across modes. We split by mode so cowork/code recents|pinned|… fold independently.
+   */
+  collapsedGroupsByMode?: unknown;
+  customGroupAssignments?: unknown; customGroupOrder?: unknown; customGroups?: unknown;
   darkerCode?: unknown; groupByByMode?: unknown; mode?: unknown; navPinnedIds?: unknown; pinnedOrder?: unknown; seenDragPinHint?: unknown;
   sidebarWidth?: unknown; sortByByMode?: unknown; systemFont?: unknown;
 };
@@ -36,9 +44,10 @@ export function readPersistedFrameMode(): FrameMode {
 
 export function createInitialFrameState(): FrameState {
   const persisted = readPersistedDFrameState();
+  const collapsedGroupsByMode = readCollapsedGroupsByMode(persisted);
   return {
     mode: readPersistedFrameMode(),
-    collapsedGroups: getStringArray(persisted.collapsedGroups),
+    collapsedGroupsByMode,
     customGroupAssignments: getStringRecord(persisted.customGroupAssignments),
     customGroupOrder: getStringArrayRecord(persisted.customGroupOrder),
     customGroups: getCustomGroups(persisted.customGroups),
@@ -56,6 +65,26 @@ export function createInitialFrameState(): FrameState {
     systemFont: getBoolean(persisted.systemFont),
     moreOpen: false,
   };
+}
+
+/** Current-mode collapsed group ids (call sites keep using frame.collapsedGroups). */
+export function collapsedGroupsForMode(
+  byMode: Partial<Record<FrameMode, string[]>>,
+  mode: FrameMode,
+): string[] {
+  return byMode[mode] ?? [];
+}
+
+export function toggleGroupCollapsedState(
+  current: FrameState,
+  id: string,
+): FrameState {
+  const mode = current.mode;
+  const prev = current.collapsedGroupsByMode[mode] ?? [];
+  const next = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
+  const collapsedGroupsByMode = { ...current.collapsedGroupsByMode, [mode]: next };
+  persistDFrameState({ collapsedGroupsByMode });
+  return { ...current, collapsedGroupsByMode };
 }
 
 export function assignToCustomGroupState(current: FrameState, sessionKey: string, groupId: string | null, nextOrder?: string[]): FrameState {
@@ -121,9 +150,13 @@ export function deleteCustomGroupState(current: FrameState, id: string): FrameSt
   const customGroupAssignments = Object.fromEntries(Object.entries(current.customGroupAssignments).filter(([, groupId]) => groupId !== id));
   const { [id]: _deleted, ...customGroupOrder } = current.customGroupOrder;
   const customGroups = current.customGroups.filter((group) => group.id !== id);
-  const collapsedGroups = current.collapsedGroups.filter((item) => item !== `custom-${id}`);
-  persistDFrameState({ collapsedGroups, customGroupAssignments, customGroupOrder, customGroups });
-  return { ...current, collapsedGroups, customGroupAssignments, customGroupOrder, customGroups };
+  const dropKey = `custom-${id}`;
+  // Custom groups are shared across modes; drop collapse marker from every mode bucket.
+  const collapsedGroupsByMode = mapCollapsedGroupsByMode(current.collapsedGroupsByMode, (list) =>
+    list.filter((item) => item !== dropKey),
+  );
+  persistDFrameState({ collapsedGroupsByMode, customGroupAssignments, customGroupOrder, customGroups });
+  return { ...current, collapsedGroupsByMode, customGroupAssignments, customGroupOrder, customGroups };
 }
 
 export function moveCustomGroupState(current: FrameState, id: string, index: number): FrameState {
@@ -148,6 +181,44 @@ function readPersistedDFrameState(): PersistedDFrameState {
 
 function getBoolean(value: unknown) { return typeof value === "boolean" ? value : false; }
 function getStringArray(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }
+
+/**
+ * Prefer mode-split persist key. Legacy flat collapsedGroups seeds both modes once
+ * so existing fold state is not lost when upgrading.
+ */
+function readCollapsedGroupsByMode(persisted: PersistedDFrameState): Partial<Record<FrameMode, string[]>> {
+  const byMode = getStringArrayByMode(persisted.collapsedGroupsByMode);
+  if (Object.keys(byMode).length > 0) return byMode;
+  const legacy = getStringArray(persisted.collapsedGroups);
+  if (legacy.length === 0) return {};
+  return { code: [...legacy], cowork: [...legacy] };
+}
+
+function getStringArrayByMode(value: unknown): Partial<Record<FrameMode, string[]>> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const modes = new Set<string>(FRAME_MODE_VALUES);
+  const out: Partial<Record<FrameMode, string[]>> = {};
+  for (const [mode, list] of Object.entries(value)) {
+    if (!modes.has(mode)) continue;
+    const items = getStringArray(list);
+    if (items.length > 0) out[mode as FrameMode] = items;
+  }
+  return out;
+}
+
+function mapCollapsedGroupsByMode(
+  byMode: Partial<Record<FrameMode, string[]>>,
+  map: (list: string[]) => string[],
+): Partial<Record<FrameMode, string[]>> {
+  const next: Partial<Record<FrameMode, string[]>> = {};
+  for (const mode of FRAME_MODE_VALUES) {
+    const list = byMode[mode];
+    if (!list) continue;
+    const mapped = map(list);
+    if (mapped.length > 0) next[mode] = mapped;
+  }
+  return next;
+}
 function getNavPinnedIds(value: unknown): string[] | null { return value === null || !Array.isArray(value) ? null : getStringArray(value); }
 function getCustomGroups(value: unknown): DFrameCustomGroup[] {
   return Array.isArray(value) ? value.filter((item): item is DFrameCustomGroup => Boolean(item) && typeof item.id === "string" && typeof item.name === "string") : [];

@@ -25,6 +25,18 @@ import {
   officialPlanExitTrustMode,
   permissionModeLabel,
 } from "./officialComposerOptions";
+import { OfficialAskUserQuestionCard } from "./OfficialAskUserQuestionCard";
+import { isOfficialAskUserQuestionTool } from "./officialAskUserQuestionModel";
+import {
+  OfficialComputerUseAgeApproval,
+  OfficialComputerUseTeachApproval,
+  OfficialComputerUseWkApprovalCard,
+} from "./OfficialComputerUseApprovalCards";
+import {
+  isOfficialComputerRequestAccessTool,
+  isOfficialComputerTeachAccessTool,
+  isOfficialComputerUseWkTool,
+} from "./officialComputerUseModel";
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -252,7 +264,12 @@ export function InlineToolPermissionApprovals({
     options?: { targetMode?: string },
   ) => {
     if (!request || !bridge.respondToToolPermission) return;
-    if (decision === "always" && request.hasAlwaysAllow === false) return;
+    // Official wk / Vge / Age always-grant paths use decide("always", {_cuGrants}) even when
+    // generic nI hasAlwaysAllow is false (session-scoped computer grants, not settings always-allow).
+    const computerAlwaysGrant =
+      isOfficialComputerRequestAccessTool(request.toolName)
+      || isOfficialComputerTeachAccessTool(request.toolName);
+    if (decision === "always" && request.hasAlwaysAllow === false && !computerAlwaysGrant) return;
     const requestId = request.requestId;
     setResolvingId(requestId);
     setResolveError(null);
@@ -319,9 +336,26 @@ export function InlineToolPermissionApprovals({
     }
   }, [bridge, onPermissionModeChange, request, sessionId]);
 
-  // Generic tool card shortcuts only — ExitPlanMode Wk owns Escape / ⌘⏎ itself.
+  // Official Xt: AskUser Ow → ExitPlan Wk → yk wk → fo Age → mo Teach → nI.
+  const isAskUserQuestion = isOfficialAskUserQuestionTool(request?.toolName);
+  const isComputerUseWk = isOfficialComputerUseWkTool(request?.toolName, request?.input);
+  const isComputerRequestAccess = isOfficialComputerRequestAccessTool(request?.toolName);
+  const isComputerTeach = isOfficialComputerTeachAccessTool(request?.toolName);
+  // When yk is true, Age is not used; when featureDisabled/tcc, fo→Lge/Age (not wk).
+  const isComputerUseAge = isComputerRequestAccess && !isComputerUseWk;
+
+  // Generic tool card shortcuts only — Ow / Wk / wk / Age / Teach own keys themselves.
   useEffect(() => {
-    if (!request || isExitPlanMode) return undefined;
+    if (
+      !request
+      || isExitPlanMode
+      || isAskUserQuestion
+      || isComputerUseWk
+      || isComputerUseAge
+      || isComputerTeach
+    ) {
+      return undefined;
+    }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || resolvingId === request.requestId) return;
       if (event.key === "Escape") {
@@ -344,11 +378,35 @@ export function InlineToolPermissionApprovals({
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [decide, hasAlwaysAllow, isExitPlanMode, request, resolvingId]);
+  }, [
+    decide,
+    hasAlwaysAllow,
+    isAskUserQuestion,
+    isComputerTeach,
+    isComputerUseAge,
+    isComputerUseWk,
+    isExitPlanMode,
+    request,
+    resolvingId,
+  ]);
 
   if (!request) return null;
 
   const busy = resolvingId === request.requestId;
+  const queueDepth = Math.max(0, requests.length - 1);
+  if (isAskUserQuestion) {
+    // Official ta = decide("once", { questions, answers, annotations? }).
+    return (
+      <OfficialAskUserQuestionCard
+        busy={busy}
+        onSubmit={(payload) => void decide("once", payload as unknown as Record<string, unknown>)}
+        queueDepth={queueDepth}
+        toolInput={request.input}
+      >
+        {resolveError ? <div className="text-footnote text-extended-pink">{resolveError}</div> : null}
+      </OfficialAskUserQuestionCard>
+    );
+  }
   if (isExitPlanMode) {
     // Official Mt.planExitTrustMode / planExitAcceptOptions from Os available modes.
     const availableModes = officialAvailablePermissionModes();
@@ -360,7 +418,7 @@ export function InlineToolPermissionApprovals({
         busy={busy}
         onDecide={(decision, updatedInput, options) => void decide(decision, updatedInput, options)}
         onOpenPlan={onOpenPlan}
-        queueDepth={Math.max(0, requests.length - 1)}
+        queueDepth={queueDepth}
         request={request}
         sessionId={sessionId}
         trustForwardMode={planExitTrustMode}
@@ -369,11 +427,50 @@ export function InlineToolPermissionApprovals({
       </OfficialExitPlanModeApprovalCard>
     );
   }
+  if (isComputerUseWk) {
+    // Official wk: decide("always", { ...input, _cuGrants }) / decide("deny").
+    return (
+      <OfficialComputerUseWkApprovalCard
+        busy={busy}
+        onDecide={(decision, updatedInput) => void decide(decision, updatedInput)}
+        queueDepth={queueDepth}
+        toolInput={request.input}
+      >
+        {resolveError ? <div className="text-footnote text-extended-pink">{resolveError}</div> : null}
+      </OfficialComputerUseWkApprovalCard>
+    );
+  }
+  if (isComputerUseAge) {
+    // Official fo → Lge/Age (Uge/Fge/Oge). hasAlwaysAllow may be false; still allow "always" grants.
+    return (
+      <OfficialComputerUseAgeApproval
+        busy={busy}
+        onDecide={(decision, updatedInput) => void decide(decision, updatedInput)}
+        requestId={request.requestId}
+        sessionId={request.sessionId}
+        toolInput={request.input}
+        toolName={request.toolName}
+      />
+    );
+  }
+  if (isComputerTeach) {
+    // Official mo → Vge teach card.
+    return (
+      <OfficialComputerUseTeachApproval
+        busy={busy}
+        onDecide={(decision, updatedInput) => void decide(decision, updatedInput)}
+        requestId={request.requestId}
+        sessionId={request.sessionId}
+        toolInput={request.input}
+        toolName={request.toolName}
+      />
+    );
+  }
   return (
     <OfficialToolApprovalCard
       busy={busy}
       onDecide={(decision) => void decide(decision)}
-      queueDepth={Math.max(0, requests.length - 1)}
+      queueDepth={queueDepth}
       request={request}
     >
       {resolveError ? <div className="text-footnote text-extended-pink">{resolveError}</div> : null}
