@@ -9,6 +9,7 @@ import { RoutineHeader, ScheduledRouteShell } from "./ScheduledPrimitives";
 import { taskDisplayName } from "./scheduleUtils";
 import { SCHEDULED_DETAIL_MESSAGES, formatScheduledTemplate } from "./scheduledDetailMessages";
 import { useI18nText } from "../../i18n/footerMenuMessages";
+import { resolveScheduledTaskRunMessage } from "../cowork/scheduled/scheduledTaskPromptWrap";
 import { scheduledTaskIndexPath } from "./scheduledPaths";
 import { useScheduledTasks } from "./useScheduledTasks";
 
@@ -207,10 +208,20 @@ function useScheduledRuns(taskId: string) {
 }
 
 async function startScheduledRun(task: ScheduledTaskSummary, title: string) {
+  // Residual pYt body: file → Uwe → Lwe wrap (not raw prompt alone).
+  // Empty after Uwe → residual no-op (do not start with bare title/prompt).
+  const fileContent =
+    (await desktopBridge.CCDScheduledTasks.getFileContent?.(task.id).catch(() => "")) ?? "";
+  const prompt = resolveScheduledTaskRunMessage({
+    taskId: task.id,
+    fileContent,
+    prompt: task.prompt,
+  });
+  if (!prompt) return;
   await desktopBridge.LocalSessions.start({
     kind: "code",
     title,
-    prompt: task.prompt ?? title,
+    prompt,
     scheduledTaskId: task.id,
     origin: "scheduled",
     workspace: {

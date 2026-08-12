@@ -192,6 +192,13 @@ export type ScheduledTaskSummary = {
   nextRunAt?: string;
   fireAt?: string;
   lastRunAt?: string;
+  /** Official uYt disableJitter — exact-time runs (jitterSeconds=0). */
+  disableJitter?: boolean;
+  /**
+   * Official list enrichment getJitterSecondsForTask (seconds).
+   * HNe schedule copy prefixes `~` when Math.round(jitterSeconds/60) > 0.
+   */
+  jitterSeconds?: number;
   useWorktree?: boolean;
   sourceBranch?: string;
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "auto";
@@ -209,6 +216,8 @@ export type UpdateScheduledTaskInput = {
   description?: string;
   prompt?: string;
   cronExpression?: string | null;
+  /** Residual one-shot fireAt (ISO); null clears. Official create once is manual (no fireAt invent). */
+  fireAt?: string | null;
   cwd?: string;
   model?: string;
   permissionMode?: ScheduledTaskSummary["permissionMode"];
@@ -218,6 +227,7 @@ export type UpdateScheduledTaskInput = {
   enabled?: boolean;
   title?: string;
   name?: string;
+  disableJitter?: boolean;
 };
 
 export type CreateScheduledTaskInput = {
@@ -225,6 +235,8 @@ export type CreateScheduledTaskInput = {
   description: string;
   prompt: string;
   cronExpression?: string;
+  /** Residual fireAt when host/edit/remote supplies one-shot time — not invented for frequency once. */
+  fireAt?: string;
   cwd?: string;
   permissionMode?: ScheduledTaskSummary["permissionMode"];
   model?: string;
@@ -820,6 +832,16 @@ export type ScheduledTasksBridge = {
   /** Official residual updateScheduledTask(id, patch) — also used by space Qa link/unlink. */
   update?: (id: string, input: UpdateScheduledTaskInput) => Promise<ScheduledTaskSummary | null>;
   updateStatus?: (id: string, status: "enabled" | "disabled" | "deleted") => Promise<void>;
+  /**
+   * Official jT.getScheduledTaskFileContent(taskId) — pYt fire path body source.
+   * Host seeds from prompt on create/update; empty string when missing.
+   */
+  getFileContent?: (id: string) => Promise<string>;
+  /**
+   * Official jT.updateScheduledTaskFileContent(taskId, content) — residual file body write.
+   * Product create/update already seeds via prompt; optional for editor parity.
+   */
+  updateFileContent?: (id: string, content: string) => Promise<boolean>;
   /** Official jT.removeApprovedPermission(taskId, toolName) — Always allowed remove. */
   removeApprovedPermission?: (id: string, toolName: string) => Promise<boolean>;
   /** Official jT.clearChromePermissions(taskId) — Always allowed browser remove. */

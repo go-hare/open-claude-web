@@ -165,6 +165,7 @@ type CoworkLifecycleBridge = Pick<CoworkSessionsBridge,
 type RawScheduledTasksBridge = {
   getAllScheduledTasks?: () => Promise<unknown[]>;
   getScheduledTaskFileContent?: (id: string) => Promise<unknown>;
+  updateScheduledTaskFileContent?: (id: string, content: string) => Promise<unknown>;
   updateScheduledTaskStatus?: (id: string, status: string) => Promise<unknown>;
   /** Host: updateScheduledTask(id, patch). Residual single-object form also accepted. */
   updateScheduledTask?: (idOrInput: string | Record<string, unknown>, input?: Record<string, unknown>) => Promise<unknown>;
@@ -1603,6 +1604,15 @@ function createScheduledTasksBridge(raw: RawScheduledTasksBridge | undefined): D
     updateStatus: async (id, status) => {
       await raw?.updateScheduledTaskStatus?.(id, status);
     },
+    // Residual jT.getScheduledTaskFileContent — pYt fire body (string, never invent).
+    getFileContent: async (id) => {
+      const rawContent = await raw?.getScheduledTaskFileContent?.(id);
+      return typeof rawContent === "string" ? rawContent : "";
+    },
+    updateFileContent: async (id, content) => {
+      const result = await raw?.updateScheduledTaskFileContent?.(id, content);
+      return result === true;
+    },
     // Residual jT: only true when host returns true (already-empty chrome → false).
     removeApprovedPermission: async (id, toolName) => {
       const result = await raw?.removeApprovedPermission?.(id, toolName);
@@ -2674,8 +2684,14 @@ function normalizeScheduledTask(item: unknown): ScheduledTaskSummary {
     cronExpression: stringValue(raw.cronExpression) ?? stringValue(raw.cron_expression),
     cwd: stringValue(raw.cwd),
     nextRunAt: stringValue(raw.nextRunAt) ?? stringValue(raw.next_run_at),
-    fireAt: stringValue(raw.fireAt),
+    fireAt: stringValue(raw.fireAt) ?? stringValue(raw.fire_at),
     lastRunAt: stringValue(raw.lastRunAt) ?? stringValue(raw.last_run_at),
+    disableJitter: raw.disableJitter === true || raw.disable_jitter === true ? true : undefined,
+    jitterSeconds: typeof raw.jitterSeconds === "number"
+      ? raw.jitterSeconds
+      : typeof raw.jitter_seconds === "number"
+        ? raw.jitter_seconds
+        : undefined,
     useWorktree: Boolean(raw.useWorktree),
     sourceBranch: stringValue(raw.sourceBranch),
     permissionMode: raw.permissionMode as ScheduledTaskSummary["permissionMode"],

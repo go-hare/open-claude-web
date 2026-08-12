@@ -3,6 +3,7 @@ import { desktopBridge } from "../../adapters/desktopBridge";
 import { OfficialButton } from "../epitaxy/OfficialEpitaxyComponents";
 import { useI18nText } from "../../i18n/footerMenuMessages";
 import { Icon } from "../../shell/icons";
+import { OfficialCheckbox } from "../shared/OfficialCheckbox";
 import { RoutineHeader, ScheduledRouteShell, subtleButtonClass } from "./ScheduledPrimitives";
 import { SCHEDULED_FORM_MESSAGES, type ScheduledFormText } from "./scheduledFormMessages";
 import { cronForSchedule, formatTime, normalizeTaskId, taskNameError, type ScheduleFrequency } from "./scheduleUtils";
@@ -20,6 +21,8 @@ type CreateTaskInput = {
   cwd: string;
   frequency: ScheduleFrequency;
   time: string;
+  /** Residual uYt/c024 create bag disableJitter. */
+  disableJitter: boolean;
   setError: (value: string) => void;
   setIsSaving: (value: boolean) => void;
   onCreated: (id: string) => void;
@@ -58,7 +61,15 @@ function LocalRoutineForm({ existingNames, onBack, onCreated, text }: FormProps 
       <TextField label={text.name} required value={form.name} error={form.nameError} onChange={form.setName} placeholder={text.namePlaceholder} />
       <TextField label={text.description} required value={form.description} onChange={form.setDescription} placeholder={text.descriptionPlaceholder} />
       <InstructionsField form={form} text={text} />
-      <ScheduleField frequency={form.frequency} setFrequency={form.setFrequency} time={form.time} setTime={form.setTime} text={text} />
+      <ScheduleField
+        disableJitter={form.disableJitter}
+        frequency={form.frequency}
+        setDisableJitter={form.setDisableJitter}
+        setFrequency={form.setFrequency}
+        setTime={form.setTime}
+        text={text}
+        time={form.time}
+      />
       {form.error ? <p className="text-footnote text-danger-000">{form.error}</p> : null}
       {/* Official c024 footer: Button variant contained + primary with btn-squish fill layer (c87b). */}
       <div className="flex justify-end gap-g4">
@@ -80,6 +91,8 @@ function useLocalRoutineForm(existingNames: Set<string>, onCreated: (id: string)
   const [cwd, setCwd] = useState("");
   const [frequency, setFrequency] = useState<ScheduleFrequency>("daily");
   const [time, setTime] = useState("09:00");
+  // Residual uYt/c024 disableJitter ("Run at exact time"); default false.
+  const [disableJitter, setDisableJitter] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const nameError = useMemo(() => taskNameError(name, existingNames), [name, existingNames]);
@@ -87,15 +100,48 @@ function useLocalRoutineForm(existingNames: Set<string>, onCreated: (id: string)
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!isValid || isSaving) return;
-    await createTask({ name, description, prompt, cwd, frequency, time, setError, setIsSaving, onCreated, creationUnavailable });
+    await createTask({
+      name,
+      description,
+      prompt,
+      cwd,
+      frequency,
+      time,
+      disableJitter,
+      setError,
+      setIsSaving,
+      onCreated,
+      creationUnavailable,
+    });
   };
-  return { name, setName, description, setDescription, prompt, setPrompt, cwd, setCwd, frequency, setFrequency, time, setTime, isSaving, error, nameError, isValid, submit };
+  return {
+    name,
+    setName,
+    description,
+    setDescription,
+    prompt,
+    setPrompt,
+    cwd,
+    setCwd,
+    frequency,
+    setFrequency,
+    time,
+    setTime,
+    disableJitter,
+    setDisableJitter,
+    isSaving,
+    error,
+    nameError,
+    isValid,
+    submit,
+  };
 }
 
 async function createTask(input: CreateTaskInput) {
   input.setIsSaving(true);
   input.setError("");
   const [hour, minute] = input.time.split(":").map(Number);
+  // Residual create bag includes disableJitter (exact-time); once has no cron (manual).
   const created = await desktopBridge.CCDScheduledTasks.create?.({
     name: normalizeTaskId(input.name),
     description: input.description.trim(),
@@ -103,6 +149,7 @@ async function createTask(input: CreateTaskInput) {
     cwd: input.cwd,
     userSelectedFolders: [input.cwd],
     cronExpression: cronForSchedule(input.frequency, hour, minute, 1),
+    disableJitter: input.disableJitter,
     permissionMode: "default",
   });
   input.setIsSaving(false);
@@ -152,7 +199,28 @@ function InstructionsField({ form, text }: { form: ReturnType<typeof useLocalRou
   );
 }
 
-function ScheduleField({ frequency, setFrequency, time, setTime, text }: { frequency: ScheduleFrequency; setFrequency: (value: ScheduleFrequency) => void; time: string; setTime: (value: string) => void; text: ScheduledFormText }) {
+function ScheduleField({
+  frequency,
+  setFrequency,
+  time,
+  setTime,
+  disableJitter,
+  setDisableJitter,
+  text,
+}: {
+  frequency: ScheduleFrequency;
+  setFrequency: (value: ScheduleFrequency) => void;
+  time: string;
+  setTime: (value: string) => void;
+  disableJitter: boolean;
+  setDisableJitter: (value: boolean) => void;
+  text: ScheduledFormText;
+}) {
+  // Official cYt().showScheduledTaskExactTimeOption — no yukon flag bridge yet; keep false (stagger note path).
+  const showExactTimeOption = false;
+  const showTimeInput = frequency !== "once" && frequency !== "hourly";
+  const showJitterNote = !showExactTimeOption && frequency !== "once";
+  const showExactTime = showExactTimeOption && frequency !== "once";
   return (
     <div className="flex flex-col gap-g4">
       <span className="text-body text-t6">{text.schedule}</span>
@@ -164,8 +232,19 @@ function ScheduleField({ frequency, setFrequency, time, setTime, text }: { frequ
             </button>
           ))}
         </div>
-        {frequency !== "once" ? <TimeRow time={time} setTime={setTime} atLabel={text.atTime} /> : null}
-        {frequency !== "once" ? <p className="text-footnote text-t5">{text.staggerNote}</p> : null}
+        {showTimeInput ? <TimeRow time={time} setTime={setTime} atLabel={text.atTime} /> : null}
+        {showJitterNote ? <p className="text-footnote text-t5">{text.staggerNote}</p> : null}
+        {showExactTime ? (
+          <div className="min-w-0">
+            <OfficialCheckbox
+              checked={disableJitter}
+              label={text.runAtExactTime}
+              labelClassName="text-sm"
+              onCheckedChange={setDisableJitter}
+            />
+            <p className="text-footnote text-t5 mt-1 ml-7">{text.exactTimeHint}</p>
+          </div>
+        ) : null}
       </div>
     </div>
   );

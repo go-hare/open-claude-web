@@ -41,6 +41,12 @@ export const SCHEDULED_FORM_MESSAGES = {
     defaultMessage: "Scheduled tasks use a randomized delay of several minutes for server performance.",
     id: "x9TlvXuBUX",
   },
+  /** Residual exact-time (disableJitter) — same ids as uYt / SCHEDULED_CREATE_MESSAGES. */
+  runAtExactTime: { defaultMessage: "Run at exact time", id: "noyr4eHzOU" },
+  exactTimeHint: {
+    defaultMessage: "By default, scheduled tasks use a randomized delay of several minutes for server performance.",
+    id: "CbDZjKEj2c",
+  },
   selectFolder: { defaultMessage: "Select folder", id: "K3Z1XCYM9J" },
   worktree: { defaultMessage: "Worktree", id: "tUTlFfqj3E" },
   defaultModel: { defaultMessage: "Default", id: "lKv8ex1Pyg" },

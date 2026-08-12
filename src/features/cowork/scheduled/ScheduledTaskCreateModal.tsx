@@ -183,7 +183,8 @@ export function ScheduledTaskCreateModal({
       }
       setFolders(editingTask.userSelectedFolders ?? (editingTask.cwd ? [editingTask.cwd] : []));
       setModel(editingTask.model);
-      setDisableJitter(false);
+      // Residual uYt seed: disableJitter from task (exact-time checkbox).
+      setDisableJitter(editingTask.disableJitter === true);
     } else {
       setName("");
       setDescription("");
@@ -236,6 +237,8 @@ export function ScheduledTaskCreateModal({
           userSelectedFolders: folders.length > 0 ? folders : [],
           cronExpression: cronExpression ?? null,
           model,
+          // Residual uYt update bag includes disableJitter; fireAt only when residual seed (edit fireAt freq keeps existing host field unless cleared by cron).
+          disableJitter,
           spaceId: effectiveSpaceId && effectiveSpaceId.length > 0 ? effectiveSpaceId : undefined,
         });
         if (!updated && updated !== null) {

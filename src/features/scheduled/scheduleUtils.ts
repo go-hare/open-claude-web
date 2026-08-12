@@ -40,19 +40,38 @@ export const cronForSchedule = (frequency: ScheduleFrequency, hour: number, minu
   return `${minute} ${hour} * * ${dayOfWeek}`;
 };
 
+/** Official HNe approx when jitterSeconds > 0 minutes. */
+export function scheduleApproxPrefix(
+  task: Pick<ScheduledTaskSummary, "jitterSeconds" | "disableJitter">,
+): string {
+  if (task.disableJitter) return "";
+  return Math.round((task.jitterSeconds ?? 0) / 60) > 0 ? "~" : "";
+}
+
 export const scheduleLabel = (task: ScheduledTaskSummary) => {
   if (task.fireAt) return "Run once";
-  if (task.schedule && task.schedule !== task.cronExpression) return task.schedule;
-  return labelFromCron(task.cronExpression);
+  const approx = scheduleApproxPrefix(task);
+  if (task.schedule && task.schedule !== task.cronExpression) {
+    if (approx && !task.schedule.startsWith("~")) return `${approx}${task.schedule}`;
+    return task.schedule;
+  }
+  return labelFromCron(task.cronExpression, approx);
 };
 
-export const labelFromCron = (cron?: string) => {
+export const labelFromCron = (cron?: string, approx = "") => {
   if (!cron) return "Manual";
   const [minute, hour, , , day] = cron.split(" ");
-  if (hour === "*") return "Hourly";
-  if (day === "1-5") return `Weekdays at ${formatTime(Number(hour), Number(minute))}`;
-  if (day && day !== "*") return `Weekly on ${DAYS[Number(day)] ?? "Monday"} at ${formatTime(Number(hour), Number(minute))}`;
-  return `Daily at ${formatTime(Number(hour), Number(minute))}`;
+  if (hour === "*") {
+    const m = Number(minute);
+    if ((Number.isFinite(m) && m > 0) || approx) {
+      return `Hourly at ${approx}:${String(Number.isFinite(m) ? m : 0).padStart(2, "0")}`;
+    }
+    return "Hourly";
+  }
+  const time = `${approx}${formatTime(Number(hour), Number(minute))}`;
+  if (day === "1-5") return `Weekdays at ${time}`;
+  if (day && day !== "*") return `Weekly on ${DAYS[Number(day)] ?? "Monday"} at ${time}`;
+  return `Daily at ${time}`;
 };
 
 export const formatTime = (hour: number, minute: number) => {

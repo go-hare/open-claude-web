@@ -290,6 +290,8 @@ const coworkScheduledTasks: ScheduledTaskSummary[] = coworkFixture.scheduledTask
 const coworkSpaces: CoworkSpaceSummary[] = coworkFixture.spaces.map((space) => ({ ...space }));
 
 function createFakeScheduledTasksBridge(items: ScheduledTaskSummary[]): ScheduledTasksBridge {
+  // Residual jT files map (pYt getScheduledTaskFileContent).
+  const files = new Map<string, string>();
   return {
     list: async () => items.slice(),
     get: async (id) => items.find((task) => task.id === id) ?? null,
@@ -311,6 +313,7 @@ function createFakeScheduledTasksBridge(items: ScheduledTaskSummary[]): Schedule
         spaceId: input.spaceId && input.spaceId.length > 0 ? input.spaceId : undefined,
       };
       items.unshift(task);
+      if (typeof input.prompt === "string") files.set(task.id, input.prompt);
       return task;
     },
     update: async (id, input) => {
@@ -323,6 +326,7 @@ function createFakeScheduledTasksBridge(items: ScheduledTaskSummary[]): Schedule
             ? input.spaceId
             : undefined;
       items[index] = { ...items[index], ...input, spaceId, id };
+      if (typeof input.prompt === "string") files.set(id, input.prompt);
       return { ...items[index] };
     },
     updateStatus: async (id, status) => {
@@ -330,9 +334,15 @@ function createFakeScheduledTasksBridge(items: ScheduledTaskSummary[]): Schedule
       if (index < 0) return;
       if (status === "deleted") {
         items.splice(index, 1);
+        files.delete(id);
         return;
       }
       items[index] = { ...items[index], enabled: status === "enabled" };
+    },
+    getFileContent: async (id) => files.get(id) ?? "",
+    updateFileContent: async (id, content) => {
+      files.set(id, content);
+      return true;
     },
     removeApprovedPermission: async (id, toolName) => {
       const index = items.findIndex((task) => task.id === id);

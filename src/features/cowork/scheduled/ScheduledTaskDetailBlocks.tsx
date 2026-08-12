@@ -22,7 +22,7 @@ import {
   formatWebsiteCount,
   type ScheduledDetailText,
 } from "./scheduledDetailMessages";
-import { formatTime, scheduleLabel, taskDisplayName } from "./scheduleUtils";
+import { formatTime, scheduleApproxPrefix, scheduleLabel, taskDisplayName } from "./scheduleUtils";
 
 export type LinkedSpaceInfo = {
   id: string;
@@ -585,12 +585,21 @@ function localizedScheduleLabel(task: ScheduledTaskSummary, text: ScheduledDetai
   const cron = task.cronExpression;
   if (task.fireAt) return text.manual;
   if (!cron) return text.manualOnly;
+  // Official HNe: ~ when Math.round((jitterSeconds ?? 0) / 60) > 0 and not disableJitter.
+  const approx = scheduleApproxPrefix(task);
   const [minute, hour, , , day] = cron.split(" ");
-  if (hour === "*") return text.hourly;
-  if (day === "1-5") return `${text.weekdays} ${formatTime(Number(hour), Number(minute))}`;
-  if (day && day !== "*") return `${text.weekly} ${formatTime(Number(hour), Number(minute))}`;
+  if (hour === "*") {
+    if (approx) {
+      const m = Number(minute);
+      return `Hourly at ${approx}:${String(Number.isFinite(m) ? m : 0).padStart(2, "0")}`;
+    }
+    return text.hourly;
+  }
+  const time = `${approx}${formatTime(Number(hour), Number(minute))}`;
+  if (day === "1-5") return `${text.weekdays} ${time}`;
+  if (day && day !== "*") return `${text.weekly} ${time}`;
   if (hour !== undefined && minute !== undefined) {
-    return `${text.daily} ${formatTime(Number(hour), Number(minute))}`;
+    return `${text.daily} ${time}`;
   }
   return scheduleLabel(task);
 }

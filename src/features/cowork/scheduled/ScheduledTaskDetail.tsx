@@ -28,6 +28,7 @@ import {
   formatScheduledTemplate,
 } from "./scheduledDetailMessages";
 import { scheduledTaskIndexPath } from "./scheduledPaths";
+import { resolveScheduledTaskRunMessage } from "./scheduledTaskPromptWrap";
 import { taskDisplayName } from "./scheduleUtils";
 import { useScheduledTasks } from "./useScheduledTasks";
 
@@ -380,8 +381,9 @@ function useScheduledRuns(taskId: string) {
 }
 
 async function startScheduledRun(task: ScheduledTaskSummary, title: string) {
-  // Residual rKt onRunNow → LocalAgentModeSessions.start (cowork/epitaxy path).
+  // Residual rKt onRunNow → pYt body (file → Uwe → Lwe wrap) → LocalAgentModeSessions.start.
   // Bridge toStartPayload flattens workspace.cwd; kind must be epitaxy for CoworkSessionsBridge.
+  // Empty after Uwe → residual no-op (do not start with bare title/prompt).
   const folders =
     task.userSelectedFolders && task.userSelectedFolders.length > 0
       ? task.userSelectedFolders
@@ -389,13 +391,20 @@ async function startScheduledRun(task: ScheduledTaskSummary, title: string) {
         ? [task.cwd]
         : [];
   const cwd = folders[0] ?? task.cwd;
-  const prompt = task.prompt ?? title;
+  const fileContent =
+    (await desktopBridge.CoworkScheduledTasks.getFileContent?.(task.id).catch(() => "")) ?? "";
+  const message = resolveScheduledTaskRunMessage({
+    taskId: task.id,
+    fileContent,
+    prompt: task.prompt,
+  });
+  if (!message) return;
   await desktopBridge.LocalAgentModeSessions.start({
     kind: "epitaxy",
-    message: prompt,
+    message,
     model: task.model,
     permissionMode: task.permissionMode,
-    prompt,
+    prompt: message,
     scheduledTaskId: task.id,
     spaceId: task.spaceId,
     title,
