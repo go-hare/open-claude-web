@@ -51,12 +51,13 @@ export function CoworkActiveTasksSection({
   useEffect(() => {
     let active = true;
     const load = async () => {
+      // Official t6 catch: getAll failure must not replace sessions with [].
       const [nextSessions, nextScheduled] = await Promise.all([
-        desktopBridge.LocalAgentModeSessions.list().catch(() => []),
+        desktopBridge.LocalAgentModeSessions.list().catch(() => null),
         desktopBridge.CoworkScheduledTasks?.list().catch(() => []) ?? Promise.resolve([]),
       ]);
       if (!active) return;
-      setSessions(nextSessions);
+      if (nextSessions) setSessions(nextSessions);
       setScheduledTasks(nextScheduled);
     };
     void load();

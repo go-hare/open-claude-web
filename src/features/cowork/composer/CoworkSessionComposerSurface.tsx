@@ -1,7 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import { EditorContent } from "@tiptap/react";
 import { AnimatePresence, motion } from "motion/react";
-import { useLayoutEffect, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { Icon } from "../../../shell/icons";
 import { CoworkComposerPlusIcon } from "../newTask/CoworkAddMenuIcons";
 import { CoworkSelectedFiles } from "../newTask/CoworkSelectedFiles";
@@ -24,6 +24,7 @@ import {
   useCoworkDisclaimerText,
 } from "./coworkDisclaimerMessages";
 import { CoworkComposerButton } from "./CoworkComposerPrimitives";
+import { shouldOfficialCoworkSamplingEscapeStop } from "./officialCoworkSamplingEscape";
 import type { CoworkStagedImage } from "./coworkComposerStagedImages";
 import { CoworkStagedImageStrip } from "./CoworkStagedImageStrip";
 
@@ -236,6 +237,16 @@ function ComposerActions({ canStop, disabled, isSubmitting, onStop, onSubmit }: 
   onStop: () => void;
   onSubmit: () => void;
 }) {
+  // Official Oyt: window Escape → onStop while sampling (not while isLoading/stopping).
+  useEffect(() => {
+    if (!canStop) return undefined;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (!shouldOfficialCoworkSamplingEscapeStop(event.key, false)) return;
+      onStop();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canStop, onStop]);
   return (
     <AnimatePresence initial={false} mode="popLayout">
       {canStop ? (

@@ -106,6 +106,7 @@ type RawLocalSessionsBridge = {
   setPermissionMode?: (id: string, mode: string) => Promise<unknown>;
   updateSession?: (id: string, patch: Record<string, unknown>) => Promise<unknown>;
   startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<unknown>;
+  interrupt?: (id: string) => Promise<unknown>;
   stop?: (id: string) => Promise<unknown>;
   stopShellPty?: (sessionId: string) => Promise<unknown>;
   stopTask?: (sessionId: string, taskId: string) => Promise<unknown>;
@@ -1070,6 +1071,7 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
     },
     startShellPty: async (sessionId, cols, rows) => normalizeShellPtyStartResult(await raw?.startShellPty?.(sessionId, cols, rows), await raw?.getShellPtyBuffer?.(sessionId).catch(() => "")),
+    interrupt: async (id) => raw?.interrupt?.(id),
     stop: async (id) => raw?.stop?.(id),
     stopShellPty: async (sessionId) => {
       await raw?.stopShellPty?.(sessionId);

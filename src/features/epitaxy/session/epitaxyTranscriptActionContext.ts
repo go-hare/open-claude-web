@@ -38,6 +38,11 @@ export type EpitaxyTranscriptActionContextValue = {
   bridge: LocalSessionsBridge;
   /** Official yt / Yr cancelQueued — drop mid-turn queued user bubble. */
   cancelQueuedMessage?: (uuid: string) => void;
+  /**
+   * Official H busy gate: onRewindToMessage disabled while responding
+   * (`!ue || H || xn ? void 0 : $a`).
+   */
+  isResponding?: boolean;
   openFile: (target: OfficialFileViewTarget) => void;
   /** Official Wk onOpenPlan → setSidePane("plan") (c11959232). */
   openPlan: () => void;
@@ -46,7 +51,16 @@ export type EpitaxyTranscriptActionContextValue = {
   openTasks: () => void;
   onNavigate: (path: string) => void;
   reload: (options?: { silent?: boolean }) => Promise<void>;
+  /**
+   * Official session type gate: rewind local-only (`"local" !== e.type` → null).
+   * Fork may still be available when bridge.forkSession exists.
+   */
+  sessionRef?: EpitaxySessionRef | null;
   sessionId?: string;
+  /**
+   * Official $a / xt: set composer plain text + focus after rewind (prefill prompt).
+   */
+  setComposerText?: (text: string) => void;
   /**
    * Official mc submitToChat residual (c119 Preview Set up / start-failed).
    * Sends a user turn immediately — not composer-only attach.

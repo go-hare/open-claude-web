@@ -3,6 +3,7 @@
  * Extracted from EpitaxySessionTile — behavior unchanged.
  */
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
+// useRef used by useEpitaxyViewShortcuts (Esc Esc stamp) + OfficialSubagentPane.
 import type { SessionSummary } from "../../../adapters/desktopBridge";
 import type { ChatMessage } from "../../../adapters/desktopBridge/types";
 import {
@@ -15,6 +16,7 @@ import { MarkdownContent } from "../OfficialCodeMarkdown";
 import { canUseOfficialFilesBrowser } from "./OfficialFilesBrowserPane";
 import { OfficialSparkSpinner } from "./OfficialWorkingStatus";
 import type { EpitaxySessionRef, OfficialSubagentTarget } from "./epitaxyTranscriptActionContext";
+import { matchOfficialSessionShortcut } from "./officialSessionShortcuts";
 import { parseOfficialTasks } from "./officialTasksAndPlan";
 import { parseOfficialSubagentTranscriptEntries } from "./officialTranscriptParse";
 import { CodeAssistantEntryMessage, CodeUserEntryMessage } from "./OfficialTranscript";
@@ -82,44 +84,131 @@ export function EpitaxyChatHeader({ activeView, canOpenBrowser = false, canOpenF
   );
 }
 
-export function useEpitaxyViewShortcuts(
-  onSelect: (view: OfficialViewPane) => void,
-  enabled = true,
+/**
+ * Official session keydown residual (c11959232 `lk` switch):
+ * togglePreview / toggleDiff / toggleBrowser / toggleTerminal → onTogglePane
+ * cycleTranscriptMode → onCycleTranscriptMode
+ * closePane → onClosePane (side tile closeLastPane residual)
+ * toggleSideChat → only when onToggleSideChat provided (honest wall: product has none)
+ *
+ * Footer still owns openMode/Model/Effort menus; toggleSelectionMode stays on Preview pane.
+ */
+export type EpitaxySessionShortcutHandlers = {
   /**
-   * Official VC() — when false, ⇧⌘F is a no-op (same as Files menu hidden).
+   * Official VC() — when false, toggleBrowser is a no-op (same as Files menu hidden).
    * Default keeps prior sync probe for callers that omit the gate.
    */
-  canOpenBrowser: boolean = canUseOfficialFilesBrowser(),
-) {
+  canOpenBrowser?: boolean;
+  enabled?: boolean;
+  onClosePane?: () => void;
+  onCycleTranscriptMode?: () => void;
+  /**
+   * Official double-Esc (≤500ms) → openRewindPicker.
+   * Plain Escape only; modifiers abort the latch.
+   */
+  onRewind?: () => void;
+  /** Official onTogglePane(view) — toggle side tile for preview/diff/browser/terminal. */
+  onTogglePane: (view: OfficialViewPane) => void;
+  /**
+   * Official onToggleSideChat — local-only Side chat. Omit to leave cmd+; as honest wall
+   * (match but no dispatch), matching product without inventing Side chat.
+   */
+  onToggleSideChat?: () => void;
+};
+
+export function useEpitaxyViewShortcuts({
+  canOpenBrowser = canUseOfficialFilesBrowser(),
+  enabled = true,
+  onClosePane,
+  onCycleTranscriptMode,
+  onRewind,
+  onTogglePane,
+  onToggleSideChat,
+}: EpitaxySessionShortcutHandlers) {
+  const escEscStampRef = useRef(0);
   useEffect(() => {
     if (!enabled) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
+      // Official: if (!t || e.repeat) return.
+      if (!enabled || event.repeat) return;
+
+      // Official Esc Esc rewind picker (before lk switch; plain Escape only).
+      if (
+        event.key === "Escape"
+        && !event.metaKey
+        && !event.ctrlKey
+        && !event.shiftKey
+        && !event.altKey
+      ) {
+        if (!onRewind) {
+          escEscStampRef.current = 0;
+        } else {
+          const now = Date.now();
+          if (now - escEscStampRef.current <= 500) {
+            escEscStampRef.current = 0;
+            event.preventDefault();
+            onRewind();
+            return;
+          }
+          escEscStampRef.current = now;
+          // First Esc: do not preventDefault — composer stop / blur / side-pane Esc still run.
+        }
+      }
+
       if (event.defaultPrevented) return;
-      if (event.metaKey && event.shiftKey && event.code === "KeyP") {
-        event.preventDefault();
-        onSelect("preview");
-        return;
-      }
-      if (event.metaKey && event.shiftKey && event.code === "KeyD") {
-        event.preventDefault();
-        onSelect("diff");
-        return;
-      }
-      // Official toggleBrowser ⇧⌘F — only when VC() Files is available.
-      if (event.metaKey && event.shiftKey && event.code === "KeyF") {
-        if (!canOpenBrowser) return;
-        event.preventDefault();
-        onSelect("browser");
-        return;
-      }
-      if (event.ctrlKey && event.code === "Backquote") {
-        event.preventDefault();
-        onSelect("terminal");
+      const command = matchOfficialSessionShortcut(event);
+      if (!command) return;
+      switch (command) {
+        case "toggleTerminal":
+          event.preventDefault();
+          onTogglePane("terminal");
+          return;
+        case "cycleTranscriptMode":
+          if (!onCycleTranscriptMode) return;
+          event.preventDefault();
+          onCycleTranscriptMode();
+          return;
+        case "closePane":
+          if (!onClosePane) return;
+          event.preventDefault();
+          onClosePane();
+          return;
+        case "toggleSideChat":
+          // Honest wall: no product Side chat unless caller wires onToggleSideChat.
+          if (!onToggleSideChat) return;
+          event.preventDefault();
+          onToggleSideChat();
+          return;
+        case "togglePreview":
+          event.preventDefault();
+          onTogglePane("preview");
+          return;
+        case "toggleDiff":
+          event.preventDefault();
+          onTogglePane("diff");
+          return;
+        case "toggleBrowser":
+          if (!canOpenBrowser) return;
+          event.preventDefault();
+          onTogglePane("browser");
+          return;
+        default:
+          // openMode/Model/Effort + toggleSelectionMode handled elsewhere (footer / preview).
+          return;
       }
     };
+    // Official tc("keydown", i) — bubble phase session-level listener.
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [canOpenBrowser, enabled, onSelect]);
+  }, [
+    canOpenBrowser,
+    enabled,
+    onClosePane,
+    onCycleTranscriptMode,
+    onRewind,
+    onTogglePane,
+    onToggleSideChat,
+  ]);
 }
 
 /**

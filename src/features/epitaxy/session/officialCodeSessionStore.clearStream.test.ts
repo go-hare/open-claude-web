@@ -1,0 +1,216 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import type { ChatMessage } from "../../../adapters/desktopBridge/types";
+import { officialCodeSessionStore } from "./officialCodeSessionStore";
+import { parseOfficialTranscriptEntries } from "./officialTranscriptParse";
+
+function queuedUser(id: string, text: string): ChatMessage {
+  return {
+    id,
+    role: "user",
+    text,
+    createdAt: "2026-08-13T00:00:00.000Z",
+    raw: {
+      type: "user",
+      uuid: id,
+      isLocalOptimistic: true,
+      message: { role: "user", content: [{ type: "text", text }] },
+    },
+  };
+}
+
+function interruptUser(): ChatMessage {
+  return {
+    id: "interrupt",
+    role: "user",
+    text: "[Request interrupted by user]",
+    createdAt: "2026-08-13T00:00:01.000Z",
+    raw: {
+      type: "user",
+      uuid: "interrupt",
+      message: {
+        role: "user",
+        content: [{ type: "text", text: "[Request interrupted by user]" }],
+      },
+    },
+  };
+}
+
+function resultErrorDuringExecution(id: string): ChatMessage {
+  return {
+    id,
+    role: "assistant",
+    text: "error",
+    createdAt: "2026-08-13T00:00:03.000Z",
+    raw: {
+      type: "result",
+      uuid: id,
+      is_error: true,
+      subtype: "error_during_execution",
+      errors: ["error"],
+    },
+  };
+}
+
+describe("officialCodeSessionStore interrupt-then-continue", () => {
+  beforeEach(() => {
+    officialCodeSessionStore.setState({ buckets: {} });
+  });
+
+  it("promotes queuedMessages on normal settle (parent result / stream end)", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "222"));
+
+    officialCodeSessionStore.getState().clearStream("s1", true);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.queuedMessages).toEqual([]);
+    expect(bucket?.pendingQueuedSends).toBe(0);
+    expect(bucket?.messages.some((message) => message.id === "q1")).toBe(true);
+  });
+
+  it("markInterrupting keeps queuedMessages and isRunning (official Wr)", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: Date.now(),
+      streamActivityMode: "responding",
+      streamingMessageId: "live",
+      isRunning: true,
+    });
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "222"));
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q2", "333"));
+
+    officialCodeSessionStore.getState().markInterrupting("s1");
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.queuedMessages.map((message) => message.id)).toEqual(["q1", "q2"]);
+    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+    expect(bucket?.session?.isRunning).toBe(true);
+    expect(bucket?.streamActivityMode).toBe("idle");
+    expect(bucket?.streamingMessageId).toBeNull();
+  });
+
+  it("interrupt user stays in messages while queued follow-ups wait (jke)", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, []);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: Date.now(),
+      isRunning: true,
+    });
+    officialCodeSessionStore.getState().noteQueuedSend("s1");
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "222"));
+    officialCodeSessionStore.getState().mergeMessage("s1", interruptUser());
+    officialCodeSessionStore.getState().mergeMessage("s1", resultErrorDuringExecution("r1"));
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.messages.map((message) => message.id)).toEqual(["interrupt", "r1", "q1"]);
+    const entries = parseOfficialTranscriptEntries(bucket!.messages);
+    expect(entries.some((entry) => entry.items.some((item) => item.kind === "turn_error"))).toBe(false);
+    // Official Mke: interrupt user stays in messages for jke, but Ike emits no text Hb.
+    expect(entries.some((entry) => entry.items.some((item) => item.kind === "text" && item.text.includes("interrupted")))).toBe(false);
+  });
+
+  it("result + queue continues (official g): promote after result, keep running", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: Date.now(),
+      isRunning: true,
+    });
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "222"));
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q2", "333"));
+
+    officialCodeSessionStore.getState().mergeMessage("s1", resultErrorDuringExecution("r1"));
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.queuedMessages).toEqual([]);
+    expect(bucket?.messages.map((message) => message.id)).toEqual(["interrupt", "r1", "q1", "q2"]);
+    expect(bucket?.session?.isRunning).toBe(true);
+    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+    // jke: queued sit AFTER the interrupt result, so skip still holds.
+    const entries = parseOfficialTranscriptEntries(bucket!.messages);
+    expect(entries.some((entry) => entry.items.some((item) => item.kind === "turn_error"))).toBe(false);
+  });
+
+  it("promoteQueueAndContinue promotes after success result and keeps running", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: Date.now(),
+      isRunning: true,
+    });
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "222"));
+
+    expect(officialCodeSessionStore.getState().promoteQueueAndContinue("s1")).toBe(true);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.queuedMessages).toEqual([]);
+    expect(bucket?.messages.some((message) => message.id === "q1")).toBe(true);
+    expect(bucket?.session?.isRunning).toBe(true);
+    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+  });
+
+  it("empty-queue interrupt result clears pendingTurn (official !g)", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, []);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: Date.now(),
+      isRunning: true,
+    });
+    officialCodeSessionStore.getState().mergeMessage("s1", interruptUser());
+    officialCodeSessionStore.getState().mergeMessage("s1", resultErrorDuringExecution("r1"));
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.messages.map((message) => message.id)).toEqual(["interrupt", "r1"]);
+    expect(bucket?.queuedMessages).toEqual([]);
+    expect(bucket?.pendingTurnStartedAt).toBeNull();
+    expect(bucket?.pendingQueuedSends).toBe(0);
+  });
+
+  it("hard stop discardQueued does not promote (stopSession teardown)", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "222"));
+
+    officialCodeSessionStore.getState().clearStream("s1", true, true);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.queuedMessages).toEqual([]);
+    expect(bucket?.messages.map((message) => message.id)).toEqual(["interrupt"]);
+    expect(bucket?.session?.isRunning).toBe(false);
+  });
+});

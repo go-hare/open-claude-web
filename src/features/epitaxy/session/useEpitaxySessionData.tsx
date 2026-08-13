@@ -274,7 +274,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     streamMessageIdRef.current = null;
   }, [sessionId]);
 
-  const clearStreamState = useCallback((markSessionSettled = false) => {
+  const clearStreamState = useCallback((markSessionSettled = false, discardQueued = false) => {
     if (!sessionId) return;
     // Official settle (result → clear Va / Rke + Jwe): do NOT invent a durable assistant
     // with outer uuid = Anthropic message.id. Live multi-emit already lands via
@@ -291,7 +291,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     streamMessageIdRef.current = null;
     streamSnapshotRef.current = null;
     streamActivityModeRef.current = idleStreamActivityMode;
-    store.getState().clearStream(sessionId, markSessionSettled);
+    store.getState().clearStream(sessionId, markSessionSettled, discardQueued);
   }, [sessionId, store]);
 
   const reload = useCallback(async (options?: { silent?: boolean }) => {
@@ -463,7 +463,13 @@ export function useEpitaxySessionData(sessionId?: string) {
         // before user tool_result). eke/Xwe suppress *rendering* of the live Anthropic
         // message.id while Va owns the typewriter — do NOT drop merge here or rke order breaks.
         store.getState().mergeMessage(sessionId, transcriptMessage);
-        return;
+        // Official `g` (result + queue + pendingTurn): mergeMessage already promoted
+        // and opened a new pendingTurn — do not settle. Empty-queue error result
+        // (Esc, no deferred) is mergeMessage'd because is_error; success results
+        // return null here and already fall through to shouldClearOfficialStreamForEvent.
+        if (!shouldSettleEmptyQueueAfterMergedResult(event, store.getState().buckets[sessionId])) {
+          return;
+        }
       }
       if (shouldReloadTranscriptForEvent(event)) {
         // Official type:"error" (+ nested message.type error) → FM category when host sends it.
@@ -493,6 +499,35 @@ export function useEpitaxySessionData(sessionId?: string) {
           const finalize = () => {
             if (streamGenerationRef.current !== streamGeneration) return;
             finalizeStreamGenerationRef.current = null;
+            const eventType = stringValue(asRecord(event).type);
+            // Official stopSession / close / clear: drop optimistic queue (host
+            // deferredSends already cleared). Distinct from Esc interrupt-continue.
+            if (eventType === "stopped" || eventType === "close" || eventType === "cleared") {
+              clearStreamState(true, true);
+              return;
+            }
+            const after = store.getState().buckets[sessionId];
+            // Official `g`: success result is not mergeMessage'd; promote queue
+            // after the result, new pendingTurn, keep isRunning for host drain.
+            const continueTurn = Boolean(
+              after
+              && (
+                (after.queuedMessages?.length ?? 0) > 0
+                || (after.pendingQueuedSends ?? 0) > 0
+              ),
+            );
+            if (continueTurn) {
+              officialStreamClear(sessionId);
+              clearOfficialEkeCache(sessionId);
+              setStreamSnapshot(null);
+              setStreamingMessageId(null);
+              setStreamActivityMode(idleStreamActivityMode);
+              streamMessageIdRef.current = null;
+              streamSnapshotRef.current = null;
+              streamActivityModeRef.current = idleStreamActivityMode;
+              store.getState().promoteQueueAndContinue(sessionId);
+              return;
+            }
             clearStreamState(true);
             // Official does not full-reload transcript on every result; mergeMessage already
             // holds durable rows. Avoid silent reload thrash that "refreshes old messages".
@@ -524,7 +559,25 @@ export function useEpitaxySessionData(sessionId?: string) {
             // hold bookend stdin. patchSession clears bucket stream flags; also clear
             // local Va / activity so main spinner cannot stick if result settle raced.
             if (prevRunning && patched?.isRunning === false) {
-              clearStreamState(true);
+              const after = store.getState().buckets[sessionId];
+              // Official `g` opens a new pendingTurn and keeps running. A stale
+              // isRunning=false must not settle that continue turn.
+              const continueTurn = Boolean(
+                after
+                && (
+                  after.pendingTurnStartedAt !== null
+                  || (after.queuedMessages?.length ?? 0) > 0
+                  || (after.pendingQueuedSends ?? 0) > 0
+                ),
+              );
+              if (continueTurn) {
+                // Official drainDeferredSends stays isRunning. A stale isRunning=false
+                // must not drop Xke/pe busy (q would re-arm and Esc-stack).
+                store.getState().setStreamActivity(sessionId, { isRunning: true });
+                store.getState().markInterrupting(sessionId);
+              } else {
+                clearStreamState(true);
+              }
             }
           }
         } else if (stringValue(asRecord(event).type) === "initialization_status") {
@@ -705,12 +758,19 @@ export function useEpitaxySessionData(sessionId?: string) {
     }),
     [bucket.isMetaPending, bucket.isSessionNotFound, bucket.session, isUltrareviewLaunching, sessionId],
   );
+  // Official Xke/pe (index-BELzQL5P): pendingTurn && !endTurnSeen.
+  // Qj busy=H=isResponding; q only resets when busy clears — keep pendingTurn in the OR
+  // so Esc→markInterrupting (stream flush) cannot re-arm a second interrupt mid-continue.
+  const pendingTurnStartedAt = sessionId
+    ? (officialGetTurnStartedAt(sessionId) ?? bucket.pendingTurnStartedAt)
+    : bucket.pendingTurnStartedAt;
   // Official isResponding on Xb: H || spawning || null!==Js || bs — keep loader while spawnLabel set.
   const isResponding =
     streamActivityMode !== idleStreamActivityMode
     || streamSnapshot !== null
     || streamingMessageId !== null
     || bucket.session?.isRunning === true
+    || pendingTurnStartedAt !== null
     || (bucket.queuedMessages?.length ?? 0) > 0
     || (bucket.pendingQueuedSends ?? 0) > 0
     || Boolean(spawnLabel);
@@ -724,15 +784,21 @@ export function useEpitaxySessionData(sessionId?: string) {
   const streamTokenEstimate = sessionId
     ? officialGetStreamTokenEstimate(sessionId) || estimateOfficialStreamSnapshotTokens(streamSnapshot)
     : estimateOfficialStreamSnapshotTokens(streamSnapshot);
-  const pendingTurnStartedAt = sessionId
-    ? (officialGetTurnStartedAt(sessionId) ?? bucket.pendingTurnStartedAt)
-    : bucket.pendingTurnStartedAt;
 
   const stopLiveTurn = useCallback(async () => {
-    // Official wt(): clear local Va/stream flags immediately so the stop button
-    // and loader drop without waiting for CLI process exit / reload.
-    clearStreamState(true);
-  }, [clearStreamState]);
+    // Official Wr onMutate = markInterrupting (Pke.flush + mCe.reset).
+    // Esc is interrupt-then-continue: keep queuedMessages + pendingTurn + isRunning.
+    if (!sessionId) return;
+    officialStreamClear(sessionId);
+    clearOfficialEkeCache(sessionId);
+    setStreamSnapshot(null);
+    setStreamingMessageId(null);
+    setStreamActivityMode(idleStreamActivityMode);
+    streamMessageIdRef.current = null;
+    streamSnapshotRef.current = null;
+    streamActivityModeRef.current = idleStreamActivityMode;
+    store.getState().markInterrupting(sessionId);
+  }, [sessionId, store]);
 
   return {
     beginLocalUserTurn,
@@ -1250,6 +1316,29 @@ function streamActivityModeFromInnerEvent(event: Record<string, unknown>, curren
     if (deltaType === "text_delta" || deltaType === "connector_text_delta") return "responding";
   }
   return currentMode;
+}
+
+/**
+ * After mergeMessage of an is_error parent result: official `g` is false when
+ * the queue is empty, so pendingTurn is already null. Fall through to settle
+ * Va / isRunning. Continue (`g`) leaves a fresh pendingTurn — keep running.
+ */
+function shouldSettleEmptyQueueAfterMergedResult(
+  event: unknown,
+  bucket: {
+    pendingTurnStartedAt: number | null;
+    queuedMessages?: unknown[];
+    pendingQueuedSends?: number;
+  } | undefined,
+): boolean {
+  const raw = asRecord(event);
+  const message = raw.type === "message" ? asRecord(raw.message) : raw;
+  if (stringValue(message.type) !== "result") return false;
+  if (message.is_error !== true && message.isError !== true) return false;
+  if (!bucket) return false;
+  return bucket.pendingTurnStartedAt === null
+    && (bucket.queuedMessages?.length ?? 0) === 0
+    && (bucket.pendingQueuedSends ?? 0) === 0;
 }
 
 function shouldClearOfficialStreamForEvent(event: unknown) {

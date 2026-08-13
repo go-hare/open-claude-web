@@ -60,9 +60,16 @@ import {
   officialSessionHeaderTitle,
   useEpitaxyViewShortcuts,
 } from "./session/EpitaxyChatChrome";
-import { ExistingSessionComposer } from "./session/OfficialExistingSessionComposer";
+import { cycleOfficialTranscriptMode } from "./session/officialTranscriptMode";
+import {
+  ExistingSessionComposer,
+  type OfficialComposerSurfaceApi,
+} from "./session/OfficialExistingSessionComposer";
 import { OfficialCodeSessionErrorBanner } from "./session/OfficialCodeSessionErrorBanner";
 import { EpitaxyChatPanelErrorBoundary } from "./session/EpitaxyChatPanelErrorBoundary";
+import { useErrorsOptional } from "../settings/errorsToast";
+import { OfficialRewindPicker } from "./session/OfficialRewindPicker";
+import { collectOfficialRewindTurns } from "./session/officialRewindTurns";
 
 type OfficialPreviewTarget = OfficialPreviewTargetImported;
 
@@ -329,6 +336,9 @@ function EpitaxyChatPanel({
   const transcriptRef = useRef<OfficialTranscriptHandle | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const composerAttachRef = useRef<((text: string) => void) | null>(null);
+  const composerApiRef = useRef<OfficialComposerSurfaceApi | null>(null);
+  const [rewindPickerOpen, setRewindPickerOpen] = useState(false);
+  const rewindDismissedAtRef = useRef(0);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showBottomFade, setShowBottomFade] = useState(false);
   const updateTranscriptScrollState = useCallback((state: OfficialTranscriptScrollState) => {
@@ -344,13 +354,18 @@ function EpitaxyChatPanel({
     if (node) scrollElementToBottom(node, behavior);
   }, []);
   const attachAsContext = useCallback((text: string) => {
-    composerAttachRef.current?.(text);
+    composerApiRef.current?.attachAsContext(text)
+      ?? composerAttachRef.current?.(text);
+  }, []);
+  const setComposerText = useCallback((text: string) => {
+    composerApiRef.current?.setComposerText(text);
   }, []);
   // Official mc submitToChat — Preview Set up / start-failed residual (c11959232).
   const submitToChat = useCallback(
     async (text: string) => {
       if (!initialSessionId) {
-        composerAttachRef.current?.(text);
+        composerApiRef.current?.setComposerText(text)
+          ?? composerAttachRef.current?.(text);
         return;
       }
       const messageUuid = createMessageUuid();
@@ -380,6 +395,7 @@ function EpitaxyChatPanel({
     attachPreviewAnnotation,
     bridge,
     cancelQueuedMessage,
+    isResponding,
     openFile,
     openPlan,
     openPreview,
@@ -388,8 +404,27 @@ function EpitaxyChatPanel({
     onNavigate,
     reload,
     sessionId: initialSessionId,
+    sessionRef: effectiveSessionRef,
+    setComposerText,
     submitToChat,
-  }), [attachAsContext, attachPreviewAnnotation, bridge, cancelQueuedMessage, initialSessionId, onNavigate, openFile, openPlan, openPreview, openSubagent, openTasks, reload, submitToChat]);
+  }), [
+    attachAsContext,
+    attachPreviewAnnotation,
+    bridge,
+    cancelQueuedMessage,
+    effectiveSessionRef,
+    initialSessionId,
+    isResponding,
+    onNavigate,
+    openFile,
+    openPlan,
+    openPreview,
+    openSubagent,
+    openTasks,
+    reload,
+    setComposerText,
+    submitToChat,
+  ]);
   // Official toggleSidePane: remove if present else ur insert.
   const selectView = useCallback((view: OfficialViewPane) => {
     setSideTiles((current) => {
@@ -410,7 +445,117 @@ function EpitaxyChatPanel({
     });
   }, []);
 
-  useEpitaxyViewShortcuts(selectView, true, canOpenBrowser);
+  /**
+   * Official onCycleTranscriptMode (c119): ladder fr/ld, skip summary when hideSummary.
+   * Product header defaults hideSummary=false (summary item shown).
+   */
+  const cycleTranscriptMode = useCallback(() => {
+    setTranscriptMode((current) => cycleOfficialTranscriptMode(current));
+  }, []);
+
+  /**
+   * Official closePane ⌘\ → closeLastPane residual:
+   * close focused non-chat side tile (activeView), else last open side tile.
+   * Does not invent multi-session paneStore close — that is header Close pane / Se path.
+   */
+  const closeLastSidePane = useCallback(() => {
+    setSideTiles((current) => {
+      if (current.length === 0) return current;
+      const target =
+        (activeView && current.includes(activeView) ? activeView : undefined)
+        ?? current[current.length - 1];
+      if (!target) return current;
+      const next = current.filter((item) => item !== target);
+      setActiveView((focused) => {
+        if (next.length === 0) return undefined;
+        if (focused === target) return next[next.length - 1];
+        return focused && next.includes(focused) ? focused : next[next.length - 1];
+      });
+      if (target === "subagent") setSubagentView(null);
+      if (target === "file") setFileView(null);
+      if (target === "preview") setPreviewTarget(null);
+      return next;
+    });
+  }, [activeView]);
+
+  /**
+   * Official openRewindPicker **pa** (not ma): local + !responding + empty composer + 600ms
+   * dismiss cooldown. Esc Esc chrome → openRewindPicker → pa. (ma force-opens from transcript UI.)
+   */
+  const canOpenRewindPicker =
+    isPanelActive
+    && Boolean(bridge.rewind)
+    && !isResponding
+    && (effectiveSessionRef?.type ?? "local") === "local";
+
+  const openRewindPicker = useCallback(() => {
+    if (!canOpenRewindPicker) return;
+    if (Date.now() - rewindDismissedAtRef.current < 600) return;
+    // Official pa: require empty composer for auto-open path.
+    const composerText = composerApiRef.current?.getText()?.trim() ?? "";
+    if (composerText.length > 0) return;
+    setRewindPickerOpen(true);
+  }, [canOpenRewindPicker]);
+
+  const closeRewindPicker = useCallback(() => {
+    rewindDismissedAtRef.current = Date.now();
+    setRewindPickerOpen(false);
+  }, []);
+
+  const rewindTurns = useMemo(() => collectOfficialRewindTurns(entries), [entries]);
+
+  const errors = useErrorsOptional();
+  const onRewindPickerSelect = useCallback(
+    async (uuid: string, text: string) => {
+      // Official $a from DM pick: null → can't-rewind toast; else truncate+xt(prompt||text).
+      if (!initialSessionId || !bridge.rewind) return;
+      if ((effectiveSessionRef?.type ?? "local") !== "local") return;
+      const prompt = await bridge.rewind(initialSessionId, uuid);
+      if (prompt === null) {
+        errors?.addError("Can't rewind to this message.", {
+          messageForLogging: "epitaxy-rewind-not-possible",
+        });
+        return;
+      }
+      await reload({ silent: true });
+      const prefill =
+        typeof prompt === "string" && prompt.length > 0 ? prompt : text;
+      composerApiRef.current?.setComposerText(prefill);
+    },
+    [bridge, effectiveSessionRef?.type, errors, initialSessionId, reload],
+  );
+
+  // Official session lk + Esc Esc — only when this chat panel is the active primary.
+  useEpitaxyViewShortcuts({
+    canOpenBrowser,
+    enabled: isPanelActive,
+    onClosePane: closeLastSidePane,
+    onCycleTranscriptMode: cycleTranscriptMode,
+    onRewind: canOpenRewindPicker ? openRewindPicker : undefined,
+    onTogglePane: selectView,
+    // toggleSideChat omitted — honest wall (no Side chat product path).
+  });
+
+  /**
+   * Official side-pane Escape closer (c119 Yt): when side pane open and not blocked,
+   * Escape closes last side tile. Composer busy Esc→stop still wins via preventDefault
+   * on first Esc while responding; we skip when defaultPrevented.
+   */
+  useEffect(() => {
+    if (!isPanelActive) return undefined;
+    if (sideTiles.length === 0) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.repeat) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      // Leave busy-stop and permission cards alone when they already claimed Escape.
+      if (isResponding) return;
+      if (rewindPickerOpen) return;
+      event.preventDefault();
+      closeLastSidePane();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closeLastSidePane, isPanelActive, isResponding, rewindPickerOpen, sideTiles.length]);
   // Bridge OfficialCodeMarkdown / Hb inline path clicks (ob/db/Db) → file pane.
   useEffect(() => {
     const onOpenFile = (event: Event) => {
@@ -557,6 +702,7 @@ function EpitaxyChatPanel({
           <ExistingSessionComposer
             attachRef={composerAttachRef}
             bridge={bridge}
+            composerApiRef={composerApiRef}
             disabled={isLoading || Boolean(error)}
             isResponding={isResponding}
             onOpenDiff={openDiff}
@@ -697,6 +843,15 @@ function EpitaxyChatPanel({
             />
           ) : null}
         </div>
+        {/* Official DM rewind picker — Esc Esc / openRewindPicker residual. */}
+        <OfficialRewindPicker
+          isOpen={rewindPickerOpen}
+          onClose={closeRewindPicker}
+          onSelect={(uuid, text) => {
+            void onRewindPickerSelect(uuid, text);
+          }}
+          turns={rewindTurns}
+        />
       </EpitaxyTranscriptActionContext.Provider>
     </OfficialPierreWorkerPool>
   );

@@ -571,22 +571,49 @@ function officialDkeToolResultContent(content: unknown): {
   return { text: texts.join("\n"), images };
 }
 
-/** Official jke: walk back; if prior assistant exists return false; if prior user, return whether user has image blocks. */
+/** Official kke (index-BELzQL5P) — user interrupt markers. */
+const OFFICIAL_USER_INTERRUPT_TEXTS = new Set([
+  "[Request interrupted by user]",
+  "[Request interrupted by user for tool use]",
+]);
+
+/** Official Qhe — ake drops this assistant text after The(). */
+const OFFICIAL_NO_RESPONSE_REQUESTED = "No response requested.";
+
+/**
+ * Official Mke (index-BELzQL5P): `if (kke.has(e)) return ""` then The/Dwe strip.
+ * Ike string path: `const o = Mke(e); return o ? [...a, {kind:"text", text:o}] : a`.
+ */
+function officialMkeVisibleUserText(text: string): string {
+  if (OFFICIAL_USER_INTERRUPT_TEXTS.has(text)) return "";
+  return officialCoworkMessageText(text);
+}
+
+/** Official _ke: user row whose content is exactly an interrupt marker. */
+export function officialUserMessageIsInterrupt(raw: Record<string, unknown>): boolean {
+  const nested = asRecord(raw.message);
+  const content = nested.content ?? raw.content;
+  if (typeof content === "string") return OFFICIAL_USER_INTERRUPT_TEXTS.has(content);
+  if (!Array.isArray(content)) return false;
+  return content.some((item) => {
+    const record = asRecord(item);
+    return stringValue(record.type) === "text"
+      && OFFICIAL_USER_INTERRUPT_TEXTS.has(stringValue(record.text) ?? "");
+  });
+}
+
+/**
+ * Official jke: walk back from result; first assistant → not skippable;
+ * first user → skippable iff _ke (interrupt marker). Image blocks are NOT the gate.
+ */
 function officialResultErrorDuringExecutionSkippable(messages: ChatMessage[], resultIndex: number) {
   for (let index = resultIndex - 1; index >= 0; index -= 1) {
     const raw = asRecord(messages[index]?.raw);
     const type = stringValue(raw.type);
     if (type === "assistant") return false;
-    if (type === "user") return rawMessageContentContainsImage(raw);
+    if (type === "user") return officialUserMessageIsInterrupt(raw);
   }
   return false;
-}
-
-function rawMessageContentContainsImage(raw: Record<string, unknown>) {
-  return rawMessageContent(raw).some((item) => {
-    const record = asRecord(item);
-    return (stringValue(record.type) ?? stringValue(record.kind)) === "image";
-  });
 }
 
 function officialTaskEventItemFromSystemRaw(raw: Record<string, unknown>, index: number): Extract<TranscriptEntryItem, { kind: "task_event" }> | null {
@@ -874,9 +901,10 @@ function parseAssistantTranscriptItems(
   fallbackText: string,
 ): TranscriptEntryItem[] {
   if (typeof content === "string") {
-    // Official ake: The(e) — strip task-notification / system-reminder / …; empty → no text item.
+    // Official ake: The(e); empty skip; `s === Qhe` skip ("No response requested.").
     const text = officialCoworkMessageText(content);
-    return text ? [{ id: messageId, kind: "text", text }] : [];
+    if (!text || text === OFFICIAL_NO_RESPONSE_REQUESTED) return [];
+    return [{ id: messageId, kind: "text", text }];
   }
   const source = Array.isArray(content)
     ? content
@@ -910,8 +938,9 @@ function parseAssistantTranscriptItems(
         : undefined;
     if (textBody) {
       // Official ake text branch: The(e) before push.
+      // Official ake: The(e); empty skip; `s === Qhe` skip ("No response requested.").
       const text = officialCoworkMessageText(textBody);
-      if (!text) continue;
+      if (!text || text === OFFICIAL_NO_RESPONSE_REQUESTED) continue;
       toolGroup = null;
       flushThinking();
       // context / stats from local_command-shaped assistant text (official dCe/swe on ake path).
@@ -1011,7 +1040,8 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
     uploaded.files.forEach((file, fileIndex) => {
       items.push({ file, id: `${entryId}-uploaded-${fileIndex}`, kind: "uploaded-file" });
     });
-    const visible = officialCoworkMessageText(uploaded.text);
+    // Official Ike/Mke (index-BELzQL5P): kke.has(e) → "" then The(); empty → no Hb text item.
+    const visible = officialMkeVisibleUserText(uploaded.text);
     if (visible) items.push({ id: entryId, kind: "text", text: visible });
     return items;
   }
@@ -1060,10 +1090,9 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
       parsed.files.forEach((file, fileIndex) => {
         items.push({ file, id: `${id}-uploaded-${fileIndex}`, kind: "uploaded-file" });
       });
-      // Official The residual (index Nhe / Mke): strip <task-notification> / system-reminder / …
-      // Pure task-notification user rows → empty text → no Hb bubble (Tasks pane only).
+      // Official Ike/Mke: kke interrupt → ""; The() strip. Empty → no text item.
       if (parsed.text) {
-        const visible = officialCoworkMessageText(parsed.text);
+        const visible = officialMkeVisibleUserText(parsed.text);
         if (visible) textChunks.push(visible);
       }
       return;

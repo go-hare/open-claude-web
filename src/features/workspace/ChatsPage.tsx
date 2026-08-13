@@ -143,8 +143,9 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
   const reload = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
     try {
-      const items = await desktopBridge.LocalAgentModeSessions.list().catch(() => []);
-      setSessions([...items].sort((a, b) => b.updatedAtMs - a.updatedAtMs));
+      // Official t6 catch: keep previous recents when getAll throws.
+      const items = await desktopBridge.LocalAgentModeSessions.list().catch(() => null);
+      if (items) setSessions([...items].sort((a, b) => b.updatedAtMs - a.updatedAtMs));
     } finally {
       if (!opts?.silent) setLoading(false);
     }

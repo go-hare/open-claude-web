@@ -491,7 +491,8 @@ function slashMenuVisible(editor: Editor | null) { const storage = (editor?.stor
 function handleComposerKey(event: React.KeyboardEvent<HTMLElement>, input: { askActive: boolean; clear: () => void; editor: Editor | null; questionMinimized: boolean; reopenQuestion: () => void; text: string }) {
   if (event.key === "ArrowUp" && input.askActive && input.questionMinimized && input.editor?.isEmpty) { event.preventDefault(); input.reopenQuestion(); return; }
   if (event.key === "ArrowUp" && input.askActive && input.questionMinimized && input.text === "Continue without answering") { event.preventDefault(); input.clear(); input.reopenQuestion(); return; }
-  if (event.key === "Escape" && !slashMenuVisible(input.editor)) { event.preventDefault(); input.clear(); }
+  // Official ChatInput Esc is not clear-draft. Slash/mention close themselves.
+  // Sampling Esc is Oyt window listener → stopSession (see ComposerActions).
 }
 function normalizeModel(value: string | undefined, allowedValues: string[]) {
   if (!value) return "default";

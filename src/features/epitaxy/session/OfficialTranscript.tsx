@@ -1034,14 +1034,32 @@ export function CodeUserEntryMessage({
     const forked = await actions.bridge.forkSession(actions.sessionId, entry.id);
     if (forked?.id) actions.onNavigate(sessionPath(forked));
   }, [actions, entry.id]);
+  const errors = useErrorsOptional();
   const rewindToHere = useCallback(async () => {
+    // Official $a: local-only fe.rewind; null → "Can't rewind"; else xt(prompt||text)+focus.
     if (!actions?.sessionId || !actions.bridge.rewind) return;
-    await actions.bridge.rewind(actions.sessionId, entry.id);
+    if (actions.sessionRef && actions.sessionRef.type !== "local") return;
+    const prompt = await actions.bridge.rewind(actions.sessionId, entry.id);
+    if (prompt === null) {
+      errors?.addError("Can't rewind to this message.", {
+        messageForLogging: "epitaxy-rewind-not-possible",
+      });
+      return;
+    }
     await actions.reload({ silent: true });
-  }, [actions, entry.id]);
+    const prefill =
+      typeof prompt === "string" && prompt.length > 0 ? prompt : copyText;
+    actions.setComposerText?.(prefill);
+  }, [actions, copyText, entry.id, errors]);
   // Official: n && y ? () => n(t.id, b) : void 0 — only durable UUIDs enable fork/rewind.
+  // Official onRewindToMessage: !ue || H || xn ? void 0 : $a (local + !responding).
+  const canRewind =
+    durableId
+    && Boolean(actions?.bridge.rewind)
+    && !actions?.isResponding
+    && (actions?.sessionRef?.type ?? "local") === "local";
   const onFork = durableId && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
-  const onRewind = durableId && actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
+  const onRewind = canRewind ? () => { void rewindToHere(); } : undefined;
   const onAttachAsContext = actions?.attachAsContext;
   const openPath = useCallback((path: string) => {
     actions?.openFile({ path });
@@ -1626,19 +1644,39 @@ export function CodeAssistantEntryMessage({
     const forked = await actions.bridge.forkSession(actions.sessionId, entry.id);
     if (forked?.id) actions.onNavigate(sessionPath(forked));
   }, [actions, entry.id]);
+  const errors = useErrorsOptional();
   const rewindToHere = useCallback(async () => {
+    // Official $a local-only + composer prefill (same as Hb path).
     if (!actions?.sessionId || !actions.bridge.rewind) return;
-    await actions.bridge.rewind(actions.sessionId, entry.id);
+    if (actions.sessionRef && actions.sessionRef.type !== "local") return;
+    const prompt = await actions.bridge.rewind(actions.sessionId, entry.id);
+    if (prompt === null) {
+      errors?.addError("Can't rewind to this message.", {
+        messageForLogging: "epitaxy-rewind-not-possible",
+      });
+      return;
+    }
     await actions.reload({ silent: true });
-  }, [actions, entry.id]);
+    const prefill =
+      typeof prompt === "string" && prompt.length > 0
+        ? prompt
+        : (copyText ?? "");
+    actions.setComposerText?.(prefill);
+  }, [actions, copyText, entry.id, errors]);
   const retryLastTurn = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.rewind) return;
     await actions.bridge.rewind(actions.sessionId, entry.id);
     await actions.reload({ silent: true });
   }, [actions, entry.id]);
   // Official Kb: fork/rewind only on Uv (item context menu), not on Vv hover action bar.
+  // Official onRewindToMessage: local + !responding.
+  const canRewind =
+    !isStreaming
+    && Boolean(actions?.bridge.rewind)
+    && !actions?.isResponding
+    && (actions?.sessionRef?.type ?? "local") === "local";
   const onFork = !isStreaming && actions?.bridge.forkSession ? () => { void forkFromHere(); } : undefined;
-  const onRewind = !isStreaming && actions?.bridge.rewind ? () => { void rewindToHere(); } : undefined;
+  const onRewind = canRewind ? () => { void rewindToHere(); } : undefined;
   const onRetry = !isStreaming && actions?.bridge.rewind ? () => { void retryLastTurn(); } : undefined;
   const onRateMessage = !isStreaming && actions?.sessionId && actions.bridge.submitTranscriptFeedback
     ? (messageUuid: string, rating: "negative" | "positive") => {

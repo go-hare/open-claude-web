@@ -8,6 +8,13 @@ import type { LocalSessionsBridge } from "../../adapters/desktopBridge/types";
 import { OfficialButton, OfficialDropdownButton, type OfficialDropdownItem, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
 import { OfficialComposerUsageIndicator } from "./OfficialComposerUsageIndicator";
 import { OfficialEffortControl, type OfficialEffortItem } from "./composer/OfficialEffortControl";
+import {
+  getOfficialSessionShortcutContext,
+  matchOfficialSessionShortcut,
+  officialSessionShortcutKeyForCommand,
+  type OfficialSessionShortcutCommand,
+  type OfficialSessionShortcutContext,
+} from "./session/officialSessionShortcuts";
 
 export type OfficialComposerDropdownItem = OfficialDropdownItem & {
   accent?: boolean;
@@ -59,26 +66,10 @@ type OfficialComposerFooterProps = {
 };
 
 const emptyComposerMenuItems: OfficialComposerDropdownItem[] = [];
-const composerShortcutBindings = [
-  { command: "togglePreview", key: "cmd+shift+p", code: "KeyP", when: "isClaudeApp" },
-  { command: "togglePreview", key: "cmd+alt+p", code: "KeyP" },
-  { command: "toggleDiff", key: "cmd+shift+d", code: "KeyD", when: "isClaudeApp" },
-  { command: "toggleDiff", key: "ctrl+shift+d", code: "KeyD", when: "!isClaudeApp" },
-  { command: "toggleTerminal", key: "ctrl+`", code: "Backquote" },
-  { command: "toggleBrowser", key: "cmd+shift+f", code: "KeyF" },
-  { command: "closePane", key: "cmd+\\", code: "Backslash" },
-  { command: "toggleSideChat", key: "cmd+;", code: "Semicolon" },
-  { command: "cycleTranscriptMode", key: "ctrl+o", code: "KeyO" },
-  { command: "openModeMenu", key: "cmd+shift+m", code: "KeyM", when: "isClaudeApp" },
-  { command: "openModeMenu", key: "cmd+alt+m", code: "KeyM" },
-  { command: "openModelMenu", key: "cmd+shift+i", code: "KeyI" },
-  { command: "openEffortMenu", key: "cmd+shift+e", code: "KeyE" },
-  { command: "toggleSelectionMode", key: "cmd+shift+s", code: "KeyS" },
-] as const;
+/** Official ak residual shared with session lk (officialSessionShortcuts). */
 const composerMenuTargetByCommand = { openModeMenu: "mode", openModelMenu: "model", openEffortMenu: "effort" } as const;
-type ComposerShortcutCommand = (typeof composerShortcutBindings)[number]["command"];
 type ComposerMenuTarget = "mode" | "model" | "effort";
-type ComposerShortcutContext = { isClaudeApp: boolean; mac: boolean };
+type ComposerShortcutContext = OfficialSessionShortcutContext;
 
 export function OfficialComposerFooter({
   bridge,
@@ -337,7 +328,8 @@ function handleComposerFooterKeyDown(event: KeyboardEvent, state: {
     if (state.modelPickerDisabled && (state.openMenu === "model" || state.openMenu === "effort")) return;
     return selectNumberedComposerItem(event, state);
   }
-  const command = composerCommandForKeyboardEvent(event, state.shortcutContext);
+  // Official: footer only opens mode/model/effort; pane commands dispatch at session lk.
+  const command = matchOfficialSessionShortcut(event, state.shortcutContext);
   const target = command ? composerMenuTargetByCommand[command as keyof typeof composerMenuTargetByCommand] : undefined;
   if (!target) return;
   if (state.modelPickerDisabled && (target === "model" || target === "effort")) return;
@@ -382,25 +374,6 @@ function isQuickSelectableComposerItem(item: OfficialComposerDropdownItem) {
   return !item.disabled && !item.noQuickKey;
 }
 
-function composerCommandForKeyboardEvent(event: KeyboardEvent, options: { isClaudeApp: boolean; mac: boolean }) {
-  for (const binding of composerShortcutBindings) {
-    const when = "when" in binding ? binding.when : undefined;
-    if (event.code === binding.code && composerShortcutConditionMatches(when, options.isClaudeApp) && composerShortcutMatches(event, binding.key, options.mac)) return binding.command;
-  }
-  return null;
-}
-
-function composerShortcutConditionMatches(when: string | undefined, isClaudeApp: boolean) {
-  return when === "isClaudeApp" ? isClaudeApp : when !== "!isClaudeApp" || !isClaudeApp;
-}
-
-function composerShortcutMatches(event: KeyboardEvent, spec: string, mac: boolean) {
-  const parts = spec.split("+");
-  const wantsCmd = parts.includes("cmd");
-  const wantsCtrl = parts.includes("ctrl");
-  return event.metaKey === (mac && wantsCmd) && event.ctrlKey === (wantsCtrl || (!mac && wantsCmd)) && event.shiftKey === parts.includes("shift") && event.altKey === parts.includes("alt");
-}
-
 /**
  * OfficialCodeComposer residual: triggerKey is the raw binding spec
  * (`"cmd+shift+i"`), not pre-split glyphs. OfficialTriggerShortcut /
@@ -409,16 +382,13 @@ function composerShortcutMatches(event: KeyboardEvent, spec: string, mac: boolea
  * shortcutChordParts treat each word as a bare chord and Array.from() it
  * into single-letter kbd chips (C t r l then S h i f t …).
  */
-function composerShortcutForCommand(command: ComposerShortcutCommand, context: ComposerShortcutContext) {
-  const binding = composerShortcutBindings.find((item) => item.command === command && composerShortcutConditionMatches("when" in item ? item.when : undefined, context.isClaudeApp));
-  return binding?.key;
+function composerShortcutForCommand(
+  command: OfficialSessionShortcutCommand,
+  context: ComposerShortcutContext,
+) {
+  return officialSessionShortcutKeyForCommand(command, context.isClaudeApp);
 }
 
 function getComposerShortcutContext(): ComposerShortcutContext {
-  const mac = isMacPlatform();
-  return { isClaudeApp: mac, mac };
-}
-
-function isMacPlatform() {
-  return typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+  return getOfficialSessionShortcutContext();
 }

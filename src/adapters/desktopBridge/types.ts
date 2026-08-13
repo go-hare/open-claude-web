@@ -644,6 +644,11 @@ export type LocalSessionsBridge = {
   saveTrust?: (folder: string) => Promise<unknown>;
   addTrustedFolder?: (folder: string) => Promise<unknown>;
   startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<ShellPtyStartResult>;
+  /**
+   * Official Wr / LocalSessions.interrupt residual — abort the current turn
+   * and drain deferredSends (continue). Distinct from `stop` (stopSession teardown).
+   */
+  interrupt?: (id: string) => Promise<unknown>;
   stop?: (id: string) => Promise<unknown>;
   stopShellPty?: (sessionId: string) => Promise<unknown>;
   stopTask?: (

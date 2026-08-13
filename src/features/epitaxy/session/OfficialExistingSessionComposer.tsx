@@ -74,9 +74,21 @@ function sameEffortLevels(a: readonly string[] | null | undefined, b: readonly s
   return true;
 }
 
+/**
+ * Official Ye composer surface residual used by session tile:
+ * attachAsContext / setComposerText / getText / focus for rewind + type-to-composer.
+ */
+export type OfficialComposerSurfaceApi = {
+  attachAsContext: (text: string) => void;
+  focus: () => void;
+  getText: () => string;
+  setComposerText: (text: string) => void;
+};
+
 export function ExistingSessionComposer({
   attachRef,
   bridge,
+  composerApiRef,
   disabled,
   isResponding,
   onOpenDiff,
@@ -90,8 +102,11 @@ export function ExistingSessionComposer({
   sessionRef,
   showScrollButton,
 }: {
+  /** @deprecated prefer composerApiRef.attachAsContext — kept for attach-as-context only. */
   attachRef?: MutableRefObject<((text: string) => void) | null>;
   bridge: LocalSessionsBridge;
+  /** Official Ye.current residual: setText / focus / getText for rewind + Esc Esc. */
+  composerApiRef?: MutableRefObject<OfficialComposerSurfaceApi | null>;
   disabled: boolean;
   isResponding: boolean;
   onOpenDiff?: () => void;
@@ -212,18 +227,63 @@ export function ExistingSessionComposer({
   }, []);
   const bashModeRef = useRef(false);
   const respondingRef = useRef(isResponding);
+  /**
+   * Official c119 Qj: `q` — arm Escape→onStop once per busy cycle.
+   * Reset when busy/isResponding clears so the next stream can be stopped again.
+   */
+  const stopOnceRef = useRef(false);
+  /** Official Qj `B` isPanelActive — product footer uses !disabled. */
+  const isPanelActiveRef = useRef(!disabled);
+  /** Official Qj `H` onStop ref — product path is stopResponse (Wr markInterrupting + interrupt). */
+  const stopResponseRef = useRef<() => void | Promise<void>>(async () => {});
   const isBashMode = text.trimStart().startsWith("!");
   // Official Qj: bash → shell placeholder; else chat. Ref-backed for RNt without remount.
   const placeholderRef = useRef("Type / for commands");
   placeholderRef.current = isBashMode ? "Enter a shell command" : "Type / for commands";
-  const canStop = isResponding && Boolean(sessionRef && bridge.stop);
+  const canStop = isResponding && Boolean(sessionRef && (bridge.interrupt || bridge.stop));
   const readyImageCount = stagedImages.filter((image) => image.status === "ready" && image.base64).length;
-  // Official: allow send with images only (text optional when d.length > 0).
+  // Official Qj Te: has text/attachments && !disabled/submitDisabled — busy does NOT block submit.
+  // Mid-turn Enter/send → Gr noteQueuedSend + enqueue (pendingQueuedSends); button click while busy = Stop.
   const canSubmit =
     (text.trim().length > 0 || readyImageCount > 0)
     && !disabled
-    && !isSubmitting
-    && !isResponding;
+    && !isSubmitting;
+
+  /**
+   * Official c119 Qj Escape residual (editor path):
+   * slash/mention → no-op; defaultPrevented → no-op;
+   * busy && !q → prevent + stopPropagation + arm q + onStop;
+   * busy (already armed) → return;
+   * bash → exit bash; else blur.
+   * Returns true when ProseMirror should treat the key as handled.
+   */
+  const handleComposerEscapeKey = useCallback((event: KeyboardEvent, options?: { stopPropagation?: boolean }): boolean => {
+    const slashStorage = (tiptapEditorRef.current?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
+    const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
+    if (hasSlashMenu) return false;
+    if (event.defaultPrevented) return false;
+    if (respondingRef.current && !stopOnceRef.current) {
+      event.preventDefault();
+      if (options?.stopPropagation) event.stopPropagation();
+      stopOnceRef.current = true;
+      void stopResponseRef.current();
+      return true;
+    }
+    if (respondingRef.current) return true;
+    if (bashModeRef.current) {
+      event.preventDefault();
+      clearComposerRef.current();
+      return true;
+    }
+    // Official: ve?.commands.blur() when not bash and not busy.
+    try {
+      tiptapEditorRef.current?.commands.blur();
+    } catch {
+      /* destroyed */
+    }
+    return false;
+  }, []);
+
   const editor = useEditor({
     // Official vTt: immediatelyRender when document exists (Electron renderer).
     immediatelyRender: typeof document !== "undefined",
@@ -243,12 +303,8 @@ export function ExistingSessionComposer({
       handleKeyDown: (_view, event) => {
         // Enter submit is handled in onKeyDownCapture (official wTt residual).
         // ProseMirror skips handleKeyDown while view.composing / keyCode 229.
-        const slashStorage = (tiptapEditorRef.current?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
-        const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
-        if (event.key === "Escape" && bashModeRef.current && !hasSlashMenu) {
-          event.preventDefault();
-          clearComposerRef.current();
-          return true;
+        if (event.key === "Escape") {
+          return handleComposerEscapeKey(event, { stopPropagation: true });
         }
         return false;
       },
@@ -285,6 +341,7 @@ export function ExistingSessionComposer({
 
   bashModeRef.current = isBashMode;
   respondingRef.current = isResponding;
+  isPanelActiveRef.current = !disabled;
 
   // Official Ase residual: printable keys while focus is on chrome still insert into TipTap.
   // Official does not gate Ase on busy/isResponding — only disabled locks the editor.
@@ -297,6 +354,25 @@ export function ExistingSessionComposer({
     }, [disabled, editor]),
     !disabled,
   );
+
+  // Official Qj: q.current = false when busy clears.
+  useEffect(() => {
+    if (!isResponding) stopOnceRef.current = false;
+  }, [isResponding]);
+
+  // Official Qj window keydown (bubble, not capture): Escape → onStop when panel active + busy + !q.
+  // Permission cards use capture+stopPropagation so they win when open (Ow/Wk/wk/Age).
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (!isPanelActiveRef.current || !respondingRef.current || stopOnceRef.current) return;
+      event.preventDefault();
+      stopOnceRef.current = true;
+      void stopResponseRef.current();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(() => {
     // Official c119: ve?.setEditable(!l)
@@ -480,7 +556,8 @@ export function ExistingSessionComposer({
   useEffect(() => {
     bashModeRef.current = isBashMode;
     respondingRef.current = isResponding;
-  }, [isBashMode, isResponding]);
+    isPanelActiveRef.current = !disabled;
+  }, [disabled, isBashMode, isResponding]);
 
   useEffect(() => {
     const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { disabled?: boolean } | undefined;
@@ -630,15 +707,40 @@ export function ExistingSessionComposer({
     editor?.chain().focus("start").insertContent("/").run();
   }, [editor]);
 
-  /** Official onAttachAsContext → setComposerText + focus (c119 Ye.current). */
+  /**
+   * Official le (c119): insert quoted `> line` paragraphs at end + empty trailing para.
+   * Does not replace existing composer text.
+   */
   const attachTextAsContext = useCallback((value: string) => {
     const next = value.trim();
     if (!next || !editor || editor.isDestroyed) return;
-    const current = editor.getText({ blockSeparator: "\n" }).trim();
-    const combined = current ? `${current}\n\n${next}` : next;
-    editor.commands.setContent(tiptapDocFromPlainText(combined), { emitUpdate: true });
+    const nodes = next.split("\n").map((line) => {
+      const text = `> ${line}`;
+      return {
+        type: "paragraph" as const,
+        content: text ? [{ type: "text" as const, text }] : [],
+      };
+    });
+    nodes.push({ type: "paragraph", content: [] });
+    editor.chain().focus("end").insertContent(nodes).run();
+    setText(editor.getText({ blockSeparator: "\n" }));
+  }, [editor]);
+
+  /** Official setComposerText / xt — replace editor contents (rewind prefill). */
+  const setComposerText = useCallback((value: string) => {
+    if (!editor || editor.isDestroyed) return;
+    editor.commands.setContent(tiptapDocFromPlainText(value), { emitUpdate: true });
     setText(editor.getText({ blockSeparator: "\n" }));
     editor.commands.focus("end");
+  }, [editor]);
+
+  const getComposerText = useCallback(() => {
+    if (!editor || editor.isDestroyed) return text;
+    return editor.getText({ blockSeparator: "\n" });
+  }, [editor, text]);
+
+  const focusComposer = useCallback(() => {
+    editor?.commands.focus("end");
   }, [editor]);
 
   const submit = useCallback(async () => {
@@ -722,16 +824,28 @@ export function ExistingSessionComposer({
     };
   }, [attachRef, attachTextAsContext]);
 
+  useEffect(() => {
+    if (!composerApiRef) return undefined;
+    const api: OfficialComposerSurfaceApi = {
+      attachAsContext: attachTextAsContext,
+      focus: focusComposer,
+      getText: getComposerText,
+      setComposerText,
+    };
+    composerApiRef.current = api;
+    return () => {
+      if (composerApiRef.current === api) composerApiRef.current = null;
+    };
+  }, [attachTextAsContext, composerApiRef, focusComposer, getComposerText, setComposerText]);
+
   const stopResponse = async () => {
-    if (!sessionRef || !bridge.stop) return;
-    // Official wt(): clear local stream first, then await LocalSessions.stop.
+    if (!sessionRef || !(bridge.interrupt || bridge.stop)) return;
+    // Official Wr: onMutate markInterrupting, mutationFn transport.stop = interrupt.
+    // Do not silent-reload; do not drop queuedMessages.
     await onStop?.();
-    try {
-      await bridge.stop(sessionRef.id);
-    } finally {
-      await reload({ silent: true });
-    }
+    await (bridge.interrupt ?? bridge.stop)?.(sessionRef.id);
   };
+  stopResponseRef.current = () => void stopResponse();
 
   const applyModel = async (nextModel: string) => {
     if (!sessionRef || nextModel === selectedModel) return;
@@ -931,9 +1045,9 @@ export function ExistingSessionComposer({
             onKeyDownCapture={(event) => {
               const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
               const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
-              if (event.key === "Escape" && isBashMode && !hasSlashMenu) {
-                event.preventDefault();
-                clearComposer();
+              // Official Qj editor Escape: busy→onStop, bash exit, else blur (via handleComposerEscapeKey).
+              if (event.key === "Escape") {
+                handleComposerEscapeKey(event.nativeEvent, { stopPropagation: true });
                 return;
               }
               // Official Qj: Enter + !shift + !alt + !nativeEvent.isComposing (no keyCode 229 invent).
@@ -948,14 +1062,16 @@ export function ExistingSessionComposer({
               }
               event.preventDefault();
               event.stopPropagation();
-              if (!respondingRef.current) void submitRef.current();
+              // Official Qj: Enter always Ee while !disabled — busy mid-turn queues (not blocked).
+              void submitRef.current();
             }}
           />
           <div className="flex self-end p-p7 pl-p3">
+            {/* Official Qj: busy → Stop icon/click; else Send. disabled: !busy && !Te. */}
             <OfficialButton
               ariaLabel={canStop ? "Stop response" : "Send"}
               disabled={!canSubmit && !canStop}
-              icon={canStop || isSubmitting ? "Stop" : "ArrowReturn"}
+              icon={canStop ? "Stop" : "ArrowReturn"}
               onClick={() => void (canStop ? stopResponse() : submit())}
             />
           </div>

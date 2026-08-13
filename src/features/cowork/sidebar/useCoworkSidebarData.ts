@@ -12,12 +12,18 @@ const emptyData: CoworkSidebarData = { scheduledTasks: [], sessions: [], spaces:
 export function useCoworkSidebarData() {
   const [data, setData] = useState<CoworkSidebarData>(emptyData);
   const reload = useCallback(async () => {
+    // Official t6 catch (index-BELzQL5P ~39068): set isInitialized only —
+    // do not wipe previous sessions when getAll throws (boot identity race).
     const [sessions, scheduledTasks, spaces] = await Promise.all([
-      desktopBridge.LocalAgentModeSessions.list().catch(() => []),
+      desktopBridge.LocalAgentModeSessions.list().catch(() => null),
       desktopBridge.CoworkScheduledTasks?.list().catch(() => []),
       desktopBridge.CoworkSpaces?.list().catch(() => []),
     ]);
-    setData({ sessions, scheduledTasks, spaces });
+    setData((current) => ({
+      sessions: sessions ?? current.sessions,
+      scheduledTasks,
+      spaces,
+    }));
   }, []);
 
   useEffect(() => {

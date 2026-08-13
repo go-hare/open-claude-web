@@ -20,6 +20,7 @@ import {
   foldOfficialStatusPermissionMode,
   type OfficialLiveMeta,
 } from "./officialLiveMeta";
+import { officialUserMessageIsInterrupt } from "./officialTranscriptParse";
 
 export type StreamActivityMode = "idle" | "requesting" | "thinking" | "responding" | "tool-use";
 
@@ -236,7 +237,23 @@ type OfficialCodeSessionActions = {
       isRunning?: boolean;
     },
   ) => void;
-  clearStream: (sessionId: string, markSessionSettled?: boolean) => void;
+  /**
+   * Official markInterrupting (Wr onMutate / Pke.flush + mCe.reset).
+   * Flush Va / stream flags only. Keep pendingTurn, queuedMessages, isRunning.
+   */
+  markInterrupting: (sessionId: string) => void;
+  /**
+   * Official `g` for success parent results (not mergeMessage'd).
+   * Promote queuedMessages after the result, new pendingTurn, keep isRunning.
+   */
+  promoteQueueAndContinue: (sessionId: string) => boolean;
+  /**
+   * Local stream settle / stop.
+   * Official result+queue+pendingTurn (`g`) is handled in mergeMessage — reset
+   * pendingTurn and keep isRunning so host drain can continue.
+   * `discardQueued` is host stopSession teardown only (not Esc).
+   */
+  clearStream: (sessionId: string, markSessionSettled?: boolean, discardQueued?: boolean) => void;
   /**
    * Drop a session bucket after host delete (official Lve residual).
    * Idempotent — missing id is a no-op.
@@ -1075,11 +1092,14 @@ function createOfficialCodeSessionStore() {
         }
       }
       // Official d: mid-turn durable user echo while pendingQueuedSends > 0 → queue, not transcript.
+      // Official _ke interrupt marker is a current-turn user row, never a queued follow-up.
+      const isInterruptUser = isUser && officialUserMessageIsInterrupt(rawRecord);
       const routeToQueue = prev.pendingQueuedSends > 0
         && isUser
         && !isSynthetic
         && !hasParentTool
-        && !isOptimisticLocalUser(message);
+        && !isOptimisticLocalUser(message)
+        && !isInterruptUser;
       if (routeToQueue) {
         // Prefer replacing optimistic queued row by text match / local-user id, else append.
         let queuedMessages = prev.queuedMessages.slice();
@@ -1105,13 +1125,17 @@ function createOfficialCodeSessionStore() {
         };
       }
       // Official result/error settle: append remaining queue into messages and clear queue.
+      // Official `g` = result && queue && pendingTurn → promote after result, reset
+      // pendingTurn, keep isRunning (host drainDeferredSends continues the session).
       const isResult = rawRecord.type === "result" && !hasParentTool;
       const isApiError = !isUser
         && (rawRecord.type === "assistant" || message.role === "assistant")
         && rawRecord.isApiErrorMessage === true
         && prev.pendingTurnStartedAt !== null;
-      const settleQueue = (isResult || isApiError)
+      const continueTurn = (isResult || isApiError)
+        && prev.pendingTurnStartedAt !== null
         && (prev.queuedMessages.length > 0 || prev.pendingQueuedSends > 0);
+      const settleQueue = continueTurn;
       let messages = filterStreamEvents(upsertMessage(prev.messages, message));
       if (settleQueue && prev.queuedMessages.length > 0) {
         for (const queued of prev.queuedMessages) {
@@ -1125,13 +1149,18 @@ function createOfficialCodeSessionStore() {
       const compactionStatus = isResult || isApiError
         ? null
         : (nextCompaction !== undefined ? nextCompaction : prev.compactionStatus);
+      // Official result: pendingTurn = g ? { startTime: now } : null
+      const nextPendingTurn = isResult || isApiError
+        ? (continueTurn ? Date.now() : null)
+        : prev.pendingTurnStartedAt;
       const messagesUnchanged = messages === prev.messages || (messages.length === prev.messages.length
         && messages.every((item, index) => item === prev.messages[index]));
       const liveUnchanged = liveMeta?.permissionMode === prev.liveMeta?.permissionMode
         && liveMeta?.model === prev.liveMeta?.model;
       const queueUnchanged = !settleQueue;
       const compactionUnchanged = compactionStatus === prev.compactionStatus;
-      if (messagesUnchanged && liveUnchanged && queueUnchanged && compactionUnchanged) {
+      const pendingUnchanged = nextPendingTurn === prev.pendingTurnStartedAt;
+      if (messagesUnchanged && liveUnchanged && queueUnchanged && compactionUnchanged && pendingUnchanged) {
         return state;
       }
       // Official Mode pill: only system/status mirrors permissionMode onto session.
@@ -1152,13 +1181,85 @@ function createOfficialCodeSessionStore() {
             liveMeta,
             messages,
             compactionStatus,
-            ...(settleQueue
-              ? { queuedMessages: EMPTY_QUEUED_MESSAGES, pendingQueuedSends: 0 }
-              : {}),
+            // Official `g`: promote queue after result, new pendingTurn, keep isRunning.
+            pendingTurnStartedAt: nextPendingTurn,
+            ...(continueTurn
+              ? {
+                  queuedMessages: EMPTY_QUEUED_MESSAGES,
+                  pendingQueuedSends: 0,
+                  streamActivityMode: idleStreamActivityMode,
+                  streamingMessageId: null,
+                  streamSnapshot: null,
+                }
+              : settleQueue
+                ? { queuedMessages: EMPTY_QUEUED_MESSAGES, pendingQueuedSends: 0 }
+                : {}),
             session: sessionWithLiveMeta(
-              prev.session ? { ...prev.session, messages } : prev.session,
+              prev.session
+                ? { ...prev.session, messages, isRunning: continueTurn ? true : prev.session.isRunning }
+                : prev.session,
               mirrorMeta,
             ),
+          },
+        },
+      };
+    });
+  },
+
+  promoteQueueAndContinue: (sessionId) => {
+    let continued = false;
+    set((state) => {
+      const raw = state.buckets[sessionId];
+      if (!raw) return state;
+      const prev = withQueueDefaults(raw);
+      if (prev.queuedMessages.length === 0 && prev.pendingQueuedSends === 0) return state;
+      continued = true;
+      let messages = prev.messages;
+      for (const queued of prev.queuedMessages) {
+        messages = upsertMessage(messages, queued);
+      }
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: {
+            ...prev,
+            messages,
+            queuedMessages: EMPTY_QUEUED_MESSAGES,
+            pendingQueuedSends: 0,
+            pendingTurnStartedAt: Date.now(),
+            compactionStatus: null,
+            streamActivityMode: idleStreamActivityMode,
+            streamingMessageId: null,
+            streamSnapshot: null,
+            session: prev.session ? { ...prev.session, messages, isRunning: true } : prev.session,
+          },
+        },
+      };
+    });
+    return continued;
+  },
+
+  markInterrupting: (sessionId) => {
+    // Official Wr onMutate: Pke.flush + mCe.reset only. Do not clearPendingTurn,
+    // queuedMessages, or isRunning — interrupt then continues the queue.
+    set((state) => {
+      const prev = state.buckets[sessionId];
+      if (!prev) return state;
+      if (
+        prev.streamActivityMode === idleStreamActivityMode
+        && prev.streamingMessageId === null
+        && prev.streamSnapshot === null
+      ) {
+        return state;
+      }
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: {
+            ...prev,
+            streamActivityMode: idleStreamActivityMode,
+            streamingMessageId: null,
+            streamSnapshot: null,
           },
         },
       };
@@ -1215,19 +1316,20 @@ function createOfficialCodeSessionStore() {
     });
   },
 
-  clearStream: (sessionId, markSessionSettled = false) => {
+  clearStream: (sessionId, markSessionSettled = false, discardQueued = false) => {
     let shouldNotifyCompletion = false;
     set((state) => {
       const raw = state.buckets[sessionId];
       if (!raw) return state;
       const prev = withQueueDefaults(raw);
-      // Official settle (result/error): remaining queuedMessages append into messages.
-      // clearStream(true) is our local settle path (stop / stream end).
+      // Official result/error/done: remaining queuedMessages append into messages.
+      // Esc is markInterrupting + interrupt (not clearPendingTurn / not discard).
+      // discardQueued is stopSession teardown only (stopped/close/cleared).
       let messages = prev.messages;
       let queuedMessages = prev.queuedMessages;
       let pendingQueuedSends = prev.pendingQueuedSends;
       if (markSessionSettled && (queuedMessages.length > 0 || pendingQueuedSends > 0)) {
-        if (queuedMessages.length > 0) {
+        if (!discardQueued && queuedMessages.length > 0) {
           for (const queued of queuedMessages) {
             messages = upsertMessage(messages, queued);
           }
@@ -1310,7 +1412,7 @@ function migrateBucketsWithQueueDefaults(
  * Bump when queue pipeline action bodies change so HMR rebinds implementations
  * without wiping transcript buckets (zustand keeps old closures otherwise).
  */
-const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 6;
+const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 9;
 const OFFICIAL_CODE_SESSION_STORE_REV_KEY = "__hareOfficialCodeSessionStoreQueueRev__";
 
 function resolveOfficialCodeSessionStore() {
@@ -1325,7 +1427,8 @@ function resolveOfficialCodeSessionStore() {
       removeSession?: unknown;
     };
     const hasQueueActions = typeof state.noteQueuedSend === "function"
-      && typeof state.removeSession === "function";
+      && typeof state.removeSession === "function"
+      && typeof (state as { markInterrupting?: unknown }).markInterrupting === "function";
     if (hasQueueActions && prevRev === OFFICIAL_CODE_SESSION_STORE_QUEUE_REV) {
       return existing;
     }
