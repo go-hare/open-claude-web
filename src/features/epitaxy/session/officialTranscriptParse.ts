@@ -605,15 +605,45 @@ export function officialUserMessageIsInterrupt(raw: Record<string, unknown>): bo
 /**
  * Official jke: walk back from result; first assistant → not skippable;
  * first user → skippable iff _ke (interrupt marker). Image blocks are NOT the gate.
+ *
+ * Product residual (3p / gateway): QueryEngine may still emit
+ * result/error_during_execution after a durable assistant with
+ * stop_reason=end_turn + text (isResultSuccessful false on an intermediate
+ * shape, or post-tool false positive). Official CCD rarely hits this with
+ * first-party; product must not paint rv over a finished reply. Skip when the
+ * nearest prior assistant is a successful end_turn text turn.
  */
 function officialResultErrorDuringExecutionSkippable(messages: ChatMessage[], resultIndex: number) {
   for (let index = resultIndex - 1; index >= 0; index -= 1) {
     const raw = asRecord(messages[index]?.raw);
     const type = stringValue(raw.type);
-    if (type === "assistant") return false;
+    if (type === "assistant") {
+      if (assistantMessageIsSuccessfulEndTurn(raw)) return true;
+      return false;
+    }
     if (type === "user") return officialUserMessageIsInterrupt(raw);
   }
   return false;
+}
+
+/** Nearest prior assistant completed the turn with visible text (not tool_use-only). */
+function assistantMessageIsSuccessfulEndTurn(raw: Record<string, unknown>): boolean {
+  const message = asRecord(raw.message);
+  const stopReason =
+    stringValue(message.stop_reason)
+    ?? stringValue(raw.stop_reason)
+    ?? stringValue(message.stopReason);
+  if (stopReason !== "end_turn") return false;
+  const content = message.content ?? raw.content;
+  if (!Array.isArray(content)) {
+    return typeof content === "string" && content.trim().length > 0;
+  }
+  return content.some((block) => {
+    const record = asRecord(block);
+    if (stringValue(record.type) !== "text") return false;
+    const text = stringValue(record.text) ?? "";
+    return text.trim().length > 0;
+  });
 }
 
 function officialTaskEventItemFromSystemRaw(raw: Record<string, unknown>, index: number): Extract<TranscriptEntryItem, { kind: "task_event" }> | null {

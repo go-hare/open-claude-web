@@ -825,11 +825,17 @@ function createOfficialCodeSessionStore() {
         };
       }
       // Stream snapshot now lives in Pe/local Va — protect live turns via session flags.
+      // Esc→queue residual: after markInterrupting / stale session_updated, stream flags
+      // may already be idle while pendingTurn + queuedMessages still own the continue
+      // turn. Silent getTranscript must not clear that busy (host drain still live).
       const liveStreaming = options?.preserveLiveStream
         || prev.streamSnapshot !== null
         || prev.streamingMessageId !== null
         || prev.streamActivityMode !== idleStreamActivityMode
         || prev.session?.isRunning === true
+        || prev.pendingTurnStartedAt !== null
+        || prev.pendingQueuedSends > 0
+        || prev.queuedMessages.length > 0
         || prev.messages.some((message) => isOptimisticLocalUser(message));
       if (liveStreaming) {
         // While a turn is live, never replace local history with a partial fetch.
@@ -1132,12 +1138,29 @@ function createOfficialCodeSessionStore() {
         && (rawRecord.type === "assistant" || message.role === "assistant")
         && rawRecord.isApiErrorMessage === true
         && prev.pendingTurnStartedAt !== null;
+      // Product residual (3p/gateway, often 0 stream-json result rows): durable assistant
+      // stop_reason=end_turn is the settle signal. Promote queued follow-ups *before*
+      // appending the assistant so transcript order stays user… → end_turn text (not
+      // assistant then stacked queue users).
+      const nestedAssistant = asRecord(rawRecord.message);
+      const isEndTurnAssistant = !isUser
+        && !hasParentTool
+        && (rawRecord.type === "assistant" || message.role === "assistant")
+        && nestedAssistant.stop_reason === "end_turn";
       const continueTurn = (isResult || isApiError)
         && prev.pendingTurnStartedAt !== null
         && (prev.queuedMessages.length > 0 || prev.pendingQueuedSends > 0);
-      const settleQueue = continueTurn;
-      let messages = filterStreamEvents(upsertMessage(prev.messages, message));
-      if (settleQueue && prev.queuedMessages.length > 0) {
+      const promoteQueueBeforeEndTurn = isEndTurnAssistant
+        && (prev.queuedMessages.length > 0 || prev.pendingQueuedSends > 0);
+      const settleQueue = continueTurn || promoteQueueBeforeEndTurn;
+      let messages = prev.messages;
+      if (promoteQueueBeforeEndTurn && prev.queuedMessages.length > 0) {
+        for (const queued of prev.queuedMessages) {
+          messages = upsertMessage(messages, queued);
+        }
+      }
+      messages = filterStreamEvents(upsertMessage(messages, message));
+      if (continueTurn && !promoteQueueBeforeEndTurn && prev.queuedMessages.length > 0) {
         for (const queued of prev.queuedMessages) {
           messages = upsertMessage(messages, queued);
         }
@@ -1191,6 +1214,16 @@ function createOfficialCodeSessionStore() {
                   streamingMessageId: null,
                   streamSnapshot: null,
                 }
+              : isEndTurnAssistant
+                // Product residual: lift eke suppress so end_turn text paints immediately
+                // (Va may still hold Anthropic message.id after Esc/stream race).
+                ? {
+                    queuedMessages: EMPTY_QUEUED_MESSAGES,
+                    pendingQueuedSends: 0,
+                    streamActivityMode: idleStreamActivityMode,
+                    streamingMessageId: null,
+                    streamSnapshot: null,
+                  }
               : settleQueue
                 ? { queuedMessages: EMPTY_QUEUED_MESSAGES, pendingQueuedSends: 0 }
                 : {}),

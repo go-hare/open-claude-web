@@ -213,4 +213,83 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(bucket?.messages.map((message) => message.id)).toEqual(["interrupt"]);
     expect(bucket?.session?.isRunning).toBe(false);
   });
+
+  it("assistant end_turn promotes queue before text (3p no-result residual)", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: Date.now(),
+      streamingMessageId: "msg_live",
+      streamActivityMode: "responding",
+      isRunning: true,
+    });
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "6"));
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q2", "6b"));
+
+    const endTurn: ChatMessage = {
+      id: "a-end",
+      role: "assistant",
+      text: "reply for 6b",
+      createdAt: "2026-08-13T00:00:04.000Z",
+      raw: {
+        type: "assistant",
+        uuid: "a-end",
+        message: {
+          id: "msg_live",
+          role: "assistant",
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: "reply for 6b" }],
+        },
+      },
+    };
+    officialCodeSessionStore.getState().mergeMessage("s1", endTurn);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.queuedMessages).toEqual([]);
+    expect(bucket?.pendingQueuedSends).toBe(0);
+    expect(bucket?.streamingMessageId).toBeNull();
+    expect(bucket?.messages.map((message) => message.id)).toEqual([
+      "interrupt",
+      "q1",
+      "q2",
+      "a-end",
+    ]);
+    expect(bucket?.messages.some((message) => message.text.includes("reply for 6b"))).toBe(true);
+  });
+
+  it("applyLoad preserves pendingTurn/queue while host reports settled mid-drain", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    const generation = officialCodeSessionStore.getState().markLoading("s1", true);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: Date.now(),
+      isRunning: true,
+    });
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "6"));
+
+    officialCodeSessionStore.getState().applyLoad("s1", generation, {
+      session: {
+        id: "s1",
+        kind: "code",
+        title: "S",
+        updatedAtMs: 2,
+        isRunning: false,
+      } as never,
+      messages: [interruptUser()],
+    });
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+    expect(bucket?.queuedMessages.map((message) => message.id)).toEqual(["q1"]);
+  });
 });

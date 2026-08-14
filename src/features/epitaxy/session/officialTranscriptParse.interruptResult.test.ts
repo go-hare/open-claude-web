@@ -85,6 +85,34 @@ describe("official jke / Qhe interrupt residual", () => {
     expect(entries.some((entry) => entry.items.some((item) => item.kind === "turn_error"))).toBe(true);
   });
 
+  it("skips error_during_execution after successful end_turn assistant (3p false EDE residual)", () => {
+    const entries = parseOfficialTranscriptEntries([
+      user("u1", "2"),
+      {
+        id: "a-end",
+        role: "assistant",
+        text: "Got 2 — still nothing defined.",
+        createdAt: "2026-08-13T00:00:01.000Z",
+        raw: {
+          type: "assistant",
+          uuid: "a-end",
+          message: {
+            role: "assistant",
+            stop_reason: "end_turn",
+            content: [{ type: "text", text: "Got 2 — still nothing defined." }],
+          },
+        },
+      },
+      resultErrorDuringExecution("r1", ["[ede_diagnostic] result_type=assistant ..."]),
+    ]);
+    expect(entries.some((entry) => entry.items.some((item) => item.kind === "turn_error"))).toBe(false);
+    expect(
+      entries.some((entry) =>
+        entry.items.some((item) => item.kind === "text" && item.text.includes("Got 2")),
+      ),
+    ).toBe(true);
+  });
+
   it("does not treat a prior image user as skippable (product bug residual)", () => {
     const entries = parseOfficialTranscriptEntries([
       {

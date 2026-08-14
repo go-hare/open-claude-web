@@ -405,6 +405,26 @@ export function useEpitaxySessionData(sessionId?: string) {
         const streamMessageId = isStart
           ? (stringValue(asRecord(innerEvent.message).id) ?? null)
           : null;
+        // Official Xke/pe: stream only advances an open turn (Gr pendingTurn / isRunning).
+        // densable orphan flush after stopSession/result settle must not re-open busy —
+        // that made the Stop square "close then reopen by itself".
+        // Esc→queue residual: after markInterrupting, Va/stream flags are idle but
+        // pendingTurn + queuedMessages still own the continue turn — keep turnOpen so
+        // post-interrupt message_start can re-arm typewriter for the drained follow-up.
+        const bucketBeforeStream = store.getState().buckets[sessionId];
+        const turnOpen =
+          bucketBeforeStream?.pendingTurnStartedAt != null
+          || bucketBeforeStream?.session?.isRunning === true
+          || bucketBeforeStream?.streamingMessageId != null
+          || (
+            bucketBeforeStream != null
+            && bucketBeforeStream.streamActivityMode !== idleStreamActivityMode
+          )
+          || (bucketBeforeStream?.queuedMessages?.length ?? 0) > 0
+          || (bucketBeforeStream?.pendingQueuedSends ?? 0) > 0;
+        if (!turnOpen) {
+          return;
+        }
         if (isStart) {
           streamGenerationRef.current += 1;
           finalizeStreamGenerationRef.current = null;
@@ -430,7 +450,11 @@ export function useEpitaxySessionData(sessionId?: string) {
               isRunning: true,
             });
           }
-        } else if (store.getState().buckets[sessionId]?.session?.isRunning !== true) {
+        } else if (
+          // Only re-assert isRunning while pendingTurn/open busy still owns the turn.
+          bucketBeforeStream?.pendingTurnStartedAt != null
+          && bucketBeforeStream?.session?.isRunning !== true
+        ) {
           store.getState().setStreamActivity(sessionId, { isRunning: true });
         }
         // Activity mode from inner event (official stream_event.event).
@@ -463,6 +487,25 @@ export function useEpitaxySessionData(sessionId?: string) {
         // before user tool_result). eke/Xwe suppress *rendering* of the live Anthropic
         // message.id while Va owns the typewriter — do NOT drop merge here or rke order breaks.
         store.getState().mergeMessage(sessionId, transcriptMessage);
+        // Product residual (3p/gateway, often 0 stream-json result rows): durable assistant
+        // stop_reason=end_turn must paint immediately. Lift Va / eke suppress here, but do
+        // NOT clearStream(markSessionSettled) — host type:completed / session_updated owns
+        // idle so multi-deferred follow-ups stay busy until the host turn truly ends.
+        if (isAssistantEndTurnBridgeEvent(event)) {
+          officialStreamClear(sessionId);
+          clearOfficialEkeCache(sessionId);
+          setStreamSnapshot(null);
+          setStreamingMessageId(null);
+          setStreamActivityMode(idleStreamActivityMode);
+          streamMessageIdRef.current = null;
+          streamSnapshotRef.current = null;
+          streamActivityModeRef.current = idleStreamActivityMode;
+          store.getState().setStreamActivity(sessionId, {
+            streamingMessageId: null,
+            streamActivityMode: idleStreamActivityMode,
+          });
+          return;
+        }
         // Official `g` (result + queue + pendingTurn): mergeMessage already promoted
         // and opened a new pendingTurn — do not settle. Empty-queue error result
         // (Esc, no deferred) is mergeMessage'd because is_error; success results
@@ -526,15 +569,27 @@ export function useEpitaxySessionData(sessionId?: string) {
               streamSnapshotRef.current = null;
               streamActivityModeRef.current = idleStreamActivityMode;
               store.getState().promoteQueueAndContinue(sessionId);
+              // Esc→queue continue: interrupted turn's assistant may already be on CLI
+              // jsonl while live merge missed it (stream suppress / parent_id residual).
+              // Silent reload fills prior replies without clearing the new pendingTurn
+              // (applyLoad preserves busy when session still isRunning).
+              void reload({ silent: true });
               return;
             }
             clearStreamState(true);
-            // Official does not full-reload transcript on every result; mergeMessage already
-            // holds durable rows. Avoid silent reload thrash that "refreshes old messages".
-            void refreshSessionTitleAfterSettle(sessionId).then((nextSession) => {
-              if (!nextSession) return;
+            // Official settles from live merge only. Product residual (3p end_turn /
+            // Esc→queue multi-send): durable assistants can land on CLI jsonl while
+            // live merge/stream suppress races leave bucket.messages user-only — UI
+            // shows stacked user bubbles and no reply. One silent getTranscript after
+            // final settle recovers jsonl SoT. Skip on continueTurn (above) so host
+            // drain is not interrupted by a mid-queue reload thrash.
+            void reload({ silent: true }).finally(() => {
               if (streamGenerationRef.current !== streamGeneration) return;
-              store.getState().patchSession(sessionId, nextSession);
+              void refreshSessionTitleAfterSettle(sessionId).then((nextSession) => {
+                if (!nextSession) return;
+                if (streamGenerationRef.current !== streamGeneration) return;
+                store.getState().patchSession(sessionId, nextSession);
+              });
             });
           };
           if (shouldSettleOfficialStreamForEvent(event)) {
@@ -573,6 +628,17 @@ export function useEpitaxySessionData(sessionId?: string) {
               if (continueTurn) {
                 // Official drainDeferredSends stays isRunning. A stale isRunning=false
                 // must not drop Xke/pe busy (q would re-arm and Esc-stack).
+                // Also lift local Va / eke suppress: markInterrupting only clears the
+                // store stream flags — React streamingMessageId would keep suppressing
+                // durable assistant end_turn paint while users already show in queue.
+                officialStreamClear(sessionId);
+                clearOfficialEkeCache(sessionId);
+                setStreamSnapshot(null);
+                setStreamingMessageId(null);
+                setStreamActivityMode(idleStreamActivityMode);
+                streamMessageIdRef.current = null;
+                streamSnapshotRef.current = null;
+                streamActivityModeRef.current = idleStreamActivityMode;
                 store.getState().setStreamActivity(sessionId, { isRunning: true });
                 store.getState().markInterrupting(sessionId);
               } else {
@@ -1068,6 +1134,26 @@ function shouldReloadTranscriptForEvent(event: unknown) {
     || type === "permission_mode_changed"
     || type === "permission_mode_change_failed"
     || type === "session_updated";
+}
+
+/**
+ * Product residual (observed 3p/gateway jsonl): turn may end with durable assistant
+ * `message.stop_reason === "end_turn"` and no stream-json `type:"result"`. Host already
+ * signals turn-complete from that row; web must settle Va / promote queue the same way.
+ * Do not treat partial assistants (tool_use / null stop_reason) as settle.
+ */
+function isAssistantEndTurnMessage(message: Record<string, unknown>): boolean {
+  if (stringValue(message.type) !== "assistant") return false;
+  const nested = asRecord(message.message);
+  return stringValue(nested.stop_reason) === "end_turn";
+}
+
+function isAssistantEndTurnBridgeEvent(event: unknown): boolean {
+  const raw = asRecord(event);
+  if (stringValue(raw.type) === "message") {
+    return isAssistantEndTurnMessage(asRecord(raw.message));
+  }
+  return isAssistantEndTurnMessage(raw);
 }
 
 /** Host runtime error residual (type error / nested message.type error). */
