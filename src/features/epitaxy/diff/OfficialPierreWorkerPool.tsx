@@ -123,6 +123,14 @@ export function useOfficialPierreTheme(): OfficialPierreThemePair {
   }, []);
 }
 
+/**
+ * Official c119 `sg` / `kI` residual:
+ *   kI wraps the whole session shell with one `sg` (PierreWorkerPool).
+ *   Mount count keeps the singleton alive across Code session switches —
+ *   do NOT terminate+recreate on every panel remount (that caused ~1s+ longtasks).
+ * getOrCreateWorkerPoolSingleton only constructs once; terminate only when
+ * last provider unmounts (official `0===tg && mh()`).
+ */
 export function OfficialPierreWorkerPool({ children }: { children: ReactNode }) {
   const [pool, setPool] = useState<WorkerPoolManager | undefined>(undefined);
   const theme = useOfficialPierreTheme();
@@ -146,9 +154,8 @@ export function OfficialPierreWorkerPool({ children }: { children: ReactNode }) 
           preferredHighlighter: "shiki-js",
         };
         const workerUrl = resolvePackageWorkerUrl();
-        // Always drop any prior singleton (wrong worker entry / stale HMR pool).
-        // getOrCreateWorkerPoolSingleton only constructs once per process lifetime.
-        terminateWorkerPoolSingleton();
+        // Official: reuse singleton. Product invent terminate-before-create forced
+        // full worker re-init on every EpitaxyChatPanel remount (session switch).
         const manager = getOrCreateWorkerPoolSingleton({
           poolOptions: {
             poolSize: POOL_SIZE,
@@ -188,6 +195,7 @@ export function OfficialPierreWorkerPool({ children }: { children: ReactNode }) 
 
     return () => {
       cancelled = true;
+      // Official: only drop singleton when no providers remain.
       if (providerMountCount === 0) terminateWorkerPoolSingleton();
     };
   }, []);

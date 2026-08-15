@@ -203,7 +203,8 @@ export function parseOfficialTranscriptEntriesCached(
     && streamingMessageId === cached.streamingMessageId
   ) {
     if (messages.length === cached.inputLen) {
-      return cached.entries.slice();
+      // Official Xwe (index-BELzQL5P): return [...a.entries] — new array identity.
+      return [...cached.entries];
     }
     // Official eke: if (t && e === t) continue — live Anthropic message.id is not painted.
     // Multi-emit text partials only grow durable T while Va owns typewriter; Xa is unchanged.
@@ -222,12 +223,13 @@ export function parseOfficialTranscriptEntriesCached(
         return !content.some((block) => stringValue(asRecord(block).type) === "tool_use");
       });
       if (onlyTextLiveSuppressed) {
+        // Still return new array identity (official Xwe always spreads / rebuilds).
         officialEkeCacheBySession.set(sessionId, {
           ...cached,
           inputLen: messages.length,
           lastMsg: messages[messages.length - 1],
         });
-        return cached.entries.slice();
+        return [...cached.entries];
       }
     }
   }
@@ -1081,7 +1083,7 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
       ? [{ type: "text", text: fallbackText }]
       : [];
   const items: TranscriptEntryItem[] = [];
-  const textChunks: string[] = [];
+  let textIndex = 0;
   let imageIndex = 0;
   let peerIndex = 0;
   let eventIndex = 0;
@@ -1120,10 +1122,15 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
       parsed.files.forEach((file, fileIndex) => {
         items.push({ file, id: `${id}-uploaded-${fileIndex}`, kind: "uploaded-file" });
       });
-      // Official Ike/Mke: kke interrupt → ""; The() strip. Empty → no text item.
+      // Official Hb (c119): each text item → own <p> under gap-g4.
+      // Do NOT invent-join multi content blocks with "\n" into one item — that
+      // collapses CLI multi-block user rows (e.g. ["3","4"]) into a single
+      // pre-wrap paragraph with no inter-block gap (looks glued).
       if (parsed.text) {
         const visible = officialMkeVisibleUserText(parsed.text);
-        if (visible) textChunks.push(visible);
+        if (visible) {
+          items.push({ id: `${entryId}-t${textIndex++}`, kind: "text", text: visible });
+        }
       }
       return;
     }
@@ -1185,9 +1192,6 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
       }
     }
   });
-  if (textChunks.length > 0) {
-    items.push({ id: entryId, kind: "text", text: textChunks.join("\n") });
-  }
   return items;
 }
 

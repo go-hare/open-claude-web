@@ -5,6 +5,7 @@ import { BootstrapConnectionErrorPage } from "../features/public/AccessPages";
 import { LoginDesktopT5tPortal } from "../features/public/LoginDesktop";
 import { subscribeResponseCompletionEvents } from "../features/settings/responseCompletionNotify";
 import { DesktopFrame } from "../shell/DesktopFrame";
+import { OfficialPierreWorkerPool } from "../features/epitaxy/diff/OfficialPierreWorkerPool";
 import {
   accountDetailsFromBootstrap,
   bootstrapUrls,
@@ -314,10 +315,17 @@ export function App() {
     );
   }
 
+  // Official kI wraps Code shell with `sg` (PierreWorkerPool) once for the mode.
+  // Keep pool outside route.Component so /code/:id A→B does not remount workers.
+  const main = <route.Component route={route} onNavigate={navigate} />;
   return (
     <>
       <DesktopFrame currentRoute={route} onNavigate={navigate}>
-        <route.Component route={route} onNavigate={navigate} />
+        {route.kind === "code" ? (
+          <OfficialPierreWorkerPool>{main}</OfficialPierreWorkerPool>
+        ) : (
+          main
+        )}
       </DesktopFrame>
       {/* Official T5t: org force-login overlay when interactiveAuth.needsAuth (hide1p). */}
       <LoginDesktopT5tPortal />

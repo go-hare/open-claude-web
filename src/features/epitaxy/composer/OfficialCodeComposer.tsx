@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   desktopBridge,
   type EffortLevel,
@@ -28,8 +28,19 @@ import {
   clampEffortToCatalog,
 } from "../session/officialComposerOptions";
 import { useOfficialTypeToComposer } from "../../shared/useOfficialTypeToComposer";
+import { coworkRateLimitStore } from "../../cowork/session/rateLimit/coworkRateLimitStore";
+import {
+  residualGaFromMessageLimits,
+  residualOs,
+  residualQjDisabled,
+  residualQjSubmitDisabled,
+} from "../session/officialQjComposerGate";
 
 type OfficialCodeComposerProps = {
+  /**
+   * Product draft create in-flight (EpitaxyHome setBusy around LocalSessions.start).
+   * Maps residual Ns create mutate counter — NOT residual H busy/Stop chrome.
+   */
   busy: boolean;
   /** Ladder stop only — Ultracode is a separate session flag (official jR / 5f75ff4). */
   effort: EffortLevel;
@@ -90,7 +101,46 @@ export function OfficialCodeComposer({
     workspace.mode === "local"
     && !workspace.sshConfig
     && gitAvailable === false;
-  const submitStateRef = useRef({ busy, ensureTrusted, hasPrompt: false, onSubmit, workspaceCwd: workspace.cwd });
+  // Residual Ga from pr() messageLimits (shared Code/Cowork store).
+  const messageLimits = useSyncExternalStore(
+    (onStoreChange) => coworkRateLimitStore.subscribe(onStoreChange),
+    () => coworkRateLimitStore.getState().messageLimits,
+    () => coworkRateLimitStore.getState().messageLimits,
+  );
+  /**
+   * Residual Qj on draft home:
+   * Os = draft (no F; product never keeps createPending on this shell — navigate after start).
+   * Ns = busy (create mutate in-flight around LocalSessions.start).
+   * J = false (no expectedId on home). Ga from messageLimits. xn N/A local-first.
+   * bi → submitDisabled (not editable lock).
+   */
+  const createInFlightCount = busy ? 1 : 0;
+  const draftOs = residualOs({
+    hasSessionMeta: false,
+    createPending: false,
+    createInFlightCount,
+  });
+  const qjDisabled = residualQjDisabled({
+    os: draftOs,
+    isMetaPending: false,
+    createInFlightCount,
+    rateLimitExceeded: residualGaFromMessageLimits(messageLimits),
+    isRemoteUploading: false,
+  });
+  const qjSubmitDisabled = residualQjSubmitDisabled({
+    isProcessingImages: false,
+    isRemoteUploading: false,
+    gitRequiredBlocksSubmit: showGitRequired,
+  });
+  const submitStateRef = useRef({
+    busy,
+    ensureTrusted,
+    hasPrompt: false,
+    onSubmit,
+    workspaceCwd: workspace.cwd,
+    qjDisabled,
+    qjSubmitDisabled,
+  });
   // Official Ye / focusComposer residual: after folder pill / native browse, focus returns
   // to the prompt so keystrokes land in TipTap (not the folder Menu.Trigger / body).
   const promptEditorRef = useRef<OfficialPromptEditorHandle | null>(null);
@@ -103,7 +153,15 @@ export function OfficialCodeComposer({
   );
   const selectedModel = normalizeSelectorModelValue(model, allowedModelValues);
 
-  submitStateRef.current = { busy, ensureTrusted, hasPrompt, onSubmit, workspaceCwd: workspace.cwd };
+  submitStateRef.current = {
+    busy,
+    ensureTrusted,
+    hasPrompt,
+    onSubmit,
+    workspaceCwd: workspace.cwd,
+    qjDisabled,
+    qjSubmitDisabled,
+  };
 
   // Official Sm + EpitaxyPermissionModeModal for first bypass/auto selection.
   const permissionModeConfirm = usePermissionModeConfirm(
@@ -205,7 +263,8 @@ export function OfficialCodeComposer({
 
   const submitWithTrust = useCallback(() => {
     const state = submitStateRef.current;
-    if (!state.hasPrompt || state.busy) return;
+    // Residual Te: !disabled && !submitDisabled — busy maps Ns (also in disabled via createInFlight).
+    if (!state.hasPrompt || state.qjDisabled || state.qjSubmitDisabled) return;
     void state.ensureTrusted(state.workspaceCwd, state.onSubmit);
   }, []);
 
@@ -230,9 +289,10 @@ export function OfficialCodeComposer({
 
   // Official Ase residual (index-BELzQL5P): printable keys while focus is on folder /
   // env pill still go into TipTap — matches Code home after folder select.
-  // Official Ase: not gated on busy — busy is Stop chrome, editor stays editable.
+  // Residual Ase gated by !disabled (Ns/Ga); busy on draft is Ns not Stop chrome.
   useOfficialTypeToComposer(
     useCallback((key: string) => {
+      if (submitStateRef.current.qjDisabled) return;
       // Official: T.current?.getEditor()?.chain().insertContent(e).focus().run()
       const ed = promptEditorRef.current?.getEditor?.();
       if (ed?.view?.composing) return;
@@ -242,7 +302,7 @@ export function OfficialCodeComposer({
       }
       promptEditorRef.current?.insertText?.(key);
     }, []),
-    true,
+    !qjDisabled,
   );
 
   // Official c119 draft residual (exact):
@@ -276,10 +336,12 @@ export function OfficialCodeComposer({
   const handleWorkspaceChange = useCallback((next: WorkspaceContext) => {
     onWorkspaceChange(next);
     focusPromptEditor();
-  }, [focusPromptEditor, onWorkspaceChange]);  return (
+  }, [focusPromptEditor, onWorkspaceChange]);
+
+  return (
     <div className="flex flex-col gap-g5">
       <OfficialWorkspaceControls
-        disabled={busy}
+        disabled={qjDisabled}
         ensureTrusted={ensureTrusted}
         onFolderMenuClosed={focusPromptEditor}
         onSourceBranchChange={onSourceBranchChange}
@@ -306,11 +368,14 @@ export function OfficialCodeComposer({
       <OfficialPromptEditor
         ref={promptEditorRef}
         bridge={desktopBridge.LocalSessions}
-        busy={busy}
+        // Draft create in-flight maps Ns → disabled; not residual H busy/Stop.
+        busy={false}
+        disabled={qjDisabled}
         onChange={setPrompt}
         onSubmit={submitWithTrust}
         placeholder="描述一个任务，或提一个问题"
         slashCwd={workspace.cwd || undefined}
+        submitDisabled={qjSubmitDisabled}
         value={prompt}
       />
       {/* Official c119 bi residual (CHsqi6o1Li) above mode footer when git probe false. */}
@@ -327,7 +392,7 @@ export function OfficialCodeComposer({
           <OfficialDropdownButton
             align="start"
             ariaLabel="Permission mode"
-            disabled={busy}
+            disabled={qjDisabled}
             header="模式"
             items={numberedPermissionItems}
             label={<span className={permissionMode === "bypassPermissions" ? "text-extended-yellow" : undefined}>{permissionModeLabel(permissionMode)}</span>}
@@ -340,13 +405,13 @@ export function OfficialCodeComposer({
             triggerKey="cmd+shift+m"
             variant="uncontained"
           />
-          <OfficialDropdownButton ariaLabel="Add" disabled={busy} icon="PlusLarge" items={[{ icon: "Folder1", label: "Add folder" }]} revealChevron="never" side="top" size="small" variant="uncontained" />
+          <OfficialDropdownButton ariaLabel="Add" disabled={qjDisabled} icon="PlusLarge" items={[{ icon: "Folder1", label: "Add folder" }]} revealChevron="never" side="top" size="small" variant="uncontained" />
         </div>
         <div className="ml-auto flex items-center gap-g4">
           <OfficialDropdownButton
             align="end"
             ariaLabel="Model"
-            disabled={busy}
+            disabled={qjDisabled}
             header="Models"
             items={numberedModelItems}
             label={codeModelOptions.labelFor(selectedModel)}
@@ -360,7 +425,7 @@ export function OfficialCodeComposer({
             variant="uncontained"
           />
           <OfficialEffortControl
-            disabled={busy}
+            disabled={qjDisabled}
             items={effortItems}
             onOpenChange={(open) => setOpenFooterMenu(open ? "effort" : null)}
             open={openFooterMenu === "effort"}

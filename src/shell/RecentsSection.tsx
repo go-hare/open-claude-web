@@ -59,11 +59,25 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
         setIsLoadingLocal(false);
         // Official: session meta is shared with chat buckets — seed openSession meta so
         // selecting a recent can paint title/cwd immediately from the same store as tm.
+        // Official Recents list paints titles from the list API only.
+        // Do NOT invent openSession(meta) for every row — that created empty
+        // buckets for all sessions and competed with real open/load on switch.
+        // openSession + seed is the chat-open path (c119 tm / BELz openSession).
         const store = officialCodeSessionStore.getState();
-        for (const session of sorted) {
-          const existing = store.buckets[session.id];
-          if (existing?.session && existing.messages.length > 0) continue;
-          store.openSession(session.id, session);
+        const openId = selectedSessionIdFromPath(window.location.pathname);
+        if (openId) {
+          const open = sorted.find((session) => session.id === openId);
+          if (open) {
+            const existing = store.buckets[openId];
+            // Residual: list API paints Recents titles only. Chat open path seeds meta.
+            // Do NOT openSession when messages=[] after settle — that resurrected B → sticky Ja.
+            // Only cold/missing (!session) openSession; already-open meta uses patchSession.
+            if (!existing?.session) {
+              store.openSession(openId, open);
+            } else {
+              store.patchSession(openId, open);
+            }
+          }
         }
       }).catch(() => {
         if (mounted) setIsLoadingLocal(false);

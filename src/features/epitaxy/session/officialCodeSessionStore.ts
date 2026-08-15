@@ -546,7 +546,11 @@ function createOfficialCodeSessionStore() {
   ensureBucket: (sessionId) => {
     const existing = get().buckets[sessionId];
     if (existing) return existing;
-    const created = emptyBucket(true);
+    // Official openSession/seed creates a real bucket; do NOT invent pending=true
+    // here — that made useOfficialCodeSessionBucket + isLoading flash Ja / disable
+    // composer for one frame on every switch before openSession/reload ran.
+    // markLoading(false-path) still sets isTranscriptPending for cold first fetch.
+    const created = emptyBucket(false);
     set((state) => ({ buckets: { ...state.buckets, [sessionId]: created } }));
     return created;
   },
@@ -587,13 +591,14 @@ function createOfficialCodeSessionStore() {
       const baseSession = session
         ? { ...session, messages: nextMessages.length ? nextMessages : session.messages ?? nextMessages }
         : prev.session;
-      // Official openSession(meta): attach session, keep B (transcript pending) until messages
-      // are provided or applyLoad fills Ya. Recents only seeds meta — must not clear Ja.
+      // Official openSession(meta): attach session; B stays pending until messages / applyLoad.
+      // Do NOT resurrect B after empty settle (messages=[], B=false, session already known).
+      // Cold/missing (no session yet) or still-pending keep B=true so Ja paints.
       const transcriptPending = messages !== undefined
         ? false
         : nextMessages.length > 0
           ? false
-          : true;
+          : prev.isTranscriptPending || prev.session === null;
       return {
         buckets: {
           ...state.buckets,
@@ -825,21 +830,24 @@ function createOfficialCodeSessionStore() {
         };
       }
       // Stream snapshot now lives in Pe/local Va — protect live turns via session flags.
-      // Esc→queue residual: after markInterrupting / stale session_updated, stream flags
-      // may already be idle while pendingTurn + queuedMessages still own the continue
-      // turn. Silent getTranscript must not clear that busy (host drain still live).
+      // Official BELz applyLoad/transcript: merge messages only — does NOT clear
+      // pendingTurn / queue (g is result-gated). Silent getTranscript must not
+      // invent-settle mid-turn or while deferred queue still owns continue.
+      const hasDeferredQueue =
+        prev.pendingQueuedSends > 0
+        || prev.queuedMessages.length > 0;
       const liveStreaming = options?.preserveLiveStream
         || prev.streamSnapshot !== null
         || prev.streamingMessageId !== null
         || prev.streamActivityMode !== idleStreamActivityMode
         || prev.session?.isRunning === true
         || prev.pendingTurnStartedAt !== null
-        || prev.pendingQueuedSends > 0
-        || prev.queuedMessages.length > 0
+        || hasDeferredQueue
         || prev.messages.some((message) => isOptimisticLocalUser(message));
       if (liveStreaming) {
         // While a turn is live, never replace local history with a partial fetch.
         // Only append missing identities from the server payload.
+        // Official: keep pendingTurn / queue / isRunning (no invent clear).
         const nextMessages = filterStreamEvents(payload.messages);
         const messages = mergeTranscriptPreserveAll(prev.messages, nextMessages);
         const liveMeta = liveMetaPreferCurrent(prev.liveMeta, liveMetaFromMessages(messages));
@@ -849,6 +857,9 @@ function createOfficialCodeSessionStore() {
           : prev.session
             ? { ...prev.session, messages }
             : null;
+        // Host isRunning mirror only when payload has it; do not clear pendingTurn.
+        const nextSession = sessionForLoad(baseSession, messages, liveMeta)
+          ?? sessionWithLiveMeta(baseSession, liveMeta);
         return {
           buckets: {
             ...state.buckets,
@@ -861,9 +872,7 @@ function createOfficialCodeSessionStore() {
               isSessionNotFound: false,
               liveMeta,
               messages,
-              session: sessionForLoad(baseSession, messages, liveMeta)
-                // Keep live Fke mirror if status fold did not apply.
-                ?? sessionWithLiveMeta(baseSession, liveMeta),
+              session: nextSession,
             },
           },
         };
@@ -871,7 +880,11 @@ function createOfficialCodeSessionStore() {
       const nextMessages = filterStreamEvents(payload.messages);
       // Always union — never wholesale-replace history (even when settled).
       const messages = mergeTranscriptUnion(prev.messages, nextMessages);
-      const sessionSettled = payload.session ? payload.session.isRunning !== true : true;
+      // Official transcript load does not clear pendingTurn. Only settle when host
+      // reports not running AND no local pendingTurn/queue (true idle).
+      const sessionSettled = (payload.session ? payload.session.isRunning !== true : true)
+        && prev.pendingTurnStartedAt === null
+        && !hasDeferredQueue;
       const liveMeta = liveMetaPreferCurrent(prev.liveMeta, liveMetaFromMessages(messages));
       return {
         buckets: {
@@ -972,13 +985,10 @@ function createOfficialCodeSessionStore() {
         modelFilled && modelFilled !== nextSession.model
           ? { ...nextSession, model: modelFilled }
           : nextSession;
-      // densable: host may set isRunning=false on parent stream-json `result` while
-      // CLI process still open for stoppable task bookends. Main spinner uses
-      // isResponding ← session.isRunning || stream flags — settle stream when host
-      // reports not running (Tasks pane still tracks system bookends independently).
-      const hostSettledTurn =
-        base?.isRunning === true
-        && session.isRunning === false;
+      // Official session_updated / formatSessionForEvent: metadata + isRunning only.
+      // Do NOT invent: force isRunning from web queue, or clear pendingTurn here.
+      // Official web H (isResponding) = stream || isRunning || pendingTurn || queue.
+      // pendingTurn / queue promote only on mergeMessage result g/h (BELz).
       return {
         buckets: {
           ...state.buckets,
@@ -986,14 +996,6 @@ function createOfficialCodeSessionStore() {
             ...prev,
             isMetaPending: false,
             session,
-            ...(hostSettledTurn
-              ? {
-                  pendingTurnStartedAt: null,
-                  streamActivityMode: idleStreamActivityMode,
-                  streamingMessageId: null,
-                  streamSnapshot: null,
-                }
-              : {}),
           },
         },
       };
@@ -1130,64 +1132,74 @@ function createOfficialCodeSessionStore() {
           },
         };
       }
-      // Official result/error settle: append remaining queue into messages and clear queue.
-      // Official `g` = result && queue && pendingTurn → promote after result, reset
-      // pendingTurn, keep isRunning (host drainDeferredSends continues the session).
+      // Official index-BELzQL5P merge residual (literal):
+      //   u = type==="result" && !parent
+      //   m = apiError assistant while pendingTurn
+      //   h = u || m          → settle: messages += [n, ...queuedMessages], clear queue
+      //   f = queue nonempty
+      //   g = u && f && pendingTurn  → new pendingTurn (continue)
+      //   p = assistant end_turn → only endTurnSeen; does NOT promote queue
+      // Inventing promote-on-end_turn strips Hb isQueued chrome (opacity + Remove).
       const isResult = rawRecord.type === "result" && !hasParentTool;
       const isApiError = !isUser
         && (rawRecord.type === "assistant" || message.role === "assistant")
         && rawRecord.isApiErrorMessage === true
         && prev.pendingTurnStartedAt !== null;
-      // Product residual (3p/gateway, often 0 stream-json result rows): durable assistant
-      // stop_reason=end_turn is the settle signal. Promote queued follow-ups *before*
-      // appending the assistant so transcript order stays user… → end_turn text (not
-      // assistant then stacked queue users).
       const nestedAssistant = asRecord(rawRecord.message);
       const isEndTurnAssistant = !isUser
         && !hasParentTool
         && (rawRecord.type === "assistant" || message.role === "assistant")
         && nestedAssistant.stop_reason === "end_turn";
-      const continueTurn = (isResult || isApiError)
-        && prev.pendingTurnStartedAt !== null
-        && (prev.queuedMessages.length > 0 || prev.pendingQueuedSends > 0);
-      const promoteQueueBeforeEndTurn = isEndTurnAssistant
-        && (prev.queuedMessages.length > 0 || prev.pendingQueuedSends > 0);
-      const settleQueue = continueTurn || promoteQueueBeforeEndTurn;
+      const hasQueue = prev.queuedMessages.length > 0 || prev.pendingQueuedSends > 0;
+      // Official h: result or api-error settles and dumps queue into messages.
+      const settleWithQueue = isResult || isApiError;
+      // Official g: only parent result + queue + pendingTurn continues.
+      const continueTurn = isResult
+        && hasQueue
+        && prev.pendingTurnStartedAt !== null;
       let messages = prev.messages;
-      if (promoteQueueBeforeEndTurn && prev.queuedMessages.length > 0) {
+      if (settleWithQueue && prev.queuedMessages.length > 0) {
+        // Official: [...messages, n, ...queuedMessages]
+        messages = filterStreamEvents(upsertMessage(messages, message));
         for (const queued of prev.queuedMessages) {
           messages = upsertMessage(messages, queued);
         }
-      }
-      messages = filterStreamEvents(upsertMessage(messages, message));
-      if (continueTurn && !promoteQueueBeforeEndTurn && prev.queuedMessages.length > 0) {
-        for (const queued of prev.queuedMessages) {
-          messages = upsertMessage(messages, queued);
-        }
+      } else {
+        messages = filterStreamEvents(upsertMessage(messages, message));
       }
       const fromMessage = extractOfficialLiveMeta(raw);
       const liveMeta = fromMessage ? { ...prev.liveMeta, ...fromMessage } : prev.liveMeta;
-      // Official v / compactionStatus from system/status; clear on result/error settle (h).
       const nextCompaction = compactionStatusFromMessage(rawRecord);
-      const compactionStatus = isResult || isApiError
+      // Official h clears compactionStatus; end_turn alone does not.
+      const compactionStatus = settleWithQueue
         ? null
         : (nextCompaction !== undefined ? nextCompaction : prev.compactionStatus);
-      // Official result: pendingTurn = g ? { startTime: now } : null
-      const nextPendingTurn = isResult || isApiError
+      // Official: h → pendingTurn = g ? {startTime:now} : null
+      //           p → pendingTurn.endTurnSeen only (keep pendingTurn / queue)
+      const nextPendingTurn = settleWithQueue
         ? (continueTurn ? Date.now() : null)
         : prev.pendingTurnStartedAt;
       const messagesUnchanged = messages === prev.messages || (messages.length === prev.messages.length
         && messages.every((item, index) => item === prev.messages[index]));
       const liveUnchanged = liveMeta?.permissionMode === prev.liveMeta?.permissionMode
         && liveMeta?.model === prev.liveMeta?.model;
-      const queueUnchanged = !settleQueue;
+      const queueUnchanged = !settleWithQueue;
       const compactionUnchanged = compactionStatus === prev.compactionStatus;
       const pendingUnchanged = nextPendingTurn === prev.pendingTurnStartedAt;
-      if (messagesUnchanged && liveUnchanged && queueUnchanged && compactionUnchanged && pendingUnchanged) {
+      // end_turn only needs stream suppress lift when streamingMessageId set
+      const endTurnLiftStream = isEndTurnAssistant
+        && (prev.streamingMessageId !== null || prev.streamSnapshot !== null
+          || prev.streamActivityMode !== idleStreamActivityMode);
+      if (
+        messagesUnchanged
+        && liveUnchanged
+        && queueUnchanged
+        && compactionUnchanged
+        && pendingUnchanged
+        && !endTurnLiftStream
+      ) {
         return state;
       }
-      // Official Mode pill: only system/status mirrors permissionMode onto session.
-      // system/init updates liveMeta bookkeeping but must not clobber host mode.
       const isStatus =
         rawRecord.type === "system" && rawRecord.subtype === "status";
       const mirrorMeta: OfficialLiveMeta | null = liveMeta
@@ -1204,9 +1216,8 @@ function createOfficialCodeSessionStore() {
             liveMeta,
             messages,
             compactionStatus,
-            // Official `g`: promote queue after result, new pendingTurn, keep isRunning.
             pendingTurnStartedAt: nextPendingTurn,
-            ...(continueTurn
+            ...(settleWithQueue
               ? {
                   queuedMessages: EMPTY_QUEUED_MESSAGES,
                   pendingQueuedSends: 0,
@@ -1214,22 +1225,28 @@ function createOfficialCodeSessionStore() {
                   streamingMessageId: null,
                   streamSnapshot: null,
                 }
-              : isEndTurnAssistant
-                // Product residual: lift eke suppress so end_turn text paints immediately
-                // (Va may still hold Anthropic message.id after Esc/stream race).
+              : endTurnLiftStream
+                // Official p: end_turn marks endTurnSeen; keep queue isQueued (Hb).
+                // Lift Va/eke suppress only so durable end_turn text can paint.
                 ? {
-                    queuedMessages: EMPTY_QUEUED_MESSAGES,
-                    pendingQueuedSends: 0,
                     streamActivityMode: idleStreamActivityMode,
                     streamingMessageId: null,
                     streamSnapshot: null,
                   }
-              : settleQueue
-                ? { queuedMessages: EMPTY_QUEUED_MESSAGES, pendingQueuedSends: 0 }
                 : {}),
             session: sessionWithLiveMeta(
               prev.session
-                ? { ...prev.session, messages, isRunning: continueTurn ? true : prev.session.isRunning }
+                ? {
+                    ...prev.session,
+                    messages,
+                    // Official g keeps session running; non-g result settles.
+                    // end_turn does not invent isRunning=false here (host session_updated).
+                    isRunning: continueTurn
+                      ? true
+                      : settleWithQueue
+                        ? false
+                        : prev.session.isRunning,
+                  }
                 : prev.session,
               mirrorMeta,
             ),
@@ -1511,8 +1528,35 @@ export function useOfficialCodeSessionBucket(sessionId?: string) {
   return useStore(officialCodeSessionStore, (state) => {
     if (!sessionId) return EMPTY_BUCKET_IDLE;
     const bucket = state.buckets[sessionId];
-    if (!bucket) return EMPTY_BUCKET_PENDING;
+    // Official he.buckets[id] missing → treat as idle empty, not invent pending Ja.
+    // Cold open sets pending via markLoading / openSession meta-only path.
+    // Returning EMPTY_BUCKET_PENDING here disabled composer + swapped full loading
+    // chrome for a frame on warm switch (bottom flash).
+    if (!bucket) return EMPTY_BUCKET_IDLE;
     return withQueueDefaults(bucket);
+  });
+}
+
+/**
+ * Residual c119 d_e / Gv `ws(t)` — only compactionStatus.
+ * Full-bucket Gv subscribe re-renders the loader row on every stream tick → Fu
+ * remeasure under pin (stream up/down jitter).
+ */
+export function useOfficialCodeSessionCompactionStatus(sessionId?: string) {
+  return useStore(officialCodeSessionStore, (state) => {
+    if (!sessionId) return null;
+    return state.buckets[sessionId]?.compactionStatus ?? null;
+  });
+}
+
+/**
+ * Residual c119 Gv `js(t)` — true while tool permission requests are pending.
+ * Product stores the pending queue on session.pendingToolPermissions.
+ */
+export function useOfficialCodeSessionPermissionSuppressed(sessionId?: string) {
+  return useStore(officialCodeSessionStore, (state) => {
+    if (!sessionId) return false;
+    return (state.buckets[sessionId]?.session?.pendingToolPermissions?.length ?? 0) > 0;
   });
 }
 

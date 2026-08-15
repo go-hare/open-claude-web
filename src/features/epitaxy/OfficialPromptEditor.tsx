@@ -26,8 +26,21 @@ export type OfficialPromptEditorHandle = {
 
 type OfficialPromptEditorProps = {
   bridge: LocalSessionsBridge;
+  /**
+   * Residual H busy — Stop chrome only (existing-session isResponding).
+   * Does NOT lock editable or Te send. Draft home create uses disabled (Ns), not busy Stop.
+   */
   busy?: boolean;
+  /**
+   * Residual Qj disabled: "spawning"===Os || J || Ns>0 || Ga || xn
+   * setEditable(!disabled) only.
+   */
   disabled?: boolean;
+  /**
+   * Residual Qj submitDisabled: cn.isProcessingImages || mn.isUploading || bi
+   * Blocks Te send only — does not setEditable(false).
+   */
+  submitDisabled?: boolean;
   onChange: (value: string) => void;
   onSubmit: () => void;
   placeholder: string;
@@ -48,7 +61,7 @@ type OfficialPromptEditorProps = {
  * - index vTt: tipTapEditorState + RNt Placeholder; onUpdate → text + hasText
  * - index aYt CodeTipTapEditor: setEditable(!disabled); setText imperative
  * - Qj `_e` absolute span is **only** promptSuggestion — product has none
- * - setEditable(!disabled) only; busy = Stop / Enter-gate
+ * - setEditable(!disabled) only; busy = Stop chrome; submitDisabled blocks Te
  *
  * Host packaged app:// only: handleEmptyDocBeforeInput (empty trailingBreak).
  */
@@ -56,6 +69,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   bridge,
   busy = false,
   disabled = false,
+  submitDisabled = false,
   onChange,
   onSubmit,
   placeholder,
@@ -67,7 +81,8 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   const editorRef = useRef<Editor | null>(null);
   const submitRef = useRef(onSubmit);
   const disabledRef = useRef(disabled);
-  const submitBlockedRef = useRef(disabled || busy);
+  // Residual z / Te block: disabled || submitDisabled — busy is NOT in Te gate.
+  const submitBlockedRef = useRef(disabled || submitDisabled);
   const onChangeRef = useRef(onChange);
   const bashModeRef = useRef(false);
   const slashMenuStateRef = useRef({ bridge, session, sessionRef, slashCwd });
@@ -88,12 +103,12 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   const hasTextRef = useRef(hasText);
 
   const isBashMode = value.trimStart().startsWith("!");
-  // Official Te = (he||m)&&!z — Send enabled when has text (and not disabled/busy).
-  const canSubmit = hasText && !disabled && !busy;
+  // Official Te = (he||m) && !disabled && !submitDisabled — busy does NOT block send.
+  const canSubmit = hasText && !disabled && !submitDisabled;
 
   submitRef.current = onSubmit;
   disabledRef.current = disabled;
-  submitBlockedRef.current = disabled || busy;
+  submitBlockedRef.current = disabled || submitDisabled;
   onChangeRef.current = onChange;
   bashModeRef.current = isBashMode;
   slashMenuStateRef.current = { bridge, session, sessionRef, slashCwd };
@@ -186,7 +201,8 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
     onUpdate: ({ editor }) => {
       // Official vTt: k.current = true; setTipTapEditorState(json); Qj: he from trim.
       userEditedRef.current = true;
-      const next = editor.getText({ blockSeparator: "\n" });
+      // Residual TipTap getText() default blockSeparator is "\n\n" — do not invent "\n" collapse.
+      const next = editor.getText();
       const nextHas = next.trim().length > 0;
       if (nextHas !== hasTextRef.current) {
         hasTextRef.current = nextHas;

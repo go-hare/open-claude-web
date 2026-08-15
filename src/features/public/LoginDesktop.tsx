@@ -406,15 +406,10 @@ export function LoginDesktopChooser({
     setPhase("idle");
   }, []);
 
-  // Official: void 0 === r → empty sVt while interactiveAuth store still loading.
+  // Official M5t (index-BELzQL5P.js): if (void 0 === r) return a.jsx(sVt, {})
+  // Empty shell only — no Ace / no "Loading…" invent while interactiveAuth loads.
   if (interactiveAuth === undefined) {
-    return (
-      <LoginDesktopShell>
-        <div className="flex h-full w-full flex-col items-center justify-center gap-5 px-14 text-center">
-          <CoworkClaudeAvatar state="thinking" className="!w-12" isInteractive={false} />
-        </div>
-      </LoginDesktopShell>
-    );
+    return <LoginDesktopShell />;
   }
 
   // Official: "relaunching" | "applying" → d2t (signin | signed-in).
@@ -790,15 +785,10 @@ export function LoginDesktopPage(_props: RouteViewProps) {
     void custom3pBridge()?.openSetupWindow?.();
   }, []);
 
+  // Official LoginRoute / M5t loading: empty sVt shell (bg-bg-100 + drag bar only).
+  // Product invent Ace+Loading… on cold start was wrong residual — delete.
   if (status === undefined) {
-    return (
-      <LoginDesktopShell>
-        <div className="flex h-full w-full flex-col items-center justify-center gap-5 px-14 text-center">
-          <CoworkClaudeAvatar state="thinking" className="!w-12" isInteractive={false} />
-          <p className="max-w-sm text-balance text-sm leading-normal text-text-400">Loading…</p>
-        </div>
-      </LoginDesktopShell>
-    );
+    return <LoginDesktopShell />;
   }
 
   // AnthropicEntry-only path: page-level d2t (chooser owns its own relaunching phase).

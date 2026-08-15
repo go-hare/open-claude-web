@@ -601,7 +601,8 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
       editorRef.current = editor;
     },
     onUpdate: ({ editor }) => {
-      const next = editor.getText({ blockSeparator: "\n" });
+      // Residual TipTap getText() default is "\n\n" — same as Code Qj; no invent "\n" collapse.
+      const next = editor.getText();
       emitRef.current = markControlledTiptapUserEdit(next);
       onChangeRef.current(next);
     },

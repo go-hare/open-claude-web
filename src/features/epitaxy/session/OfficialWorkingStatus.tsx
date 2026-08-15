@@ -4,11 +4,13 @@
  */
 import { memo, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Icon } from "../../../shell/icons";
-import { useOfficialCodeSessionBucket } from "./officialCodeSessionStore";
+import {
+  useOfficialCodeSessionCompactionStatus,
+  useOfficialCodeSessionPermissionSuppressed,
+} from "./officialCodeSessionStore";
 import {
   officialGetStreamTokenEstimate,
   officialGetTurnStartedAt,
-  officialMarkTurnStarted,
 } from "./officialStreamSessionStore";
 import { OFFICIAL_SPARK_MASK_IMAGE } from "./officialSparkMaskUrl";
 
@@ -103,18 +105,15 @@ export function OfficialWorkingStatus({
   isWorking: boolean;
   sessionId?: string;
   spawnLabel?: string;
-  /** @deprecated residual Gv ignores prop; kept optional for call-site compat */
-  startedAt?: number | null;
-  /** @deprecated residual Gv reads _e map; kept optional for call-site compat */
-  tokenEstimate?: number;
 }) {
-  // Official d_e(t): bucket.compactionStatus for this session.
-  const bucket = useOfficialCodeSessionBucket(sessionId);
-  const compactionStatus = bucket?.compactionStatus ?? null;
-  // Official je(t): stable turn start for this sessionId.
-  const startedAt = sessionId
-    ? (officialGetTurnStartedAt(sessionId) ?? (isWorking ? officialMarkTurnStarted(sessionId) : null))
-    : null;
+  // Residual Gv: r=ws(t) compactionStatus; o=js(t) permission pending — not full bucket.
+  // Full-bucket subscribe re-rendered loader on every stream tick under Fu pin.
+  const compactionStatus = useOfficialCodeSessionCompactionStatus(sessionId);
+  // Official je(t): stable turn start for this sessionId — set by beginPendingTurn / stream
+  // message_start (officialMarkTurnStarted), cleared on settle. Gv only READs je.
+  // Product invent: mark when isWorking without je → sticky elapsed after idle and
+  // poisoned isResponding when callers OR'd je into busy (empty session "43s" spark).
+  const startedAt = sessionId ? officialGetTurnStartedAt(sessionId) : null;
   const [elapsedSeconds, setElapsedSeconds] = useState(() => (
     startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0
   ));
@@ -142,7 +141,7 @@ export function OfficialWorkingStatus({
   // (index Efe: requestsBySession[id] has status==="pending"). Product stores the pending
   // queue on session.pendingToolPermissions (resolved items are removed).
   // l = isWorking && !suppressed; d=elapsed>=2; f=compacting; p=n||d||f; opacity = p && l
-  const permissionSuppressed = (bucket?.session?.pendingToolPermissions?.length ?? 0) > 0;
+  const permissionSuppressed = useOfficialCodeSessionPermissionSuppressed(sessionId);
   const sparkWorking = isWorking && !permissionSuppressed;
   const showElapsedGate = elapsedSeconds >= 2;
   const showTokens = showElapsedGate && tokens > 0;
@@ -213,13 +212,13 @@ export function useOfficialDelayedFlag(active: boolean, delayMs: number) {
   return active && elapsed;
 }
 
-/** Official Ja/Za loading branch — must be a component so the delayed flag is a valid hook. */
+/** Official Ja/Za loading branch — residual jd Spinner size l (NOT Ed Spark; Spark is Gv only). */
 export function OfficialConversationLoading() {
   const showSpinner = useOfficialDelayedFlag(true, 20);
   if (!showSpinner) return null;
   return (
     <div role="status" className="h-full flex items-center justify-center text-t5">
-      <OfficialSparkSpinner isWorking size="l" />
+      <OfficialSpinner size="l" />
       <span className="sr-only">Loading conversation</span>
     </div>
   );

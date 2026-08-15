@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { desktopBridge, type SessionSummary } from "../../adapters/desktopBridge";
 import type { ChatMessage } from "../../adapters/desktopBridge/types";
 import { sessionHomePath } from "../../shell/sessionPaths";
@@ -14,11 +14,11 @@ import {
   type OfficialTranscriptMode,
   type OfficialViewPane,
 } from "./OfficialEpitaxyComponents";
-import { OfficialPierreWorkerPool } from "./diff/OfficialPierreWorkerPool";
 import "./diff/ensurePierreDiffsContainer";
 import { createMessageUuid } from "../../adapters/desktopBridge/messageUuid";
 import {
   officialCodeSessionStore,
+  useOfficialCodeSessionBucket,
 } from "./session/officialCodeSessionStore";
 import { setDraftPermissionMode } from "./codeDraftComposerStore";
 import type { PermissionMode } from "../../adapters/desktopBridge";
@@ -62,6 +62,18 @@ import {
 } from "./session/EpitaxyChatChrome";
 import { cycleOfficialTranscriptMode } from "./session/officialTranscriptMode";
 import {
+  EPITAXY_SIDE_PANE_PERSIST_KEY,
+  OfficialSidePaneStoreProvider,
+  residualOfficialViewPanes,
+  residualSecondarySidePanePersistKey,
+  useOfficialSidePaneSessionStore,
+  useOfficialSidePaneStoreApi,
+} from "./session/officialSidePaneSessionStore";
+import {
+  residualChatFlex,
+  residualSideColumns,
+} from "./session/officialTileLayout";
+import {
   ExistingSessionComposer,
   type OfficialComposerSurfaceApi,
 } from "./session/OfficialExistingSessionComposer";
@@ -70,6 +82,12 @@ import { EpitaxyChatPanelErrorBoundary } from "./session/EpitaxyChatPanelErrorBo
 import { useErrorsOptional } from "../settings/errorsToast";
 import { OfficialRewindPicker } from "./session/OfficialRewindPicker";
 import { collectOfficialRewindTurns } from "./session/officialRewindTurns";
+import { coworkRateLimitStore } from "../cowork/session/rateLimit/coworkRateLimitStore";
+import {
+  residualGaFromMessageLimits,
+  residualOs,
+  residualQjDisabled,
+} from "./session/officialQjComposerGate";
 
 type OfficialPreviewTarget = OfficialPreviewTargetImported;
 
@@ -157,30 +175,40 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
     </OfficialChatTileShell>
   ), [activeSessionId, hasExtraCodePanes, hideComposer, landingActions, landingBody, onChatPanelBack, onCloseExtraPane, onNavigate, sessionRef, sessionType]);
 
+  // Official kI/`sg` PierreWorkerPool is provided by App shell for kind==="code"
+  // (stays mounted across /code/:id). Do not wrap here — remounting pool on each
+  // session switch re-inits workers (~1s longtask).
+  // Residual kI(sidePanePersistKey=EPITAXY_SIDE_PANE_PERSIST_KEY): primary Nr store.
   return (
-    <div className="epitaxy-root select-none h-full w-full flex flex-col">
-      <div className="flex-1 min-h-0">
-        <EpitaxyTileLayout>{renderChatTile(undefined, true)}</EpitaxyTileLayout>
+    <OfficialSidePaneStoreProvider persistKey={EPITAXY_SIDE_PANE_PERSIST_KEY}>
+      <div className="epitaxy-root select-none h-full w-full flex flex-col">
+        <div className="flex-1 min-h-0">
+          <EpitaxyTileLayout>{renderChatTile(undefined, true)}</EpitaxyTileLayout>
+        </div>
       </div>
-    </div>
+    </OfficialSidePaneStoreProvider>
   );
 }
 
-export function EpitaxySessionTile({ onClose, onNavigate, paneIndex = 0, sessionId }: EpitaxySessionTileProps) {
+export function EpitaxySessionTile({ onClose, onNavigate, paneIndex = 0, sessionId, slot }: EpitaxySessionTileProps) {
   // isLonePane / onMovePane / slot kept on props for PaneLayout API; secondary Close pane only needs onClose.
+  // Residual EpitaxySecondPane: sidePanePersistKey = `${dd}.${slot}` (tr|br|bl).
   return (
     <EpitaxySecondPane
       onClose={onClose}
       onNavigate={onNavigate}
       paneIndex={paneIndex}
       sessionId={sessionId}
+      slot={slot}
     />
   );
 }
 
-function EpitaxySecondPane({ onClose, onNavigate, paneIndex, sessionId }: EpitaxySessionTileProps) {
+function EpitaxySecondPane({ onClose, onNavigate, paneIndex, sessionId, slot }: EpitaxySessionTileProps) {
   const sessionType = useEpitaxySessionType(sessionId);
   const sessionRef = useMemo(() => ({ id: sessionId, type: sessionType }), [sessionId, sessionType]);
+  // Residual `${dd}.${slot}` — fall back tr when slot omitted (legacy callers).
+  const sidePanePersistKey = residualSecondarySidePanePersistKey(slot ?? "tr");
   // Secondary pane crash: close the pane if possible, else home (do not steal primary route on close alone).
   const onChatPanelBack = useCallback(() => {
     if (onClose) {
@@ -212,9 +240,11 @@ function EpitaxySecondPane({ onClose, onNavigate, paneIndex, sessionId }: Epitax
   ), [onChatPanelBack, onClose, onNavigate, paneIndex, sessionId, sessionRef, sessionType]);
 
   return (
-    <div className="epitaxy-root select-none flex-1 min-h-0 flex flex-col overflow-hidden">
-      <EpitaxyTileLayout>{renderChatTile()}</EpitaxyTileLayout>
-    </div>
+    <OfficialSidePaneStoreProvider persistKey={sidePanePersistKey}>
+      <div className="epitaxy-root select-none flex-1 min-h-0 flex flex-col overflow-hidden">
+        <EpitaxyTileLayout>{renderChatTile()}</EpitaxyTileLayout>
+      </div>
+    </OfficialSidePaneStoreProvider>
   );
 }
 
@@ -259,21 +289,61 @@ function EpitaxyChatPanel({
     isResponding,
     isSessionNotFound,
     messages,
-    pendingTurnStartedAt,
     reload,
     session,
     spawnLabel,
     stopLiveTurn,
-    streamTokenEstimate,
   } = useEpitaxySessionData(initialSessionId);
-  // Official ca0135 tileLayout + sidePane: multi-tile side stack (tasks + subagent column via ur).
-  // activeView ≡ sidePane focused kind; openViews ≡ ir(tileLayout) non-chat tiles.
-  const [sideTiles, setSideTiles] = useState<OfficialViewPane[]>([]);
-  const [activeView, setActiveView] = useState<OfficialViewPane | undefined>(undefined);
-  const [transcriptMode, setTranscriptMode] = useState<OfficialTranscriptMode>("normal");
-  const [fileView, setFileView] = useState<OfficialFileViewTarget | null>(null);
+  // Residual Qj J = expectedId && !meta — reactive isMetaPending for composer disabled.
+  const codeBucket = useOfficialCodeSessionBucket(initialSessionId);
+  // Residual Ga from pr() messageLimits — shared store also used by Code rate-limit path.
+  const messageLimits = useSyncExternalStore(
+    (onStoreChange) => coworkRateLimitStore.subscribe(onStoreChange),
+    () => coworkRateLimitStore.getState().messageLimits,
+    () => coworkRateLimitStore.getState().messageLimits,
+  );
+  /**
+   * Residual Qj disabled on /code/:id shell:
+   * Os = F?"active":Qt.isPending&&0===Ns?"spawning":"draft"
+   * Product: create navigates away (LocalSessions.start) — never same-shell createPending/spawning.
+   * Ns=0 always on existing shell. J = expectedId && !meta. Ga from messageLimits. xn N/A local-first.
+   * error is residual banner W only — NOT invent Qj disabled lock.
+   */
+  const qjDisabled = residualQjDisabled({
+    os: residualOs({
+      hasSessionMeta: Boolean(session),
+      createPending: false,
+      createInFlightCount: 0,
+    }),
+    isMetaPending: Boolean(initialSessionId) && !session && codeBucket.isMetaPending,
+    createInFlightCount: 0,
+    rateLimitExceeded: residualGaFromMessageLimits(messageLimits),
+    isRemoteUploading: false,
+  });
+  // Residual Ur / zr — this pane's Nr store (primary v1 or secondary v1.slot).
+  const sidePaneStore = useOfficialSidePaneStoreApi();
+  // Residual live tileLayout / sidePane / transcriptMode in Nr (not product useState flat sideTiles).
+  const tileLayout = useOfficialSidePaneSessionStore((s) => s.tileLayout);
+  const residualSidePane = useOfficialSidePaneSessionStore((s) => s.sidePane);
+  const transcriptMode = useOfficialSidePaneSessionStore((s) => s.transcriptMode);
+  const sideTiles = useMemo(() => residualOfficialViewPanes(tileLayout), [tileLayout]);
+  const sideColumns = useMemo(() => residualSideColumns(tileLayout), [tileLayout]);
+  const chatFlex = useMemo(() => residualChatFlex(tileLayout), [tileLayout]);
+  // activeView ≡ residual sidePane focused kind (none → undefined).
+  const activeView: OfficialViewPane | undefined =
+    residualSidePane === "none" ? undefined : residualSidePane;
+  // Residual Lr.fileView / subagentView live in Nr; product mirrors for render (previewTarget product-only).
+  const [fileView, setFileViewLocal] = useState<OfficialFileViewTarget | null>(null);
   const [previewTarget, setPreviewTarget] = useState<OfficialPreviewTarget | null>(null);
-  const [subagentView, setSubagentView] = useState<OfficialSubagentTarget | null>(null);
+  const [subagentView, setSubagentViewLocal] = useState<OfficialSubagentTarget | null>(null);
+  const setFileView = useCallback((view: OfficialFileViewTarget | null) => {
+    setFileViewLocal(view);
+    sidePaneStore.getState().setFileView(view ?? undefined);
+  }, [sidePaneStore]);
+  const setSubagentView = useCallback((view: OfficialSubagentTarget | null) => {
+    setSubagentViewLocal(view);
+    sidePaneStore.getState().setSubagentView(view ?? undefined);
+  }, [sidePaneStore]);
   const [sidePaneWidth, setSidePaneWidth] = useState<number | undefined>(undefined);
   const title = officialSessionHeaderTitle(session, initialSessionId);
   const effectiveSessionRef = sessionRef ?? (initialSessionId ? { id: initialSessionId, type: sessionType } : null);
@@ -285,37 +355,34 @@ function EpitaxyChatPanel({
   const canOpenFramebuffer = useOfficialFramebufferMenuGate(session?.cwd, framebufferPaneOpen);
   // Official VC(): el("ccd_file_browser") && listSessionDirectory && fetchMentionOptions
   const canOpenBrowser = useOfficialFilesBrowserMenuGate();
-  // Official setSidePane(e): if tile already present only focus; else ur() insert (column under existing side).
+  // Residual setSidePane(e): if tile already present only focus; else ur() insert.
   const openSidePane = useCallback((view: OfficialViewPane) => {
-    setSideTiles((current) => current.includes(view) ? current : [...current, view]);
-    setActiveView(view);
-  }, []);
-  // Official closeSidePane(e): Zs(tileLayout, e) remove one tile; clear sidePane if focused was that tile.
+    sidePaneStore.getState().setSidePane(view);
+  }, [sidePaneStore]);
+  // Residual closeSidePane(e): Zs(tileLayout, e); clear sidePane if focused was that tile.
   const closeSidePane = useCallback((view: OfficialViewPane) => {
-    setSideTiles((current) => {
-      const next = current.filter((item) => item !== view);
-      setActiveView((focused) => {
-        if (next.length === 0) return undefined;
-        if (focused === view) return next[next.length - 1];
-        return focused && next.includes(focused) ? focused : next[next.length - 1];
-      });
-      return next;
-    });
+    sidePaneStore.getState().closeSidePane(view);
     if (view === "subagent") setSubagentView(null);
     if (view === "file") setFileView(null);
-    if (view === "preview") setPreviewTarget(null);
-  }, []);
+    if (view === "preview") {
+      setPreviewTarget(null);
+      // Residual unbind when closing preview tile so restore does not re-open dead pane.
+      const sid = sidePaneStore.getState().previewServerId;
+      if (sid) sidePaneStore.getState().unbindPreviewServer(sid);
+    }
+  }, [setFileView, setSubagentView, sidePaneStore]);
   const closeAllSidePanes = useCallback(() => {
-    setSideTiles([]);
-    setActiveView(undefined);
+    sidePaneStore.getState().closeAllSidePanes();
     setSubagentView(null);
     setFileView(null);
     setPreviewTarget(null);
-  }, []);
+    const sid = sidePaneStore.getState().previewServerId;
+    if (sid) sidePaneStore.getState().unbindPreviewServer(sid);
+  }, [setFileView, setSubagentView, sidePaneStore]);
   const openFile = useCallback((target: OfficialFileViewTarget) => {
     setFileView({ ...target, scrollNonce: Date.now() });
     openSidePane("file");
-  }, [openSidePane]);
+  }, [openSidePane, setFileView]);
   const openPreview = useCallback((target: OfficialPreviewTarget) => {
     setPreviewTarget(target);
     openSidePane("preview");
@@ -324,7 +391,7 @@ function EpitaxyChatPanel({
   const openSubagent = useCallback((target: OfficialSubagentTarget) => {
     setSubagentView(target);
     openSidePane("subagent");
-  }, [openSidePane]);
+  }, [openSidePane, setSubagentView]);
   /** Stable poll callback for OfficialSubagentPane — must not be recreated each render. */
   const refreshSubagentTranscript = useCallback(() => {
     void reload({ silent: true });
@@ -425,33 +492,34 @@ function EpitaxyChatPanel({
     setComposerText,
     submitToChat,
   ]);
-  // Official toggleSidePane: remove if present else ur insert.
+  // Residual toggleSidePane: Zs if present else ur insert.
   const selectView = useCallback((view: OfficialViewPane) => {
-    setSideTiles((current) => {
-      if (current.includes(view)) {
-        const next = current.filter((item) => item !== view);
-        setActiveView((focused) => {
-          if (next.length === 0) return undefined;
-          if (focused === view) return next[next.length - 1];
-          return focused && next.includes(focused) ? focused : next[next.length - 1];
-        });
-        if (view === "subagent") setSubagentView(null);
-        if (view === "file") setFileView(null);
-        if (view === "preview") setPreviewTarget(null);
-        return next;
+    const wasOpen = residualOfficialViewPanes(sidePaneStore.getState().tileLayout).includes(view);
+    sidePaneStore.getState().toggleSidePane(view);
+    if (wasOpen) {
+      if (view === "subagent") setSubagentView(null);
+      if (view === "file") setFileView(null);
+      if (view === "preview") {
+        setPreviewTarget(null);
+        const sid = sidePaneStore.getState().previewServerId;
+        if (sid) sidePaneStore.getState().unbindPreviewServer(sid);
       }
-      setActiveView(view);
-      return [...current, view];
-    });
-  }, []);
+    }
+  }, [setFileView, setSubagentView, sidePaneStore]);
 
   /**
    * Official onCycleTranscriptMode (c119): ladder fr/ld, skip summary when hideSummary.
+   * Residual ca0135 setTranscriptMode also writes localStorage epitaxy.transcriptMode (kr).
    * Product header defaults hideSummary=false (summary item shown).
    */
+  /** Residual ca0135 setTranscriptMode: persist epitaxy.transcriptMode for kr() default. */
+  const applyTranscriptMode = useCallback((next: OfficialTranscriptMode) => {
+    sidePaneStore.getState().setTranscriptMode(next);
+  }, [sidePaneStore]);
   const cycleTranscriptMode = useCallback(() => {
-    setTranscriptMode((current) => cycleOfficialTranscriptMode(current));
-  }, []);
+    const current = sidePaneStore.getState().transcriptMode;
+    sidePaneStore.getState().setTranscriptMode(cycleOfficialTranscriptMode(current));
+  }, [sidePaneStore]);
 
   /**
    * Official closePane ⌘\ → closeLastPane residual:
@@ -459,24 +527,15 @@ function EpitaxyChatPanel({
    * Does not invent multi-session paneStore close — that is header Close pane / Se path.
    */
   const closeLastSidePane = useCallback(() => {
-    setSideTiles((current) => {
-      if (current.length === 0) return current;
-      const target =
-        (activeView && current.includes(activeView) ? activeView : undefined)
-        ?? current[current.length - 1];
-      if (!target) return current;
-      const next = current.filter((item) => item !== target);
-      setActiveView((focused) => {
-        if (next.length === 0) return undefined;
-        if (focused === target) return next[next.length - 1];
-        return focused && next.includes(focused) ? focused : next[next.length - 1];
-      });
-      if (target === "subagent") setSubagentView(null);
-      if (target === "file") setFileView(null);
-      if (target === "preview") setPreviewTarget(null);
-      return next;
-    });
-  }, [activeView]);
+    const tiles = residualOfficialViewPanes(sidePaneStore.getState().tileLayout);
+    if (tiles.length === 0) return;
+    const focused = sidePaneStore.getState().sidePane;
+    const target =
+      (focused !== "none" && tiles.includes(focused) ? focused : undefined)
+      ?? tiles[tiles.length - 1];
+    if (!target) return;
+    closeSidePane(target);
+  }, [closeSidePane, sidePaneStore]);
 
   /**
    * Official openRewindPicker **pa** (not ma): local + !responding + empty composer + 600ms
@@ -636,18 +695,27 @@ function EpitaxyChatPanel({
     window.addEventListener("epitaxy-run-inline", onRunInline as EventListener);
     return () => window.removeEventListener("epitaxy-run-inline", onRunInline as EventListener);
   }, [bridge, initialSessionId, openSidePane]);
+  /**
+   * Residual ca0135 Nr.reset(sessionId) — not invent hard-clear.
+   * Live tileLayout/transcriptMode already in Nr; reset saves prev tree via xr, restore strip.
+   * Unmount saveLive: residual Nr keeps live tileLayout; still upsert bySession for safety.
+   * Multi-pane: each panel owns its own Nr (kI persistKey) — secondary never mutates primary.
+   */
   useEffect(() => {
-    setFileView(null);
-    setPreviewTarget(null);
-    setSubagentView(null);
-    setSideTiles([]);
-    setActiveView(undefined);
-  }, [initialSessionId]);
-  useEffect(() => {
-    if (!initialSessionId || (entries.length === 0 && !isResponding)) {
-      updateTranscriptScrollState({ showScrollButton: false, showBottomFade: false });
-    }
-  }, [entries.length, initialSessionId, isResponding, updateTranscriptScrollState]);
+    const restored = sidePaneStore.getState().reset(initialSessionId);
+    // Residual same-session keeps Lr.fileView/subagentView; cross-session Lr clears → undefined.
+    // Mirror store result into local React state (do not invent hard-clear).
+    setFileViewLocal(restored.fileView ?? null);
+    setSubagentViewLocal(restored.subagentView ?? null);
+    // Product-only previewTarget (not residual Lr field) — clear when preview tile not restored.
+    if (!restored.sideTiles.includes("preview")) setPreviewTarget(null);
+    return () => {
+      sidePaneStore.getState().saveLive(initialSessionId);
+    };
+  }, [initialSessionId, sidePaneStore]);
+  // Official R (c119 Ka): parent only mirrors onScrollState from Gb.
+  // showBottomFade/showScrollButton false comes solely from Xb unmount cleanup
+  // (empty/loading branch). No invent parent effect on sessionId/entries.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!initialSessionId) return;
@@ -683,7 +751,7 @@ function EpitaxyChatPanel({
           <div aria-hidden="true" className="epitaxy-top-scrim" />
           <div aria-hidden="true" className="epitaxy-bottom-scrim" style={{ opacity: showBottomFade ? 1 : 0 }} />
           <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
-            {renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onNavigate, onScrollState: updateTranscriptScrollState, pendingTurnStartedAt, ref: transcriptRef, reload, scrollRef: transcriptScrollRef, session, sessionType, spawnLabel, streamTokenEstimate, tasks, transcriptMode })}
+            {renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onNavigate, onScrollState: updateTranscriptScrollState, ref: transcriptRef, reload, scrollRef: transcriptScrollRef, session, sessionType, spawnLabel, tasks, transcriptMode })}
           </EpitaxyTranscriptActionContext.Provider>
         </div>
         {!hideComposer && initialSessionId && !isSessionNotFound ? (
@@ -703,7 +771,9 @@ function EpitaxyChatPanel({
             attachRef={composerAttachRef}
             bridge={bridge}
             composerApiRef={composerApiRef}
-            disabled={isLoading || Boolean(error)}
+            // Residual Qj disabled via residualQjDisabled (Os/J/Ns/Ga/xn). See qjDisabled above.
+            // Error stays banner-only (W); not folded into disabled.
+            disabled={qjDisabled}
             isResponding={isResponding}
             onOpenDiff={openDiff}
             onOpenPlan={openPlan}
@@ -763,8 +833,9 @@ function EpitaxyChatPanel({
   );
 
   // Official kI wraps session with `sg` (PierreWorkerPool) so Diff/File Zd mounts with a warm pool.
-  // Official ur (ca0135): first open beside chat → Xs({direction:"row", children:[["chat",2], side]}).
-  // Second side open under existing side tile → column stack (tasks above, subagent below) — "from below".
+  // Residual ur (ca0135): first open beside chat → Xs({direction:"row", children:[["chat",2], side]}).
+  // Second side open under existing side tile → column stack (tasks above, subagent below).
+  // Third when last root child is stack → Js new side column (residualSideColumns).
   // c119 YI: flexGrow from tile.flex, flexShrink:1, flexBasis:0, minWidth:minTilePx(100).
   const hasSidePanes = sideTiles.length > 0;
   const chatTileStyle = useMemo<CSSProperties>(() => {
@@ -776,53 +847,60 @@ function EpitaxyChatPanel({
     return {
       height: "100%",
       minWidth: sidePaneMinWidth,
-      flexGrow: chatDefaultFlex,
+      flexGrow: chatFlex || chatDefaultFlex,
       flexShrink: 1,
       flexBasis: 0,
     };
-  }, [hasSidePanes, sidePaneWidth]);
+  }, [chatFlex, hasSidePanes, sidePaneWidth]);
 
   // Official iE row stack: gap from nE.gap (12). Side tile FI uses DI + Nn sidebar elevation.
   // Chat tile also sits in the same padded container (EpitaxyTileLayout padding:8) so elevated rings show.
+  // Pierre pool (`sg`) is provided by EpitaxyFramePage / outer shell (official kI), not here.
   return (
-    <OfficialPierreWorkerPool>
-      <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
-        {/* Official stack gap nE.gap=12 between chat tile and side column. */}
-        <div className="relative h-full min-w-0 flex" style={{ gap: hasSidePanes ? 12 : 0 }}>
-          {/* Chat shell matches iE: h-full w-full min-w-0 relative isolate rounded-r6 + Nn sidebar elevation.
-              Official c119 iE: Nn(elevation:"sidebar") is opacity-0 until .tiles-dragging — ring is NOT always on.
-              data-official-source: ion-dist c11959232 iE + Nn / k_e */}
-          <div className="relative min-w-0 h-full flex flex-col rounded-r6 isolate" style={chatTileStyle}>
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated opacity-0 transition-opacity duration-200 [.tiles-dragging_&]:opacity-100"
-              data-surface="sidebar"
-            />
-            <EpitaxyChatHeader
-              activeView={activeView}
-              canOpenBrowser={canOpenBrowser}
-              canOpenFramebuffer={canOpenFramebuffer}
-              canOpenRuns={sessionHasOfficialRuns(session, effectiveSessionRef)}
-              dragHandle={dragHandle}
-              hasRunningTasks={hasRunningTasks}
-              isTitleLoading={isLoading && !session}
-              isTopLeft={isTopLeft}
-              onSessionRemoved={onSessionRemoved}
-              onTranscriptModeChange={setTranscriptMode}
-              onViewSelect={selectView}
-              openViews={sideTiles}
-              paneIndex={paneIndex}
-              session={session}
-              sessionRef={effectiveSessionRef}
-              title={title}
-              transcriptMode={transcriptMode}
-            />
-            {chatBody}
-          </div>
-          {hasSidePanes ? (
+    <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
+      {/* Official stack gap nE.gap=12 between chat tile and side column(s). */}
+      <div className="relative h-full min-w-0 flex" style={{ gap: hasSidePanes ? 12 : 0 }}>
+        {/* Chat shell matches iE: h-full w-full min-w-0 relative isolate rounded-r6 + Nn sidebar elevation.
+            Official c119 iE: Nn(elevation:"sidebar") is opacity-0 until .tiles-dragging — ring is NOT always on.
+            data-official-source: ion-dist c11959232 iE + Nn / k_e */}
+        <div className="relative min-w-0 h-full flex flex-col rounded-r6 isolate" style={chatTileStyle}>
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated opacity-0 transition-opacity duration-200 [.tiles-dragging_&]:opacity-100"
+            data-surface="sidebar"
+          />
+          <EpitaxyChatHeader
+            activeView={activeView}
+            canOpenBrowser={canOpenBrowser}
+            canOpenFramebuffer={canOpenFramebuffer}
+            canOpenRuns={sessionHasOfficialRuns(session, effectiveSessionRef)}
+            dragHandle={dragHandle}
+            hasRunningTasks={hasRunningTasks}
+            isTitleLoading={isLoading && !session}
+            isTopLeft={isTopLeft}
+            onSessionRemoved={onSessionRemoved}
+            onTranscriptModeChange={applyTranscriptMode}
+            onViewSelect={selectView}
+            openViews={sideTiles}
+            paneIndex={paneIndex}
+            session={session}
+            sessionRef={effectiveSessionRef}
+            title={title}
+            transcriptMode={transcriptMode}
+          />
+          {chatBody}
+        </div>
+        {sideColumns.map((column, columnIndex) => {
+          // Residual column tiles → OfficialViewPane ids (product supports these kinds only).
+          const renderTiles = column.tiles.filter((id): id is OfficialViewPane =>
+            (sideTiles as string[]).includes(id),
+          );
+          if (renderTiles.length === 0) return null;
+          return (
             <EpitaxySidePaneColumn
+              key={`side-col-${columnIndex}-${renderTiles.join("|")}`}
               fileView={fileView}
-              isTopLeft={isTopLeft}
+              isTopLeft={isTopLeft && columnIndex === 0}
               messages={messages}
               onCloseAll={closeAllSidePanes}
               onCloseTile={closeSidePane}
@@ -837,23 +915,24 @@ function EpitaxyChatPanel({
               )}
               session={session}
               sessionRef={effectiveSessionRef}
-              sidePaneWidth={sidePaneWidth}
-              sideTiles={sideTiles}
+              // First residual side column keeps product resize width; extra columns use residual flex.
+              sidePaneWidth={columnIndex === 0 ? sidePaneWidth : undefined}
+              sideTiles={renderTiles}
               subagentView={subagentView}
             />
-          ) : null}
-        </div>
-        {/* Official DM rewind picker — Esc Esc / openRewindPicker residual. */}
-        <OfficialRewindPicker
-          isOpen={rewindPickerOpen}
-          onClose={closeRewindPicker}
-          onSelect={(uuid, text) => {
-            void onRewindPickerSelect(uuid, text);
-          }}
-          turns={rewindTurns}
-        />
-      </EpitaxyTranscriptActionContext.Provider>
-    </OfficialPierreWorkerPool>
+          );
+        })}
+      </div>
+      {/* Official DM rewind picker — Esc Esc / openRewindPicker residual. */}
+      <OfficialRewindPicker
+        isOpen={rewindPickerOpen}
+        onClose={closeRewindPicker}
+        onSelect={(uuid, text) => {
+          void onRewindPickerSelect(uuid, text);
+        }}
+        turns={rewindTurns}
+      />
+    </EpitaxyTranscriptActionContext.Provider>
   );
 }
 

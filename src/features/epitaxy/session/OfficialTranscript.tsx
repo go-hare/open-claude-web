@@ -47,6 +47,11 @@ import { applyCoworkRateLimitToStore } from "../../cowork/session/rateLimit/cowo
 import { isOfficialMermaidMarkdownLanguage, OfficialMermaidDiagramCard } from "../OfficialMermaidDiagramCard";
 import { OfficialSearchTree, officialSearchTreeLanguage } from "../OfficialSearchTree";
 import {
+  officialEpitaxyChaptersStore,
+  useOfficialSessionUserChapters,
+  type OfficialCodeUserChapter,
+} from "./officialEpitaxyChaptersStore";
+import {
   OfficialAssistantMessage,
   OfficialButton,
   OfficialMessageActions,
@@ -78,7 +83,6 @@ import {
 import { OfficialTranscriptItemMenu } from "./OfficialTranscriptItemMenu";
 import {
   OfficialConversationLoading,
-  OfficialSparkSpinner,
   OfficialSpinner,
   OfficialWorkingStatus,
 } from "./OfficialWorkingStatus";
@@ -156,8 +160,6 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   /** Official CC "Start a new session" navigates home (Rs / sessionHomePath). */
   onNavigate?: (path: string) => void;
   onScrollState: (state: OfficialTranscriptScrollState) => void;
-  /** Residual Gv reads turn start from je map — accepted for call-site compat only. */
-  pendingTurnStartedAt?: number | null;
   ref: Ref<OfficialTranscriptHandle>;
   reload: (options?: { silent?: boolean }) => Promise<void>;
   scrollRef: MutableRefObject<HTMLDivElement | null>;
@@ -165,8 +167,6 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   /** Official remote tR uses Connecting empty; local Ja uses delayed Loading spark. */
   sessionType?: "local" | "remote" | "bridge" | "pool" | "ssh";
   spawnLabel?: string;
-  /** Residual Gv polls _e map — accepted for call-site compat only; not piped into Transcript. */
-  streamTokenEstimate?: number;
   tasks: OfficialBackgroundTask[];
   transcriptMode: OfficialTranscriptMode;
 }) {
@@ -181,29 +181,35 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   }
   if (error && entries.length === 0) return <SessionError error={error} />;
   if (!initialSessionId) return <div className="h-full overflow-y-auto overflow-x-hidden">{landingBody ?? null}</div>;
-  // Official Xb/Gb remounts with session; product keys by session so Fu state does not leak.
-  // Official c119 Gb → Fu(...) does NOT pass restoreKey (only general je list does).
-  // Passing restoreKey here desynced estimate-based initialOffset vs stale measurementsCache
-  // and caused vertical thrash when reopening a prior session.
-  const transcriptKey = initialSessionId;
-  // Official Ja: Boolean(D) && 0===Ya.length && (B||J). Za delays spinner 20ms.
-  // Do NOT gate on !session — Recents openSession seeds meta before getTranscript;
-  // that used to skip Ja and flash "No messages yet." / empty→full jump.
-  // Official remote tR (c119): empty + isTranscriptPending → spinner + "Connecting to session…"
-  if (isLoading && entries.length === 0) {
+  // Residual c119 shell (before Fu/Xb):
+  //   Z? not-found
+  //   : Ja? (Za? Loading spark : null)     // Ja = D && Ya.length===0 && (B||J) — NOT gated by !H
+  //   : li? (D? "No messages yet." : landing)
+  //   : oi? init chrome | Xb
+  // Product invent: `entries.length===0 && !isResponding` wrapped Ja → busy empty missed Loading and
+  // could flash "No messages" / skip Za. Match residual order: Ja first, then li, then Xb.
+  if (isLoading) {
     if (sessionType === "remote" || sessionType === "pool" || sessionType === "bridge") {
       return <OfficialConnectingToSession />;
     }
     return <OfficialConversationLoading />;
   }
-  // Official: empty + not pending → "No messages yet." (xc7r0SA6rC)
+  // Residual li = 0===Ya.length && !oi && !H && "spawning"!==Os
   if (entries.length === 0 && !isResponding) {
-    return <div className="h-full flex flex-col items-center justify-center gap-g4 text-body text-t5">No messages yet.</div>;
+    return (
+      <div className="h-full flex items-center justify-center text-body text-t5">
+        No messages yet.
+      </div>
+    );
   }
-  // Residual Gb/Gv: tokens/elapsed from session maps inside Gv — do not pipe streamTokenEstimate into Transcript props.
+  // Residual c119 Xb mount: c.jsx(Xb,{...,sessionId:D,entries:Ya,...}) — no key on sessionId.
+  // Warm A→B keeps Gb/Fu mounted; pin layout sticks scrollTop=totalSize when items change.
+  // Product invent key={sessionId} remounted Fu every hot switch → scroll-listener cleanup forced
+  // showBottomFade false, then RO remeasure true→false while pin settled → bottom scrim flash
+  // (official CSS transition:opacity .15s on .epitaxy-bottom-scrim). Residual only unmounts Xb
+  // via empty branch (li) / loading (Ja), not on every session identity change.
   return (
     <Transcript
-      key={transcriptKey}
       entries={entries}
       isAwaitingReply={officialIsAwaitingReply(session, isResponding)}
       isResponding={isResponding}
@@ -218,7 +224,7 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   );
 }
 
-/** Official c119 remote tR empty pending residual (L2r8A2+O5x). */
+/** Official remote tR empty pending: residual jd Spinner size m + "Connecting to session…" (NOT Ed Spark). */
 function OfficialConnectingToSession() {
   return (
     <div className="h-full flex flex-col items-center justify-center gap-g4 text-body text-t5">
@@ -265,13 +271,7 @@ type TranscriptProps = {
   transcriptMode: OfficialTranscriptMode;
 };
 
-type CodeUserChapter = {
-  afterId: string;
-  id: string;
-  title: string;
-};
-
-const emptyCodeUserChaptersByAfterId = new Map<string, CodeUserChapter[]>();
+const emptyCodeUserChaptersByAfterId = new Map<string, OfficialCodeUserChapter[]>();
 
 /**
  * Official Gb/R transcript (c11959232):
@@ -279,17 +279,18 @@ const emptyCodeUserChaptersByAfterId = new Map<string, CodeUserChapter[]>();
  *   DOM: scrollRef > sizerRef(height) > absolute translateY(virtualItems[0].start) > measureElement rows
  *   scrollToBottom: setPinned(true); scrollTo({ top: scrollHeight })
  */
-// Residual Xb = memo(Gb) — skip re-render when only parent noise (e.g. streamTokenEstimate) changes.
+// Residual Xb = memo(Gb) — skip re-render when only parent noise changes.
 const Transcript = memo(forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isAwaitingReply, isResponding, onScrollState, scrollRef, sessionId, spawnLabel, tasks, transcriptMode }, ref) {
   const rowsRef = useRef<TranscriptRow[]>([]);
   const initialCount = useRef(entries.length);
-  const [userChapters, setUserChapters] = useState<CodeUserChapter[]>([]);
+  // Residual Vb: Um(sessionId) store — not local useState + invent clear on sessionId.
+  const userChapters = useOfficialSessionUserChapters(sessionId);
   const rows = useMemo(() => buildTranscriptRows(entries), [entries]);
   const userChaptersByAfterId = useMemo(() => groupCodeUserChaptersByAfterId(userChapters), [userChapters]);
   const lastEntryIdx = entries.length - 1;
 
   // Official c119 Gb: Fu({ items, getKey, estimateSize:Wb, overscan:6, paddingStart:48, paddingEnd:48, useFlushSync:!1 })
-  // — no restoreKey on Code transcript path.
+  // — no restoreKey, no sessionKey, no sessionId-driven measure invent on Code path.
   const officialVirtualizer = useOfficialTranscriptVirtualizer({
     estimateSize: estimateTranscriptRowSize,
     getKey: (row) => row.id,
@@ -305,6 +306,9 @@ const Transcript = memo(forwardRef<OfficialTranscriptHandle, TranscriptProps>(fu
   useLayoutEffect(() => {
     rowsRef.current = rows;
   }, [rows]);
+
+  // Residual initialCount is mount-once (x.current) — do not reseed invent.
+  // Residual chapters: Um re-subscribe by sessionId; no invent setUserChapters([]) on swap.
 
   useLayoutEffect(() => {
     scrollRef.current = officialVirtualizer.scrollRef.current;
@@ -365,24 +369,30 @@ const Transcript = memo(forwardRef<OfficialTranscriptHandle, TranscriptProps>(fu
       officialVirtualizer.setPinned(false);
     }
   }, [officialVirtualizer]);
+  // Residual Vb pinUserChapter / unpinUserChapter → Um.addUserChapter / removeUserChapter(chapterId).
   const pinUserChapter = useCallback((afterId: string, text: string) => {
-    setUserChapters((current) => {
-      if (current.some((chapter) => chapter.afterId === afterId)) return current;
-      return [...current, {
-        afterId,
-        id: `chapter-${afterId}`,
-        title: officialChapterTitleFromText(text),
-      }];
-    });
-  }, []);
-  const unpinUserChapters = useCallback((afterId: string) => {
-    setUserChapters((current) => current.filter((chapter) => chapter.afterId !== afterId));
-  }, []);
+    if (!sessionId) return;
+    officialEpitaxyChaptersStore.getState().addUserChapter(
+      sessionId,
+      afterId,
+      officialChapterTitleFromText(text),
+    );
+  }, [sessionId]);
+  const unpinUserChapter = useCallback((chapterId: string) => {
+    if (!sessionId) return;
+    officialEpitaxyChaptersStore.getState().removeUserChapter(sessionId, chapterId);
+  }, [sessionId]);
 
   // Official DOM structure (c119 Gb return) — NOT bare virtua <Virtualizer>.
+  // Empty/loading is branch-returned above Fu (renderTranscriptBody); this path only paints rows.
+  // Residual scroll root: h-full overflow-y-auto overflow-x-hidden [contain:strict] — no invent relative.
   return (
     <div ref={officialVirtualizer.scrollRef} data-testid="epitaxy-virtual-transcript" className="h-full overflow-y-auto overflow-x-hidden [contain:strict]">
-      <div ref={officialVirtualizer.sizerRef} className="relative epitaxy-chat-column" style={{ height: officialVirtualizer.sizerHeight }}>
+      <div
+        ref={officialVirtualizer.sizerRef}
+        className="relative epitaxy-chat-column"
+        style={{ height: officialVirtualizer.sizerHeight }}
+      >
         <div onPointerDownCapture={unpinTranscript} onKeyDownCapture={unpinTranscriptFromKeyboard} className="absolute top-0 left-0 w-full" style={{ transform: `translateY(${translateY}px)` }}>
           {virtualItems.map((virtualRow) => {
             const row = rows[virtualRow.index];
@@ -395,8 +405,8 @@ const Transcript = memo(forwardRef<OfficialTranscriptHandle, TranscriptProps>(fu
                     isAwaitingReply={isAwaitingReply}
                     isResponding={isResponding}
                     lastEntryIdx={lastEntryIdx}
-                    onPinUserChapter={pinUserChapter}
-                    onUnpinUserChapters={unpinUserChapters}
+                    onPinChapter={pinUserChapter}
+                    onUnpinChapter={unpinUserChapter}
                     row={row}
                     sessionId={sessionId}
                     spawnLabel={spawnLabel}
@@ -414,8 +424,9 @@ const Transcript = memo(forwardRef<OfficialTranscriptHandle, TranscriptProps>(fu
   );
 }));
 
-function groupCodeUserChaptersByAfterId(chapters: CodeUserChapter[]) {
-  const grouped = new Map<string, CodeUserChapter[]>();
+/** Residual qm — group Um userChapters by afterId. */
+function groupCodeUserChaptersByAfterId(chapters: OfficialCodeUserChapter[]) {
+  const grouped = new Map<string, OfficialCodeUserChapter[]>();
   for (const chapter of chapters) {
     const existing = grouped.get(chapter.afterId);
     if (existing) existing.push(chapter);
@@ -448,25 +459,52 @@ function estimateTranscriptRowSize(row: TranscriptRow) {
 }
 
 /**
- * Residual c43 `qs._measureElement` always `resizeItem` when the node is connected.
- * Product `@tanstack/virtual-core@3.14` gates:
+ * Package-only adapter (not UI invent): residual ion-dist c43 `qs._measureElement` verbatim:
+ *   n=indexFromElement(e); r=measurementsCache[n]; if(!r)return;
+ *   o=r.key; i=elementsCache.get(o); i!==e → unobserve/observe/set;
+ *   e.isConnected && resizeItem(n, options.measureElement(e,t,this))
+ * No isScrolling gate. Product `@tanstack/virtual-core@3.17` `measureElement` gates:
  *   if ((!this.isScrolling || this.scrollState) && this.shouldMeasureDuringScroll(index))
- * so ref/RO measure is dropped for ~isScrollingResetDelay(150ms) after programmatic
- * initialOffset/pin scrollTop — totalSize stays on estimateSize and pin sticks to a
- * short sizer (scrollbar gap / Jump to bottom). Clear isScrolling only for the
- * measure call so resizeItem runs; restore immediately after (residual has no gate).
+ * so ref/RO measure is dropped for ~isScrollingResetDelay(150ms) after pin sets
+ * scrollTop — totalSize stays on estimateSize and pin sticks to a short sizer.
+ *
+ * Do NOT mutate `isScrolling` around package measureElement: that notifies React
+ * with a false mid-scroll flag, re-runs pin layout, re-sets scrollTop, and the
+ * 150ms timer re-enters isScrolling — estimate↔measure thrash (stream jitter).
+ * Port residual `_measureElement` body so resizeItem always runs when connected.
  */
+type ResidualVirtualizerMeasureApi = {
+  elementsCache: Map<string | number, Element>;
+  indexFromElement: (node: Element) => number;
+  measurementsCache: Array<{ key: string | number } | undefined>;
+  observer: {
+    observe: (node: Element) => void;
+    unobserve: (node: Element) => void;
+  };
+  options: {
+    measureElement: (node: Element, entry: ResizeObserverEntry | undefined, instance: unknown) => number;
+  };
+  resizeItem: (index: number, size: number) => void;
+};
+
 function measureVirtualRowLikeResidual(
   virtualizer: ReturnType<typeof useVirtualizer<HTMLDivElement, Element>>,
   node: Element,
 ) {
-  const instance = virtualizer as typeof virtualizer & { isScrolling: boolean };
-  const wasScrolling = instance.isScrolling;
-  if (wasScrolling) instance.isScrolling = false;
-  try {
-    virtualizer.measureElement(node);
-  } finally {
-    if (wasScrolling) instance.isScrolling = wasScrolling;
+  // Residual c43: this._measureElement=(e,t)=>{const n=…,r=this.measurementsCache[n];if(!r)return;…}
+  const instance = virtualizer as unknown as ResidualVirtualizerMeasureApi;
+  const index = instance.indexFromElement(node);
+  const measured = instance.measurementsCache[index];
+  if (!measured) return;
+  const key = measured.key;
+  const prevNode = instance.elementsCache.get(key);
+  if (prevNode !== node) {
+    if (prevNode) instance.observer.unobserve(prevNode);
+    instance.observer.observe(node);
+    instance.elementsCache.set(key, node);
+  }
+  if (node.isConnected) {
+    instance.resizeItem(index, instance.options.measureElement(node, undefined, instance));
   }
 }
 
@@ -529,6 +567,8 @@ function useOfficialTranscriptVirtualizer<TItem>({
   const prependAdjustedThisPassRef = useRef(false); // A
 
   // Residual ve x: pinned → sum(estimate)+padding; else 0 (restore anchor path sets later).
+  // Code Gb does not pass restoreKey; warm full→full keeps this Fu instance — residual does
+  // NOT invent sessionId measure()/setPinned on swap; pin layout + RO re-pin own bottom stick.
   const initialOffsetRef = useRef<number | undefined>(undefined);
   if (initialOffsetRef.current === undefined) {
     if (pinnedRef.current) {
@@ -872,8 +912,8 @@ function TranscriptRowContent({
   isAwaitingReply,
   isResponding,
   lastEntryIdx,
-  onPinUserChapter,
-  onUnpinUserChapters,
+  onPinChapter,
+  onUnpinChapter,
   row,
   sessionId,
   spawnLabel,
@@ -885,14 +925,14 @@ function TranscriptRowContent({
   isAwaitingReply: boolean;
   isResponding: boolean;
   lastEntryIdx: number;
-  onPinUserChapter: (afterId: string, text: string) => void;
-  onUnpinUserChapters: (afterId: string) => void;
+  onPinChapter: (afterId: string, text: string) => void;
+  onUnpinChapter: (chapterId: string) => void;
   row: TranscriptRow;
   sessionId?: string;
   spawnLabel?: string;
   tasks: OfficialBackgroundTask[];
   transcriptMode?: OfficialTranscriptMode;
-  userChaptersByAfterId: Map<string, CodeUserChapter[]>;
+  userChaptersByAfterId: Map<string, OfficialCodeUserChapter[]>;
 }) {
   if (row.kind === "running-tasks") return <OfficialRunningTasks isResponding={isResponding} tasks={tasks} />;
   if (row.kind === "loader") {
@@ -915,8 +955,8 @@ function TranscriptRowContent({
       <CodeAssistantEntryMessage
         entry={row.entry}
         isStreaming={isStreaming}
-        onPinUserChapter={onPinUserChapter}
-        onUnpinUserChapters={onUnpinUserChapters}
+        onPinChapter={onPinChapter}
+        onUnpinChapter={onUnpinChapter}
         showAwaitingDot={showCodeAwaitingDot}
         transcriptMode={transcriptMode}
         userChaptersByAfterId={userChaptersByAfterId}
@@ -1602,19 +1642,21 @@ function OfficialUserEventCard({ item }: { item: Extract<TranscriptEntryItem, { 
 export function CodeAssistantEntryMessage({
   entry,
   isStreaming = false,
-  onPinUserChapter,
-  onUnpinUserChapters,
+  onPinChapter,
+  onUnpinChapter,
   showAwaitingDot = false,
   transcriptMode = "normal",
   userChaptersByAfterId,
 }: {
   entry: TranscriptEntry;
   isStreaming?: boolean;
-  onPinUserChapter?: (afterId: string, text: string) => void;
-  onUnpinUserChapters?: (afterId: string) => void;
+  /** Residual Kb onPinChapter(afterId, titleText). */
+  onPinChapter?: (afterId: string, text: string) => void;
+  /** Residual Kb onUnpinChapter(chapterId) — removeUserChapter by id, not afterId. */
+  onUnpinChapter?: (chapterId: string) => void;
   showAwaitingDot?: boolean;
   transcriptMode?: OfficialTranscriptMode;
-  userChaptersByAfterId?: Map<string, CodeUserChapter[]>;
+  userChaptersByAfterId?: Map<string, OfficialCodeUserChapter[]>;
 }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
   const chaptersByAfterId = userChaptersByAfterId ?? emptyCodeUserChaptersByAfterId;
@@ -1622,20 +1664,24 @@ export function CodeAssistantEntryMessage({
   const copyText = visibleItems.flatMap((item) => item.kind === "text" ? [item.text] : []).join("\n\n") || undefined;
   const firstVisibleItem = visibleItems[0];
   const hasErrorItem = visibleItems.some((item) => item.kind === "error");
+  // Residual Kb: pinned → s.forEach(e => o(e.id)); unpinned → r(afterId, title).
   const pinHandlersForItem = useCallback((itemId: string, textForTitle: () => string) => {
     const pinned = chaptersByAfterId.get(itemId);
-    if (!onPinUserChapter || !onUnpinUserChapters) return { isPinned: Boolean(pinned?.length) };
     if (pinned?.length) {
       return {
-        isPinned: true,
-        onPinChapter: () => pinned.forEach((chapter) => onUnpinUserChapters(itemId)),
+        isPinned: true as const,
+        onPinChapter: onUnpinChapter
+          ? () => { for (const chapter of pinned) onUnpinChapter(chapter.id); }
+          : undefined,
       };
     }
     return {
-      isPinned: false,
-      onPinChapter: () => onPinUserChapter(itemId, textForTitle()),
+      isPinned: false as const,
+      onPinChapter: onPinChapter
+        ? () => onPinChapter(itemId, textForTitle())
+        : undefined,
     };
-  }, [chaptersByAfterId, onPinUserChapter, onUnpinUserChapters]);
+  }, [chaptersByAfterId, onPinChapter, onUnpinChapter]);
   const firstPin = firstVisibleItem
     ? pinHandlersForItem(firstVisibleItem.id, () => copyText ?? "")
     : { isPinned: false as boolean };
@@ -2052,7 +2098,7 @@ function officialToolsCopyText(tools: TranscriptToolUse[]) {
   return inputString("description") ?? inputString("command") ?? inputString("file_path") ?? inputString("pattern") ?? inputString("prompt") ?? tool.name;
 }
 
-function CodeChapterTitle({ chapter }: { chapter: CodeUserChapter }) {
+function CodeChapterTitle({ chapter }: { chapter: OfficialCodeUserChapter }) {
   return (
     <div id={chapter.id} className="text-body-semibold text-assistant-primary select-text scroll-mt-[56px]">
       {chapter.title}

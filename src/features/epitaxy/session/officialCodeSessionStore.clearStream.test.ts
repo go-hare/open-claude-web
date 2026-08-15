@@ -214,7 +214,9 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(bucket?.session?.isRunning).toBe(false);
   });
 
-  it("assistant end_turn promotes queue before text (3p no-result residual)", () => {
+  it("assistant end_turn does not promote queue (official p / BELz endTurnSeen only)", () => {
+    // Official: p = end_turn → pendingTurn.endTurnSeen; g promotes only on result.
+    // Promoting on end_turn invents and strips Hb isQueued (opacity + Remove).
     officialCodeSessionStore.getState().openSession("s1", {
       id: "s1",
       kind: "code",
@@ -234,7 +236,7 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     const endTurn: ChatMessage = {
       id: "a-end",
       role: "assistant",
-      text: "reply for 6b",
+      text: "reply for current turn",
       createdAt: "2026-08-13T00:00:04.000Z",
       raw: {
         type: "assistant",
@@ -243,23 +245,60 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
           id: "msg_live",
           role: "assistant",
           stop_reason: "end_turn",
-          content: [{ type: "text", text: "reply for 6b" }],
+          content: [{ type: "text", text: "reply for current turn" }],
         },
       },
     };
     officialCodeSessionStore.getState().mergeMessage("s1", endTurn);
 
     const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.queuedMessages.map((message) => message.id)).toEqual(["q1", "q2"]);
+    expect(bucket?.streamingMessageId).toBeNull();
+    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+    expect(bucket?.messages.map((message) => message.id)).toEqual(["interrupt", "a-end"]);
+    expect(bucket?.session?.isRunning).toBe(true);
+  });
+
+  it("parent result promotes queue (official g / h)", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: Date.now(),
+      isRunning: true,
+    });
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "6"));
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q2", "6b"));
+
+    const result: ChatMessage = {
+      id: "r1",
+      role: "assistant",
+      text: "",
+      createdAt: "2026-08-13T00:00:05.000Z",
+      raw: {
+        type: "result",
+        uuid: "r1",
+        subtype: "success",
+        is_error: false,
+      },
+    };
+    officialCodeSessionStore.getState().mergeMessage("s1", result);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
     expect(bucket?.queuedMessages).toEqual([]);
     expect(bucket?.pendingQueuedSends).toBe(0);
-    expect(bucket?.streamingMessageId).toBeNull();
     expect(bucket?.messages.map((message) => message.id)).toEqual([
       "interrupt",
+      "r1",
       "q1",
       "q2",
-      "a-end",
     ]);
-    expect(bucket?.messages.some((message) => message.text.includes("reply for 6b"))).toBe(true);
+    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+    expect(bucket?.session?.isRunning).toBe(true);
   });
 
   it("applyLoad preserves pendingTurn/queue while host reports settled mid-drain", () => {

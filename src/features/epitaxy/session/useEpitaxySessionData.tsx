@@ -6,6 +6,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -22,7 +23,6 @@ import {
 } from "./officialCodeSessionStore";
 import {
   clearOfficialEkeCache,
-  estimateOfficialStreamSnapshotTokens,
   mergeOfficialStreamSnapshot,
   parseOfficialTranscriptEntries,
   parseOfficialTranscriptEntriesCached,
@@ -32,13 +32,13 @@ import {
 import type { OfficialStreamSnapshot } from "../officialStreamSmoother";
 import {
   officialClearTurnStarted,
-  officialGetStreamTokenEstimate,
   officialGetTurnStartedAt,
   officialMarkTurnStarted,
   officialSetStreamCharBudget,
   officialStreamActiveMessageId,
   officialStreamClear,
   officialStreamFeed,
+  officialStreamGetSnapshot,
   officialStreamHasListeners,
   officialStreamSetVisibility,
   officialStreamSettleAfterReveal,
@@ -111,31 +111,29 @@ export function SessionError({ error }: { error: Error }) {
   );
 }
 
+/**
+ * Official local Code route is always local for `code_*` ids. Do NOT invent a full
+ * LocalSessions.list() on every session switch — that IPC + sort of all sessions
+ * blocked the open path (Recents already holds meta).
+ */
 export function useEpitaxySessionType(sessionId?: string): EpitaxySessionType {
-  const [sessionType, setSessionType] = useState<EpitaxySessionType>(() => inferSessionType(sessionId));
-
-  useEffect(() => {
-    let alive = true;
-    setSessionType(inferSessionType(sessionId));
-    if (!sessionId) return () => { alive = false; };
-
-    desktopBridge.LocalSessions.list().then((sessions) => {
-      if (!alive) return;
-      setSessionType(inferSessionType(sessionId, sessions.find((session) => session.id === sessionId)));
-    }).catch(() => undefined);
-
-    return () => { alive = false; };
-  }, [sessionId]);
-
-  return sessionType;
+  return useMemo(() => inferSessionType(sessionId), [sessionId]);
 }
 
+/**
+ * Official LocalSessions.setFocusedSession(o) residual (asar):
+ *   focusedSessionId = o; if (t !== o) emit focusedSessionChanged
+ *   o && preconnectSSHIfNeeded(o)
+ * Visibility warm is setSessionVisibility(id, true|false) for **previous vs next**
+ * only — never an intermediate null on A→B switch.
+ *
+ * Product invent: effect cleanup setFocusedSession(null) ran between A and B,
+ * so previousFocused was lost and every switch still re-warmed B while thrashing
+ * idle state. Align: only set next id (or null when leaving /code/:id entirely).
+ */
 export function useFocusedSession(sessionId?: string) {
   useEffect(() => {
     void desktopBridge.LocalSessions.setFocusedSession?.(sessionId ?? null);
-    return () => {
-      void desktopBridge.LocalSessions.setFocusedSession?.(null);
-    };
   }, [sessionId]);
 }
 
@@ -185,60 +183,49 @@ export function useEpitaxySessionData(sessionId?: string) {
       if (block.kind === "tool") return total + 1 + block.partialJson.length;
       return total;
     }, 0);
-    // Dev probe for live typewriter cadence (window.__tileVaDiag).
-    const win = window as typeof window & { __tileVaDiag?: Array<{ t: number; chars: number }> };
-    const diag = win.__tileVaDiag ?? [];
-    diag.push({ t: performance.now(), chars });
-    if (diag.length > 400) diag.splice(0, diag.length - 400);
-    win.__tileVaDiag = diag;
+    // Residual Pe/Va: char budget only — no product window.__tileVaDiag invent.
     officialSetStreamCharBudget(sessionId, chars);
     streamMessageIdRef.current = nextId;
     setStreamingMessageId((current) => (current === nextId ? current : nextId));
   }, [sessionId, streamSnapshot]);
 
-  useEffect(() => {
+  // useLayoutEffect: Va is per sessionId (official Pe). useState would keep the previous
+  // session's streamSnapshot / activity for one paint → Working / empty chrome flash on switch.
+  // Hydrate + subscribe before paint; openSession re-entry does not Jwe/clear target Va.
+  useLayoutEffect(() => {
+    // Official openSession re-entry: only bump refCount — do NOT Jwe / Pe.clear.
+    // streamGeneration only gates in-flight settle finalize for THIS mount cycle.
+    streamGenerationRef.current += 1;
+    finalizeStreamGenerationRef.current = null;
+
     if (!sessionId) {
       setStreamSnapshot(null);
       setStreamActivityMode(idleStreamActivityMode);
       streamMessageIdRef.current = null;
+      setStreamingMessageId(null);
       return undefined;
     }
-    // Dev probe: expose a simulator so the main process can drive a synthetic stream
-    // and measure paint cadence without calling the real CLI.
-    const win = window as typeof window & Record<string, unknown>;
-    win.__simulateOfficialStream = (targetSessionId: string) => {
-      const apiMsgId = `simulate_${Date.now()}`;
-      officialStreamFeed(targetSessionId, {
-        type: "stream_event",
-        event: { type: "message_start", message: { id: apiMsgId, model: "claude-opus", usage: {} } },
-        parent_tool_use_id: null,
-      });
-      officialStreamFeed(targetSessionId, {
-        type: "stream_event",
-        event: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
-        parent_tool_use_id: null,
-      });
-      const words = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega".split(" ");
-      let i = 0;
-      const tick = () => {
-        if (i >= words.length) {
-          officialStreamFeed(targetSessionId, { type: "stream_event", event: { type: "message_stop" }, parent_tool_use_id: null });
-          return;
-        }
-        const word = i === 0 ? words[i] : ` ${words[i]}`;
-        i += 1;
-        officialStreamFeed(targetSessionId, {
-          type: "stream_event",
-          event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: word } },
-          parent_tool_use_id: null,
-        });
-        setTimeout(tick, 30);
-      };
-      tick();
-    };
+    // Residual Va: Pe.subscribe + visibility only — no window.__simulateOfficialStream invent.
     store.getState().ensureBucket(sessionId);
     // Residual Va(sessionId, enabled, visible=true): Pe.subscribe + setVisibility(() => r.current)
+    // Product: Pe keeps lastSnapshot per sessionId. On re-subscribe after switch, hydrate
+    // from lastSnapshot so live typewriter does not invent-blank until next delta.
     let lastMessageId: string | null = null;
+    const hydrate = officialStreamGetSnapshot(sessionId);
+    const bucketNow = store.getState().buckets[sessionId];
+    if (hydrate) {
+      lastMessageId = hydrate.messageId;
+      setStreamSnapshot(hydrate);
+      streamMessageIdRef.current = hydrate.messageId;
+      setStreamingMessageId(hydrate.messageId);
+      setStreamActivityMode(bucketNow?.streamActivityMode ?? idleStreamActivityMode);
+    } else {
+      lastMessageId = null;
+      setStreamSnapshot(null);
+      streamMessageIdRef.current = null;
+      setStreamingMessageId(null);
+      setStreamActivityMode(bucketNow?.streamActivityMode ?? idleStreamActivityMode);
+    }
     const unsubscribe = officialStreamSubscribe(sessionId, (snapshot) => {
       if (snapshot === null) {
         lastMessageId = null;
@@ -262,17 +249,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     };
   }, [sessionId, store]);
 
-  useEffect(() => {
-    streamGenerationRef.current += 1;
-    finalizeStreamGenerationRef.current = null;
-    if (!sessionId) return;
-    officialStreamClear(sessionId);
-    clearOfficialEkeCache(sessionId);
-    setStreamSnapshot(null);
-    setStreamingMessageId(null);
-    setStreamActivityMode(idleStreamActivityMode);
-    streamMessageIdRef.current = null;
-  }, [sessionId]);
+  // Residual: je (turnStartedAt) is Gv elapsed only; cleared on settle — no idle-scan invent.
 
   const clearStreamState = useCallback((markSessionSettled = false, discardQueued = false) => {
     if (!sessionId) return;
@@ -368,13 +345,25 @@ export function useEpitaxySessionData(sessionId?: string) {
     })();
   }, [sessionId, store]);
 
-  useEffect(() => {
+  // useLayoutEffect: markLoading / open path must set B before paint so Ja shows
+  // (official openSession leaves transcript pending until Ya). useEffect painted one
+  // frame of empty idle → "No messages yet." flash on cold / hot-open empty buckets.
+  useLayoutEffect(() => {
     let alive = true;
     if (!sessionId) return () => { alive = false; };
     const existing = store.getState().buckets[sessionId];
-    // Official silent revalidate only when Ya already has content. Session meta from
-    // Recents openSession must still run a non-silent load so Ja/B stays true until
-    // getTranscript paints (avoids empty→full transcript jump).
+    // Residual openSession (index-BELzQL5P): if (a?.sub) return — only refCount +
+    // reclaim. No getTranscript, no getSession. Product warm Ya (messages already
+    // durable, B false) must match: skip disk reload AND invent meta getSession.
+    // First open / Recents meta-only: still full load so Ja/B paints.
+    const hasWarmTranscript = Boolean(
+      existing
+      && existing.messages.length > 0
+      && !existing.isTranscriptPending,
+    );
+    if (hasWarmTranscript) {
+      return () => { alive = false; };
+    }
     const silent = Boolean(existing && (existing.messages.length > 0 || existing.streamSnapshot !== null));
     void reload({ silent }).finally(() => {
       if (!alive) return;
@@ -507,9 +496,9 @@ export function useEpitaxySessionData(sessionId?: string) {
           return;
         }
         // Official `g` (result + queue + pendingTurn): mergeMessage already promoted
-        // and opened a new pendingTurn — do not settle. Empty-queue error result
-        // (Esc, no deferred) is mergeMessage'd because is_error; success results
-        // return null here and already fall through to shouldClearOfficialStreamForEvent.
+        // and opened a new pendingTurn — do not settle Va here.
+        // Empty-queue parent result (success or error): mergeMessage already
+        // cleared pendingTurn / isRunning (h); fall through to clearStream for Va.
         if (!shouldSettleEmptyQueueAfterMergedResult(event, store.getState().buckets[sessionId])) {
           return;
         }
@@ -550,16 +539,18 @@ export function useEpitaxySessionData(sessionId?: string) {
               return;
             }
             const after = store.getState().buckets[sessionId];
-            // Official `g`: success result is not mergeMessage'd; promote queue
-            // after the result, new pendingTurn, keep isRunning for host drain.
-            const continueTurn = Boolean(
+            // Official BELz g/h: queue promote only on type:result mergeMessage.
+            // Do NOT invent hasQueue from pendingTurn alone — that blocked
+            // success-result settle forever (Stop stuck after host idle).
+            // Real deferred queue: flush Va only; g continues on next result merge.
+            const hasDeferredQueue = Boolean(
               after
               && (
                 (after.queuedMessages?.length ?? 0) > 0
                 || (after.pendingQueuedSends ?? 0) > 0
               ),
             );
-            if (continueTurn) {
+            if (hasDeferredQueue) {
               officialStreamClear(sessionId);
               clearOfficialEkeCache(sessionId);
               setStreamSnapshot(null);
@@ -568,12 +559,10 @@ export function useEpitaxySessionData(sessionId?: string) {
               streamMessageIdRef.current = null;
               streamSnapshotRef.current = null;
               streamActivityModeRef.current = idleStreamActivityMode;
-              store.getState().promoteQueueAndContinue(sessionId);
-              // Esc→queue continue: interrupted turn's assistant may already be on CLI
-              // jsonl while live merge missed it (stream suppress / parent_id residual).
-              // Silent reload fills prior replies without clearing the new pendingTurn
-              // (applyLoad preserves busy when session still isRunning).
-              void reload({ silent: true });
+              store.getState().setStreamActivity(sessionId, {
+                streamingMessageId: null,
+                streamActivityMode: idleStreamActivityMode,
+              });
               return;
             }
             clearStreamState(true);
@@ -581,8 +570,7 @@ export function useEpitaxySessionData(sessionId?: string) {
             // Esc→queue multi-send): durable assistants can land on CLI jsonl while
             // live merge/stream suppress races leave bucket.messages user-only — UI
             // shows stacked user bubbles and no reply. One silent getTranscript after
-            // final settle recovers jsonl SoT. Skip on continueTurn (above) so host
-            // drain is not interrupted by a mid-queue reload thrash.
+            // final settle recovers jsonl SoT.
             void reload({ silent: true }).finally(() => {
               if (streamGenerationRef.current !== streamGeneration) return;
               void refreshSessionTitleAfterSettle(sessionId).then((nextSession) => {
@@ -607,30 +595,32 @@ export function useEpitaxySessionData(sessionId?: string) {
           // getTranscript/reload the conversation body mid-turn.
           const nextSession = asRecord(event).session ?? asRecord(asRecord(event).payload).session;
           if (nextSession) {
-            const prevRunning = store.getState().buckets[sessionId]?.session?.isRunning === true;
-            const patched = normalizeSessionSummaryPatch(store.getState().buckets[sessionId]?.session ?? null, nextSession);
+            const prevBucket = store.getState().buckets[sessionId];
+            const prevRunning = prevBucket?.session?.isRunning === true;
+            const patched = normalizeSessionSummaryPatch(prevBucket?.session ?? null, nextSession);
             if (patched) store.getState().patchSession(sessionId, patched);
-            // densable: host sets isRunning=false on parent `result` while CLI may still
-            // hold bookend stdin. patchSession clears bucket stream flags; also clear
-            // local Va / activity so main spinner cannot stick if result settle raced.
+            // Official session_updated: metadata + isRunning only (no queue promote).
+            // Host markNotRunning (isRunning false): settle Va only when web has no
+            // open turn (pendingTurn/queue). Official g continues with pendingTurn
+            // after result promote — keep that. Real deferred queue: flush stream only.
             if (prevRunning && patched?.isRunning === false) {
               const after = store.getState().buckets[sessionId];
-              // Official `g` opens a new pendingTurn and keeps running. A stale
-              // isRunning=false must not settle that continue turn.
-              const continueTurn = Boolean(
+              const hasDeferredQueue = Boolean(
                 after
                 && (
-                  after.pendingTurnStartedAt !== null
-                  || (after.queuedMessages?.length ?? 0) > 0
+                  (after.queuedMessages?.length ?? 0) > 0
                   || (after.pendingQueuedSends ?? 0) > 0
                 ),
               );
-              if (continueTurn) {
-                // Official drainDeferredSends stays isRunning. A stale isRunning=false
-                // must not drop Xke/pe busy (q would re-arm and Esc-stack).
-                // Also lift local Va / eke suppress: markInterrupting only clears the
-                // store stream flags — React streamingMessageId would keep suppressing
-                // durable assistant end_turn paint while users already show in queue.
+              const hasOpenTurn = Boolean(
+                after
+                && (
+                  after.pendingTurnStartedAt !== null
+                  || hasDeferredQueue
+                ),
+              );
+              if (hasDeferredQueue || hasOpenTurn) {
+                // Lift Va / eke only — keep pendingTurn for official g / H busy.
                 officialStreamClear(sessionId);
                 clearOfficialEkeCache(sessionId);
                 setStreamSnapshot(null);
@@ -639,8 +629,10 @@ export function useEpitaxySessionData(sessionId?: string) {
                 streamMessageIdRef.current = null;
                 streamSnapshotRef.current = null;
                 streamActivityModeRef.current = idleStreamActivityMode;
-                store.getState().setStreamActivity(sessionId, { isRunning: true });
-                store.getState().markInterrupting(sessionId);
+                store.getState().setStreamActivity(sessionId, {
+                  streamingMessageId: null,
+                  streamActivityMode: idleStreamActivityMode,
+                });
               } else {
                 clearStreamState(true);
               }
@@ -772,9 +764,6 @@ export function useEpitaxySessionData(sessionId?: string) {
     store,
   ]);
 
-  // Official Ja
-  const isLoading = Boolean(sessionId) && (bucket.isTranscriptPending || bucket.isMetaPending);
-
   // Official rwe: seed Mfe.approvedPlans from transcript when last ExitPlanMode already has tool_result.
   // Also acknowledge settled ExitPlanMode ids so jfe skips re-showing Wk after reload/reconnect.
   useEffect(() => {
@@ -813,7 +802,11 @@ export function useEpitaxySessionData(sessionId?: string) {
     () => 0,
   );
   const isUltrareviewLaunching = ultrareviewLaunchVersion >= 0 && isOfficialUltrareviewLaunching(sessionId);
-  // Official Gv spawnLabel (c11959232 Xb): bs ultrareview / spawning / J cold-start / init step.
+  // Official Gv spawnLabel (c11959232 Xb):
+  //   bs? Ultrareview : "spawning"===Os ? plugins|worktree|Starting : J? Starting : void 0
+  // Os=F?"active":createPending?"spawning":"draft" — once route has session meta (F active),
+  // init-step labels do NOT apply. Product invent: any incomplete initializationStatus →
+  // sticky "Starting session…" on warm/empty sessions.
   const spawnLabel = useMemo(
     () => deriveOfficialCodeSpawnLabel({
       hasSessionId: Boolean(sessionId),
@@ -825,12 +818,18 @@ export function useEpitaxySessionData(sessionId?: string) {
     [bucket.isMetaPending, bucket.isSessionNotFound, bucket.session, isUltrareviewLaunching, sessionId],
   );
   // Official Xke/pe (index-BELzQL5P): pendingTurn && !endTurnSeen.
-  // Qj busy=H=isResponding; q only resets when busy clears — keep pendingTurn in the OR
-  // so Esc→markInterrupting (stream flush) cannot re-arm a second interrupt mid-continue.
-  const pendingTurnStartedAt = sessionId
-    ? (officialGetTurnStartedAt(sessionId) ?? bucket.pendingTurnStartedAt)
-    : bucket.pendingTurnStartedAt;
-  // Official isResponding on Xb: H || spawning || null!==Js || bs — keep loader while spawnLabel set.
+  // Residual Xb isResponding paint: H || "spawning"===Os || null!==Js || bs
+  // Product maps:
+  //   H → stream/pendingTurn/isRunning/queue (Xke + host isRunning)
+  //   "spawning"===Os → createPending same-shell (product /code/:id has F once routed; N/A)
+  //   null!==Js → optimistic user row before transcript; product beginLocalUserTurn → pendingTurnStartedAt
+  //   bs → ultrareview launch chrome (isUltrareviewBusy)
+  // — NOT J (awaiting meta) and NOT "any spawnLabel". J only feeds Gv text when Xb is up;
+  // empty cold open is Ja Loading / No messages branch, not sticky Starting via isResponding.
+  // Residual Gv tokens/elapsed: _e / je maps only — do NOT invent streamTokenEstimate prop.
+  const pendingTurnStartedAt = bucket.pendingTurnStartedAt;
+  const isUltrareviewBusy = isUltrareviewLaunching
+    || Boolean(bucket.session?.tags?.includes("ultrareview") && bucket.session.isRunning);
   const isResponding =
     streamActivityMode !== idleStreamActivityMode
     || streamSnapshot !== null
@@ -839,7 +838,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     || pendingTurnStartedAt !== null
     || (bucket.queuedMessages?.length ?? 0) > 0
     || (bucket.pendingQueuedSends ?? 0) > 0
-    || Boolean(spawnLabel);
+    || isUltrareviewBusy;
   // Official Ya = Kwe(Xa, Va). Tool settle is eke/rke object-ref mutation — no settleOrphan invent.
   // Official also appends ge (queued Hb rows) after the main stream-merged transcript.
   const entries = useMemo(() => {
@@ -847,9 +846,17 @@ export function useEpitaxySessionData(sessionId?: string) {
     if (queuedEntries.length === 0) return merged;
     return [...merged, ...queuedEntries];
   }, [parsedEntries, queuedEntries, streamSnapshot]);
-  const streamTokenEstimate = sessionId
-    ? officialGetStreamTokenEstimate(sessionId) || estimateOfficialStreamSnapshotTokens(streamSnapshot)
-    : estimateOfficialStreamSnapshotTokens(streamSnapshot);
+
+  // Residual Ja (c119): Boolean(D) && 0===Ya.length && (B||J)
+  // Ya = painted entries (Xa+Va+queue), not raw messages alone. B=isTranscriptPending, J=isMetaPending
+  // (product maps residual J=X&&!O via isMetaPending until session meta lands).
+  // Do NOT invent !session as loading — that flashed Ja on empty idle buckets.
+  const isLoading = Boolean(sessionId)
+    && entries.length === 0
+    && (
+      bucket.isTranscriptPending
+      || bucket.isMetaPending
+    );
 
   const stopLiveTurn = useCallback(async () => {
     // Official Wr onMutate = markInterrupting (Pke.flush + mCe.reset).
@@ -876,21 +883,23 @@ export function useEpitaxySessionData(sessionId?: string) {
     isResponding,
     isSessionNotFound: bucket.isSessionNotFound,
     messages: bucket.messages,
-    pendingTurnStartedAt,
     reload,
     session: bucket.session,
     spawnLabel,
     stopLiveTurn,
-    streamTokenEstimate,
   };
 }
 
 /**
  * Official Gv spawnLabel (c11959232):
- *   bs ultrareview launch → Launching Ultrareview…
- *   spawning + init step plugins → Setting up plugins…
- *   spawning + (worktree step | local useWorktree pending) → Creating worktree…
- *   spawning | J (id expected, meta not yet) → Starting session…
+ *   bs? "Launching Ultrareview…"
+ *   : "spawning"===Os ? ($s plugins | worktree | "Starting session…")
+ *   : J ? "Starting session…"
+ *   : void 0
+ *
+ * Os = F ? "active" : createPending ? "spawning" : "draft".
+ * $s init steps only while Os==="spawning". Once session meta exists, F is active —
+ * incomplete initializationStatus must NOT keep "Starting session…".
  */
 function deriveOfficialCodeSpawnLabel(input: {
   hasSessionId: boolean;
@@ -902,36 +911,14 @@ function deriveOfficialCodeSpawnLabel(input: {
   const { hasSessionId, isMetaPending, isSessionNotFound, isUltrareviewLaunching, session } = input;
   // Official spawnLabel:bs? "Launching Ultrareview…" while fe.launchUltrareview in flight.
   if (isUltrareviewLaunching) return "Launching Ultrareview…";
-  // Official tags includes ultrareview while remote agent progress may also show; keep launch flag primary.
   if (session?.tags?.includes("ultrareview") && session.isRunning) return "Launching Ultrareview…";
   // Official J = expectedId && !meta — cold navigate before meta arrives.
+  // (Does not alone force Xb isResponding; empty path uses Ja Loading.)
   const awaitingMeta = hasSessionId && !session && !isSessionNotFound && isMetaPending;
-  const init = parseOfficialInitializationStatus(session?.initializationStatus);
-  // Only incomplete init drives spawn chrome; completed/absent status must not stick.
-  const initIncomplete = Boolean(init && init.isComplete !== true);
-  const step = init?.step ?? null;
-
-  // Official $s step while spawning: plugins / worktree / default Starting session.
-  if (initIncomplete) {
-    if (step === "plugins") return "Setting up plugins…";
-    if (step === "worktree") return "Creating worktree…";
-    return "Starting session…";
-  }
-  // Official J branch: id expected, meta not loaded yet.
   if (awaitingMeta) return "Starting session…";
+  // Official $s only while "spawning"===Os. Product /code/:id always has F once meta exists
+  // (Os active). Do not map sticky initializationStatus → Starting session invent.
   return undefined;
-}
-
-function parseOfficialInitializationStatus(value: unknown): {
-  isComplete?: boolean;
-  step?: string | null;
-} | null {
-  if (!value || typeof value !== "object") return null;
-  const raw = value as Record<string, unknown>;
-  const step = typeof raw.step === "string" ? raw.step : null;
-  const isComplete = typeof raw.isComplete === "boolean" ? raw.isComplete : undefined;
-  if (step == null && isComplete === undefined) return null;
-  return { isComplete, step };
 }
 
 function chatMessageContentRichness(message: ChatMessage): number {
@@ -1303,10 +1290,11 @@ function chatMessageFromBridgeMessageEvent(event: unknown): ChatMessage | null {
   if (raw.type !== "message") return null;
   const message = asRecord(raw.message);
   if (message.type === "stream_event") return null;
-  // Official eke keeps result / system task events in the transcript stream so
-  // turn_error + task_event items can render without waiting for full reload.
+  // Official BELz mergeMessage: parent `type:"result"` is always merged (u).
+  // g = result && queue && pendingTurn → continue; h settles. Do NOT drop
+  // success results — that invent blocked g promote and left pendingTurn stuck
+  // (Stop hollow box after turn finished; host isRunning already false).
   if (message.type === "result") {
-    if (message.is_error !== true && message.isError !== true) return null;
     return chatMessageFromRawTranscriptEvent(message);
   }
   if (message.type === "error") return null;
@@ -1405,9 +1393,10 @@ function streamActivityModeFromInnerEvent(event: Record<string, unknown>, curren
 }
 
 /**
- * After mergeMessage of an is_error parent result: official `g` is false when
- * the queue is empty, so pendingTurn is already null. Fall through to settle
- * Va / isRunning. Continue (`g`) leaves a fresh pendingTurn — keep running.
+ * After mergeMessage of a parent result: official `g` is false when the queue is
+ * empty, so pendingTurn is already null. Fall through to settle Va.
+ * Continue (`g`) leaves a fresh pendingTurn — keep running (return false).
+ * Success and error results both merge (BELz u); only empty-queue h settles here.
  */
 function shouldSettleEmptyQueueAfterMergedResult(
   event: unknown,
@@ -1420,7 +1409,8 @@ function shouldSettleEmptyQueueAfterMergedResult(
   const raw = asRecord(event);
   const message = raw.type === "message" ? asRecord(raw.message) : raw;
   if (stringValue(message.type) !== "result") return false;
-  if (message.is_error !== true && message.isError !== true) return false;
+  // Official u: parent result only (subagent results keep parent_tool_use_id).
+  if (message.parent_tool_use_id != null && message.parent_tool_use_id !== "") return false;
   if (!bucket) return false;
   return bucket.pendingTurnStartedAt === null
     && (bucket.queuedMessages?.length ?? 0) === 0

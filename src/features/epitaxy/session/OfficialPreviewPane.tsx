@@ -22,6 +22,10 @@ import {
   OfficialPreviewAnnotateOverlay,
   PREVIEW_ANNOTATION_CONTEXT_NOTE,
 } from "./OfficialPreviewSketch";
+import {
+  officialPeekPreviewServerId,
+  useOfficialSidePaneStoreApi,
+} from "./officialSidePaneSessionStore";
 
 export type OfficialPreviewTarget = {
   path: string;
@@ -181,6 +185,8 @@ export function OfficialPreviewPane({
   sessionRef: EpitaxySessionRef | null;
 }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
+  // Residual Ur — bind/peek against this pane's Nr store (not shared singleton).
+  const sidePaneStore = useOfficialSidePaneStoreApi();
   const [selectedTarget, setSelectedTarget] = useState<OfficialPreviewTarget | null>(previewTarget);
   const [state, setState] = useState<{ dataUrl?: string; error?: string; isLoading: boolean; text?: string }>({
     isLoading: false,
@@ -208,6 +214,7 @@ export function OfficialPreviewPane({
 
   // Official TI auto-start residual: getConfiguredServices(cwd) → empty ⇒ no-config;
   // first service ⇒ startFromConfig; failure ⇒ start-failed.
+  // Residual Nr previewServerId restore: reattach saved durable serverId before startFromConfig.
   useEffect(() => {
     let alive = true;
     const cwd = session?.cwd;
@@ -234,6 +241,27 @@ export function OfficialPreviewPane({
     void (async () => {
       const launch = launchBridge();
       try {
+        // Residual: restored previewServerIdBySession[session] → try getPreviewUrl before start.
+        const restoredServerId = officialPeekPreviewServerId(sessionRef.id, sidePaneStore);
+        if (restoredServerId) {
+          try {
+            const url = (await launch?.getPreviewUrl?.(restoredServerId)) ?? null;
+            if (!alive) return;
+            if (url != null || typeof launch?.showPreview === "function") {
+              liveServerIdRef.current = restoredServerId;
+              setLiveServerId(restoredServerId);
+              setPreviewUrl(url);
+              setHostMode(typeof launch?.showPreview === "function");
+              setStartError(null);
+              sidePaneStore.getState().bindPreviewServer(restoredServerId);
+              setProbeDone(true);
+              return;
+            }
+          } catch {
+            // Fall through to startFromConfig when reattach fails.
+          }
+        }
+
         // Official Ea residual: launchEnabled false → do not auto-start (isEnabled gate).
         // Prefer Launch.isEnabled(); fall back to startFromConfig returning launch_disabled.
         const enabledRaw = launch?.isEnabled?.();
@@ -267,6 +295,8 @@ export function OfficialPreviewPane({
           setPreviewUrl(url);
           setHostMode(typeof launch?.showPreview === "function");
           setStartError(null);
+          // Residual ca0135 bindPreviewServer — durable id into Nr for A→B→A restore.
+          sidePaneStore.getState().bindPreviewServer(started.serverId);
         } else if (started?.error === "launch_disabled") {
           // Preference off — treat as inactive preview surface, not a start failure.
           setStartError({ kind: "no-config" });
@@ -294,6 +324,8 @@ export function OfficialPreviewPane({
     return () => {
       alive = false;
       // Official hidePreview + disable selection on unmount / session switch.
+      // Residual: do NOT unbindPreviewServer here — Nr keeps durable serverId for restore.
+      // Unbind only when user closes preview tile / server dies.
       const launch = launchBridge();
       const sid = liveServerIdRef.current;
       try {
@@ -312,7 +344,7 @@ export function OfficialPreviewPane({
     };
     // session cwd / id drive re-probe; submitToChat identity not required each render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.cwd, sessionRef?.id, sessionRef?.type]);
+  }, [session?.cwd, sessionRef?.id, sessionRef?.type, sidePaneStore]);
 
   // Official showPreview(serverId, bounds) residual — host WebContentsView over pane rect.
   // When sketchMode is on, hide host view so annotate overlay (screenshot) can receive pointer events

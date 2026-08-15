@@ -283,6 +283,13 @@ function CodeNewSessionPage({
     };
   }, [model]);
 
+  /**
+   * Residual create path (product host-loop):
+   * - busy maps Ns create-in-flight (Rs±1 around mutate); OfficialCodeComposer → residualQjDisabled
+   * - LocalSessions.start then navigate to /code/:id — never keep createPending on same shell
+   * - Os "spawning" only when createPending && Ns===0; product has no same-shell pending shell
+   * - Do NOT invent sticky "Starting…" from initializationStatus on existing session tile
+   */
   const submit = useCallback(async () => {
     const normalized = prompt.trim();
     if (!normalized || busy) return;

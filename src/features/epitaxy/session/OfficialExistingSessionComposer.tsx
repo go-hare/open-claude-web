@@ -50,6 +50,7 @@ import {
 } from "./previewAnnotationQueue";
 import { setDraftPermissionMode } from "../codeDraftComposerStore";
 import type { PermissionMode } from "../../../adapters/desktopBridge";
+import { residualQjSubmitDisabled } from "./officialQjComposerGate";
 
 /** Plain text → TipTap doc (same shape as OfficialCodeComposer). */
 function tiptapDocFromPlainText(value: string) {
@@ -242,11 +243,22 @@ export function ExistingSessionComposer({
   placeholderRef.current = isBashMode ? "Enter a shell command" : "Type / for commands";
   const canStop = isResponding && Boolean(sessionRef && (bridge.interrupt || bridge.stop));
   const readyImageCount = stagedImages.filter((image) => image.status === "ready" && image.base64).length;
-  // Official Qj Te: has text/attachments && !disabled/submitDisabled — busy does NOT block submit.
+  // Residual Qj submitDisabled: cn.isProcessingImages || mn.isUploading || bi
+  // Product: staged image status==="loading" ≡ isProcessingImages; remote mn N/A local-first.
+  // bi is draft-only (showGitRequired) — existing shell never bi.
+  const isProcessingImages = stagedImages.some((image) => image.status === "loading");
+  const submitDisabled = residualQjSubmitDisabled({
+    isProcessingImages,
+    isRemoteUploading: false,
+    gitRequiredBlocksSubmit: false,
+  });
+  // Official Qj Te: has text/attachments && !disabled && !submitDisabled — busy does NOT block submit.
   // Mid-turn Enter/send → Gr noteQueuedSend + enqueue (pendingQueuedSends); button click while busy = Stop.
+  // isSubmitting is only ultrareview/in-flight double-click guard (not residual disabled matrix).
   const canSubmit =
     (text.trim().length > 0 || readyImageCount > 0)
     && !disabled
+    && !submitDisabled
     && !isSubmitting;
 
   /**
@@ -334,7 +346,9 @@ export function ExistingSessionComposer({
       OfficialSlashCommandSuggestion.configure({ placement: "onpage", menuComponent: slashMenuComponent }),
     ],
     onUpdate: ({ editor: nextEditor }) => {
-      setText(nextEditor.getText({ blockSeparator: "\n" }));
+      // Official TipTap getText() default blockSeparator is "\n\n" (paragraph breaks).
+      // "\n" invents single-newline collapse → multi-paragraph short sends look glued.
+      setText(nextEditor.getText());
     },
     shouldRerenderOnTransaction: false,
   }, [slashMenuComponent]);
@@ -723,20 +737,20 @@ export function ExistingSessionComposer({
     });
     nodes.push({ type: "paragraph", content: [] });
     editor.chain().focus("end").insertContent(nodes).run();
-    setText(editor.getText({ blockSeparator: "\n" }));
+    setText(editor.getText());
   }, [editor]);
 
   /** Official setComposerText / xt — replace editor contents (rewind prefill). */
   const setComposerText = useCallback((value: string) => {
     if (!editor || editor.isDestroyed) return;
     editor.commands.setContent(tiptapDocFromPlainText(value), { emitUpdate: true });
-    setText(editor.getText({ blockSeparator: "\n" }));
+    setText(editor.getText());
     editor.commands.focus("end");
   }, [editor]);
 
   const getComposerText = useCallback(() => {
     if (!editor || editor.isDestroyed) return text;
-    return editor.getText({ blockSeparator: "\n" });
+    return editor.getText();
   }, [editor, text]);
 
   const focusComposer = useCallback(() => {
@@ -1067,12 +1081,13 @@ export function ExistingSessionComposer({
             }}
           />
           <div className="flex self-end p-p7 pl-p3">
-            {/* Official Qj: busy → Stop icon/click; else Send. disabled: !busy && !Te. */}
+            {/* Official Qj (c119): yd icon Stop | ReturnArrowCornerDownLeft; aria Stop | Send. */}
             <OfficialButton
-              ariaLabel={canStop ? "Stop response" : "Send"}
+              ariaLabel={canStop ? "Stop" : "Send"}
               disabled={!canSubmit && !canStop}
-              icon={canStop ? "Stop" : "ArrowReturn"}
+              icon={canStop ? "Stop" : "ReturnArrowCornerDownLeft"}
               onClick={() => void (canStop ? stopResponse() : submit())}
+              tooltipShortcut={canStop ? "escape" : "enter"}
             />
           </div>
         </div>

@@ -20,6 +20,7 @@ import type { SessionSummary } from "../../../adapters/desktopBridge/types";
 import { sessionHomePath, sessionPath } from "../../../shell/sessionPaths";
 import { officialCodeSessionStore } from "./officialCodeSessionStore";
 import { officialPlanCommentsApi } from "./officialPlanCommentsStore";
+import { officialEvictSidePaneSession } from "./officialSidePaneSessionStore";
 import {
   officialClearTurnStarted,
   officialStreamDrop,
@@ -67,6 +68,8 @@ function clearCodeSessionCaches(sessionId: string) {
   officialClearTurnStarted(sessionId);
   officialPlanCommentsApi.clear(sessionId);
   previewAnnotationQueue.getState().clearSession(sessionId);
+  // Residual ca0135 Kr: for (const t of Ar) t.getState().evictSession(e) + yr localStorage scrub.
+  officialEvictSidePaneSession(sessionId);
 }
 
 function emitSessionIdEvent(eventName: string, sessionId: string) {
