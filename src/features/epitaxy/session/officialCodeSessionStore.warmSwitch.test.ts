@@ -4,7 +4,8 @@
  *   (isLoading = D && Ya.length===0 && (B||J)).
  * - ensureBucket idle empty must NOT invent pending Ja on missing bucket.
  * - Cold first fetch still uses markLoading → B/J true so Ja paints (not li).
- * No invent key={sessionId} / restoreKey — residual Xb stays mounted and re-renders Ya.
+ * Residual Xb remounts via key Gn=`${sessionId}:${transcriptMode}` (c119 jsx third arg).
+ * Fu still has no restoreKey on Code Gb path.
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import {

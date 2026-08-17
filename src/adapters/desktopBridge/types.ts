@@ -578,7 +578,25 @@ export type LocalSessionsBridge = {
   checkGhAvailable?: (idOrCwd?: string) => Promise<boolean>;
   /** Official installGh residual (darwin brew / open docs). */
   installGh?: () => Promise<boolean | { success: boolean; error?: string }>;
-  summarizeSession?: (id: string) => Promise<{ summary?: string; title?: string | null; session?: SessionSummary | null } | string | null>;
+  /**
+   * Residual LocalSessions.summarizeSession(sessionId) → boolean (Df.start).
+   * Summary text arrives via onEvent session_summary_result / session_summary_error.
+   * Do not treat as invent title dump.
+   */
+  summarizeSession?: (id: string) => Promise<boolean>;
+  /**
+   * Residual summarizeTranscript(sessionId, transcriptText) → boolean (non-local dump path).
+   */
+  summarizeTranscript?: (id: string, transcript: string) => Promise<boolean>;
+  /** Residual stopSessionSummary(sessionId) → true if a forked summary query was aborted. */
+  stopSessionSummary?: (id: string) => Promise<boolean>;
+  /**
+   * Product title SoT after turn settle (was invent piggyback on summarizeSession).
+   * Returns updated session or null.
+   */
+  refreshSessionTitle?: (id: string) => Promise<SessionSummary | null>;
+  /** Residual LocalSessions event bus (session_summary_*, session_updated, …). */
+  onEvent?: (listener: (event: unknown) => void) => () => void;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<string>;
   getSupportedCommands?: (request?: GetSupportedCommandsRequest) => Promise<SlashCommand[]>;

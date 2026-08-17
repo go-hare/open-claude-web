@@ -110,10 +110,39 @@ export const officialEpitaxyChaptersStore = createStore<OfficialEpitaxyChaptersS
   ),
 );
 
+/** Residual Lm — DOM id prefix for chapter jump targets (Gw / zh / Lh). */
+export function officialChapterDomId(chapterId: string): string {
+  return `epitaxy-ch-${chapterId}`;
+}
+
 /** Residual Vb: Um(t => sessionId ? bySession[sessionId]?.userChapters ?? Hm : Hm). */
 export function useOfficialSessionUserChapters(sessionId?: string): OfficialCodeUserChapter[] {
   return useStore(
     officialEpitaxyChaptersStore,
     (state) => (sessionId ? state.bySession[sessionId]?.userChapters ?? EMPTY_USER_CHAPTERS : EMPTY_USER_CHAPTERS),
+  );
+}
+
+/** Residual Qw session bag: renames + hidden + userChapters (Om empty defaults). */
+export function useOfficialSessionChaptersBag(sessionId?: string): SessionChapters {
+  return useStore(
+    officialEpitaxyChaptersStore,
+    (state) => (sessionId ? state.bySession[sessionId] ?? EMPTY_SESSION_CHAPTERS : EMPTY_SESSION_CHAPTERS),
+  );
+}
+
+/** Residual Lh: whether a claude chapter id is hidden for this session. */
+export function useOfficialChapterHidden(sessionId: string | undefined, chapterId: string): boolean {
+  return useStore(
+    officialEpitaxyChaptersStore,
+    (state) => Boolean(sessionId && (state.bySession[sessionId]?.hidden.includes(chapterId) ?? false)),
+  );
+}
+
+/** Residual Lh: renamed title override for claude chapter id. */
+export function useOfficialChapterRenamedTitle(sessionId: string | undefined, chapterId: string): string | undefined {
+  return useStore(
+    officialEpitaxyChaptersStore,
+    (state) => (sessionId ? state.bySession[sessionId]?.renames[chapterId] : undefined),
   );
 }

@@ -530,7 +530,53 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   checkGhAvailable: async () => true,
   // Official installGh residual bag. Browser fake = already present.
   installGh: async () => ({ success: true }),
+  // Residual summarizeSession → boolean start; result via session_summary_* events.
   summarizeSession: async (id) => {
+    const session = sessions.find((item) => item.id === id && item.kind === targetKind);
+    if (!session) return false;
+    const surface = targetKind === "epitaxy" ? "epitaxy" : "code";
+    // Fake one-shot markdown summary (not invent 1000-char dump as title).
+    queueMicrotask(() => {
+      emitFakeLocalSessionEvent({
+        type: "session_summary_result",
+        sessionId: id,
+        data: [
+          "## Purpose",
+          "Fake bridge live summary for this coding session.",
+          "",
+          "## Current state",
+          session.title || "In progress.",
+          "",
+          "## Outcome",
+          "Continue from the last turn when ready.",
+        ].join("\n"),
+      }, surface);
+    });
+    return true;
+  },
+  summarizeTranscript: async (id, transcript) => {
+    const surface = targetKind === "epitaxy" ? "epitaxy" : "code";
+    if (!transcript.trim()) {
+      queueMicrotask(() => {
+        emitFakeLocalSessionEvent({
+          type: "session_summary_error",
+          sessionId: id,
+          error: "No transcript yet — send a message first.",
+        }, surface);
+      });
+      return true;
+    }
+    queueMicrotask(() => {
+      emitFakeLocalSessionEvent({
+        type: "session_summary_result",
+        sessionId: id,
+        data: `## Purpose\nSummarize provided transcript.\n\n## Current state\n${transcript.slice(0, 400)}\n\n## Outcome\n—`,
+      }, surface);
+    });
+    return true;
+  },
+  stopSessionSummary: async () => false,
+  refreshSessionTitle: async (id) => {
     const session = sessions.find((item) => item.id === id && item.kind === targetKind);
     if (!session) return null;
     if (!session.title || session.title === "General coding session" || session.title === "Coding session" || /^\d+$/.test(session.title)) {
@@ -539,9 +585,9 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
         session.title = firstUser.split("\n")[0]!.slice(0, 40);
       }
     }
-    // Mirror desktop summarizeSession → session_updated so recents/header listeners refresh.
-    emitFakeLocalSessionEvent({ type: "session_updated", sessionId: id, session }, targetKind === "epitaxy" ? "epitaxy" : "code");
-    return { summary: session.messages?.map((message) => message.text).join("\n").slice(0, 1000) ?? "", title: session.title, session };
+    const surface = targetKind === "epitaxy" ? "epitaxy" : "code";
+    emitFakeLocalSessionEvent({ type: "session_updated", sessionId: id, session }, surface);
+    return session;
   },
   checkTrust: async (folder) => ({ trusted: fakeTrustedFolders.has(folder), sources: [] }),
   checkRemoteTrust: async () => ({ trusted: false, remote: true, sources: [] }),

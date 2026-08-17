@@ -663,7 +663,9 @@ export function OfficialAssistantCodeFence({ language, text }: { language?: stri
 }
 
 /** Official ks: search_tree tags → fenced search_tree. */
-function preprocessOfficialCodeMarkdown(text: string) {
+function preprocessOfficialCodeMarkdown(text: string | undefined | null) {
+  // Guard: callers must pass `text` prop (not children). Empty string is valid.
+  if (typeof text !== "string" || text.length === 0) return "";
   return text.includes("<search_tree>")
     ? text.replace(OFFICIAL_SEARCH_TREE_BLOCK_RE, (_match, body: string) => `\n\n\`\`\`search_tree\n${body.trim()}\n\`\`\`\n\n`)
     : text;

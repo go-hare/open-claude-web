@@ -253,7 +253,9 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
 
     const bucket = officialCodeSessionStore.getState().buckets.s1;
     expect(bucket?.queuedMessages.map((message) => message.id)).toEqual(["q1", "q2"]);
-    expect(bucket?.streamingMessageId).toBeNull();
+    // Residual p: end_turn → endTurnSeen only. Keep streamingMessageId / Va until result Pke.clear.
+    expect(bucket?.streamingMessageId).toBe("msg_live");
+    expect(bucket?.pendingTurnEndTurnSeen).toBe(true);
     expect(bucket?.pendingTurnStartedAt).not.toBeNull();
     expect(bucket?.messages.map((message) => message.id)).toEqual(["interrupt", "a-end"]);
     expect(bucket?.session?.isRunning).toBe(true);

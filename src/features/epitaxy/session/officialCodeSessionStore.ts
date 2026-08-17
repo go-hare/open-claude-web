@@ -56,6 +56,12 @@ export type OfficialCodeSessionBucket = {
   pendingQueuedSends: number;
   pendingTurnStartedAt: number | null;
   /**
+   * Official `pendingTurn.endTurnSeen` (index-BELzQL5P).
+   * Set on durable assistant stop_reason=end_turn (`p`); cleared when pendingTurn resets.
+   * Xke / pe = pendingTurn && !endTurnSeen — end_turn alone does NOT Pke.clear / lift Va.
+   */
+  pendingTurnEndTurnSeen: boolean;
+  /**
    * Official index-BELzQL5P `compactionStatus` (d_e / Gv).
    * Set from system/status `status` (any string; Gv chrome only for `"compacting"`); cleared on result settle.
    */
@@ -84,6 +90,7 @@ function emptyBucket(pending: boolean): OfficialCodeSessionBucket {
     queuedMessages: EMPTY_QUEUED_MESSAGES,
     pendingQueuedSends: 0,
     pendingTurnStartedAt: null,
+    pendingTurnEndTurnSeen: false,
     compactionStatus: null,
     session: null,
     streamActivityMode: idleStreamActivityMode,
@@ -414,11 +421,13 @@ function isOptimisticLocalUser(message: ChatMessage) {
 function withQueueDefaults(bucket: OfficialCodeSessionBucket): OfficialCodeSessionBucket {
   const hasQueue = Array.isArray(bucket.queuedMessages) && typeof bucket.pendingQueuedSends === "number";
   const hasCompaction = "compactionStatus" in bucket;
-  if (hasQueue && hasCompaction) return bucket;
+  const hasEndTurnSeen = "pendingTurnEndTurnSeen" in bucket;
+  if (hasQueue && hasCompaction && hasEndTurnSeen) return bucket;
   return {
     ...bucket,
     queuedMessages: Array.isArray(bucket.queuedMessages) ? bucket.queuedMessages : EMPTY_QUEUED_MESSAGES,
     pendingQueuedSends: typeof bucket.pendingQueuedSends === "number" ? bucket.pendingQueuedSends : 0,
+    pendingTurnEndTurnSeen: hasEndTurnSeen ? Boolean(bucket.pendingTurnEndTurnSeen) : false,
     compactionStatus: hasCompaction ? bucket.compactionStatus : null,
   };
 }
@@ -620,8 +629,12 @@ function createOfficialCodeSessionStore() {
   },
 
   beginPendingTurn: (sessionId, optimisticUser) => {
+    // Official beginPendingTurn: if pendingTurn already set → no-op.
+    // Else mCe.reset + Pke.clear (caller clears Pe/Va) then pendingTurn={start,endTurnSeen:false}.
     set((state) => {
-      const prev = state.buckets[sessionId] ?? emptyBucket(false);
+      const raw = state.buckets[sessionId] ?? emptyBucket(false);
+      const prev = withQueueDefaults(raw);
+      if (prev.pendingTurnStartedAt !== null) return state;
       const messages = optimisticUser ? upsertMessage(prev.messages, optimisticUser) : prev.messages;
       return {
         buckets: {
@@ -634,7 +647,11 @@ function createOfficialCodeSessionStore() {
             isMetaPending: false,
             messages,
             pendingTurnStartedAt: Date.now(),
+            pendingTurnEndTurnSeen: false,
+            // Residual: Pke.clear companion — lift prior Va ownership flags for the new turn.
             streamActivityMode: "requesting",
+            streamingMessageId: null,
+            streamSnapshot: null,
             session: prev.session ? { ...prev.session, isRunning: true, messages } : prev.session,
           },
         },
@@ -655,6 +672,7 @@ function createOfficialCodeSessionStore() {
             error: new Error(message),
             errorCategory: errorCategory ?? null,
             pendingTurnStartedAt: null,
+            pendingTurnEndTurnSeen: false,
             streamActivityMode: idleStreamActivityMode,
             streamingMessageId: null,
             streamSnapshot: null,
@@ -695,6 +713,7 @@ function createOfficialCodeSessionStore() {
             isTranscriptPending: false,
             isMetaPending: false,
             pendingTurnStartedAt: null,
+            pendingTurnEndTurnSeen: false,
             streamActivityMode: idleStreamActivityMode,
             streamingMessageId: null,
             streamSnapshot: null,
@@ -902,6 +921,7 @@ function createOfficialCodeSessionStore() {
               ? sessionForLoad({ ...payload.session, messages }, messages, liveMeta)
               : null,
             pendingTurnStartedAt: sessionSettled ? null : prev.pendingTurnStartedAt,
+            pendingTurnEndTurnSeen: sessionSettled ? false : prev.pendingTurnEndTurnSeen,
             streamActivityMode: sessionSettled ? idleStreamActivityMode : prev.streamActivityMode,
             streamingMessageId: sessionSettled ? null : prev.streamingMessageId,
             streamSnapshot: sessionSettled ? null : prev.streamSnapshot,
@@ -1174,29 +1194,31 @@ function createOfficialCodeSessionStore() {
       const compactionStatus = settleWithQueue
         ? null
         : (nextCompaction !== undefined ? nextCompaction : prev.compactionStatus);
-      // Official: h → pendingTurn = g ? {startTime:now} : null
-      //           p → pendingTurn.endTurnSeen only (keep pendingTurn / queue)
+      // Official: h → pendingTurn = g ? {startTime:now,endTurnSeen:false} : null
+      //           p → pendingTurn.endTurnSeen only (keep pendingTurn / queue / Va)
       const nextPendingTurn = settleWithQueue
         ? (continueTurn ? Date.now() : null)
         : prev.pendingTurnStartedAt;
+      // Residual p: end_turn + pendingTurn → endTurnSeen=true. Does NOT Pke.clear / lift Va.
+      const nextEndTurnSeen = settleWithQueue
+        ? false
+        : (isEndTurnAssistant && prev.pendingTurnStartedAt !== null
+          ? true
+          : prev.pendingTurnEndTurnSeen);
       const messagesUnchanged = messages === prev.messages || (messages.length === prev.messages.length
         && messages.every((item, index) => item === prev.messages[index]));
       const liveUnchanged = liveMeta?.permissionMode === prev.liveMeta?.permissionMode
         && liveMeta?.model === prev.liveMeta?.model;
       const queueUnchanged = !settleWithQueue;
       const compactionUnchanged = compactionStatus === prev.compactionStatus;
-      const pendingUnchanged = nextPendingTurn === prev.pendingTurnStartedAt;
-      // end_turn only needs stream suppress lift when streamingMessageId set
-      const endTurnLiftStream = isEndTurnAssistant
-        && (prev.streamingMessageId !== null || prev.streamSnapshot !== null
-          || prev.streamActivityMode !== idleStreamActivityMode);
+      const pendingUnchanged = nextPendingTurn === prev.pendingTurnStartedAt
+        && nextEndTurnSeen === prev.pendingTurnEndTurnSeen;
       if (
         messagesUnchanged
         && liveUnchanged
         && queueUnchanged
         && compactionUnchanged
         && pendingUnchanged
-        && !endTurnLiftStream
       ) {
         return state;
       }
@@ -1217,23 +1239,17 @@ function createOfficialCodeSessionStore() {
             messages,
             compactionStatus,
             pendingTurnStartedAt: nextPendingTurn,
+            pendingTurnEndTurnSeen: nextPendingTurn === null ? false : nextEndTurnSeen,
             ...(settleWithQueue
               ? {
                   queuedMessages: EMPTY_QUEUED_MESSAGES,
                   pendingQueuedSends: 0,
+                  // Official u&&Pke.clear — result settles Va ownership with h.
                   streamActivityMode: idleStreamActivityMode,
                   streamingMessageId: null,
                   streamSnapshot: null,
                 }
-              : endTurnLiftStream
-                // Official p: end_turn marks endTurnSeen; keep queue isQueued (Hb).
-                // Lift Va/eke suppress only so durable end_turn text can paint.
-                ? {
-                    streamActivityMode: idleStreamActivityMode,
-                    streamingMessageId: null,
-                    streamSnapshot: null,
-                  }
-                : {}),
+              : {}),
             session: sessionWithLiveMeta(
               prev.session
                 ? {
@@ -1277,6 +1293,7 @@ function createOfficialCodeSessionStore() {
             queuedMessages: EMPTY_QUEUED_MESSAGES,
             pendingQueuedSends: 0,
             pendingTurnStartedAt: Date.now(),
+            pendingTurnEndTurnSeen: false,
             compactionStatus: null,
             streamActivityMode: idleStreamActivityMode,
             streamingMessageId: null,
@@ -1336,6 +1353,10 @@ function createOfficialCodeSessionStore() {
       const pendingTurnStartedAt = patch.pendingTurnStartedAt !== undefined
         ? patch.pendingTurnStartedAt
         : prev.pendingTurnStartedAt;
+      // Residual: new/cleared pendingTurn resets endTurnSeen; keep flag when only stream flags patch.
+      const pendingTurnEndTurnSeen = patch.pendingTurnStartedAt !== undefined || pendingTurnStartedAt === null
+        ? false
+        : prev.pendingTurnEndTurnSeen;
       const streamActivityMode = patch.streamActivityMode ?? prev.streamActivityMode;
       const streamingMessageId = patch.streamingMessageId !== undefined
         ? patch.streamingMessageId
@@ -1345,6 +1366,7 @@ function createOfficialCodeSessionStore() {
         : prev.session;
       if (
         pendingTurnStartedAt === prev.pendingTurnStartedAt
+        && pendingTurnEndTurnSeen === prev.pendingTurnEndTurnSeen
         && streamActivityMode === prev.streamActivityMode
         && streamingMessageId === prev.streamingMessageId
         && session === prev.session
@@ -1357,6 +1379,7 @@ function createOfficialCodeSessionStore() {
           [sessionId]: {
             ...prev,
             pendingTurnStartedAt,
+            pendingTurnEndTurnSeen,
             streamActivityMode,
             streamingMessageId,
             session,
@@ -1408,6 +1431,7 @@ function createOfficialCodeSessionStore() {
             // Official clearPendingTurn / result settle also clears compactionStatus.
             compactionStatus: markSessionSettled ? null : prev.compactionStatus,
             pendingTurnStartedAt: null,
+            pendingTurnEndTurnSeen: false,
             streamActivityMode: idleStreamActivityMode,
             streamingMessageId: null,
             streamSnapshot: null,
@@ -1462,7 +1486,7 @@ function migrateBucketsWithQueueDefaults(
  * Bump when queue pipeline action bodies change so HMR rebinds implementations
  * without wiping transcript buckets (zustand keeps old closures otherwise).
  */
-const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 9;
+const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 10;
 const OFFICIAL_CODE_SESSION_STORE_REV_KEY = "__hareOfficialCodeSessionStoreQueueRev__";
 
 function resolveOfficialCodeSessionStore() {

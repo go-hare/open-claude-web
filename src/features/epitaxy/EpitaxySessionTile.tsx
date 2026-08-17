@@ -54,6 +54,10 @@ import {
   type OfficialTranscriptScrollBehavior,
   type OfficialTranscriptScrollState,
 } from "./session/OfficialTranscript";
+import { OfficialChapterToc } from "./session/OfficialChapterToc";
+import { OfficialSummaryTranscriptBody } from "./session/OfficialSummaryTranscriptBody";
+import { OfficialUltrareviewProgress } from "./session/OfficialUltrareviewProgress.tsx";
+import { OfficialWorkingStatus } from "./session/OfficialWorkingStatus";
 import {
   EpitaxyChatHeader,
   OfficialSubagentPane,
@@ -288,8 +292,10 @@ function EpitaxyChatPanel({
     isLoading,
     isResponding,
     isSessionNotFound,
+    isUltrareviewTagged,
     messages,
     reload,
+    reviewProgress,
     session,
     spawnLabel,
     stopLiveTurn,
@@ -419,6 +425,10 @@ function EpitaxyChatPanel({
     }
     const node = transcriptScrollRef.current;
     if (node) scrollElementToBottom(node, behavior);
+  }, []);
+  // Residual Wa → tt.current?.scrollToEntry(e) for Qw jump when chapter node not mounted.
+  const scrollTranscriptToEntry = useCallback((entryId: string) => {
+    transcriptRef.current?.scrollToEntry(entryId);
   }, []);
   const attachAsContext = useCallback((text: string) => {
     composerApiRef.current?.attachAsContext(text)
@@ -750,8 +760,124 @@ function EpitaxyChatPanel({
         <div className="flex-1 min-h-0 relative isolate [--epitaxy-scrim-inset-end:16px]">
           <div aria-hidden="true" className="epitaxy-top-scrim" />
           <div aria-hidden="true" className="epitaxy-bottom-scrim" style={{ opacity: showBottomFade ? 1 : 0 }} />
+          {/* Residual !Vn && Qw — chapter left rail; omit on summary (yC). scrollKey = Gn. */}
+          {transcriptMode !== "summary" && initialSessionId ? (
+            <OfficialChapterToc
+              sessionId={initialSessionId}
+              entries={entries}
+              scrollRef={transcriptScrollRef}
+              scrollKey={`${initialSessionId}:${transcriptMode}`}
+              scrollToEntry={scrollTranscriptToEntry}
+            />
+          ) : null}
           <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
-            {renderTranscriptBody({ entries, error, initialSessionId, isLoading, isResponding, isSessionNotFound, landingBody, onNavigate, onScrollState: updateTranscriptScrollState, ref: transcriptRef, reload, scrollRef: transcriptScrollRef, session, sessionType, spawnLabel, tasks, transcriptMode })}
+            {/* Residual c119 shell order after Ja/li:
+                  oi? init chrome (Mx remote | TM ultrareview | Gv)
+                  : Vn && F ? yC
+                  : Xb
+                oi = ri || (empty && ii); ri = we!=null || tags ultrareview.
+                Product: no remote Mx (云端不要); local oi = we || ultrareview tag.
+                Vn→yC and oi mounted here (not OfficialTranscript) to keep shells co-located. */}
+            {(() => {
+              const shellReady = Boolean(initialSessionId)
+                && !isSessionNotFound
+                && !(error && entries.length === 0)
+                && !isLoading;
+              // Residual li empty gate only when !oi — oi may paint on empty idle ultrareview.
+              const canPaintTranscriptBody = shellReady
+                && !(entries.length === 0 && !isResponding);
+              // Residual ri = we!=null || tags ultrareview; oi = ri || (empty && ii).
+              // Local path: no ye/ii (云端不要). we always mounts oi (TM), including completed —
+              // user 2026-08-16: 严格 residual 不动 (no invent completed→Xb).
+              // Product delta only for local invent startDiffReview: tag alone must not permanently
+              // replace Xb once normal assistant transcript exists (invent has no remote hooks).
+              // Tag+empty (launch / pre-message / idle ultrareview) still mounts residual oi + Gv.
+              const residualOi = shellReady
+                && (
+                  reviewProgress != null
+                  || (isUltrareviewTagged && entries.length === 0)
+                );
+              if (residualOi && initialSessionId) {
+                // Residual ui / pi for TM + Gv inside oi:
+                //   di = running we && isConnected; ui = H || isRunning || di || !ii?.isDone
+                //   pi = !isConnected && running we && ii?.isDone
+                // Local: no isConnected/ii — map isRunning + isResponding; stopped = !running && we running.
+                const weRunning = reviewProgress?.status === "running";
+                const sessionWorking = isResponding
+                  || Boolean(session?.isRunning)
+                  || weRunning;
+                const isStopped = weRunning
+                  && !Boolean(session?.isRunning)
+                  && !isResponding;
+                return (
+                  <div
+                    key={`${initialSessionId}:oi`}
+                    ref={(node) => {
+                      transcriptScrollRef.current = node;
+                    }}
+                    className="h-full overflow-y-auto overflow-x-hidden [contain:strict]"
+                  >
+                    <div className="epitaxy-chat-column epitaxy-chat-size flex flex-col gap-[var(--chat-turn-gap)] pt-[48px] pb-[32px]">
+                      {reviewProgress ? (
+                        <OfficialUltrareviewProgress
+                          progress={reviewProgress}
+                          isSessionWorking={sessionWorking}
+                          isStopped={isStopped}
+                        />
+                      ) : null}
+                      {/* Residual oi Gv: sessionId + isWorking only — no spawnLabel (c119 ~1163334).
+                          Xb path still passes spawnLabel (bs / Starting session…). */}
+                      <OfficialWorkingStatus
+                        isWorking={sessionWorking && (!reviewProgress || reviewProgress.status === "running")}
+                        sessionId={initialSessionId}
+                      />
+                    </div>
+                  </div>
+                );
+              }
+              if (
+                transcriptMode === "summary"
+                && effectiveSessionRef
+                && canPaintTranscriptBody
+              ) {
+                return (
+                  <div
+                    key={`${initialSessionId}:${transcriptMode}`}
+                    ref={(node) => {
+                      transcriptScrollRef.current = node;
+                    }}
+                    className="h-full overflow-y-auto overflow-x-hidden [contain:strict]"
+                  >
+                    <div className="epitaxy-chat-column epitaxy-chat-size h-full flex flex-col pt-[48px] pb-[32px]">
+                      <OfficialSummaryTranscriptBody
+                        entries={entries}
+                        isResponding={isResponding}
+                        sessionRef={effectiveSessionRef}
+                      />
+                    </div>
+                  </div>
+                );
+              }
+              return renderTranscriptBody({
+                entries,
+                error,
+                initialSessionId,
+                isLoading,
+                isResponding,
+                isSessionNotFound,
+                landingBody,
+                onNavigate,
+                onScrollState: updateTranscriptScrollState,
+                ref: transcriptRef,
+                reload,
+                scrollRef: transcriptScrollRef,
+                session,
+                sessionType,
+                spawnLabel,
+                tasks,
+                transcriptMode,
+              });
+            })()}
           </EpitaxyTranscriptActionContext.Provider>
         </div>
         {!hideComposer && initialSessionId && !isSessionNotFound ? (

@@ -53,6 +53,10 @@ import {
   isOfficialUltrareviewLaunching,
   subscribeOfficialUltrareviewLaunching,
 } from "./officialUltrareviewLaunch";
+import {
+  residualExtractUltrareviewProgress,
+  type OfficialReviewProgress,
+} from "./residualUltrareviewProgress";
 import type { EpitaxySessionType } from "./epitaxyTranscriptActionContext";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
 
@@ -314,10 +318,18 @@ export function useEpitaxySessionData(sessionId?: string) {
       store.getState().enqueueQueuedMessage(sessionId, optimistic);
       return { queued: true as const, uuid: optimistic.id };
     }
-    // Fresh turn: official beginPendingTurn + je turn-start stamp (stable for Gv elapsed).
+    // Fresh turn: official beginPendingTurn = mCe.reset + Pke.clear then pendingTurn.
+    // Residual only clears when no pendingTurn yet (beginPendingTurn no-ops mid-turn).
+    officialStreamClear(sessionId);
+    clearOfficialEkeCache(sessionId);
+    setStreamSnapshot(null);
+    setStreamingMessageId(null);
+    streamMessageIdRef.current = null;
+    streamSnapshotRef.current = null;
     officialMarkTurnStarted(sessionId);
     store.getState().beginPendingTurn(sessionId, optimistic);
     setStreamActivityMode("requesting");
+    streamActivityModeRef.current = "requesting";
     return { queued: false as const, uuid: optimistic.id };
   }, [sessionId, store]);
 
@@ -476,23 +488,11 @@ export function useEpitaxySessionData(sessionId?: string) {
         // before user tool_result). eke/Xwe suppress *rendering* of the live Anthropic
         // message.id while Va owns the typewriter — do NOT drop merge here or rke order breaks.
         store.getState().mergeMessage(sessionId, transcriptMessage);
-        // Product residual (3p/gateway, often 0 stream-json result rows): durable assistant
-        // stop_reason=end_turn must paint immediately. Lift Va / eke suppress here, but do
-        // NOT clearStream(markSessionSettled) — host type:completed / session_updated owns
-        // idle so multi-deferred follow-ups stay busy until the host turn truly ends.
+        // Residual index-BELzQL5P `p`: assistant end_turn → pendingTurn.endTurnSeen only.
+        // Does NOT Pke.clear / lift Va / clear streamingMessageId. eke keeps suppress until
+        // result/done/error (`u&&Pke.clear`) so Kwe(Va) owns typewriter through reveal.
+        // Product previously cleared Va on end_turn → blank→refill flash (not official).
         if (isAssistantEndTurnBridgeEvent(event)) {
-          officialStreamClear(sessionId);
-          clearOfficialEkeCache(sessionId);
-          setStreamSnapshot(null);
-          setStreamingMessageId(null);
-          setStreamActivityMode(idleStreamActivityMode);
-          streamMessageIdRef.current = null;
-          streamSnapshotRef.current = null;
-          streamActivityModeRef.current = idleStreamActivityMode;
-          store.getState().setStreamActivity(sessionId, {
-            streamingMessageId: null,
-            streamActivityMode: idleStreamActivityMode,
-          });
           return;
         }
         // Official `g` (result + queue + pendingTurn): mergeMessage already promoted
@@ -817,25 +817,30 @@ export function useEpitaxySessionData(sessionId?: string) {
     }),
     [bucket.isMetaPending, bucket.isSessionNotFound, bucket.session, isUltrareviewLaunching, sessionId],
   );
-  // Official Xke/pe (index-BELzQL5P): pendingTurn && !endTurnSeen.
+  // Official Xke/pe (index-BELzQL5P): Qke = pendingTurn && !endTurnSeen.
   // Residual Xb isResponding paint: H || "spawning"===Os || null!==Js || bs
-  // Product maps:
-  //   H → stream/pendingTurn/isRunning/queue (Xke + host isRunning)
-  //   "spawning"===Os → createPending same-shell (product /code/:id has F once routed; N/A)
-  //   null!==Js → optimistic user row before transcript; product beginLocalUserTurn → pendingTurnStartedAt
-  //   bs → ultrareview launch chrome (isUltrareviewBusy)
-  // — NOT J (awaiting meta) and NOT "any spawnLabel". J only feeds Gv text when Xb is up;
-  // empty cold open is Ja Loading / No messages branch, not sticky Starting via isResponding.
+  //   H → Xke (not invent host isRunning alone; end_turn keeps pendingTurn with endTurnSeen)
+  //   null!==Js → optimistic user (pendingTurnStartedAt after beginLocalUserTurn)
+  //   bs → ultrareview launch chrome
   // Residual Gv tokens/elapsed: _e / je maps only — do NOT invent streamTokenEstimate prop.
   const pendingTurnStartedAt = bucket.pendingTurnStartedAt;
+  const pendingTurnOpen = pendingTurnStartedAt !== null && !bucket.pendingTurnEndTurnSeen;
+  // Residual we = gw(U) — ultrareview progress from system hook_progress/hook_response.
+  const reviewProgress = useMemo(
+    () => residualExtractUltrareviewProgress(bucket.messages),
+    [bucket.messages],
+  );
+  // Residual isResponding arm for ultrareview: bs (launch in flight) or di (we running).
+  // Do NOT invent tag+isRunning → sticky busy / Launching after invent startDiffReview.
   const isUltrareviewBusy = isUltrareviewLaunching
-    || Boolean(bucket.session?.tags?.includes("ultrareview") && bucket.session.isRunning);
+    || reviewProgress?.status === "running";
+  // Keep stream-owned chrome while Va still has snapshot / streamingMessageId (after end_turn
+  // residual keeps Va until result clears — loader/stream row must not stick via host isRunning).
   const isResponding =
-    streamActivityMode !== idleStreamActivityMode
+    pendingTurnOpen
+    || streamActivityMode !== idleStreamActivityMode
     || streamSnapshot !== null
     || streamingMessageId !== null
-    || bucket.session?.isRunning === true
-    || pendingTurnStartedAt !== null
     || (bucket.queuedMessages?.length ?? 0) > 0
     || (bucket.pendingQueuedSends ?? 0) > 0
     || isUltrareviewBusy;
@@ -873,6 +878,12 @@ export function useEpitaxySessionData(sessionId?: string) {
     store.getState().markInterrupting(sessionId);
   }, [sessionId, store]);
 
+  // Residual oi gate inputs (c119):
+  //   ri = we != null || tags includes "ultrareview"
+  //   oi = ri || (empty && ii) — ii/remote Mx not ported (云端不要)
+  // Product: expose we + tag so EpitaxyChatPanel can mount oi shell before Vn/Xb.
+  const isUltrareviewTagged = Boolean(bucket.session?.tags?.includes("ultrareview"));
+
   return {
     beginLocalUserTurn,
     cancelQueuedMessage,
@@ -882,8 +893,10 @@ export function useEpitaxySessionData(sessionId?: string) {
     isLoading,
     isResponding,
     isSessionNotFound: bucket.isSessionNotFound,
+    isUltrareviewTagged,
     messages: bucket.messages,
     reload,
+    reviewProgress,
     session: bucket.session,
     spawnLabel,
     stopLiveTurn,
@@ -891,7 +904,7 @@ export function useEpitaxySessionData(sessionId?: string) {
 }
 
 /**
- * Official Gv spawnLabel (c11959232):
+ * Official Gv spawnLabel (c11959232 Xb path only — oi Gv omits spawnLabel):
  *   bs? "Launching Ultrareview…"
  *   : "spawning"===Os ? ($s plugins | worktree | "Starting session…")
  *   : J ? "Starting session…"
@@ -900,6 +913,7 @@ export function useEpitaxySessionData(sessionId?: string) {
  * Os = F ? "active" : createPending ? "spawning" : "draft".
  * $s init steps only while Os==="spawning". Once session meta exists, F is active —
  * incomplete initializationStatus must NOT keep "Starting session…".
+ * Ultrareview label is ONLY bs (fe.launchUltrareview in flight) — not tags+isRunning invent.
  */
 function deriveOfficialCodeSpawnLabel(input: {
   hasSessionId: boolean;
@@ -911,13 +925,13 @@ function deriveOfficialCodeSpawnLabel(input: {
   const { hasSessionId, isMetaPending, isSessionNotFound, isUltrareviewLaunching, session } = input;
   // Official spawnLabel:bs? "Launching Ultrareview…" while fe.launchUltrareview in flight.
   if (isUltrareviewLaunching) return "Launching Ultrareview…";
-  if (session?.tags?.includes("ultrareview") && session.isRunning) return "Launching Ultrareview…";
   // Official J = expectedId && !meta — cold navigate before meta arrives.
   // (Does not alone force Xb isResponding; empty path uses Ja Loading.)
   const awaitingMeta = hasSessionId && !session && !isSessionNotFound && isMetaPending;
   if (awaitingMeta) return "Starting session…";
   // Official $s only while "spawning"===Os. Product /code/:id always has F once meta exists
   // (Os active). Do not map sticky initializationStatus → Starting session invent.
+  void session;
   return undefined;
 }
 
@@ -1193,21 +1207,23 @@ export function isPlaceholderCodingTitle(title?: string | null) {
 
 async function refreshSessionTitleAfterSettle(sessionId: string): Promise<SessionSummary | null> {
   const bridge = desktopBridge.LocalSessions;
-  if (!bridge.summarizeSession) return null;
+  // Residual summarizeSession is forked live summary (events), NOT title SoT.
+  // Product refreshSessionTitle → store.refreshTitleFromTranscript + session_updated.
+  if (!bridge.refreshSessionTitle && !bridge.getSession) return null;
   try {
-    const result = await bridge.summarizeSession(sessionId);
-    // Desktop also dispatches session_updated; apply return shape so fake/web-only bridges update header immediately.
-    if (!result || typeof result === "string") return null;
-    const title = typeof result.title === "string" ? result.title : null;
-    const sessionPatch = result.session ?? (title ? { id: sessionId, title } : null);
-    if (!sessionPatch && !title) return null;
-    const current = officialCodeSessionStore.getState().buckets[sessionId]?.session ?? null;
-    const nextSession = normalizeSessionSummaryPatch(
-      current,
-      sessionPatch ?? { id: sessionId, title },
-    );
-    if (nextSession) officialCodeSessionStore.getState().patchSession(sessionId, nextSession);
-    return nextSession;
+    if (bridge.refreshSessionTitle) {
+      const result = await bridge.refreshSessionTitle(sessionId);
+      if (!result) return null;
+      const current = officialCodeSessionStore.getState().buckets[sessionId]?.session ?? null;
+      const nextSession = normalizeSessionSummaryPatch(current, result);
+      if (nextSession) officialCodeSessionStore.getState().patchSession(sessionId, nextSession);
+      return nextSession;
+    }
+    // Fallback: re-fetch session after host may have updated title elsewhere.
+    const session = await bridge.getSession(sessionId);
+    if (!session) return null;
+    officialCodeSessionStore.getState().patchSession(sessionId, session);
+    return session;
   } catch {
     // Title refresh is best-effort.
     return null;

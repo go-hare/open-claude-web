@@ -71,6 +71,9 @@ type RawLocalSessionsBridge = {
   checkGhAvailable?: (idOrCwd?: string) => Promise<unknown>;
   installGh?: () => Promise<unknown>;
   summarizeSession?: (id: string) => Promise<unknown>;
+  summarizeTranscript?: (id: string, transcript: string) => Promise<unknown>;
+  stopSessionSummary?: (id: string) => Promise<unknown>;
+  refreshSessionTitle?: (id: string) => Promise<unknown>;
   isFolderTrusted?: (folder: string) => Promise<unknown>;
   mcpCallTool?: (serverName: string, toolName: string, input?: Record<string, unknown>) => Promise<unknown>;
   checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<unknown>;
@@ -975,17 +978,15 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       }
       return { success: false };
     },
-    summarizeSession: async (id) => {
-      const result = await raw?.summarizeSession?.(id).catch(() => null);
-      if (result == null) return null;
-      if (typeof result === "string") return { summary: result, title: null, session: null };
-      const rawResult = asRecord(result);
-      const sessionRaw = rawResult.session;
-      return {
-        summary: stringValue(rawResult.summary) ?? (typeof result === "string" ? result : undefined),
-        title: stringValue(rawResult.title),
-        session: sessionRaw ? normalizeSession(sessionRaw, targetKind) : null,
-      };
+    // Residual summarizeSession → boolean (Df.start); results via onEvent.
+    summarizeSession: async (id) => Boolean(await raw?.summarizeSession?.(id).catch(() => false)),
+    summarizeTranscript: async (id, transcript) =>
+      Boolean(await raw?.summarizeTranscript?.(id, transcript).catch(() => false)),
+    stopSessionSummary: async (id) => Boolean(await raw?.stopSessionSummary?.(id).catch(() => false)),
+    // Product title refresh (not residual SessionSummary dump).
+    refreshSessionTitle: async (id) => {
+      const result = await raw?.refreshSessionTitle?.(id).catch(() => null);
+      return result ? normalizeSession(result, targetKind) : null;
     },
     checkRemoteTrust: async (sshConfig, folder) => normalizeTrustResult(await raw?.checkRemoteTrust?.(sshConfig, folder)),
     checkTrust: async (folder) => normalizeTrustResult(await raw?.checkTrust?.(folder)),

@@ -135,8 +135,8 @@ export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
 
   /**
    * Official draft home mounts real Qj Prompt immediately (tipTap + RNt).
-   * Do NOT swap EpitaxySessionLoading fake PromptBox → live editor (blank
-   * ::before then data-placeholder flash). Seed empty workspace until host
+   * Do NOT invent a fake Prompt skeleton → live editor swap (blank ::before
+   * then data-placeholder flash). Seed empty workspace until host
    * getWorkspaceContext resolves; CodeNewSessionPage syncs when data arrives.
    */
   const draftWorkspace = workspace ?? EMPTY_DRAFT_WORKSPACE;

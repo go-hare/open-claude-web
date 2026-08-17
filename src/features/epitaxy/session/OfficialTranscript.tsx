@@ -47,7 +47,10 @@ import { applyCoworkRateLimitToStore } from "../../cowork/session/rateLimit/cowo
 import { isOfficialMermaidMarkdownLanguage, OfficialMermaidDiagramCard } from "../OfficialMermaidDiagramCard";
 import { OfficialSearchTree, officialSearchTreeLanguage } from "../OfficialSearchTree";
 import {
+  officialChapterDomId,
   officialEpitaxyChaptersStore,
+  useOfficialChapterHidden,
+  useOfficialChapterRenamedTitle,
   useOfficialSessionUserChapters,
   type OfficialCodeUserChapter,
 } from "./officialEpitaxyChaptersStore";
@@ -185,9 +188,10 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   //   Z? not-found
   //   : Ja? (Za? Loading spark : null)     // Ja = D && Ya.length===0 && (B||J) — NOT gated by !H
   //   : li? (D? "No messages yet." : landing)
-  //   : oi? init chrome | Xb
+  //   : oi? init chrome | Vn? yC | Xb
   // Product invent: `entries.length===0 && !isResponding` wrapped Ja → busy empty missed Loading and
   // could flash "No messages" / skip Za. Match residual order: Ja first, then li, then Xb.
+  // Vn→yC is mounted by EpitaxyChatPanel (avoids OfficialTranscript ↔ OfficialSummary circular import).
   if (isLoading) {
     if (sessionType === "remote" || sessionType === "pool" || sessionType === "bridge") {
       return <OfficialConnectingToSession />;
@@ -202,17 +206,18 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
       </div>
     );
   }
-  // Residual c119 Xb mount: c.jsx(Xb,{...,sessionId:D,entries:Ya,...}) — no key on sessionId.
-  // Warm A→B keeps Gb/Fu mounted; pin layout sticks scrollTop=totalSize when items change.
-  // Product invent key={sessionId} remounted Fu every hot switch → scroll-listener cleanup forced
-  // showBottomFade false, then RO remeasure true→false while pin settled → bottom scrim flash
-  // (official CSS transition:opacity .15s on .epitaxy-bottom-scrim). Residual only unmounts Xb
-  // via empty branch (li) / loading (Ja), not on every session identity change.
+  // Residual c119 Xb mount (third jsx arg is React key):
+  //   Gn = `${D ?? "draft"}:${Kn}`  // Kn = transcriptMode
+  //   c.jsx(Xb, { sessionId:D, entries:Ya, ... }, Gn)
+  // Warm A→B / mode change REMOUNTS Fu/Xb — not invent keep-mounted. Scroll cleanup may
+  // briefly clear bottom fade (official epitaxy-bottom-scrim transition); do not strip key
+  // to paper over that. Code Gb still does NOT pass restoreKey into Fu.
   return (
     <Transcript
       entries={entries}
       isAwaitingReply={officialIsAwaitingReply(session, isResponding)}
       isResponding={isResponding}
+      key={`${initialSessionId}:${transcriptMode}`}
       onScrollState={onScrollState}
       ref={ref}
       scrollRef={scrollRef}
@@ -290,7 +295,7 @@ const Transcript = memo(forwardRef<OfficialTranscriptHandle, TranscriptProps>(fu
   const lastEntryIdx = entries.length - 1;
 
   // Official c119 Gb: Fu({ items, getKey, estimateSize:Wb, overscan:6, paddingStart:48, paddingEnd:48, useFlushSync:!1 })
-  // — no restoreKey, no sessionKey, no sessionId-driven measure invent on Code path.
+  // — no restoreKey on Code path. Parent Xb remounts via residual key Gn=`${sessionId}:${mode}`.
   const officialVirtualizer = useOfficialTranscriptVirtualizer({
     estimateSize: estimateTranscriptRowSize,
     getKey: (row) => row.id,
@@ -2098,29 +2103,38 @@ function officialToolsCopyText(tools: TranscriptToolUse[]) {
   return inputString("description") ?? inputString("command") ?? inputString("file_path") ?? inputString("pattern") ?? inputString("prompt") ?? tool.name;
 }
 
+/** Residual zh — user chapter title; DOM id Lm(id) for Gw jump. */
 function CodeChapterTitle({ chapter }: { chapter: OfficialCodeUserChapter }) {
   return (
-    <div id={chapter.id} className="text-body-semibold text-assistant-primary select-text scroll-mt-[56px]">
+    <div
+      id={officialChapterDomId(chapter.id)}
+      className="text-body-semibold text-assistant-primary select-text scroll-mt-[56px]"
+      data-official-source="c11959232-h_zsw3wI.js:zh"
+    >
       {chapter.title}
     </div>
   );
 }
 
-/** Official Lh chapter item from nke / mark_chapter (c11959232). */
+/** Residual Lh + zh — claude chapter from nke / mark_chapter; hide/rename via Um. */
 function CodeOfficialChapterItem({
   item,
-  sessionId: _sessionId,
+  sessionId,
 }: {
   item: Extract<TranscriptEntryItem, { kind: "chapter" }>;
   sessionId?: string;
 }) {
+  const hidden = useOfficialChapterHidden(sessionId, item.id);
+  const renamedTitle = useOfficialChapterRenamedTitle(sessionId, item.id);
+  if (hidden) return null;
+  const title = (renamedTitle ?? item.title) || "Chapter";
   return (
     <div
       className="text-body-semibold text-assistant-primary select-text scroll-mt-[56px]"
-      data-official-source="c11959232-h_zsw3wI.js:Lh + index nke"
-      id={item.id}
+      data-official-source="c11959232-h_zsw3wI.js:Lh + zh"
+      id={officialChapterDomId(item.id)}
     >
-      {item.title || "Chapter"}
+      {title}
       {item.summary ? (
         <div className="text-body text-assistant-secondary font-normal mt-p2">{item.summary}</div>
       ) : null}

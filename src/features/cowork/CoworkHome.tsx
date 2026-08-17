@@ -3,25 +3,28 @@ import { desktopBridge, type WorkspaceContext } from "../../adapters/desktopBrid
 import type { RouteViewProps } from "../../app/routes";
 import { CoworkNewTaskPage } from "./newTask/CoworkNewTaskPage";
 
+/**
+ * Official residual (index-BELzQL5P.js):
+ *   path:"task/new" → Zb()? null : S6t
+ *   Zb = account isLoading || onboarding gate
+ *   _6t (inside S6t path): "loading"===e.kind || void 0===h → null
+ *
+ * Product must NOT invent a full-page dual-ring spinner (CoworkHomeLoading /
+ * OfficialSpinner conic) while getWorkspaceContext resolves — that painted the
+ * cold-start gray ring on #fdfdfc. Match residual: paint nothing until ready.
+ */
 export function CoworkHome({ onNavigate }: RouteViewProps) {
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   useEffect(() => {
     let active = true;
-    void desktopBridge.Preferences.getWorkspaceContext().then((value) => { if (active) setWorkspace(value); });
-    return () => { active = false; };
+    void desktopBridge.Preferences.getWorkspaceContext().then((value) => {
+      if (active) setWorkspace(value);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
-  if (!workspace) return <CoworkHomeLoading />;
+  // Residual Zb / _6t loading: null (empty content), not invent spinner logo.
+  if (!workspace) return null;
   return <CoworkNewTaskPage onNavigate={onNavigate} workspace={workspace} />;
-}
-
-function CoworkHomeLoading() {
-  return (
-    <div className="epitaxy-root flex h-full items-center justify-center text-t5" role="status">
-      <span aria-hidden="true" className="relative inline-block size-5 shrink-0 align-middle">
-        <span className="absolute inset-0 rounded-full" style={{ border: "2px solid var(--t2)" }} />
-        <span className="absolute inset-0 rounded-full animate-[spin_2s_linear_infinite]" style={{ background: "conic-gradient(transparent 40%, var(--spinner-arc, var(--t6)))", mask: "radial-gradient(farthest-side, transparent calc(100% - 2px), rgb(0, 0, 0) calc(100% - 1.5px))" }} />
-      </span>
-      <span className="sr-only">Loading Cowork</span>
-    </div>
-  );
 }
