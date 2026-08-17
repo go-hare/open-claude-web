@@ -48,7 +48,7 @@ import {
   previewAnnotationQueue,
   usePreviewAnnotationPendingCount,
 } from "./previewAnnotationQueue";
-import { setDraftPermissionMode } from "../codeDraftComposerStore";
+import { resolveDraftPermissionMode, setDraftPermissionMode } from "../codeDraftComposerStore";
 import type { PermissionMode } from "../../../adapters/desktopBridge";
 import { residualQjSubmitDisabled } from "./officialQjComposerGate";
 
@@ -145,17 +145,33 @@ export function ExistingSessionComposer({
     return "default";
   });
   /**
-   * Seed Mode from host session, then liveMeta (user menu / system status already
-   * mirrored). Do NOT force "default" when both are missing mid-load — that flash
-   * of 询问权限 after leave/return is the user bug. First paint without either
-   * still falls back to "default" only as last resort for the pill label.
+   * Residual Mode seed (`be(n.permissionMode)`):
+   * 1. host session prop / bucket.session (openSession after start already filled this)
+   * 2. liveMeta (user menu / system status)
+   * 3. draft sticky (folder/landing) when meta not yet painted — same rn as Code home
+   * Never invent bare "default" (询问权限) when draft already shows bypass/accept.
    */
   const [permissionMode, setPermissionMode] = useState(() => {
-    const liveMode = sessionRef?.id
-      ? officialCodeSessionStore.getState().buckets[sessionRef.id]?.liveMeta?.permissionMode
-      : undefined;
-    const seeded = session?.permissionMode ?? liveMode;
-    return typeof seeded === "string" && seeded.length > 0 ? seeded : "default";
+    const id = sessionRef?.id;
+    const bucket = id ? officialCodeSessionStore.getState().buckets[id] : undefined;
+    const hostMode =
+      (typeof session?.permissionMode === "string" && session.permissionMode.length > 0
+        ? session.permissionMode
+        : undefined)
+      ?? (typeof bucket?.session?.permissionMode === "string" && bucket.session.permissionMode.length > 0
+        ? bucket.session.permissionMode
+        : undefined);
+    const liveMode =
+      typeof bucket?.liveMeta?.permissionMode === "string" && bucket.liveMeta.permissionMode.length > 0
+        ? bucket.liveMeta.permissionMode
+        : undefined;
+    const seeded = hostMode ?? liveMode;
+    if (typeof seeded === "string" && seeded.length > 0) return seeded;
+    // Meta still empty on first paint (create→detail race / cold open): keep draft rn.
+    return resolveDraftPermissionMode({
+      cwd: session?.cwd ?? bucket?.session?.cwd,
+      preferOverride: true,
+    });
   });
   const [effort, setEffort] = useState(() =>
     clampEffortToCatalog(
@@ -459,17 +475,23 @@ export function ExistingSessionComposer({
     // Host session Mode is authoritative when present (official be(n.permissionMode)).
     // When sparse session_updated / mid-load omits the field, keep liveMeta or current
     // pill — never invent "default" here (that wiped bypass after leave/return).
-    const liveMode = sessionRef?.id
-      ? officialCodeSessionStore.getState().buckets[sessionRef.id]?.liveMeta?.permissionMode
-      : undefined;
+    const id = sessionRef?.id;
+    const bucket = id ? officialCodeSessionStore.getState().buckets[id] : undefined;
+    const liveMode =
+      typeof bucket?.liveMeta?.permissionMode === "string" && bucket.liveMeta.permissionMode.length > 0
+        ? bucket.liveMeta.permissionMode
+        : undefined;
     const hostMode =
       typeof session?.permissionMode === "string" && session.permissionMode.length > 0
         ? session.permissionMode
-        : undefined;
+        : (typeof bucket?.session?.permissionMode === "string" && bucket.session.permissionMode.length > 0
+          ? bucket.session.permissionMode
+          : undefined);
     const nextMode = hostMode ?? liveMode;
     if (typeof nextMode === "string" && nextMode.length > 0) {
       setPermissionMode(nextMode);
     }
+    // Session switch with empty meta: do not invent "default"; leave local until host lands.
     // Official D = N!==L && T!=null ? T : b — while lock is this session, keep local effort.
     const sessionId = sessionRef?.id ?? null;
     if (sessionId && effortLocalLockRef.current === sessionId) {

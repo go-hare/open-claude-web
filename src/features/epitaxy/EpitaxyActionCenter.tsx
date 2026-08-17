@@ -21,6 +21,7 @@ import {
   type ActionCenterSessionRow,
   type EpitaxyActionCenterState,
 } from "./epitaxyActionCenterState";
+import { officialCodeSessionStore } from "./session/officialCodeSessionStore";
 
 type EpitaxyActionCenterProps = {
   onNavigate: (path: string) => void;
@@ -95,7 +96,11 @@ export function EpitaxyActionCenter({ onNavigate, state: stateProp }: EpitaxyAct
               {visibleSessions.map((row) => (
                 <ActionCenterSessionRowButton
                   key={row.session.id}
-                  onOpen={() => onNavigate(sessionPath(row.session))}
+                  onOpen={() => {
+                    // Residual openSession(meta) before route paint — Mode/title seed.
+                    officialCodeSessionStore.getState().openSession(row.session.id, row.session);
+                    onNavigate(sessionPath(row.session));
+                  }}
                   row={row}
                 />
               ))}

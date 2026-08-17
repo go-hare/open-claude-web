@@ -23,6 +23,7 @@ import {
   clampEffortToCatalog,
   cliEffortLevelsForModel,
 } from "./session/officialComposerOptions";
+import { officialCodeSessionStore } from "./session/officialCodeSessionStore";
 import { kickOfficialAutoSessionTitle } from "./session/useOfficialAutoSessionTitle";
 
 /**
@@ -323,6 +324,10 @@ function CodeNewSessionPage({
       });
       // Official create residual: generate_session_title when prompt length >= 10 → titleSource auto.
       kickOfficialAutoSessionTitle(session.id, normalized);
+      // Residual openSession(meta) before route paint so ExistingSessionComposer seeds
+      // Mode from host session.permissionMode (`be(n.permissionMode)`) — not invent
+      // "default" (询问权限) for one frame after draft already showed bypass/accept.
+      officialCodeSessionStore.getState().openSession(session.id, session);
       onNavigate(sessionPath(session));
     } finally {
       setBusy(false);

@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { desktopBridge, type WorkspaceContext } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
 import { sessionPath } from "../../shell/sessionPaths";
+import { officialCodeSessionStore } from "./session/officialCodeSessionStore";
 import { kickOfficialAutoSessionTitle } from "./session/useOfficialAutoSessionTitle";
 
 type EpitaxyComposerProps = {
@@ -32,6 +33,8 @@ export function EpitaxyComposer({ onNavigate, placeholder, workspace }: EpitaxyC
       });
       kickOfficialAutoSessionTitle(session.id, trimmedPrompt);
       setPrompt("");
+      // Residual openSession(meta) before navigate — Mode pill seeds from host session.
+      officialCodeSessionStore.getState().openSession(session.id, session);
       onNavigate(sessionPath(session));
     } finally {
       setIsSubmitting(false);

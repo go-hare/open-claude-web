@@ -7,6 +7,7 @@ import type { FrameMode } from "../stores/frameStore";
 import { Icon } from "./icons";
 import { OfficialSidebarStatusGlyph } from "./OfficialSidebarStatusGlyph";
 import { sessionPath } from "./sessionPaths";
+import { officialCodeSessionStore } from "../features/epitaxy/session/officialCodeSessionStore";
 
 type SearchCommandPaletteProps = {
   isOpen: boolean;
@@ -53,6 +54,8 @@ export function SearchCommandPalette({ isOpen, mode, onClose, onNavigate }: Sear
 
   const openItem = (item: SearchItem) => {
     onClose();
+    // Residual openSession(meta) before route paint — Mode pill seeds from host session.
+    officialCodeSessionStore.getState().openSession(item.id, item);
     onNavigate(sessionPath(item));
   };
 

@@ -526,6 +526,8 @@ function RecentSessionRow({ frame, onAction, onDropBefore, renderActions, select
                 onOpenSplit();
                 return;
               }
+              // Residual openSession(meta) before route paint — Mode/title seed from list row.
+              officialCodeSessionStore.getState().openSession(session.id, session);
               onNavigate(path);
             }}
             type="button"

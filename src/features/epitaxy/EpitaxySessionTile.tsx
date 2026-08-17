@@ -894,6 +894,9 @@ function EpitaxyChatPanel({
             </div>
           ) : null}
           <ExistingSessionComposer
+            // Remount per session so Mode/model useState seed runs with openSession meta
+            // (official be(n.permissionMode) first paint — no invent default flash).
+            key={initialSessionId}
             attachRef={composerAttachRef}
             bridge={bridge}
             composerApiRef={composerApiRef}

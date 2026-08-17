@@ -362,6 +362,21 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(bucket?.pendingTurnStartedAt).toBeNull();
   });
 
+  it("openSession keeps host permissionMode for Mode pill first paint (be(n.permissionMode))", () => {
+    // Create path residual: openSession(start result) before navigate so composer seed
+    // is bypass/accept — not invent "default" (询问权限 flash).
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      permissionMode: "bypassPermissions",
+    } as never);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.session?.permissionMode).toBe("bypassPermissions");
+  });
+
   it("applyLoad seeds pendingTurn from host isRunning when local turn missing", () => {
     officialCodeSessionStore.getState().openSession("s1", {
       id: "s1",
