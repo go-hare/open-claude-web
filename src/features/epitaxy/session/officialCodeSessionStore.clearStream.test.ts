@@ -391,59 +391,57 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(bucket?.pendingTurnEndTurnSeen).toBe(false);
   });
 
-  it("absorbs host pre-echo singles when multi-block durable user arrives (mergeMessage)", () => {
-    // Host sendMessage residual: one user event per mid-turn send (unique uuid).
-    // CLI later durable-writes one multi-text user consolidating those sends.
+  it("mid-turn host pre-echo stays in queuedMessages (official d / isQueued), not main messages", () => {
+    // Composer path: noteQueuedSend + enqueue optimistic; host then emits user with new uuid.
+    // Must NOT paint main-transcript stack next to isQueued tail (user: 是队列).
     officialCodeSessionStore.getState().openSession("s1", {
       id: "s1",
       kind: "code",
       title: "S",
       updatedAtMs: 1,
       isRunning: true,
-    } as never, []);
-    const singles: ChatMessage[] = ["3", "3", "3", "3", "2"].map((text, index) => ({
-      id: `host-echo-${index}`,
-      role: "user",
-      text,
-      createdAt: `2026-08-17T12:00:0${index}.000Z`,
-      raw: {
-        type: "user",
-        uuid: `host-echo-${index}`,
-        message: { role: "user", content: [{ type: "text", text }] },
-      },
-    }));
-    for (const message of singles) {
-      officialCodeSessionStore.getState().mergeMessage("s1", message);
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: Date.now(),
+      isRunning: true,
+    });
+    for (const [index, text] of ["3", "3", "2"].entries()) {
+      officialCodeSessionStore.getState().noteQueuedSend("s1");
+      officialCodeSessionStore.getState().enqueueQueuedMessage(
+        "s1",
+        queuedUser(`opt-${index}`, text),
+      );
     }
-    expect(officialCodeSessionStore.getState().buckets.s1?.messages).toHaveLength(5);
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingQueuedSends).toBe(3);
+    expect(officialCodeSessionStore.getState().buckets.s1?.queuedMessages).toHaveLength(3);
 
-    const multiBlock: ChatMessage = {
-      id: "282b9279-b49e-4090-a90f-f24345f4b4b8",
-      role: "user",
-      text: "3\n\n3\n\n3\n\n3\n\n2",
-      createdAt: "2026-08-17T12:00:10.000Z",
-      raw: {
-        type: "user",
-        uuid: "282b9279-b49e-4090-a90f-f24345f4b4b8",
-        message: {
-          role: "user",
-          content: [
-            { type: "text", text: "3" },
-            { type: "text", text: "3" },
-            { type: "text", text: "3" },
-            { type: "text", text: "3" },
-            { type: "text", text: "2" },
-          ],
+    for (const [index, text] of ["3", "3", "2"].entries()) {
+      officialCodeSessionStore.getState().mergeMessage("s1", {
+        id: `host-${index}`,
+        role: "user",
+        text,
+        createdAt: "2026-08-17T12:00:00.000Z",
+        raw: {
+          type: "user",
+          uuid: `host-${index}`,
+          message: { role: "user", content: [{ type: "text", text }] },
         },
-      },
-    };
-    officialCodeSessionStore.getState().mergeMessage("s1", multiBlock);
+      });
+    }
 
-    const ids = officialCodeSessionStore.getState().buckets.s1?.messages.map((message) => message.id) ?? [];
-    expect(ids).toEqual(["282b9279-b49e-4090-a90f-f24345f4b4b8"]);
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.messages.map((message) => message.id)).toEqual(["interrupt"]);
+    expect(bucket?.queuedMessages.map((message) => message.id)).toEqual([
+      "host-0",
+      "host-1",
+      "host-2",
+    ]);
+    expect(bucket?.pendingQueuedSends).toBe(0);
   });
 
-  it("applyLoad absorbs prev host pre-echo when next has multi-block durable", () => {
+  it("keeps each outer-uuid user as its own message (no multi-text invent-split)", () => {
+    // Official residual: durable shape is CLI SoT. Host/CLI must emit 1 send → 1 user uuid.
+    // Desktop must not invent-expand multi-text envelopes (CLI fix owns that).
     officialCodeSessionStore.getState().openSession("s1", {
       id: "s1",
       kind: "code",
@@ -453,50 +451,56 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     } as never, []);
     for (const [index, text] of ["3", "3", "2"].entries()) {
       officialCodeSessionStore.getState().mergeMessage("s1", {
-        id: `live-${index}`,
+        id: `host-echo-${index}`,
         role: "user",
         text,
-        createdAt: "2026-08-17T12:00:00.000Z",
+        createdAt: `2026-08-17T12:00:0${index}.000Z`,
         raw: {
           type: "user",
-          uuid: `live-${index}`,
+          uuid: `host-echo-${index}`,
           message: { role: "user", content: [{ type: "text", text }] },
         },
       });
     }
-    const generation = officialCodeSessionStore.getState().markLoading("s1", true);
-    officialCodeSessionStore.getState().applyLoad("s1", generation, {
-      session: {
-        id: "s1",
-        kind: "code",
-        title: "S",
-        updatedAtMs: 2,
-        isRunning: true,
-      } as never,
-      messages: [
-        {
-          id: "multi",
-          role: "user",
-          text: "3\n\n3\n\n2",
-          createdAt: "2026-08-17T12:00:05.000Z",
-          raw: {
-            type: "user",
-            uuid: "multi",
-            message: {
-              role: "user",
-              content: [
-                { type: "text", text: "3" },
-                { type: "text", text: "3" },
-                { type: "text", text: "2" },
-              ],
-            },
+    expect(
+      officialCodeSessionStore.getState().buckets.s1?.messages.map((message) => message.id),
+    ).toEqual(["host-echo-0", "host-echo-1", "host-echo-2"]);
+  });
+
+  it("openSession keeps multi-text durable envelope as one message (CLI SoT)", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: false,
+    } as never, [
+      {
+        id: "multi",
+        role: "user",
+        text: "3\n\n3\n\n2",
+        createdAt: "2026-08-17T12:00:05.000Z",
+        raw: {
+          type: "user",
+          uuid: "multi",
+          message: {
+            role: "user",
+            content: [
+              { type: "text", text: "3" },
+              { type: "text", text: "3" },
+              { type: "text", text: "2" },
+            ],
           },
         },
-      ],
-    }, { preserveLiveStream: true });
-
-    const ids = officialCodeSessionStore.getState().buckets.s1?.messages.map((message) => message.id) ?? [];
-    expect(ids).toEqual(["multi"]);
+      },
+    ]);
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.messages.map((message) => message.id)).toEqual(["multi"]);
+    const entries = parseOfficialTranscriptEntries(bucket!.messages).filter(
+      (entry) => entry.author === "user",
+    );
+    // Ike residual: multi text blocks → one text item (join), one user entry.
+    expect(entries).toHaveLength(1);
   });
 
   it("patchSession seeds pendingTurn when host flips isRunning true", () => {

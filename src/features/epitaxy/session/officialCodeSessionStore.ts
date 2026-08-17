@@ -374,99 +374,6 @@ function isPlainUserPrompt(message: ChatMessage): boolean {
 }
 
 /**
- * Plain text blocks inside a user envelope (string content → one block; array → each type:text).
- * Used to detect CLI multi-block consolidation vs host pre-echo singles.
- */
-function plainUserTextBlocks(message: ChatMessage): string[] {
-  if (message.role !== "user") return [];
-  const raw = asRecord(message.raw);
-  const nested = asRecord(raw.message);
-  const content = nested.content ?? raw.content;
-  if (typeof content === "string") {
-    const trimmed = content.trim();
-    return trimmed ? [trimmed] : [];
-  }
-  if (!Array.isArray(content)) {
-    const trimmed = message.text?.trim() ?? "";
-    return trimmed ? [trimmed] : [];
-  }
-  const blocks: string[] = [];
-  for (const item of content) {
-    const record = asRecord(item);
-    const type = record.type;
-    // Only plain text blocks participate in multi-block consolidations.
-    if (type != null && type !== "" && type !== "text") continue;
-    const text = typeof record.text === "string"
-      ? record.text
-      : typeof record.content === "string"
-        ? record.content
-        : "";
-    const trimmed = text.trim();
-    if (trimmed) blocks.push(trimmed);
-  }
-  if (blocks.length === 0) {
-    const trimmed = message.text?.trim() ?? "";
-    if (trimmed) return [trimmed];
-  }
-  return blocks;
-}
-
-function isSingleTextPlainUser(message: ChatMessage): boolean {
-  return isPlainUserPrompt(message) && plainUserTextBlocks(message).length === 1;
-}
-
-function isMultiTextPlainUser(message: ChatMessage): boolean {
-  return isPlainUserPrompt(message) && plainUserTextBlocks(message).length >= 2;
-}
-
-/** Multiset of text blocks from multi-block durable plain users (CLI consolidated mid-turn sends). */
-function multiBlockTextMultiset(messages: Iterable<ChatMessage>): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const message of messages) {
-    if (!isMultiTextPlainUser(message)) continue;
-    for (const block of plainUserTextBlocks(message)) {
-      counts.set(block, (counts.get(block) ?? 0) + 1);
-    }
-  }
-  return counts;
-}
-
-/**
- * Drop host pre-echo single-text plain users superseded by a multi-block durable user.
- * Host sendMessage residual always emits a user row per send (unique uuid); go-hare CLI may
- * later durable-write ONE multi-text user. Outer-uuid union then kept both → orphan singles
- * + multi-block pill. Absorb singles whose text is multiset-covered by multi-block rows.
- * Intentional re-sends that are themselves durable (present in `keepIds`) stay.
- */
-function absorbHostPreEchoSingles(
-  messages: ChatMessage[],
-  multiBlockSource: Iterable<ChatMessage>,
-  keepIds?: Set<string>,
-): ChatMessage[] {
-  const multiset = multiBlockTextMultiset(multiBlockSource);
-  if (multiset.size === 0) return messages;
-  let changed = false;
-  const out: ChatMessage[] = [];
-  for (const message of messages) {
-    if (
-      isSingleTextPlainUser(message)
-      && (!keepIds || !keepIds.has(messageIdentity(message)))
-    ) {
-      const text = plainUserTextBlocks(message)[0]!;
-      const remaining = multiset.get(text) ?? 0;
-      if (remaining > 0) {
-        if (remaining === 1) multiset.delete(text);
-        else multiset.set(text, remaining - 1);
-        changed = true;
-        continue;
-      }
-    }
-    out.push(message);
-  }
-  return changed ? out : messages;
-}
-
-/**
  * Promote host/start optimistic user seed → durable CLI echo when outer uuid differs
  * (same trimmed plain text). Intentional re-sends of the same text keep separate uuids
  * and are NOT collapsed — only isLocalOptimistic / local-user-* rows promote.
@@ -485,19 +392,16 @@ function findOptimisticPlainUserIndex(messages: ChatMessage[], text: string): nu
 }
 
 function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[] {
+  // Official live path (index-BELzQL5P): same outer-uuid replaces in place; else append.
+  // Durable shape is CLI SoT (1 send → 1 user). No multi-text expand / invent split.
   const identity = messageIdentity(next);
   const index = messages.findIndex((message) => messageIdentity(message) === identity);
   if (index >= 0) {
     const existing = messages[index]!;
     if (existing === next) return messages;
-    // Official live path (index-BELzQL5P): same outer-uuid assistant/user replaces in place.
-    // Multi-emit uses different outer uuids → append below; never mid-collapse here.
     const copy = messages.slice();
     copy[index] = next;
-    // Multi-block durable replace may still need to absorb host pre-echo siblings.
-    return isMultiTextPlainUser(next)
-      ? absorbHostPreEchoSingles(copy, [next], new Set([identity]))
-      : copy;
+    return copy;
   }
   if (next.role === "user" && !isOptimisticLocalUser(next) && isPlainUserPrompt(next)) {
     const optimisticIndex = findOptimisticPlainUserIndex(messages, next.text);
@@ -506,10 +410,6 @@ function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[
       copy[optimisticIndex] = next;
       return copy;
     }
-  }
-  if (isMultiTextPlainUser(next)) {
-    // CLI multi-block durable: drop host pre-echo singles this row consolidates.
-    return [...absorbHostPreEchoSingles(messages, [next]), next];
   }
   return [...messages, next];
 }
@@ -591,14 +491,13 @@ function compactionStatusFromMessage(raw: Record<string, unknown>): string | und
 function mergeTranscriptUnion(prev: ChatMessage[], next: ChatMessage[]) {
   if (next.length === 0) return prev;
   if (prev.length === 0) return next;
+  // Official residual: outer-uuid identity only. No multi-text invent-split.
+  // Host sendMessage stamps uuid; CLI durable must echo same uuid (CLI fix).
   const nextById = new Map(next.map((message) => [messageIdentity(message), message]));
   const seen = new Set<string>();
-  // Durable plain-user texts from next — used to promote prev optimistic seeds whose
+  // Durable plain-user texts from next — promote prev optimistic seeds whose
   // outer uuid never matched the CLI jsonl echo (same message body, different uuid).
   const durablePlainByText = new Map<string, ChatMessage>();
-  // Multi-block CLI durable (mid-turn consolidates N host pre-echoes into one row).
-  // Multiset of its text blocks — absorb prev single-text rows not present in next.
-  const multiBlockCoverage = multiBlockTextMultiset(next);
   for (const message of next) {
     if (
       message.role === "user"
@@ -635,17 +534,6 @@ function mergeTranscriptUnion(prev: ChatMessage[], next: ChatMessage[]) {
         continue;
       }
     }
-    // Host pre-echo single (unique uuid, not on disk) superseded by multi-block durable.
-    // Official zke would not keep both; product residual: drop covered singles only.
-    if (isSingleTextPlainUser(message) && multiBlockCoverage.size > 0) {
-      const text = plainUserTextBlocks(message)[0]!;
-      const remaining = multiBlockCoverage.get(text) ?? 0;
-      if (remaining > 0) {
-        if (remaining === 1) multiBlockCoverage.delete(text);
-        else multiBlockCoverage.set(text, remaining - 1);
-        continue;
-      }
-    }
     out.push(message);
   }
   for (const message of next) {
@@ -673,17 +561,7 @@ function mergeTranscriptUnion(prev: ChatMessage[], next: ChatMessage[]) {
     seen.add(id);
     out.push(message);
   }
-  // Final pass: multi-block rows in `out` may still sit next to leftover singles if
-  // coverage was exhausted by order; re-absorb against multi-blocks present in out.
-  return absorbHostPreEchoSingles(
-    out,
-    out,
-    new Set(
-      out
-        .filter((message) => isMultiTextPlainUser(message))
-        .map((message) => messageIdentity(message)),
-    ),
-  );
+  return out;
 }
 
 /** @deprecated use mergeTranscriptUnion — kept name for call sites that meant "prefer local". */
@@ -754,7 +632,9 @@ function createOfficialCodeSessionStore() {
   openSession: (sessionId, session, messages) => {
     set((state) => {
       const prev = state.buckets[sessionId] ?? emptyBucket(false);
-      const nextMessages = messages ? filterStreamEvents(messages) : prev.messages;
+      const nextMessages = messages
+        ? filterStreamEvents(messages)
+        : prev.messages;
       const liveMeta = liveMetaPreferCurrent(prev.liveMeta, liveMetaFromMessages(nextMessages));
       const baseSession = session
         ? { ...session, messages: nextMessages.length ? nextMessages : session.messages ?? nextMessages }
@@ -919,13 +799,10 @@ function createOfficialCodeSessionStore() {
       if (prev.queuedMessages.some((item) => messageIdentity(item) === identity)) {
         return state;
       }
-      // Local optimistic seed is the stand-in for official CLI user echo into
-      // queuedMessages (index d path decrements pendingQueuedSends there). Consume one
-      // pending slot so cancel/drop leaves the same 0 pending + N queue shape as official
-      // post-echo, and same-uuid durable echo still updates the queued row in place.
-      const pendingQueuedSends = prev.pendingQueuedSends > 0
-        ? prev.pendingQueuedSends - 1
-        : prev.pendingQueuedSends;
+      // Product local seed for Hb isQueued chrome. Official only lands durable user
+      // echoes into queuedMessages and decrements pendingQueuedSends on that path (d).
+      // Do NOT consume pending here — early consume let host pre-echo (different uuid)
+      // fall through to main messages while optimistic stayed in queue → double stack.
       return {
         buckets: {
           ...state.buckets,
@@ -936,7 +813,6 @@ function createOfficialCodeSessionStore() {
             isTranscriptPending: false,
             isMetaPending: false,
             queuedMessages: [...prev.queuedMessages, message],
-            pendingQueuedSends,
           },
         },
       };
@@ -1346,25 +1222,42 @@ function createOfficialCodeSessionStore() {
       }
       // Official d: mid-turn durable user echo while pendingQueuedSends > 0 → queue, not transcript.
       // Official _ke interrupt marker is a current-turn user row, never a queued follow-up.
+      // Product: also absorb host pre-echo that matches an optimistic queued row by text
+      // (uuid differs; pending may still be > 0 after enqueue no longer consumes early).
       const isInterruptUser = isUser && officialUserMessageIsInterrupt(rawRecord);
-      const routeToQueue = prev.pendingQueuedSends > 0
+      const optimisticQueuedTextMatch = isUser
+        && !isSynthetic
+        && !hasParentTool
+        && !isOptimisticLocalUser(message)
+        && !isInterruptUser
+        && prev.queuedMessages.some(
+          (item) => isOptimisticLocalUser(item) && item.text.trim() === message.text.trim(),
+        );
+      // Official d: pendingQueuedSends > 0 → mid-turn durable non-synthetic user lands in queue.
+      // Also absorb host pre-echo that matches an optimistic queued row by text.
+      const routeToQueue = (
+        prev.pendingQueuedSends > 0
+        || optimisticQueuedTextMatch
+      )
         && isUser
         && !isSynthetic
         && !hasParentTool
         && !isOptimisticLocalUser(message)
         && !isInterruptUser;
       if (routeToQueue) {
-        // Prefer replacing optimistic queued row by text match / local-user id, else append.
         let queuedMessages = prev.queuedMessages.slice();
-        const optimisticIdx = [...queuedMessages]
-          .map((item, i) => ({ item, i }))
-          .reverse()
-          .find(({ item }) => isOptimisticLocalUser(item) && item.text.trim() === message.text.trim())?.i;
-        if (optimisticIdx !== undefined) {
+        // Prefer replacing optimistic queued row by text match (FIFO — same text may queue
+        // multiple times) / local-user id, else append. One durable user → one queue slot.
+        const optimisticIdx = queuedMessages.findIndex(
+          (item) => isOptimisticLocalUser(item) && item.text.trim() === message.text.trim(),
+        );
+        if (optimisticIdx >= 0) {
           queuedMessages[optimisticIdx] = message;
         } else if (!queuedMessages.some((item) => messageIdentity(item) === identity)) {
           queuedMessages = [...queuedMessages, message];
         }
+        // Consume one pending slot per durable host/CLI echo (official d).
+        const pendingQueuedSends = Math.max(0, prev.pendingQueuedSends - 1);
         return {
           buckets: {
             ...state.buckets,
@@ -1372,7 +1265,7 @@ function createOfficialCodeSessionStore() {
               ...prev,
               isTranscriptPending: false,
               queuedMessages,
-              pendingQueuedSends: Math.max(0, prev.pendingQueuedSends - 1),
+              pendingQueuedSends,
             },
           },
         };
