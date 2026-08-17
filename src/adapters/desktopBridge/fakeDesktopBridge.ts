@@ -482,6 +482,9 @@ const titleFromPrompt = (prompt: string) => {
   return firstLine.length > 24 ? `${firstLine.slice(0, 24)}…` : firstLine || "新会话";
 };
 
+/** Official code residual: start without prompt-as-title. */
+const DEFAULT_CODE_TITLE = "General coding session";
+
 const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge["LocalSessions"] => ({
   list: async () => sessions.filter((session) => session.kind === targetKind),
   getSession: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind) ?? null,
@@ -577,16 +580,10 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   },
   stopSessionSummary: async () => false,
   refreshSessionTitle: async (id) => {
+    // Residual: auto title is generate_session_title + updateSession titleSource auto
+    // (web kickOfficialAutoSessionTitle). Do not invent prompt-as-title refresh here.
     const session = sessions.find((item) => item.id === id && item.kind === targetKind);
     if (!session) return null;
-    if (!session.title || session.title === "General coding session" || session.title === "Coding session" || /^\d+$/.test(session.title)) {
-      const firstUser = session.messages?.find((message) => message.role === "user")?.text?.trim();
-      if (firstUser) {
-        session.title = firstUser.split("\n")[0]!.slice(0, 40);
-      }
-    }
-    const surface = targetKind === "epitaxy" ? "epitaxy" : "code";
-    emitFakeLocalSessionEvent({ type: "session_updated", sessionId: id, session }, surface);
     return session;
   },
   checkTrust: async (folder) => ({ trusted: fakeTrustedFolders.has(folder), sources: [] }),
@@ -749,7 +746,7 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     };
     const created: SessionSummary = {
       id: input.sessionId ?? `${targetKind === "epitaxy" ? "local" : "code"}_${Date.now()}`,
-      title: titleFromPrompt(message),
+      title: targetKind === "code" ? DEFAULT_CODE_TITLE : titleFromPrompt(message),
       updatedAt: "刚刚",
       updatedAtMs: Date.now(),
       kind: targetKind,

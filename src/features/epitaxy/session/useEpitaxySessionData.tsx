@@ -48,6 +48,7 @@ import {
   acknowledgeOfficialToolDecision,
   rehydrateOfficialApprovedPlanFromMessages,
 } from "./officialPlanCommentsStore";
+import { useOfficialAutoSessionTitle } from "./useOfficialAutoSessionTitle";
 import {
   getOfficialUltrareviewLaunchingVersion,
   isOfficialUltrareviewLaunching,
@@ -374,6 +375,33 @@ export function useEpitaxySessionData(sessionId?: string) {
       && !existing.isTranscriptPending,
     );
     if (hasWarmTranscript) {
+      // Warm re-entry: residual openSession skips getTranscript, but while the tile was
+      // unsubscribed host isRunning / pendingTurn can drift (missed session_updated).
+      // Seed Qke from local isRunning immediately; then soft-fetch getSession meta only
+      // (no transcript body) so host isRunning / permissions re-sync without Ja flash.
+      // Use setStreamActivity — beginPendingTurn would Pke-clear Va mid-live stream.
+      if (
+        existing
+        && existing.session?.isRunning === true
+        && existing.pendingTurnStartedAt === null
+      ) {
+        officialMarkTurnStarted(sessionId);
+        // pendingTurn only — inventing streamActivityMode would sticky-protect against
+        // real host idle. Host isActive OR + isResponding(pendingTurn|isRunning) cover paint.
+        store.getState().setStreamActivity(sessionId, {
+          pendingTurnStartedAt: officialGetTurnStartedAt(sessionId) ?? Date.now(),
+          isRunning: true,
+        });
+      }
+      void desktopBridge.LocalSessions.getSession(sessionId)
+        .then((session) => {
+          if (!alive || !session) return;
+          // patchSession seeds pendingTurn when host isRunning (store helper).
+          store.getState().patchSession(sessionId, session);
+        })
+        .catch(() => {
+          // Soft meta refresh is best-effort; local bucket still paints.
+        });
       return () => { alive = false; };
     }
     const silent = Boolean(existing && (existing.messages.length > 0 || existing.streamSnapshot !== null));
@@ -605,6 +633,8 @@ export function useEpitaxySessionData(sessionId?: string) {
             // after result promote — keep that. Real deferred queue: flush stream only.
             if (prevRunning && patched?.isRunning === false) {
               const after = store.getState().buckets[sessionId];
+              // patchSession already dropped stale pendingTurn when host idle + no Va/queue.
+              // Only block settle while live stream/queue still owns the turn (not bare pendingTurn).
               const hasDeferredQueue = Boolean(
                 after
                 && (
@@ -612,28 +642,18 @@ export function useEpitaxySessionData(sessionId?: string) {
                   || (after.pendingQueuedSends ?? 0) > 0
                 ),
               );
-              const hasOpenTurn = Boolean(
+              const hasLiveStream = Boolean(
                 after
                 && (
-                  after.pendingTurnStartedAt !== null
-                  || hasDeferredQueue
+                  after.streamingMessageId != null
+                  || after.streamSnapshot != null
+                  || after.streamActivityMode !== idleStreamActivityMode
                 ),
               );
-              if (hasDeferredQueue || hasOpenTurn) {
-                // Lift Va / eke only — keep pendingTurn for official g / H busy.
-                officialStreamClear(sessionId);
-                clearOfficialEkeCache(sessionId);
-                setStreamSnapshot(null);
-                setStreamingMessageId(null);
-                setStreamActivityMode(idleStreamActivityMode);
-                streamMessageIdRef.current = null;
-                streamSnapshotRef.current = null;
-                streamActivityModeRef.current = idleStreamActivityMode;
-                store.getState().setStreamActivity(sessionId, {
-                  streamingMessageId: null,
-                  streamActivityMode: idleStreamActivityMode,
-                });
-              } else {
+              // Official markNotRunning settles when turn is over. Stale false mid-stream
+              // (disk lag) must NOT clear Pe/Va — hasLiveStream/queue blocks that.
+              // After patchSession, bare leftover pendingTurn is already cleared when host idle.
+              if (!hasLiveStream && !hasDeferredQueue) {
                 clearStreamState(true);
               }
             }
@@ -817,27 +837,31 @@ export function useEpitaxySessionData(sessionId?: string) {
     }),
     [bucket.isMetaPending, bucket.isSessionNotFound, bucket.session, isUltrareviewLaunching, sessionId],
   );
-  // Official Xke/pe (index-BELzQL5P): Qke = pendingTurn && !endTurnSeen.
   // Residual Xb isResponding paint: H || "spawning"===Os || null!==Js || bs
-  //   H → Xke (not invent host isRunning alone; end_turn keeps pendingTurn with endTurnSeen)
-  //   null!==Js → optimistic user (pendingTurnStartedAt after beginLocalUserTurn)
-  //   bs → ultrareview launch chrome
+  // Official store comment (patchSession): H = stream || isRunning || pendingTurn || queue.
+  // Xke/pe Qke = pendingTurn && !endTurnSeen is NOT H. Residual p (assistant end_turn) sets
+  // endTurnSeen but keeps pendingTurn + Va until result/Pke.clear — using Qke for H painted
+  // static spark + Send between end_turn and result (and on re-entry after end_turn).
+  // Do NOT invent busy from tags alone (spawnLabel is bs-only).
   // Residual Gv tokens/elapsed: _e / je maps only — do NOT invent streamTokenEstimate prop.
   const pendingTurnStartedAt = bucket.pendingTurnStartedAt;
-  const pendingTurnOpen = pendingTurnStartedAt !== null && !bucket.pendingTurnEndTurnSeen;
+  // H arm: pendingTurn object exists (startedAt set), regardless of endTurnSeen.
+  const hasPendingTurn = pendingTurnStartedAt !== null;
   // Residual we = gw(U) — ultrareview progress from system hook_progress/hook_response.
   const reviewProgress = useMemo(
     () => residualExtractUltrareviewProgress(bucket.messages),
     [bucket.messages],
   );
   // Residual isResponding arm for ultrareview: bs (launch in flight) or di (we running).
-  // Do NOT invent tag+isRunning → sticky busy / Launching after invent startDiffReview.
+  // Do NOT invent tag+isRunning → sticky busy / Launching (spawnLabel is bs-only).
   const isUltrareviewBusy = isUltrareviewLaunching
     || reviewProgress?.status === "running";
   // Keep stream-owned chrome while Va still has snapshot / streamingMessageId (after end_turn
-  // residual keeps Va until result clears — loader/stream row must not stick via host isRunning).
+  // residual keeps Va until result clears). Host isRunning covers re-entry without Va.
+  // pendingTurn (not Qke) covers end_turn→result and warm re-entry with endTurnSeen.
   const isResponding =
-    pendingTurnOpen
+    hasPendingTurn
+    || bucket.session?.isRunning === true
     || streamActivityMode !== idleStreamActivityMode
     || streamSnapshot !== null
     || streamingMessageId !== null
@@ -878,11 +902,14 @@ export function useEpitaxySessionData(sessionId?: string) {
     store.getState().markInterrupting(sessionId);
   }, [sessionId, store]);
 
-  // Residual oi gate inputs (c119):
-  //   ri = we != null || tags includes "ultrareview"
-  //   oi = ri || (empty && ii) — ii/remote Mx not ported (云端不要)
-  // Product: expose we + tag so EpitaxyChatPanel can mount oi shell before Vn/Xb.
+  // Residual oi gate inputs (c11959232):
+  //   ri = we != null || (O?.tags?.includes("ultrareview") ?? false)
+  //   oi = ri || (0===Ya.length && void 0!==ii)
+  // Local: no ye/ii → oi = ri. Expose we + tag for EpitaxyChatPanel shell (before Vn/Xb).
   const isUltrareviewTagged = Boolean(bucket.session?.tags?.includes("ultrareview"));
+
+  // Official auto title residual (create + open-session fallback).
+  useOfficialAutoSessionTitle(bucket.session, bucket.messages, isLoading);
 
   return {
     beginLocalUserTurn,
@@ -1194,16 +1221,7 @@ async function bridgeGetSessionPending(sessionId: string): Promise<SessionSummar
   }
 }
 
-export function isPlaceholderCodingTitle(title?: string | null) {
-  const text = title?.trim() ?? "";
-  if (!text) return true;
-  if (/^\d+$/.test(text)) return true;
-  return text === "Untitled"
-    || text === "Untitled session"
-    || text === "Coding session"
-    || text === "General coding session"
-    || text === "New session";
-}
+export { isPlaceholderCodingTitle } from "./officialSessionTitle";
 
 async function refreshSessionTitleAfterSettle(sessionId: string): Promise<SessionSummary | null> {
   const bridge = desktopBridge.LocalSessions;

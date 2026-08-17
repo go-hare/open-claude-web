@@ -59,6 +59,11 @@ export type SessionSummary = {
   cuSelectedDisplayId?: number;
   id: string;
   title: string;
+  /**
+   * Official residual: "auto" after dust generate_session_title;
+   * "user" after manual rename. Host may omit until set.
+   */
+  titleSource?: "auto" | "user" | "prompt";
   createdAtMs?: number;
   updatedAt: string;
   updatedAtMs: number;
@@ -637,7 +642,10 @@ export type LocalSessionsBridge = {
   setMcpServers?: (id: string, mcpServers: unknown) => Promise<SessionSummary | null>;
   setModel?: (id: string, model: string) => Promise<SessionSummary | null>;
   setPermissionMode?: (id: string, mode: string) => Promise<SessionSummary | null>;
-  updateSession?: (id: string, patch: Partial<Pick<SessionSummary, "title" | "isAgentCompleted" | "isPinned" | "spaceId">>) => Promise<SessionSummary | null>;
+  updateSession?: (
+    id: string,
+    patch: Partial<Pick<SessionSummary, "title" | "titleSource" | "isAgentCompleted" | "isPinned" | "spaceId">>,
+  ) => Promise<SessionSummary | null>;
   submitFeedback?: (input?: unknown) => Promise<unknown>;
   checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<WorkspaceTrustResult>;
   checkTrust?: (folder: string) => Promise<WorkspaceTrustResult>;
@@ -754,7 +762,10 @@ export type CoworkSessionsBridge = {
   setMcpServers?: (id: string, mcpServers: unknown) => Promise<SessionSummary | null>;
   setModel?: (id: string, model: string) => Promise<SessionSummary | null>;
   setPermissionMode?: (id: string, mode: string) => Promise<SessionSummary | null>;
-  updateSession?: (id: string, patch: Partial<Pick<SessionSummary, "title" | "isAgentCompleted" | "isPinned" | "spaceId">>) => Promise<SessionSummary | null>;
+  updateSession?: (
+    id: string,
+    patch: Partial<Pick<SessionSummary, "title" | "titleSource" | "isAgentCompleted" | "isPinned" | "spaceId">>,
+  ) => Promise<SessionSummary | null>;
   submitFeedback?: (input?: unknown) => Promise<unknown>;
   checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<WorkspaceTrustResult>;
   checkTrust?: (folder: string) => Promise<WorkspaceTrustResult>;

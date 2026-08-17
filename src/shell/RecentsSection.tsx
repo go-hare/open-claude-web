@@ -362,7 +362,7 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
           if (!nextTitle || nextTitle === target.title) return;
           setSessions((current) => current.map((item) => item.id === target.id ? { ...item, title: nextTitle } : item));
           officialCodeSessionStore.getState().patchSession(target.id, { title: nextTitle });
-          void desktopBridge.LocalSessions.updateSession?.(target.id, { title: nextTitle }).then((updated) => {
+          void desktopBridge.LocalSessions.updateSession?.(target.id, { title: nextTitle, titleSource: "user" }).then((updated) => {
             if (!updated) return;
             setSessions((current) => current.map((item) => item.id === target.id ? { ...item, ...updated } : item));
             officialCodeSessionStore.getState().patchSession(target.id, updated);

@@ -333,4 +333,184 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(bucket?.pendingTurnStartedAt).not.toBeNull();
     expect(bucket?.queuedMessages.map((message) => message.id)).toEqual(["q1"]);
   });
+
+  it("openSession seeds pendingTurn when host isRunning (re-entry Qke)", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.session?.isRunning).toBe(true);
+    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+    expect(bucket?.pendingTurnEndTurnSeen).toBe(false);
+  });
+
+  it("openSession does not invent pendingTurn when host is idle", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: false,
+    } as never, [interruptUser()]);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.pendingTurnStartedAt).toBeNull();
+  });
+
+  it("applyLoad seeds pendingTurn from host isRunning when local turn missing", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: false,
+    } as never, [interruptUser()]);
+    // Force-clear any seed (idle host open leaves null; assert baseline).
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt).toBeNull();
+
+    const generation = officialCodeSessionStore.getState().markLoading("s1", true);
+    officialCodeSessionStore.getState().applyLoad("s1", generation, {
+      session: {
+        id: "s1",
+        kind: "code",
+        title: "S",
+        updatedAtMs: 2,
+        isRunning: true,
+      } as never,
+      messages: [interruptUser()],
+    });
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.session?.isRunning).toBe(true);
+    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+    expect(bucket?.pendingTurnEndTurnSeen).toBe(false);
+  });
+
+  it("patchSession seeds pendingTurn when host flips isRunning true", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: false,
+    } as never, [interruptUser()]);
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt).toBeNull();
+
+    officialCodeSessionStore.getState().patchSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 2,
+      isRunning: true,
+    } as never);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.session?.isRunning).toBe(true);
+    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+  });
+
+  it("seed keeps existing pendingTurn / endTurnSeen (no re-stamp)", () => {
+    const startedAt = 1_700_000_000_000;
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: startedAt,
+      isRunning: true,
+    });
+    // Simulate residual p (end_turn) without clearing pendingTurn.
+    const endTurn: ChatMessage = {
+      id: "a-end",
+      role: "assistant",
+      text: "done",
+      createdAt: "2026-08-13T00:00:04.000Z",
+      raw: {
+        type: "assistant",
+        uuid: "a-end",
+        message: {
+          id: "msg_end",
+          role: "assistant",
+          content: [{ type: "text", text: "done" }],
+          stop_reason: "end_turn",
+        },
+      },
+    };
+    officialCodeSessionStore.getState().mergeMessage("s1", endTurn);
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingTurnEndTurnSeen).toBe(true);
+
+    officialCodeSessionStore.getState().patchSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 3,
+      isRunning: true,
+    } as never);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.pendingTurnStartedAt).toBe(startedAt);
+    expect(bucket?.pendingTurnEndTurnSeen).toBe(true);
+  });
+
+  it("patchSession keeps isRunning while live stream owns the turn", () => {
+    // Stale isRunning=false mid-stream must not idle the chrome.
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      streamingMessageId: "msg_live",
+      streamActivityMode: "responding",
+      isRunning: true,
+    });
+
+    officialCodeSessionStore.getState().patchSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 2,
+      isRunning: false,
+    } as never);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.session?.isRunning).toBe(true);
+    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+    expect(bucket?.streamingMessageId).toBe("msg_live");
+  });
+
+  it("patchSession drops stale pendingTurn when host idle without live stream", () => {
+    // Background completed while unsubscribed: host isRunning=false, result merge missed,
+    // bare pendingTurn must not sticky Stop forever.
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt).not.toBeNull();
+
+    officialCodeSessionStore.getState().patchSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 2,
+      isRunning: false,
+    } as never);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.session?.isRunning).toBe(false);
+    expect(bucket?.pendingTurnStartedAt).toBeNull();
+  });
 });

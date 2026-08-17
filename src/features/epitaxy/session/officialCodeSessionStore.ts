@@ -21,6 +21,7 @@ import {
   type OfficialLiveMeta,
 } from "./officialLiveMeta";
 import { officialUserMessageIsInterrupt } from "./officialTranscriptParse";
+import { officialMarkTurnStarted } from "./officialStreamSessionStore";
 
 export type StreamActivityMode = "idle" | "requesting" | "thinking" | "responding" | "tool-use";
 
@@ -97,6 +98,40 @@ function emptyBucket(pending: boolean): OfficialCodeSessionBucket {
     streamingMessageId: null,
     streamSnapshot: null,
     loadGeneration: 0,
+  };
+}
+
+/**
+ * Official Qke / cowork hydrate: host `isRunning` means an open pendingTurn until
+ * result/error/clear. Seed only when missing — never invent sticky busy for idle,
+ * never clear endTurnSeen on an already-open turn.
+ * Also stamps je (turnStartedAt) so Gv spark elapsed does not wait on first stream tick.
+ */
+function seedPendingTurnIfHostRunning(
+  prev: OfficialCodeSessionBucket,
+  session: SessionSummary | null | undefined,
+  sessionId: string,
+): Pick<OfficialCodeSessionBucket, "pendingTurnStartedAt" | "pendingTurnEndTurnSeen"> {
+  if (session?.isRunning !== true) {
+    return {
+      pendingTurnStartedAt: prev.pendingTurnStartedAt,
+      pendingTurnEndTurnSeen: prev.pendingTurnEndTurnSeen,
+    };
+  }
+  if (prev.pendingTurnStartedAt !== null) {
+    return {
+      pendingTurnStartedAt: prev.pendingTurnStartedAt,
+      pendingTurnEndTurnSeen: prev.pendingTurnEndTurnSeen,
+    };
+  }
+  const at = Date.now();
+  officialMarkTurnStarted(sessionId, at);
+  // pendingTurn only — do NOT invent streamActivityMode requesting. That would make
+  // host isRunning=false treat the seed as live stream and sticky-busy forever.
+  // H = pendingTurn || isRunning || real Va/queue; re-entry spark comes from those.
+  return {
+    pendingTurnStartedAt: at,
+    pendingTurnEndTurnSeen: false,
   };
 }
 
@@ -608,6 +643,9 @@ function createOfficialCodeSessionStore() {
         : nextMessages.length > 0
           ? false
           : prev.isTranscriptPending || prev.session === null;
+      const nextSession = sessionForLoad(baseSession, nextMessages, liveMeta);
+      // Host isRunning on Recents/open path → seed Qke immediately (coexist with Ja until Ya).
+      const pendingSeed = seedPendingTurnIfHostRunning(prev, nextSession ?? baseSession, sessionId);
       return {
         buckets: {
           ...state.buckets,
@@ -621,7 +659,9 @@ function createOfficialCodeSessionStore() {
             liveMeta,
             messages: nextMessages,
             // Host session.permissionMode + system/status recovery (official be(n.permissionMode)).
-            session: sessionForLoad(baseSession, nextMessages, liveMeta),
+            session: nextSession,
+            pendingTurnStartedAt: pendingSeed.pendingTurnStartedAt,
+            pendingTurnEndTurnSeen: pendingSeed.pendingTurnEndTurnSeen,
           },
         },
       };
@@ -876,9 +916,29 @@ function createOfficialCodeSessionStore() {
           : prev.session
             ? { ...prev.session, messages }
             : null;
-        // Host isRunning mirror only when payload has it; do not clear pendingTurn.
+        // Host isRunning mirror only when payload has it; do not clear pendingTurn
+        // while real Va/queue live. Cold re-entry seeds when host still running.
         const nextSession = sessionForLoad(baseSession, messages, liveMeta)
           ?? sessionWithLiveMeta(baseSession, liveMeta);
+        const hasLiveStream = Boolean(
+          prev.streamSnapshot !== null
+          || prev.streamingMessageId !== null
+          || prev.streamActivityMode !== idleStreamActivityMode,
+        );
+        // Bare leftover pendingTurn + host idle → settle (same as patchSession).
+        // Real Va/queue keep pendingTurn even if host meta lags false.
+        let pendingSeed = seedPendingTurnIfHostRunning(prev, nextSession, sessionId);
+        if (
+          nextSession?.isRunning !== true
+          && !hasLiveStream
+          && !hasDeferredQueue
+          && prev.pendingTurnStartedAt !== null
+        ) {
+          pendingSeed = {
+            pendingTurnStartedAt: null,
+            pendingTurnEndTurnSeen: false,
+          };
+        }
         return {
           buckets: {
             ...state.buckets,
@@ -892,6 +952,8 @@ function createOfficialCodeSessionStore() {
               liveMeta,
               messages,
               session: nextSession,
+              pendingTurnStartedAt: pendingSeed.pendingTurnStartedAt,
+              pendingTurnEndTurnSeen: pendingSeed.pendingTurnEndTurnSeen,
             },
           },
         };
@@ -899,12 +961,23 @@ function createOfficialCodeSessionStore() {
       const nextMessages = filterStreamEvents(payload.messages);
       // Always union — never wholesale-replace history (even when settled).
       const messages = mergeTranscriptUnion(prev.messages, nextMessages);
-      // Official transcript load does not clear pendingTurn. Only settle when host
-      // reports not running AND no local pendingTurn/queue (true idle).
-      const sessionSettled = (payload.session ? payload.session.isRunning !== true : true)
-        && prev.pendingTurnStartedAt === null
-        && !hasDeferredQueue;
+      // Official transcript load does not clear pendingTurn while host still running
+      // or local Va/queue owns the turn. Host idle + no Va/queue → settle leftover.
+      const hasLiveStream = Boolean(
+        prev.streamSnapshot !== null
+        || prev.streamingMessageId !== null
+        || prev.streamActivityMode !== idleStreamActivityMode,
+      );
+      const hostIdle = payload.session ? payload.session.isRunning !== true : true;
+      const sessionSettled = hostIdle && !hasDeferredQueue && !hasLiveStream;
       const liveMeta = liveMetaPreferCurrent(prev.liveMeta, liveMetaFromMessages(messages));
+      const nextSession = payload.session
+        ? sessionForLoad({ ...payload.session, messages }, messages, liveMeta)
+        : null;
+      // Host isRunning on getSession/getTranscript → seed pendingTurn (re-entry H).
+      const pendingSeed = sessionSettled
+        ? { pendingTurnStartedAt: null as number | null, pendingTurnEndTurnSeen: false }
+        : seedPendingTurnIfHostRunning(prev, nextSession ?? payload.session, sessionId);
       return {
         buckets: {
           ...state.buckets,
@@ -917,11 +990,9 @@ function createOfficialCodeSessionStore() {
             isSessionNotFound: false,
             liveMeta,
             messages,
-            session: payload.session
-              ? sessionForLoad({ ...payload.session, messages }, messages, liveMeta)
-              : null,
-            pendingTurnStartedAt: sessionSettled ? null : prev.pendingTurnStartedAt,
-            pendingTurnEndTurnSeen: sessionSettled ? false : prev.pendingTurnEndTurnSeen,
+            session: nextSession,
+            pendingTurnStartedAt: pendingSeed.pendingTurnStartedAt,
+            pendingTurnEndTurnSeen: pendingSeed.pendingTurnEndTurnSeen,
             streamActivityMode: sessionSettled ? idleStreamActivityMode : prev.streamActivityMode,
             streamingMessageId: sessionSettled ? null : prev.streamingMessageId,
             streamSnapshot: sessionSettled ? null : prev.streamSnapshot,
@@ -1001,14 +1072,42 @@ function createOfficialCodeSessionStore() {
       const modelFilled =
         nextSession.model
         || (prev.liveMeta?.model && prev.liveMeta.model !== "<synthetic>" ? prev.liveMeta.model : undefined);
-      const session =
+      let session =
         modelFilled && modelFilled !== nextSession.model
           ? { ...nextSession, model: modelFilled }
           : nextSession;
+      // Host isRunning=false while real Va/queue still live = stale race. Keep busy.
+      // Bare pendingTurn alone is NOT protect evidence — residual p leaves pendingTurn
+      // until result; background completed must settle leftover pendingTurn (no sticky Stop).
+      // streamActivityMode from real stream events counts; seed must not invent it.
+      const hasLiveStream = Boolean(
+        prev.streamingMessageId != null
+        || prev.streamSnapshot != null
+        || prev.streamActivityMode !== idleStreamActivityMode,
+      );
+      const hasDeferredQueue = Boolean(
+        (prev.queuedMessages?.length ?? 0) > 0
+        || (prev.pendingQueuedSends ?? 0) > 0,
+      );
+      if (session.isRunning === false && (hasLiveStream || hasDeferredQueue)) {
+        session = { ...session, isRunning: true };
+      }
       // Official session_updated / formatSessionForEvent: metadata + isRunning only.
-      // Do NOT invent: force isRunning from web queue, or clear pendingTurn here.
       // Official web H (isResponding) = stream || isRunning || pendingTurn || queue.
-      // pendingTurn / queue promote only on mergeMessage result g/h (BELz).
+      // Host isRunning true with no local pendingTurn seeds pendingTurn for re-entry H.
+      let pendingSeed = seedPendingTurnIfHostRunning(prev, session, sessionId);
+      if (
+        session.isRunning === false
+        && !hasLiveStream
+        && !hasDeferredQueue
+        && prev.pendingTurnStartedAt !== null
+      ) {
+        // Host idle + no Va/queue: settle leftover pendingTurn (unsubscribed completed).
+        pendingSeed = {
+          pendingTurnStartedAt: null,
+          pendingTurnEndTurnSeen: false,
+        };
+      }
       return {
         buckets: {
           ...state.buckets,
@@ -1016,6 +1115,8 @@ function createOfficialCodeSessionStore() {
             ...prev,
             isMetaPending: false,
             session,
+            pendingTurnStartedAt: pendingSeed.pendingTurnStartedAt,
+            pendingTurnEndTurnSeen: pendingSeed.pendingTurnEndTurnSeen,
           },
         },
       };

@@ -20,17 +20,7 @@ import { matchOfficialSessionShortcut } from "./officialSessionShortcuts";
 import { parseOfficialTasks } from "./officialTasksAndPlan";
 import { parseOfficialSubagentTranscriptEntries } from "./officialTranscriptParse";
 import { CodeAssistantEntryMessage, CodeUserEntryMessage } from "./OfficialTranscript";
-import { isPlaceholderCodingTitle } from "./useEpitaxySessionData";
-
-export function officialSessionHeaderTitle(session: SessionSummary | null, initialSessionId: string | undefined) {
-  if (!initialSessionId) return "Claude Code";
-  const title = session?.title?.trim();
-  // Official local code empty/placeholder → "Coding session" (c11959232 header fallback).
-  if (isPlaceholderCodingTitle(title) || (title && /^\d+$/.test(title) && (session?.kind === "code" || session?.kind === "epitaxy"))) {
-    return "Coding session";
-  }
-  return title!;
-}
+export { officialSessionHeaderTitle } from "./officialSessionTitle";
 
 export function EpitaxyChatHeader({ activeView, canOpenBrowser = false, canOpenFramebuffer = false, canOpenRuns = false, dragHandle, hasRunningTasks, hideViews = false, isTitleLoading, isTopLeft, onSessionRemoved, onTranscriptModeChange, onViewSelect, openViews, paneIndex, session, sessionRef, title, transcriptMode = "normal" }: {
   activeView?: OfficialViewPane;

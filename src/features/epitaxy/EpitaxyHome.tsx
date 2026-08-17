@@ -23,6 +23,7 @@ import {
   clampEffortToCatalog,
   cliEffortLevelsForModel,
 } from "./session/officialComposerOptions";
+import { kickOfficialAutoSessionTitle } from "./session/useOfficialAutoSessionTitle";
 
 /**
  * Official c119 react-query residual for Code home draft seed:
@@ -320,6 +321,8 @@ function CodeNewSessionPage({
           : {}),
         permissionMode,
       });
+      // Official create residual: generate_session_title when prompt length >= 10 → titleSource auto.
+      kickOfficialAutoSessionTitle(session.id, normalized);
       onNavigate(sessionPath(session));
     } finally {
       setBusy(false);

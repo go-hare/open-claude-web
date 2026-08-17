@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { desktopBridge, type WorkspaceContext } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
 import { sessionPath } from "../../shell/sessionPaths";
+import { kickOfficialAutoSessionTitle } from "./session/useOfficialAutoSessionTitle";
 
 type EpitaxyComposerProps = {
   workspace: WorkspaceContext;
@@ -29,6 +30,7 @@ export function EpitaxyComposer({ onNavigate, placeholder, workspace }: EpitaxyC
         prompt: trimmedPrompt,
         workspace,
       });
+      kickOfficialAutoSessionTitle(session.id, trimmedPrompt);
       setPrompt("");
       onNavigate(sessionPath(session));
     } finally {

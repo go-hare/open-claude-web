@@ -1764,10 +1764,15 @@ function normalizeSession(
     ?? Date.now();
   const createdAtMs = timestampValue(raw.createdAt) ?? timestampValue(original.createdAt) ?? updatedAtMs;
   const kind = targetKind === "code" || raw.kind === "code" ? "code" : "epitaxy";
+  // Official residual: host title wins; empty → worktreeName → "General coding session".
+  // Do NOT invent firstMessageText as title (prompt "1" was product invent).
   const title = stringValue(raw.title)
     ?? stringValue(raw.worktreeName)
-    ?? firstMessageText(raw.messages)
     ?? (kind === "code" ? "General coding session" : "New session");
+  const titleSourceRaw = stringValue(raw.titleSource) ?? stringValue(original.titleSource);
+  const titleSource = titleSourceRaw === "auto" || titleSourceRaw === "user" || titleSourceRaw === "prompt"
+    ? titleSourceRaw
+    : undefined;
 
   return {
     bufferedMessages: includeMessages ? normalizeMessages(raw.bufferedMessages ?? original.bufferedMessages) : undefined,
@@ -1775,6 +1780,7 @@ function normalizeSession(
     cuSelectedDisplayId: numberOrUndefined(raw.cuSelectedDisplayId ?? original.cuSelectedDisplayId),
     id,
     title,
+    titleSource,
     createdAtMs,
     updatedAt: relativeLabel(updatedAtMs),
     updatedAtMs,
@@ -2038,6 +2044,19 @@ function titleFromStartPrompt(prompt: string, targetKind: SessionSummary["kind"]
   return visiblePrompt.split("\n")[0] || (targetKind === "code" ? "General coding session" : "New session");
 }
 
+/**
+ * Official local code CT.start residual does not seed title from first prompt.
+ * List falls back to "General coding session"; dust generate_session_title later
+ * patches titleSource:"auto". Inventing prompt-as-title (e.g. "1") blocks the
+ * open-session auto-title fallback (placeholder gate fails).
+ * Cowork/epitaxy may still seed first-line prompt when title omitted.
+ */
+function resolveStartTitle(input: StartSessionInput, targetKind: SessionSummary["kind"], message: string): string | undefined {
+  if (typeof input.title === "string" && input.title.trim()) return input.title.trim();
+  if (targetKind === "code") return "General coding session";
+  return titleFromStartPrompt(message, targetKind);
+}
+
 function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["kind"]): Record<string, unknown> {
   // Prefer explicit input.cwd (SSH remoteCwd) over workspace.cwd when both present.
   const sshConfig = input.sshConfig ?? input.workspace?.sshConfig;
@@ -2070,7 +2089,7 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
     mountedProjects: input.mountedProjects?.length ? input.mountedProjects : undefined,
     permissionMode,
     sourceBranch: input.sourceBranch,
-    title: input.title ?? titleFromStartPrompt(message, targetKind),
+    title: resolveStartTitle(input, targetKind, message ?? ""),
     useWorktree: input.useWorktree,
     worktreeName: input.worktreeName,
     // Official Hd session.sshConfig — desktop extractStartSshConfig reads top-level + workspace.

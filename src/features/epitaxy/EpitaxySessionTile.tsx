@@ -775,28 +775,28 @@ function EpitaxyChatPanel({
                   oi? init chrome (Mx remote | TM ultrareview | Gv)
                   : Vn && F ? yC
                   : Xb
-                oi = ri || (empty && ii); ri = we!=null || tags ultrareview.
-                Product: no remote Mx (云端不要); local oi = we || ultrareview tag.
+                Residual (c11959232):
+                  ri = null!==we || (O?.tags?.includes("ultrareview")??false)
+                  oi = ri || (0===Ya.length && void 0!==ii)
+                  li = 0===Ya.length && !oi && !H && "spawning"!==Os
+                Local path: no ye/ii Mx (云端不要) → oi collapses to ri.
+                we/tag always mounts oi (incl. completed we) — no invent completed→Xb,
+                no invent tag+entries→Xb (prior product delta deleted).
                 Vn→yC and oi mounted here (not OfficialTranscript) to keep shells co-located. */}
             {(() => {
               const shellReady = Boolean(initialSessionId)
                 && !isSessionNotFound
                 && !(error && entries.length === 0)
                 && !isLoading;
-              // Residual li empty gate only when !oi — oi may paint on empty idle ultrareview.
+              // Residual ri / oi (local, no ii):
+              //   ri = we!=null || tags ultrareview
+              //   oi = ri
+              const residualRi = reviewProgress != null || isUltrareviewTagged;
+              const residualOi = shellReady && residualRi;
+              // Residual li = empty && !oi && !H && spawning!==Os — tile uses this for
+              // summary gate only; Xb empty "No messages yet." stays in renderTranscriptBody.
               const canPaintTranscriptBody = shellReady
-                && !(entries.length === 0 && !isResponding);
-              // Residual ri = we!=null || tags ultrareview; oi = ri || (empty && ii).
-              // Local path: no ye/ii (云端不要). we always mounts oi (TM), including completed —
-              // user 2026-08-16: 严格 residual 不动 (no invent completed→Xb).
-              // Product delta only for local invent startDiffReview: tag alone must not permanently
-              // replace Xb once normal assistant transcript exists (invent has no remote hooks).
-              // Tag+empty (launch / pre-message / idle ultrareview) still mounts residual oi + Gv.
-              const residualOi = shellReady
-                && (
-                  reviewProgress != null
-                  || (isUltrareviewTagged && entries.length === 0)
-                );
+                && !(entries.length === 0 && !isResponding && !residualOi);
               if (residualOi && initialSessionId) {
                 // Residual ui / pi for TM + Gv inside oi:
                 //   di = running we && isConnected; ui = H || isRunning || di || !ii?.isDone

@@ -19,6 +19,7 @@ import { desktopBridge } from "../adapters/desktopBridge";
 import { queryClient } from "./queryClient";
 import { BOOTSTRAP_QUERY_KEY } from "../features/settings/bootstrapQuery";
 import { EPITAXY_ACTION_CENTER_SESSIONS_QUERY_KEY } from "../features/epitaxy/epitaxyActionCenterState";
+import { useOfficialCodeSessionMetaSync } from "../features/epitaxy/session/useOfficialCodeSessionMetaSync";
 
 const getLocation = () => window.location.pathname + window.location.search;
 
@@ -63,6 +64,8 @@ export function App() {
   useDesktopQuickEntrySubmit();
   // Residual Rrs: Direct MCP status subscribe + initial getDirectMcpServerStatuses.
   useDirectMcpStatusHydrate();
+  // Keep durable code-session isRunning/meta fresh while the tile is unmounted.
+  useOfficialCodeSessionMetaSync();
   // Setup Apply → close small window → main SPA apply countdown → process relaunch.
   const { overlay: applyRelaunchOverlay } = useApplyRelaunchFromSetup();
   useEffect(() => subscribeResponseCompletionEvents(), []);

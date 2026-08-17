@@ -1423,8 +1423,8 @@ function OfficialSessionTitle({
     setEditing(false);
     const next = draft.trim();
     if (!next || next === title) return;
-    officialCodeSessionStore.getState().patchSession(sessionId, { title: next });
-    void desktopBridge.LocalSessions.updateSession?.(sessionId, { title: next }).then((updated) => {
+    officialCodeSessionStore.getState().patchSession(sessionId, { title: next, titleSource: "user" });
+    void desktopBridge.LocalSessions.updateSession?.(sessionId, { title: next, titleSource: "user" }).then((updated) => {
       if (updated) officialCodeSessionStore.getState().patchSession(sessionId, updated);
     });
   }, [draft, sessionId, title]);
