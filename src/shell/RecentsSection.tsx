@@ -8,6 +8,7 @@ import { buildCustomGroups, CustomGroupHeader, type RecentDisplayGroup } from ".
 import { ConfirmDialog } from "./ConfirmDialog";
 import { GroupNameDialog } from "./GroupNameDialog";
 import { OfficialSidebarStatusGlyph } from "./OfficialSidebarStatusGlyph";
+import { OfficialSidebarTitle } from "./OfficialSidebarTitle";
 import { PinnedSection, readSessionDragKey, writeSessionDragKey } from "./PinnedSection";
 import { useCodeSidebarPrState } from "./useCodeSidebarPrState";
 import { buildRecentsGroups, defaultRecentsFilter, RecentsControls, type RecentsFilterState } from "./RecentsControls";
@@ -533,7 +534,7 @@ function RecentSessionRow({ frame, onAction, onDropBefore, renderActions, select
               <SessionGlyph session={session} />
             </span>
             <span className="flex-1 min-w-0">
-              <OfficialSidebarTitle>{session.title}</OfficialSidebarTitle>
+              <OfficialSidebarTitle title={session.title} />
             </span>
           </button>
           {renderActions(session, () => setCreateGroupOpen(true))}
@@ -556,14 +557,6 @@ function sidebarRowButtonClassName() {
   // gets text-text-000 (keyboard focus). Open current session paints bg on the wrapper
   // (data-[selected=open]:bg-bg-200 / fill-uncontained-selected), not open text color.
   return "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-center gap-[var(--df-row-gap)] h-[var(--df-row-h)] px-[var(--df-row-px)] hide-focus-ring focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--accent-100)),0_0_6px_0_hsl(var(--accent-100)/0.2)] rounded-[var(--df-radius-pill)] data-[selected=focused]:text-text-000";
-}
-
-function OfficialSidebarTitle({ children }: { children: string }) {
-  return (
-    <span className="block w-full min-w-0 whitespace-nowrap overflow-hidden [mask-image:linear-gradient(to_right,hsl(var(--always-black))_85%,transparent_99%)] group-hover:[mask-image:linear-gradient(to_right,hsl(var(--always-black))_60%,transparent_78%)] group-focus-within:[mask-image:linear-gradient(to_right,hsl(var(--always-black))_60%,transparent_78%)] group-data-[menu-open=true]:[mask-image:linear-gradient(to_right,hsl(var(--always-black))_60%,transparent_78%)]">
-      {children}
-    </span>
-  );
 }
 
 function nextPinnedOrder(pinnedOrder: string[], key: string, beforeKey?: string) {

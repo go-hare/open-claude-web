@@ -110,10 +110,16 @@ export async function postOrganizationResetRateLimits(orgUuid: string): Promise<
 export function organizationUuidFromBootstrap(bootstrap: Record<string, unknown> | null | undefined): string | null {
   if (!bootstrap) return null;
   const account = asRecord(bootstrap.account);
+  // Product 3p residual (custom3pApi createThirdPartyBootstrap): org lives on
+  // account.memberships[0].organization.uuid — not top-level bootstrap.organization.
+  const memberships = account && Array.isArray(account.memberships) ? account.memberships : null;
+  const membership0 = memberships && memberships.length > 0 ? asRecord(memberships[0]) : null;
+  const membershipOrg = membership0 ? asRecord(membership0.organization) : null;
   const org =
     asRecord(bootstrap.organization)
     ?? asRecord(bootstrap.org)
-    ?? (account ? asRecord(account.organization) : null);
+    ?? (account ? asRecord(account.organization) : null)
+    ?? membershipOrg;
   return stringField(org, "uuid")
     ?? stringField(org, "id")
     ?? (account ? stringField(account, "organization_uuid") : null)
