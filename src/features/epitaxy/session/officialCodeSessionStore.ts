@@ -374,6 +374,99 @@ function isPlainUserPrompt(message: ChatMessage): boolean {
 }
 
 /**
+ * Plain text blocks inside a user envelope (string content → one block; array → each type:text).
+ * Used to detect CLI multi-block consolidation vs host pre-echo singles.
+ */
+function plainUserTextBlocks(message: ChatMessage): string[] {
+  if (message.role !== "user") return [];
+  const raw = asRecord(message.raw);
+  const nested = asRecord(raw.message);
+  const content = nested.content ?? raw.content;
+  if (typeof content === "string") {
+    const trimmed = content.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  if (!Array.isArray(content)) {
+    const trimmed = message.text?.trim() ?? "";
+    return trimmed ? [trimmed] : [];
+  }
+  const blocks: string[] = [];
+  for (const item of content) {
+    const record = asRecord(item);
+    const type = record.type;
+    // Only plain text blocks participate in multi-block consolidations.
+    if (type != null && type !== "" && type !== "text") continue;
+    const text = typeof record.text === "string"
+      ? record.text
+      : typeof record.content === "string"
+        ? record.content
+        : "";
+    const trimmed = text.trim();
+    if (trimmed) blocks.push(trimmed);
+  }
+  if (blocks.length === 0) {
+    const trimmed = message.text?.trim() ?? "";
+    if (trimmed) return [trimmed];
+  }
+  return blocks;
+}
+
+function isSingleTextPlainUser(message: ChatMessage): boolean {
+  return isPlainUserPrompt(message) && plainUserTextBlocks(message).length === 1;
+}
+
+function isMultiTextPlainUser(message: ChatMessage): boolean {
+  return isPlainUserPrompt(message) && plainUserTextBlocks(message).length >= 2;
+}
+
+/** Multiset of text blocks from multi-block durable plain users (CLI consolidated mid-turn sends). */
+function multiBlockTextMultiset(messages: Iterable<ChatMessage>): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const message of messages) {
+    if (!isMultiTextPlainUser(message)) continue;
+    for (const block of plainUserTextBlocks(message)) {
+      counts.set(block, (counts.get(block) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+/**
+ * Drop host pre-echo single-text plain users superseded by a multi-block durable user.
+ * Host sendMessage residual always emits a user row per send (unique uuid); go-hare CLI may
+ * later durable-write ONE multi-text user. Outer-uuid union then kept both → orphan singles
+ * + multi-block pill. Absorb singles whose text is multiset-covered by multi-block rows.
+ * Intentional re-sends that are themselves durable (present in `keepIds`) stay.
+ */
+function absorbHostPreEchoSingles(
+  messages: ChatMessage[],
+  multiBlockSource: Iterable<ChatMessage>,
+  keepIds?: Set<string>,
+): ChatMessage[] {
+  const multiset = multiBlockTextMultiset(multiBlockSource);
+  if (multiset.size === 0) return messages;
+  let changed = false;
+  const out: ChatMessage[] = [];
+  for (const message of messages) {
+    if (
+      isSingleTextPlainUser(message)
+      && (!keepIds || !keepIds.has(messageIdentity(message)))
+    ) {
+      const text = plainUserTextBlocks(message)[0]!;
+      const remaining = multiset.get(text) ?? 0;
+      if (remaining > 0) {
+        if (remaining === 1) multiset.delete(text);
+        else multiset.set(text, remaining - 1);
+        changed = true;
+        continue;
+      }
+    }
+    out.push(message);
+  }
+  return changed ? out : messages;
+}
+
+/**
  * Promote host/start optimistic user seed → durable CLI echo when outer uuid differs
  * (same trimmed plain text). Intentional re-sends of the same text keep separate uuids
  * and are NOT collapsed — only isLocalOptimistic / local-user-* rows promote.
@@ -401,7 +494,10 @@ function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[
     // Multi-emit uses different outer uuids → append below; never mid-collapse here.
     const copy = messages.slice();
     copy[index] = next;
-    return copy;
+    // Multi-block durable replace may still need to absorb host pre-echo siblings.
+    return isMultiTextPlainUser(next)
+      ? absorbHostPreEchoSingles(copy, [next], new Set([identity]))
+      : copy;
   }
   if (next.role === "user" && !isOptimisticLocalUser(next) && isPlainUserPrompt(next)) {
     const optimisticIndex = findOptimisticPlainUserIndex(messages, next.text);
@@ -410,6 +506,10 @@ function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[
       copy[optimisticIndex] = next;
       return copy;
     }
+  }
+  if (isMultiTextPlainUser(next)) {
+    // CLI multi-block durable: drop host pre-echo singles this row consolidates.
+    return [...absorbHostPreEchoSingles(messages, [next]), next];
   }
   return [...messages, next];
 }
@@ -496,6 +596,9 @@ function mergeTranscriptUnion(prev: ChatMessage[], next: ChatMessage[]) {
   // Durable plain-user texts from next — used to promote prev optimistic seeds whose
   // outer uuid never matched the CLI jsonl echo (same message body, different uuid).
   const durablePlainByText = new Map<string, ChatMessage>();
+  // Multi-block CLI durable (mid-turn consolidates N host pre-echoes into one row).
+  // Multiset of its text blocks — absorb prev single-text rows not present in next.
+  const multiBlockCoverage = multiBlockTextMultiset(next);
   for (const message of next) {
     if (
       message.role === "user"
@@ -532,6 +635,17 @@ function mergeTranscriptUnion(prev: ChatMessage[], next: ChatMessage[]) {
         continue;
       }
     }
+    // Host pre-echo single (unique uuid, not on disk) superseded by multi-block durable.
+    // Official zke would not keep both; product residual: drop covered singles only.
+    if (isSingleTextPlainUser(message) && multiBlockCoverage.size > 0) {
+      const text = plainUserTextBlocks(message)[0]!;
+      const remaining = multiBlockCoverage.get(text) ?? 0;
+      if (remaining > 0) {
+        if (remaining === 1) multiBlockCoverage.delete(text);
+        else multiBlockCoverage.set(text, remaining - 1);
+        continue;
+      }
+    }
     out.push(message);
   }
   for (const message of next) {
@@ -559,7 +673,17 @@ function mergeTranscriptUnion(prev: ChatMessage[], next: ChatMessage[]) {
     seen.add(id);
     out.push(message);
   }
-  return out;
+  // Final pass: multi-block rows in `out` may still sit next to leftover singles if
+  // coverage was exhausted by order; re-absorb against multi-blocks present in out.
+  return absorbHostPreEchoSingles(
+    out,
+    out,
+    new Set(
+      out
+        .filter((message) => isMultiTextPlainUser(message))
+        .map((message) => messageIdentity(message)),
+    ),
+  );
 }
 
 /** @deprecated use mergeTranscriptUnion — kept name for call sites that meant "prefer local". */

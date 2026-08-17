@@ -1042,6 +1042,8 @@ function parseAssistantTranscriptItems(
 
 /**
  * Official Ike (index-BELzQL5P): user content → file | image | peer | event | bash | text.
+ * Array path collects plain text blocks then **one** text item via `l.join("\n")`
+ * (residual: `l.length > 0 && o.push({ kind: "text", id: t, text: l.join("\n") })`).
  * Also accepts local bridge shapes used by the desktop CLI runner.
  */
 function parseUserTranscriptItems(content: unknown, messageIndex: number, fallbackText: string): TranscriptEntryItem[] {
@@ -1082,8 +1084,10 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
     : fallbackText.trim()
       ? [{ type: "text", text: fallbackText }]
       : [];
+  // Official Ike array path: file chips / images / peer / event / bash go to `o`;
+  // plain text fragments collect in `l`, then a single `{kind:"text", text: l.join("\n")}`.
   const items: TranscriptEntryItem[] = [];
-  let textIndex = 0;
+  const plainTextParts: string[] = [];
   let imageIndex = 0;
   let peerIndex = 0;
   let eventIndex = 0;
@@ -1122,15 +1126,11 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
       parsed.files.forEach((file, fileIndex) => {
         items.push({ file, id: `${id}-uploaded-${fileIndex}`, kind: "uploaded-file" });
       });
-      // Official Hb (c119): each text item → own <p> under gap-g4.
-      // Do NOT invent-join multi content blocks with "\n" into one item — that
-      // collapses CLI multi-block user rows (e.g. ["3","4"]) into a single
-      // pre-wrap paragraph with no inter-block gap (looks glued).
+      // Residual Ike: accumulate plain text → one item (l.join("\n")), not N gap-g4 <p>s.
+      // Product invent of per-block text items stacked multi-send CLI rows into one pill.
       if (parsed.text) {
         const visible = officialMkeVisibleUserText(parsed.text);
-        if (visible) {
-          items.push({ id: `${entryId}-t${textIndex++}`, kind: "text", text: visible });
-        }
+        if (visible) plainTextParts.push(visible);
       }
       return;
     }
@@ -1192,6 +1192,11 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
       }
     }
   });
+  // Residual Ike (index-BELzQL5P): `l.length > 0 && o.push({ kind:"text", id:t, text:l.join("\n") })`
+  // One text item for all plain blocks — NOT N items (product invent → N gap-g4 <p> in one Hb pill).
+  if (plainTextParts.length > 0) {
+    items.push({ id: entryId, kind: "text", text: plainTextParts.join("\n") });
+  }
   return items;
 }
 
