@@ -26,12 +26,23 @@ export function CoworkFolderPicker({ bridge, defaultTarget, disabled, onSelected
   const selectedLabel = folderSelectionLabel(selectedFolders, targetByPath, placeholder);
   const actions = useFolderActions({ bridge, confirmations, onSelectedFoldersChange, selectedFolders, setConfirmations, setOpen });
   useEffect(() => setDefaultFolderPath((current) => current ?? defaultTarget?.path ?? null), [defaultTarget?.path]);
+  // Official Ikt: `S = open && pendingFolderConfirmation === null` — hide menu while trust dialog is up
+  // so Dialog focus trap / overlay cannot leave a dead clickable-looking menu on top.
+  const menuOpen = open && confirmations.length === 0;
   return (
     <>
-      <Menu.Root onOpenChange={setOpen} open={open}>
+      {/* Official Ikt (index-BELzQL5P Ide/Ade): modal:false — Base UI defaults modal:true and mounts InternalBackdrop that steals item clicks. */}
+      <Menu.Root
+        modal={false}
+        onOpenChange={(next) => {
+          if (confirmations.length > 0 && next) return;
+          setOpen(next);
+        }}
+        open={menuOpen}
+      >
         <FolderPickerTrigger disabled={disabled} label={selectedLabel} selectedFolders={selectedFolders} />
         <Menu.Portal><Menu.Positioner align="start" className="epitaxy-root z-[60]" side="top" sideOffset={8}>
-          <Menu.Popup className={popupClass} data-cds="Menu"><span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] bg-surface-popover effect-hud" />
+          <Menu.Popup className={popupClass} data-cds="Menu"><span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
             <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
               {defaultTarget ? <><div className="px-p8 py-p2 text-footnote text-t6">Default</div><FolderTargetItem defaultFolderPath={defaultFolderPath} onSelect={actions.selectWithTrustCheck} onToggleDefault={setDefaultFolderPath} selectedFolders={selectedFolders} target={defaultTarget} /><MenuSeparator /></> : null}
               {recentTargets.map((target) => <FolderTargetItem defaultFolderPath={defaultFolderPath} key={target.path} onSelect={actions.selectWithTrustCheck} onToggleDefault={setDefaultFolderPath} selectedFolders={selectedFolders} target={target} />)}

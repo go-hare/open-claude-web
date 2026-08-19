@@ -761,11 +761,19 @@ function OfficialCoworkFolderPicker({
     </Menu.Trigger>
   );
 
+  // Official Ikt: open = menuOpen && pendingFolderConfirmation === null
+  const menuOpen = open && pending === null;
   return (
     <>
-      <Menu.Root open={open} onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-      }}>
+      {/* Official Ikt: modal:false (Base UI default modal:true mounts InternalBackdrop and steals item clicks). */}
+      <Menu.Root
+        modal={false}
+        open={menuOpen}
+        onOpenChange={(nextOpen) => {
+          if (pending !== null && nextOpen) return;
+          setOpen(nextOpen);
+        }}
+      >
         {hasPopup ? trigger : (
           <button
             className="group/dd relative isolate inline-flex items-center min-w-0 border-0 cursor-default select-none outline-none hide-focus-ring ring-focus w-full text-body justify-between !pl-3 !pr-2 !h-9 !rounded-xl bg-transparent hover:!bg-bg-200 transition-colors text-text-300 active:!scale-100"
@@ -926,8 +934,9 @@ function OfficialCoworkFolderTrustDialog({
       if (!open) onCancel();
     }}>
       <Dialog.Portal>
-        <Dialog.Backdrop forceRender className="fixed inset-0 z-50 bg-always-black/50 backdrop-blur-[2px] draggable-none" />
-        <Dialog.Popup className="epitaxy-root fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[420px] max-w-[calc(100vw-2rem)] draggable-none outline-none">
+        {/* Folder menu portal is z-[60]; keep trust chrome above leftover menu paint. Official Ikt also closes menu while pending. */}
+        <Dialog.Backdrop forceRender className="fixed inset-0 z-[70] bg-always-black/50 backdrop-blur-[2px] draggable-none" />
+        <Dialog.Popup className="epitaxy-root fixed left-1/2 top-1/2 z-[70] -translate-x-1/2 -translate-y-1/2 w-[420px] max-w-[calc(100vw-2rem)] draggable-none outline-none">
           <div className="relative isolate rounded-r6 flex flex-col">
             <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
             <div className="flex items-center justify-between gap-g4 px-[24px] pt-[24px]">

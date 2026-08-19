@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { desktopBridge, type CoworkMountedProject, type PermissionMode, type SessionSummary, type WorkspaceContext } from "../../../adapters/desktopBridge";
 import { createMessageUuid } from "../../../adapters/desktopBridge/messageUuid";
 import { coworkSessionsBasePath } from "../sessionPaths";
@@ -6,6 +6,7 @@ import { normalizeCoworkPermissionMode } from "../composer/options";
 import { CoworkGridBackground } from "./CoworkGridBackground";
 import { CoworkHeader } from "./CoworkHeader";
 import { CoworkPromptBox } from "../composer/CoworkPromptBox";
+import type { CoworkPromptInputHandle } from "../composer/CoworkPromptInput";
 import type { CoworkAddMenuProject } from "./CoworkAddMenuItems";
 import {
   CoworkProjectWarningDialog,
@@ -32,6 +33,7 @@ export function CoworkNewTaskPage({
   const [permissionMode, setPermissionMode] = useState<PermissionMode>("default");
   const [model, setModel] = useState("default");
   const [focusRequestKey, setFocusRequestKey] = useState(0);
+  const promptInputRef = useRef<CoworkPromptInputHandle | null>(null);
   const [selectedWorkspace, setSelectedWorkspace] = useState(workspace);
   const [selectedFiles, setSelectedFiles] = useState<CoworkUploadedFile[]>([]);
   const [detectedProjects, setDetectedProjects] = useState<SessionSummary[]>([]);
@@ -95,8 +97,16 @@ export function CoworkNewTaskPage({
   }, []);
 
   const selectSuggestion = useCallback((suggestion: CoworkPromptSuggestion) => {
-    setPrompt(suggestion.prompt);
+    // Official r6t D: setPrompt(fullPrompt, {forceUpdateTiptap:!0}) then focus promptInputRef.
+    // Controlled value alone does not hydrate TipTap (empty trailingBreak / sync guards).
+    const next = suggestion.prompt;
+    setPrompt(next);
+    promptInputRef.current?.setContent(next);
     setFocusRequestKey((key) => key + 1);
+    window.setTimeout(() => {
+      promptInputRef.current?.focus();
+      promptInputRef.current?.scrollToEnd();
+    }, 50);
   }, []);
   const requestProject = useCallback((project: CoworkAddMenuProject) => {
     if (!shouldShowCoworkProjectWarning(project.uuid)) {
@@ -125,6 +135,7 @@ export function CoworkNewTaskPage({
                 <CoworkPromptBox
                   busy={busy}
                   focusRequestKey={focusRequestKey}
+                  inputRef={promptInputRef}
                   model={model}
                   onAddFiles={addFiles}
                   onModelChange={setModel}

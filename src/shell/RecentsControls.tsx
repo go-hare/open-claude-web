@@ -90,8 +90,10 @@ export function RecentsControls({ mode, sessions, value, onChange }: { mode: Fra
   const text = useShellText();
   const active = isFilterActive(value);
 
+  // Official Ide callers (Ikt / CCProjectDropdown / filter menus): modal:false.
+  // Base UI defaults modal:true and mounts InternalBackdrop that can steal item clicks.
   return (
-    <Menu.Root>
+    <Menu.Root modal={false}>
       <Menu.Trigger aria-label={active ? text.filterActive : text.filter} className={triggerClassName}>
         {/*
           Official ca0135bc5: Button import `xs` + iconOnly icon="Filter" + df-chrome-btn.

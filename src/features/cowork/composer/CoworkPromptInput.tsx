@@ -20,6 +20,12 @@ export type CoworkPromptInputHandle = {
   focus: () => void;
   getEditor: () => Editor | null;
   insertSlashCommand: () => void;
+  /**
+   * Official promptInputRef.setContent residual (index-BELzQL5P setPrompt forceUpdateTiptap):
+   * imperative hydrate that bypasses controlled sync guards (empty trailingBreak / userEdited).
+   */
+  setContent: (text: string) => void;
+  scrollToEnd: () => void;
 };
 
 type CoworkPromptInputProps = {
@@ -64,9 +70,43 @@ export const CoworkPromptInput = forwardRef<CoworkPromptInputHandle, CoworkPromp
     value,
   });
   useImperativeHandle(ref, () => ({
-    focus: () => editor?.commands.focus(),
-    getEditor: () => editor ?? null,
-    insertSlashCommand: () => editor?.chain().focus("start").insertContent("/").run(),
+    focus: () => {
+      const ed = editor ?? editorRef.current;
+      ed?.commands.focus("end");
+    },
+    getEditor: () => editor ?? editorRef.current,
+    insertSlashCommand: () => (editor ?? editorRef.current)?.chain().focus("start").insertContent("/").run(),
+    setContent: (text: string) => {
+      const ed = editor ?? editorRef.current;
+      if (!ed) return;
+      // Official forceUpdateTiptap: setContent(plain) + reset userEdited so later clears still work.
+      if (!text) {
+        ed.commands.clearContent(false);
+      } else {
+        ed.commands.setContent(tiptapDoc(text), { emitUpdate: false });
+      }
+      emitRef.current = { lastEmittedValue: text, userEdited: false };
+      onChangeRef.current(text);
+      ed.commands.focus("end");
+      try {
+        const end = ed.state.doc.content.size;
+        ed.commands.setTextSelection(end);
+        ed.view.dispatch(ed.state.tr.scrollIntoView());
+      } catch {
+        /* editor may be mid-destroy */
+      }
+    },
+    scrollToEnd: () => {
+      const ed = editor ?? editorRef.current;
+      if (!ed) return;
+      try {
+        const end = ed.state.doc.content.size;
+        ed.commands.setTextSelection(end);
+        ed.view.dispatch(ed.state.tr.scrollIntoView());
+      } catch {
+        /* ignore */
+      }
+    },
   }), [editor]);
   useEffect(() => { editor?.setEditable(!disabled); }, [disabled, editor]);
   useEffect(() => {

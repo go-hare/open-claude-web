@@ -15,8 +15,9 @@ export function CoworkFolderTrustDialog({ bridge, onAlwaysAllow, onCancel, onCon
   return (
     <Dialog.Root onOpenChange={(open) => { if (!open) onCancel(); }} open={pending !== null}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-always-black/50 backdrop-blur-[2px] draggable-none" forceRender />
-        <Dialog.Popup className="epitaxy-root fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[420px] max-w-[calc(100vw-2rem)] draggable-none outline-none">
+        {/* Folder menu portal uses z-[60]; keep trust chrome above any leftover menu paint (official Ikt closes menu while pending). */}
+        <Dialog.Backdrop className="fixed inset-0 z-[70] bg-always-black/50 backdrop-blur-[2px] draggable-none" forceRender />
+        <Dialog.Popup className="epitaxy-root fixed left-1/2 top-1/2 z-[70] -translate-x-1/2 -translate-y-1/2 w-[420px] max-w-[calc(100vw-2rem)] draggable-none outline-none">
           <div className="relative isolate rounded-r6 flex flex-col">
             <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] bg-surface-popover effect-hud" />
             <div className="px-[24px] pt-[24px]"><Dialog.Title className="text-heading-semibold text-t9">{title}</Dialog.Title></div>

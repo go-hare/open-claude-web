@@ -1,4 +1,4 @@
-import { createElement, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { createElement, useCallback, useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
 import { desktopBridge, type CoworkMountedProject, type PermissionMode, type WorkspaceContext } from "../../../adapters/desktopBridge";
 import { Icon } from "../../../shell/icons";
 import { OfficialButton } from "../../shared/OfficialButton";
@@ -26,6 +26,11 @@ import { useCoworkRecentFolders } from "./useCoworkRecentFolders";
 export type CoworkPromptBoxProps = {
   busy: boolean;
   focusRequestKey?: number;
+  /**
+   * Official r6t D residual: setPrompt(fullPrompt, {forceUpdateTiptap:true}) then focus.
+   * Parent passes a ref so suggestion chips can imperatively hydrate TipTap.
+   */
+  inputRef?: RefObject<CoworkPromptInputHandle | null> | { current: CoworkPromptInputHandle | null };
   model: string;
   onAddFiles?: () => void;
   onModelChange: (model: string) => void;
@@ -53,11 +58,17 @@ const noop = () => undefined;
  * Sources: index-BELzQL5P.js:w6t/$4t/pwt/nkt/V4t
  */
 export function CoworkPromptBox(props: CoworkPromptBoxProps) {
-  const inputRef = useRef<CoworkPromptInputHandle | null>(null);
+  const localInputRef = useRef<CoworkPromptInputHandle | null>(null);
+  const inputRef = props.inputRef ?? localInputRef;
   const state = useCoworkPromptBoxState(props);
   useEffect(() => {
-    if (props.focusRequestKey && props.focusRequestKey > 0) window.setTimeout(() => inputRef.current?.focus(), 0);
-  }, [props.focusRequestKey]);
+    if (props.focusRequestKey && props.focusRequestKey > 0) {
+      window.setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.scrollToEnd?.();
+      }, 0);
+    }
+  }, [inputRef, props.focusRequestKey]);
   return (
     <div data-official-source="index-BELzQL5P.js:w6t/$4t CAt onpage">
       <CoworkDraftRiskBanner visible={state.permissionAvailable && isCoworkUnsupervisedPermissionMode(props.permissionMode)} />
@@ -162,7 +173,7 @@ function CoworkPromptSurface({
   props,
   toolbarItems,
 }: {
-  inputRef: React.RefObject<CoworkPromptInputHandle | null>;
+  inputRef: { current: CoworkPromptInputHandle | null };
   props: CoworkPromptBoxProps;
   toolbarItems: CoworkDropdownItem[];
 }) {
