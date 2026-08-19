@@ -4,9 +4,17 @@ import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import type { LocalSessionsBridge } from "../../adapters/desktopBridge/types";
+import {
+  filterCoworkImageFiles,
+  imageFilesFromClipboardData,
+} from "../cowork/composer/coworkComposerStagedImages";
 import { OfficialRNtPlaceholder } from "../shared/officialRNtPlaceholder";
 import { handleEmptyDocBeforeInput } from "../shared/tiptapEmptyDocBeforeInput";
 import { OfficialButton, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
+import {
+  OfficialComposerStagedImages,
+  type StagedComposerImage,
+} from "./session/OfficialComposerStagedImages";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
 import { OfficialSlashCommandSuggestion } from "./slash/OfficialSlashCommandSuggestion";
@@ -53,6 +61,19 @@ type OfficialPromptEditorProps = {
    * Continuous value→setContent is NOT residual — only clear / external hydrate.
    */
   value: string;
+  /**
+   * Official Qj handleImagePaste / un(addImages) — parent owns cn.images strip.
+   * TipTap paste/drop only stages when this callback is provided.
+   */
+  onAddImageFiles?: (files: File[]) => void;
+  /** Official cn.images strip above the prompt (draft + existing share residual). */
+  stagedImages?: StagedComposerImage[];
+  onRemoveStagedImage?: (id: string) => void;
+  /**
+   * Official Te `(he||m)` — ready staged images count as attachments so Send
+   * stays enabled for image-only submits.
+   */
+  hasAttachments?: boolean;
 };
 
 /**
@@ -77,6 +98,10 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   sessionRef = null,
   slashCwd,
   value,
+  onAddImageFiles,
+  stagedImages = [],
+  onRemoveStagedImage,
+  hasAttachments = false,
 }, ref) {
   const editorRef = useRef<Editor | null>(null);
   const submitRef = useRef(onSubmit);
@@ -84,6 +109,8 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   // Residual z / Te block: disabled || submitDisabled — busy is NOT in Te gate.
   const submitBlockedRef = useRef(disabled || submitDisabled);
   const onChangeRef = useRef(onChange);
+  /** Official Qj handleImagePaste → un(addImages); stable for TipTap editorProps. */
+  const onAddImageFilesRef = useRef(onAddImageFiles);
   const bashModeRef = useRef(false);
   const slashMenuStateRef = useRef({ bridge, session, sessionRef, slashCwd });
   /** Official vTt `g` / `x.current` — live placeholder string for RNt. */
@@ -104,12 +131,13 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
 
   const isBashMode = value.trimStart().startsWith("!");
   // Official Te = (he||m) && !disabled && !submitDisabled — busy does NOT block send.
-  const canSubmit = hasText && !disabled && !submitDisabled;
+  const canSubmit = (hasText || hasAttachments) && !disabled && !submitDisabled;
 
   submitRef.current = onSubmit;
   disabledRef.current = disabled;
   submitBlockedRef.current = disabled || submitDisabled;
   onChangeRef.current = onChange;
+  onAddImageFilesRef.current = onAddImageFiles;
   bashModeRef.current = isBashMode;
   slashMenuStateRef.current = { bridge, session, sessionRef, slashCwd };
   // Official: bash → "Enter a shell command"; else prop placeholder.
@@ -157,6 +185,26 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       // Host packaged app:// empty trailingBreak only (d5f261d) — not UI residual invent.
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
+      },
+      // Official Qj handleImagePaste: clipboard images ∩ Fy allowlist → un(addImages).
+      // Filter before preventDefault so SVG/BMP/HEIC fall through (not swallowed).
+      handlePaste: (_view, event) => {
+        if (!onAddImageFilesRef.current) return false;
+        const imageFiles = filterCoworkImageFiles(
+          imageFilesFromClipboardData(event.clipboardData),
+        );
+        if (imageFiles.length === 0) return false;
+        event.preventDefault();
+        onAddImageFilesRef.current(imageFiles);
+        return true;
+      },
+      handleDrop: (_view, event) => {
+        if (!onAddImageFilesRef.current) return false;
+        const imageFiles = filterCoworkImageFiles(Array.from(event.dataTransfer?.files ?? []));
+        if (imageFiles.length === 0) return false;
+        event.preventDefault();
+        onAddImageFilesRef.current(imageFiles);
+        return true;
       },
       handleKeyDown: (_view, event) => {
         const slashStorage = (editorRef.current?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
@@ -356,6 +404,9 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       <div aria-hidden="true" className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}>
         <div className="min-h-0 overflow-hidden" />
       </div>
+      {onRemoveStagedImage ? (
+        <OfficialComposerStagedImages images={stagedImages} onRemove={onRemoveStagedImage} />
+      ) : null}
       <div className="relative flex w-full">
         {isBashMode ? <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
         {/*

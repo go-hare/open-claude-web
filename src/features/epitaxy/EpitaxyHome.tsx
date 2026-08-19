@@ -10,7 +10,7 @@ import { EpitaxyRouteFrame } from "./EpitaxyFrameSurface";
 import { CodeStatsCard } from "./CodeStatsCard";
 import { EpitaxyActionCenter } from "./EpitaxyActionCenter";
 import { useEpitaxyActionCenterState } from "./epitaxyActionCenterState";
-import { OfficialCodeComposer } from "./composer/OfficialCodeComposer";
+import { OfficialCodeComposer, type OfficialCodeComposerSubmitOptions } from "./composer/OfficialCodeComposer";
 import {
   getCodeDraftComposerState,
   resetCodeDraftComposer,
@@ -292,20 +292,24 @@ function CodeNewSessionPage({
    * - Os "spawning" only when createPending && Ns===0; product has no same-shell pending shell
    * - Do NOT invent sticky "Starting…" from initializationStatus on existing session tile
    */
-  const submit = useCallback(async () => {
+  const submit = useCallback(async (options?: OfficialCodeComposerSubmitOptions) => {
     const normalized = prompt.trim();
-    if (!normalized || busy) return;
+    const images = options?.images?.filter((image) => typeof image?.base64 === "string" && image.base64.length > 0);
+    // Official Te (he||m): allow image-only first turn; host still needs a prompt string.
+    if ((!normalized && !(images && images.length > 0)) || busy) return;
     setBusy(true);
     try {
       const shouldUseGitControls = Boolean(composerWorkspace.cwd && sourceBranch);
       const isSsh = composerWorkspace.mode === "ssh" && Boolean(composerWorkspace.sshConfig);
       // Wire residual: Ultracode → "ultracode"; else ladder id (same as setEffort).
       const wireEffort = ultracode ? "ultracode" : effort;
+      const startPrompt = normalized || " ";
       const session = await desktopBridge.LocalSessions.start({
         kind: "code",
         effort: wireEffort,
         model,
-        prompt: normalized,
+        prompt: startPrompt,
+        ...(images && images.length > 0 ? { images } : {}),
         sourceBranch: shouldUseGitControls ? sourceBranch : undefined,
         useWorktree: shouldUseGitControls ? useWorktree : undefined,
         workspace: shouldUseGitControls || isSsh ? composerWorkspace : {
@@ -323,7 +327,7 @@ function CodeNewSessionPage({
         permissionMode,
       });
       // Official create residual: generate_session_title when prompt length >= 10 → titleSource auto.
-      kickOfficialAutoSessionTitle(session.id, normalized);
+      kickOfficialAutoSessionTitle(session.id, startPrompt);
       // Residual openSession(meta) before route paint so ExistingSessionComposer seeds
       // Mode from host session.permissionMode (`be(n.permissionMode)`) — not invent
       // "default" (询问权限) for one frame after draft already showed bypass/accept.
@@ -383,7 +387,7 @@ function CodeNewSessionPage({
                   setDraftPermissionMode(next, { cwd: composerWorkspace.cwd });
                 }}
                 onSourceBranchChange={setSourceBranch}
-                onSubmit={() => void submit()}
+                onSubmit={(options) => void submit(options)}
                 onUseWorktreeChange={setUseWorktree}
                 onWorkspaceChange={setComposerWorkspace}
                 permissionMode={permissionMode}

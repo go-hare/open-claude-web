@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent } from "react";
 import {
   desktopBridge,
   type EffortLevel,
   type PermissionMode,
   type WorkspaceContext,
 } from "../../../adapters/desktopBridge";
+import type { CoworkImagePayload } from "../../../adapters/desktopBridge/types";
+import {
+  filterCoworkImageFiles,
+} from "../../cowork/composer/coworkComposerStagedImages";
 import {
   OfficialDropdownButton,
   type OfficialDropdownItem,
@@ -27,6 +31,10 @@ import {
   buildOfficialEffortMenuItems,
   clampEffortToCatalog,
 } from "../session/officialComposerOptions";
+import {
+  dataUrlToImagePayload,
+  type StagedComposerImage,
+} from "../session/OfficialComposerStagedImages";
 import { useOfficialTypeToComposer } from "../../shared/useOfficialTypeToComposer";
 import { coworkRateLimitStore } from "../../cowork/session/rateLimit/coworkRateLimitStore";
 import {
@@ -35,6 +43,11 @@ import {
   residualQjDisabled,
   residualQjSubmitDisabled,
 } from "../session/officialQjComposerGate";
+
+export type OfficialCodeComposerSubmitOptions = {
+  /** Official start residual first-turn images (cn.images → LocalSessions.start). */
+  images?: CoworkImagePayload[];
+};
 
 type OfficialCodeComposerProps = {
   /**
@@ -55,7 +68,7 @@ type OfficialCodeComposerProps = {
   onModelChange: (value: string) => void;
   onPermissionModeChange: (value: PermissionMode) => void;
   onSourceBranchChange: (branch: string) => void;
-  onSubmit: () => void;
+  onSubmit: (options?: OfficialCodeComposerSubmitOptions) => void;
   onUseWorktreeChange: (enabled: boolean) => void;
   onWorkspaceChange: (workspace: WorkspaceContext) => void;
   permissionMode: PermissionMode;
@@ -127,8 +140,19 @@ export function OfficialCodeComposer({
     rateLimitExceeded: residualGaFromMessageLimits(messageLimits),
     isRemoteUploading: false,
   });
+  /**
+   * Official cn.images residual on draft home — same stage path as existing session.
+   * TipTap paste/drop + Plus Add image → strip → LocalSessions.start({ images }).
+   */
+  const [stagedImages, setStagedImages] = useState<StagedComposerImage[]>([]);
+  const stagedImagesRef = useRef(stagedImages);
+  stagedImagesRef.current = stagedImages;
+  const imageFileInputRef = useRef<HTMLInputElement | null>(null);
+  const readyImageCount = stagedImages.filter((image) => image.status === "ready" && image.base64).length;
+  const isProcessingImages = stagedImages.some((image) => image.status === "loading");
+  // Residual Qj submitDisabled: cn.isProcessingImages || mn.isUploading || bi
   const qjSubmitDisabled = residualQjSubmitDisabled({
-    isProcessingImages: false,
+    isProcessingImages,
     isRemoteUploading: false,
     gitRequiredBlocksSubmit: showGitRequired,
   });
@@ -146,7 +170,8 @@ export function OfficialCodeComposer({
   const promptEditorRef = useRef<OfficialPromptEditorHandle | null>(null);
   const [replayKey, setReplayKey] = useState(0);
   const [openFooterMenu, setOpenFooterMenu] = useState<"effort" | "mode" | "model" | null>(null);
-  const hasPrompt = prompt.trim().length > 0;
+  // Official Te (he||m): text or ready staged images.
+  const hasPrompt = prompt.trim().length > 0 || readyImageCount > 0;
   const allowedModelValues = useMemo(
     () => codeModelOptions.items.map((item) => item.value),
     [codeModelOptions.items],
@@ -261,11 +286,110 @@ export function OfficialCodeComposer({
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [effortItems, modelItems, numberedModelItems, numberedPermissionItems, openFooterMenu, permissionItems.length]);
 
+  const removeStagedImage = useCallback((id: string) => {
+    setStagedImages((prev) => {
+      const hit = prev.find((item) => item.id === id);
+      if (hit?.previewUrl.startsWith("blob:")) URL.revokeObjectURL(hit.previewUrl);
+      return prev.filter((item) => item.id !== id);
+    });
+  }, []);
+
+  /**
+   * Official un(File[]) residual — stage image Files (max 5; PNG/JPEG/GIF/WebP).
+   * Shared with existing-session TipTap paste/drop + footer picker.
+   */
+  const addImageFiles = useCallback((files: File[]) => {
+    const allowed = filterCoworkImageFiles(files);
+    if (allowed.length === 0) return;
+    setStagedImages((prev) => {
+      const room = 5 - prev.length;
+      if (room <= 0) return prev;
+      const slice = allowed.slice(0, room);
+      const loading: StagedComposerImage[] = slice.map((file) => ({
+        id: crypto.randomUUID(),
+        name: file.name || "image.png",
+        previewUrl: URL.createObjectURL(file),
+        status: "loading",
+      }));
+      slice.forEach((file, index) => {
+        const id = loading[index]!.id;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = typeof reader.result === "string" ? reader.result : "";
+          if (!dataUrl) {
+            setStagedImages((cur) => {
+              const hit = cur.find((item) => item.id === id);
+              if (hit?.previewUrl.startsWith("blob:")) URL.revokeObjectURL(hit.previewUrl);
+              return cur.filter((item) => item.id !== id);
+            });
+            return;
+          }
+          const payload = dataUrlToImagePayload(dataUrl, file.name || "image.png");
+          setStagedImages((cur) =>
+            cur.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    status: "ready",
+                    base64: payload.base64,
+                    mimeType: payload.mimeType,
+                  }
+                : item,
+            ),
+          );
+        };
+        reader.onerror = () => {
+          setStagedImages((cur) => {
+            const hit = cur.find((item) => item.id === id);
+            if (hit?.previewUrl.startsWith("blob:")) URL.revokeObjectURL(hit.previewUrl);
+            return cur.filter((item) => item.id !== id);
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+      return [...prev, ...loading];
+    });
+    queueMicrotask(() => {
+      promptEditorRef.current?.focus();
+    });
+  }, []);
+
+  // Revoke blob URLs if draft composer unmounts (route leave / draftEpoch remount).
+  useEffect(() => () => {
+    for (const image of stagedImagesRef.current) {
+      if (image.previewUrl.startsWith("blob:")) URL.revokeObjectURL(image.previewUrl);
+    }
+  }, []);
+
+  const openImagePicker = useCallback(() => {
+    imageFileInputRef.current?.click();
+  }, []);
+
+  const onImageFileInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (files.length > 0) addImageFiles(files);
+  }, [addImageFiles]);
+
   const submitWithTrust = useCallback(() => {
     const state = submitStateRef.current;
     // Residual Te: !disabled && !submitDisabled — busy maps Ns (also in disabled via createInFlight).
     if (!state.hasPrompt || state.qjDisabled || state.qjSubmitDisabled) return;
-    void state.ensureTrusted(state.workspaceCwd, state.onSubmit);
+    const ready = stagedImagesRef.current.filter(
+      (image) => image.status === "ready" && image.base64,
+    );
+    const images: CoworkImagePayload[] | undefined =
+      ready.length > 0
+        ? ready.map((image) => ({
+            base64: image.base64!,
+            mimeType: image.mimeType ?? "image/png",
+            filename: image.name,
+          }))
+        : undefined;
+    // On success EpitaxyHome navigates away (unmount revokes blobs). Keep strip on start failure.
+    void state.ensureTrusted(state.workspaceCwd, () => {
+      state.onSubmit(images ? { images } : undefined);
+    });
   }, []);
 
   /**
@@ -371,10 +495,14 @@ export function OfficialCodeComposer({
         // Draft create in-flight maps Ns → disabled; not residual H busy/Stop.
         busy={false}
         disabled={qjDisabled}
+        hasAttachments={readyImageCount > 0}
+        onAddImageFiles={addImageFiles}
         onChange={setPrompt}
+        onRemoveStagedImage={removeStagedImage}
         onSubmit={submitWithTrust}
         placeholder="描述一个任务，或提一个问题"
         slashCwd={workspace.cwd || undefined}
+        stagedImages={stagedImages}
         submitDisabled={qjSubmitDisabled}
         value={prompt}
       />
@@ -405,7 +533,28 @@ export function OfficialCodeComposer({
             triggerKey="cmd+shift+m"
             variant="uncontained"
           />
-          <OfficialDropdownButton ariaLabel="Add" disabled={qjDisabled} icon="PlusLarge" items={[{ icon: "Folder1", label: "Add folder" }]} revealChevron="never" side="top" size="small" variant="uncontained" />
+          {/* Official Plus: Add image (cn) + Add folder stub (folder via WorkspaceControls). */}
+          <OfficialDropdownButton
+            ariaLabel="Add"
+            disabled={qjDisabled}
+            icon="PlusLarge"
+            items={[
+              { icon: "PaperclipAttach", label: "Add image", onSelect: openImagePicker },
+              { icon: "Folder1", label: "Add folder" },
+            ]}
+            revealChevron="never"
+            side="top"
+            size="small"
+            variant="uncontained"
+          />
+          <input
+            ref={imageFileInputRef}
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            className="hidden"
+            multiple
+            onChange={onImageFileInputChange}
+            type="file"
+          />
         </div>
         <div className="ml-auto flex items-center gap-g4">
           <OfficialDropdownButton

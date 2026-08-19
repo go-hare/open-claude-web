@@ -51,6 +51,10 @@ import {
 import { resolveDraftPermissionMode, setDraftPermissionMode } from "../codeDraftComposerStore";
 import type { PermissionMode } from "../../../adapters/desktopBridge";
 import { residualQjSubmitDisabled } from "./officialQjComposerGate";
+import {
+  filterCoworkImageFiles,
+  imageFilesFromClipboardData,
+} from "../../cowork/composer/coworkComposerStagedImages";
 
 /** Plain text → TipTap doc (same shape as OfficialCodeComposer). */
 function tiptapDocFromPlainText(value: string) {
@@ -211,6 +215,8 @@ export function ExistingSessionComposer({
   const contextNotesRef = useRef(new Map<string, string>());
   const stagedImagesRef = useRef(stagedImages);
   stagedImagesRef.current = stagedImages;
+  /** Stable ref for TipTap paste/drop — addImageFiles is declared after useEditor. */
+  const addImageFilesRef = useRef<(files: File[]) => void>(() => undefined);
   const pendingAnnotationCount = usePreviewAnnotationPendingCount(sessionRef?.id);
   /**
    * Official jR `N`/`R(L)` lock: after user picks effort via X, local b/H win over
@@ -327,6 +333,24 @@ export function ExistingSessionComposer({
       // Host packaged app:// empty trailingBreak only (d5f261d).
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
+      },
+      // Official Qj handleImagePaste: clipboard images ∩ Fy allowlist → un(addImages).
+      // Filter before preventDefault so SVG/BMP/HEIC fall through (not swallowed).
+      handlePaste: (_view, event) => {
+        const imageFiles = filterCoworkImageFiles(
+          imageFilesFromClipboardData(event.clipboardData),
+        );
+        if (imageFiles.length === 0) return false;
+        event.preventDefault();
+        addImageFilesRef.current(imageFiles);
+        return true;
+      },
+      handleDrop: (_view, event) => {
+        const imageFiles = filterCoworkImageFiles(Array.from(event.dataTransfer?.files ?? []));
+        if (imageFiles.length === 0) return false;
+        event.preventDefault();
+        addImageFilesRef.current(imageFiles);
+        return true;
       },
       handleKeyDown: (_view, event) => {
         // Enter submit is handled in onKeyDownCapture (official wTt residual).
@@ -630,9 +654,7 @@ export function ExistingSessionComposer({
    * Official un(File[]) residual — stage image Files (max 5; PNG/JPEG/GIF/WebP).
    */
   const addImageFiles = useCallback((files: File[]) => {
-    const allowed = files.filter((file) =>
-      ["image/png", "image/jpeg", "image/gif", "image/webp"].includes(file.type),
-    );
+    const allowed = filterCoworkImageFiles(files);
     if (allowed.length === 0) return;
     setStagedImages((prev) => {
       const room = 5 - prev.length;
@@ -681,6 +703,7 @@ export function ExistingSessionComposer({
       return [...prev, ...loading];
     });
   }, []);
+  addImageFilesRef.current = addImageFiles;
 
   /**
    * Official yn residual: on real session switch, clear local staged strip + previous
