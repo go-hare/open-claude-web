@@ -24,7 +24,7 @@ export function useSessionRowActions(frame: FrameStore, setSessions: Dispatch<Se
       // clearSessionSidebarMeta). Keep fire-and-forget only for non-code kinds.
       if (session.kind === "code") return;
       setSessions((current) => current.map((item) => item.id === session.id ? { ...item, isArchived: true } : item));
-      void sessionSource(session).archive(session.id);
+      void sessionSource(session).archive(session.id, { cleanupWorktree: true });
       return;
     }
     if (action === "delete") {

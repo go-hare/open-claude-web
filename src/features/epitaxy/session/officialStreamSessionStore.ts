@@ -8,8 +8,9 @@
  *   clear / flush / setVisibility / hasListeners
  *
  * Stream snapshots stay OUT of the durable session message bucket — UI holds them
- * as Va via useSyncExternalStore(getSnapshot). (Official c119 uses startTransition for
- * same-message ticks; Electron concurrent scheduling coalesces those and dumps paragraphs.)
+ * as Va via Pe.subscribe → useState (c119 residual: same-message ticks use startTransition).
+ * Dump-at-end on desktop was NOT startTransition coalescing — it was zE getSmoothedCompletion
+ * invent-freezing when 3p burst made minChars===maxChars (see officialStreamSmoother).
  */
 import {
   createOfficialSessionStreamSmoother,
@@ -21,7 +22,7 @@ type StreamSessionEntry = {
   smoother: OfficialSessionStreamSmoother;
   messageId: string;
   cleared: boolean;
-  /** Last Oke/Va snapshot — required for useSyncExternalStore getSnapshot. */
+  /** Last Oke emit for probes/getSnapshot only — official Dke/Va has no snapshot cache. */
   lastSnapshot: OfficialStreamSnapshot;
   listeners: Set<(snapshot: OfficialStreamSnapshot) => void>;
   unsubscribeSmoother: () => void;
@@ -142,19 +143,18 @@ export function officialStreamActiveMessageId(sessionId: string | undefined) {
 }
 
 export function officialStreamClear(sessionId: string) {
+  // Official Pke.clear (index-BELzQL5P):
+  //   t.cleared=!0, dont_smooth=!1, on_completion=void 0, restart(), Oke(t,null)
+  // Does NOT zero messageId; Oke once (smoother.clear → store emit via subscribe).
   const entry = sessions.get(sessionId);
   if (!entry) return;
   entry.cleared = true;
-  entry.messageId = "";
   entry.smoother.clear();
-  emit(entry, null);
 }
 
 /**
  * Latest Oke snapshot for a session (null when cleared / idle).
- * Official c119 holds Va in useState via Pe.subscribe; React 19 concurrent
- * startTransition on every 60fps tick can drop intermediate lengths in Electron
- * and paint as paragraph dumps. Prefer useSyncExternalStore(getSnapshot).
+ * Probe/test helper only — official Va never hydrates from a snapshot cache.
  */
 export function officialStreamGetSnapshot(sessionId: string | undefined): OfficialStreamSnapshot {
   if (!sessionId) return null;
@@ -167,12 +167,6 @@ export function officialStreamFlush(sessionId: string) {
   const entry = sessions.get(sessionId);
   if (!entry || entry.cleared) return;
   entry.smoother.flush();
-}
-
-export async function officialStreamSettleAfterReveal(sessionId: string, maxWaitMs = 8000) {
-  const entry = sessions.get(sessionId);
-  if (!entry || entry.cleared) return false;
-  return entry.smoother.settleAfterReveal(maxWaitMs);
 }
 
 export function officialStreamDrop(sessionId: string) {

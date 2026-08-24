@@ -2,6 +2,7 @@ import { useCallback, useSyncExternalStore, type ReactNode } from "react";
 import { desktopBridge } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
 import { readPersistedFrameMode } from "../../stores/frameStoreHelpers";
+import { useCustomizeText } from "./customizeMessages";
 import { LOCAL_PLUGINS_VISIBLE, PLUGINS_SECTION_ENABLED, SKILLS_ENABLED } from "./customizeGates";
 import { FolderPill } from "./FolderPill";
 import { PluginsSidebarSection } from "./plugins/PluginsSidebarSection";
@@ -33,6 +34,7 @@ export function CustomizeSideNav({
   // Official KK: code / epitaxy mode shows project folder control (vK.selectedFolder + V6t).
   const isCodeMode = readPersistedFrameMode() === "code";
   const selectedFolder = useSyncExternalStore(subscribeSelectedFolder, getSelectedFolder, () => null);
+  const text = useCustomizeText();
 
   const browseFolder = useCallback(async () => {
     // Official E7t: bT.browseFolder("Select a project folder") → setSelectedFolder.
@@ -51,13 +53,13 @@ export function CustomizeSideNav({
       <div className="flex items-center gap-2 py-3 px-4">
         <button
           type="button"
-          aria-label="Back"
+          aria-label={text.back}
           onClick={() => onNavigate(backHref)}
           className="cds-reset inline-flex size-8 items-center justify-center rounded-lg text-text-300 hover:bg-bg-300 hover:text-text-100 focus-visible:shadow-focus"
         >
           <Icon name="arrowLeft" />
         </button>
-        <span className="font-large-bold">自定义</span>
+        <span className="font-large-bold">{text.customize}</span>
       </div>
 
       {isCodeMode ? (
@@ -70,7 +72,7 @@ export function CustomizeSideNav({
               onClick={() => void browseFolder()}
               className="cds-reset inline-flex h-8 w-full items-center justify-center rounded-lg border border-border-300 bg-bg-000 px-3 text-sm text-text-100 shadow-sm hover:bg-bg-100 focus-visible:shadow-focus"
             >
-              选择文件夹
+              {text.selectFolder}
             </button>
           )}
         </div>
@@ -80,18 +82,20 @@ export function CustomizeSideNav({
         {SKILLS_ENABLED ? (
           <CustomizeNavButton
             active={activePath.startsWith("/customize/skills")}
+            href="/customize/skills"
             icon={<SkillDocumentIcon size={16} />}
             onClick={() => onNavigate("/customize/skills")}
           >
-            Skills
+            {text.skills}
           </CustomizeNavButton>
         ) : null}
         <CustomizeNavButton
           active={activePath.startsWith("/customize/connectors")}
+          href="/customize/connectors"
           icon={<Icon name="connectors" customSize={16} />}
           onClick={() => onNavigate("/customize/connectors")}
         >
-          Connectors
+          {text.connectors}
         </CustomizeNavButton>
 
         {PLUGINS_SECTION_ENABLED ? (
@@ -110,25 +114,55 @@ export function CustomizeSideNav({
 function CustomizeNavButton({
   active,
   children,
+  href,
   icon,
   onClick,
 }: {
   active: boolean;
   children: string;
+  /** Official I7t: qc({href}) when set, else <button type="button">. */
+  href?: string;
   /** Official I7t: icon is ReactNode (Vv/Ky size 16), not a string name. */
   icon: ReactNode;
-  onClick: () => void;
+  onClick?: () => void;
 }) {
   // Official I7t (~269519): flex items-center rounded-lg text-sm gap-3 px-4 py-1.5 + size-5 icon slot.
+  // Official has no cds-reset here — qc is an <a href>. Native <button> focus-visible is the 小黑边.
   const className = [
-    "cds-reset flex items-center rounded-lg text-sm transition-all gap-3 px-4 py-1.5",
+    "flex items-center rounded-lg text-sm transition-all gap-3 px-4 py-1.5",
     active ? "bg-bg-300 text-text-100 font-semibold" : "text-text-100 hover:bg-bg-300",
   ].join(" ");
-
-  return (
-    <button type="button" onClick={onClick} className={className} aria-current={active ? "true" : undefined}>
+  const label = (
+    <>
       <span className="flex size-5 items-center justify-center">{icon}</span>
       <span>{children}</span>
+    </>
+  );
+  const ariaCurrent = active ? "true" : undefined;
+
+  if (href !== undefined) {
+    return (
+      <a
+        aria-current={ariaCurrent}
+        className={className}
+        href={href}
+        onClick={(event) => {
+          // Official qc (TanStack Link): unmodified left-click is client nav, not a document load.
+          if (event.defaultPrevented) return;
+          if (event.button !== 0) return;
+          if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
+          event.preventDefault();
+          onClick?.();
+        }}
+      >
+        {label}
+      </a>
+    );
+  }
+
+  return (
+    <button type="button" onClick={onClick} className={className} aria-current={ariaCurrent}>
+      {label}
     </button>
   );
 }

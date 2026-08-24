@@ -74,6 +74,14 @@ vi.mock("./previewAnnotationQueue", () => ({
   },
 }));
 
+vi.mock("./officialSidePaneSessionStore", () => ({
+  officialEvictSidePaneSession: vi.fn(),
+}));
+
+vi.mock("../../../shell/useCodeSidebarPrState", () => ({
+  removeCodeSidebarPrStateForSession: vi.fn(),
+}));
+
 import {
   CODE_SESSION_ARCHIVED_EVENT,
   CODE_SESSION_DELETED_EVENT,
@@ -167,6 +175,9 @@ describe("deleteCodeSession", () => {
     );
     const first = deleteCodeSession("s2");
     const second = deleteCodeSession("s2");
+    // $Yt confirm microtask (no getUncommittedChanges → immediate true) then shared inflight.
+    await Promise.resolve();
+    await Promise.resolve();
     expect(deleteMock).toHaveBeenCalledTimes(1);
     resolveDelete?.();
     await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
@@ -198,7 +209,7 @@ describe("archiveCodeSession", () => {
     window.removeEventListener(CODE_SESSION_ARCHIVED_EVENT, onArchived as EventListener);
 
     expect(ok).toBe(true);
-    expect(archiveMock).toHaveBeenCalledWith("s1");
+    expect(archiveMock).toHaveBeenCalledWith("s1", { cleanupWorktree: true });
     expect(deleteMock).not.toHaveBeenCalled();
     expect(removeSessionMock).toHaveBeenCalledWith("s1");
     expect(clearEkeMock).toHaveBeenCalledWith("s1");
@@ -230,6 +241,9 @@ describe("archiveCodeSession", () => {
     );
     const first = archiveCodeSession("s3");
     const second = archiveCodeSession("s3");
+    // $Yt confirm microtask (no getUncommittedChanges → immediate true) then shared inflight.
+    await Promise.resolve();
+    await Promise.resolve();
     expect(archiveMock).toHaveBeenCalledTimes(1);
     resolveArchive?.();
     await expect(Promise.all([first, second])).resolves.toEqual([true, true]);

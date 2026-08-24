@@ -108,7 +108,6 @@ class OfficialCompletionSmoother<TBlock> {
   totalCompletionLength = 0;
   v = 100;
   x = 0;
-  respectDocumentVisibility = false;
 
   constructor(private readonly blockOperations: OfficialSmootherBlockOps<TBlock>) {}
 
@@ -138,10 +137,6 @@ class OfficialCompletionSmoother<TBlock> {
     this.cachedVisibility = true;
     this.blockIndexOffset = 0;
     this.serverIndexBase = null;
-  }
-
-  finish() {
-    this.modelDone = true;
   }
 
   onMessage(event: Record<string, unknown>) {
@@ -196,7 +191,7 @@ class OfficialCompletionSmoother<TBlock> {
 
   async task(deliver: (blocks: TBlock[]) => void, signal: AbortSignal) {
     // Official zE.task (index-BELzQL5P): 60fps reveal loop; document.hidden short-circuits;
-    // no extra full deliver after the loop — flush/settle drives the final paint.
+    // result → Pke.clear aborts/restarts — no settleAfterReveal invent after the loop.
     const generation = this.generation;
     while (this.generation === generation && !this.smootherDone && !signal.aborted) {
       // Guard for non-browser (tests); official always has document in desktop FE.
@@ -215,7 +210,9 @@ class OfficialCompletionSmoother<TBlock> {
         continue;
       }
 
-      if (this.x >= this.totalCompletionLength && this.modelDone && !this.blocksMutatedSinceLastDelivery) break;
+      if (this.x >= this.totalCompletionLength && this.modelDone && !this.blocksMutatedSinceLastDelivery) {
+        break;
+      }
       if (this.blocksList.length > 0) {
         const smoothed = this.getSmoothedCompletion();
         if (!this.smoothedCompletionIsUnchanged) deliver(smoothed);
@@ -252,30 +249,25 @@ class OfficialCompletionSmoother<TBlock> {
       return sliceBlocks(this.blockOperations, this.blocksList, this.totalCompletionLength);
     }
 
-    // Official zE._get_smoothed_completion (index-BELzQL5P) — no local step caps.
+    // Official zE._get_smoothed_completion (index-BELzQL5P) — byte-match residual.
+    // Do NOT invent an early-return when minChars===maxChars / elapsed<=t / bisect throws:
+    // 3p burst puts every arrival behind the 0.9*e-0.3 deadline, so min===max while the
+    // model is still "not done". Official bisectLower(t===s) returns that length and
+    // catches Va up; a freeze-at-x guard makes Electron paint nothing mid-turn then dump
+    // the durable assistant at result/settle.
     const elapsed = (Date.now() - this.start) / 1000;
     const maxChars = this.arrivals[this.arrivals.length - 1][1] + (this.modelDone || this.forceSmootherDone ? 100 : 0);
     // Official: .9*e - (blockOperations.getBlockDeadlineOffset?.() ?? .3)
     const deadlineOffset = this.blockOperations.getBlockDeadlineOffset?.() ?? 0.3;
     const targetTime = 0.9 * elapsed - deadlineOffset;
     const arrivalsBeforeDeadline = this.arrivals.filter((arrival) => arrival[0] < targetTime).map((arrival) => arrival[1]);
-    const minChars = arrivalsBeforeDeadline[arrivalsBeforeDeadline.length - 1] ?? 0;
-    if (!(maxChars > minChars) || !(elapsed > this.t) || minChars === undefined) {
-      // Official throws on bad window; keep last x to avoid killing the 60fps task.
-      this.smoothedCompletionIsUnchanged = true;
-      return sliceBlocks(this.blockOperations, this.blocksList, this.ceilReveal ? Math.ceil(this.x) : this.x);
-    }
-    let nextX = minChars;
-    try {
-      nextX = bisectLower((candidate) => {
-        const velocity = (candidate - this.x) / (elapsed - this.t);
-        const invDt = 1 / (elapsed - this.t);
-        return 2 * (this.forceSmootherDone ? 0.01 * this.gamma : this.gamma) * invDt * (velocity - this.v) - 1 / (candidate - minChars) + 1 / (maxChars - candidate);
-      }, minChars, maxChars);
-    } catch {
-      this.smoothedCompletionIsUnchanged = true;
-      return sliceBlocks(this.blockOperations, this.blocksList, this.ceilReveal ? Math.ceil(this.x) : this.x);
-    }
+    // Official: a = n[n.length-1] (sentinel [-9999,0] keeps n non-empty for normal clocks).
+    const minChars = arrivalsBeforeDeadline[arrivalsBeforeDeadline.length - 1] as number;
+    const nextX = bisectLower((candidate) => {
+      const velocity = (candidate - this.x) / (elapsed - this.t);
+      const invDt = 1 / (elapsed - this.t);
+      return 2 * (this.forceSmootherDone ? 0.01 * this.gamma : this.gamma) * invDt * (velocity - this.v) - 1 / (candidate - minChars) + 1 / (maxChars - candidate);
+    }, minChars, maxChars);
     const velocity = (nextX - this.x) / (elapsed - this.t);
     this.v = this.alpha * this.v + (1 - this.alpha) * velocity;
     this.smoothedCompletionIsUnchanged = this.x >= this.totalCompletionLength;
@@ -331,22 +323,22 @@ export class OfficialSessionStreamSmoother {
   private cleared = true;
   private listeners = new Set<(snapshot: OfficialStreamSnapshot) => void>();
   private messageId = "";
-  private settleCallbacks = new Set<() => void>();
   private smoother = new OfficialCompletionSmoother(officialBlockOps);
 
   clear() {
+    // Official Pke.clear (index-BELzQL5P): dont_smooth/on_completion reset + restart + Oke(null).
+    // No settleAfterReveal / notifySettled invent — result path clears Va immediately.
     this.cleared = true;
     this.smoother.dontSmooth = false;
     this.smoother.onCompletion = undefined;
     this.smoother.restart();
-    this.notifySettled();
     this.emit(null);
   }
 
   dispose() {
+    // Official Pke.drop: abort + delete session entry.
     this.abort.abort();
     this.listeners.clear();
-    this.notifySettled();
   }
 
   /** Official Pke.setVisibility → smoother.checkVisibility */
@@ -372,17 +364,14 @@ export class OfficialSessionStreamSmoother {
       this.smoother.restart();
       this.smoother.dontSmooth = false;
       this.smoother.onCompletion = undefined;
-      // Recreate signal without aborting mid-frame of the previous generation when possible.
+      // Official Dke keeps one AbortController; recreate only after drop aborted it.
       if (this.abort.signal.aborted) this.abort = new AbortController();
-      const messageId = this.messageId;
-      const generation = this.smoother.generation;
       const signal = this.abort.signal;
+      // Official: smoother.task(blocks => { if (blocks.length !== 0) Oke(...) }, abort.signal)
+      // — no finally/settleAfterReveal invent.
       void this.smoother.task((blocks) => {
-        // Official Oke: only emit when blocks.length !== 0
         if (blocks.length > 0) this.emit({ blocks, messageId: this.messageId });
-      }, signal).finally(() => {
-        if (!this.cleared && this.messageId === messageId && this.smoother.generation === generation) this.notifySettled();
-      });
+      }, signal);
       return;
     }
     if (!this.cleared) this.smoother.onMessage(event);
@@ -397,36 +386,6 @@ export class OfficialSessionStreamSmoother {
     if (blocks.length > 0) this.emit({ blocks, messageId: this.messageId });
   }
 
-  async settleAfterReveal(maxWaitMs = 8000) {
-    if (this.cleared) return false;
-    this.smoother.finish();
-    const blocks = this.smoother.fullBlocks;
-    if (!hasVisibleStreamBlocks(blocks)) return false;
-    if (this.smoother.smootherDone) {
-      this.emit({ blocks, messageId: this.messageId });
-      return true;
-    }
-    return new Promise<boolean>((resolve) => {
-      let done = false;
-      const schedule = typeof globalThis.setTimeout === "function"
-        ? globalThis.setTimeout.bind(globalThis)
-        : window.setTimeout.bind(window);
-      const clear = typeof globalThis.clearTimeout === "function"
-        ? globalThis.clearTimeout.bind(globalThis)
-        : window.clearTimeout.bind(window);
-      const finish = (revealed: boolean) => {
-        if (done) return;
-        done = true;
-        this.settleCallbacks.delete(onSettled);
-        clear(timeout);
-        resolve(revealed);
-      };
-      const onSettled = () => finish(true);
-      const timeout = schedule(() => finish(false), maxWaitMs);
-      this.settleCallbacks.add(onSettled);
-    });
-  }
-
   subscribe(listener: (snapshot: OfficialStreamSnapshot) => void) {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -434,12 +393,6 @@ export class OfficialSessionStreamSmoother {
 
   private emit(snapshot: OfficialStreamSnapshot) {
     for (const listener of this.listeners) listener(snapshot);
-  }
-
-  private notifySettled() {
-    const callbacks = Array.from(this.settleCallbacks);
-    this.settleCallbacks.clear();
-    callbacks.forEach((callback) => callback());
   }
 }
 
@@ -450,14 +403,6 @@ export function createOfficialSessionStreamSmoother() {
 function thinkingDelta(event: Record<string, unknown>) {
   const delta = asRecord(event.delta);
   return stringValue(delta.type) === "thinking_delta" ? stringValue(delta.thinking) ?? "" : null;
-}
-
-function hasVisibleStreamBlocks(blocks: OfficialStreamBlock[]) {
-  return blocks.some((block) => {
-    if (block.kind === "thinking") return false;
-    if (block.kind === "text") return block.text.length > 0;
-    return true;
-  });
 }
 
 function stringValue(value: unknown): string | undefined {

@@ -31,25 +31,34 @@ const contentBaseClassName =
   'flex flex-col focus:outline-none relative text-text-100 text-left shadow-xl border-0.5 border-border-300 rounded-2xl md:p-6 p-4 align-middle data-[state="open"]:[animation:zoom_var(--modal-animation-duration,250ms)_ease-out_forwards] data-[state="closed"]:[animation:zoom_var(--modal-close-duration,125ms)_ease-in_reverse_forwards]';
 
 type OfficialModalProps = {
+  ariaLabel?: string;
   autoCloseOnFocusOut?: boolean;
   children: ReactNode;
   className?: string;
+  /** Official Tm closeOnEscapeKeydown (S7t disables while upload pending). */
+  closeOnEscapeKeydown?: boolean;
+  fullHeight?: boolean;
   hasCloseButton?: boolean;
   isOpen: boolean;
   modalSize?: OfficialModalSize;
   onClose: () => void;
+  overlayClassName?: string;
   subtitle?: ReactNode;
   title?: ReactNode;
 };
 
 export function OfficialModal({
+  ariaLabel,
   autoCloseOnFocusOut = true,
   children,
   className,
+  closeOnEscapeKeydown = true,
+  fullHeight = false,
   hasCloseButton = false,
   isOpen,
   modalSize = "md",
   onClose,
+  overlayClassName: overlayClassNameProp,
   subtitle,
   title,
 }: OfficialModalProps) {
@@ -59,13 +68,13 @@ export function OfficialModal({
   }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !closeOnEscapeKeydown) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, onClose]);
+  }, [closeOnEscapeKeydown, isOpen, onClose]);
 
   if (!mounted || !isOpen) return null;
 
@@ -75,9 +84,12 @@ export function OfficialModal({
     "--modal-overlay-opacity": 0.5,
   } as CSSProperties;
 
+  // Official jP (c5f4e1303): min-w-0 + fullWidth w-full + fullHeight h-full + size + bg-bg-100.
   const contentClass = [
     contentBaseClassName,
-    "min-w-0 w-full",
+    "min-w-0",
+    "w-full",
+    fullHeight ? "h-full" : "",
     sizeClass[modalSize],
     "bg-bg-100",
     className ?? "",
@@ -85,10 +97,13 @@ export function OfficialModal({
     .filter(Boolean)
     .join(" ");
 
+  // Official PP overlay: overlayClassName merged onto the fixed z-modal grid.
+  const overlayClass = [overlayClassName, overlayClassNameProp ?? ""].filter(Boolean).join(" ");
+
   return createPortal(
     <div className="epitaxy-root" data-official-source="c5f4e1303:Tm/_Component25">
       <div
-        className={overlayClassName}
+        className={overlayClass}
         data-state="open"
         onMouseDown={() => {
           if (autoCloseOnFocusOut) onClose();
@@ -97,6 +112,7 @@ export function OfficialModal({
         style={vars}
       >
         <section
+          aria-label={ariaLabel}
           aria-modal="true"
           className={contentClass}
           data-state="open"
@@ -108,6 +124,7 @@ export function OfficialModal({
             className={[
               "min-h-full",
               title || hasCloseButton || subtitle ? "flex flex-col" : "",
+              fullHeight ? "w-full h-full" : "",
             ]
               .filter(Boolean)
               .join(" ")}

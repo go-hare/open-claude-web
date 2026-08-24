@@ -2,21 +2,26 @@
  * Shared Code session delete / archive commands (official Ses / Lve / archived residual).
  *
  * Owns only:
- *   1. await LocalSessions.delete | archive
- *   2. success-only cache cleanup
- *   3. success-only local notification
+ *   1. $Yt uncommitted confirm (when getUncommittedChanges available)
+ *   2. await LocalSessions.delete | archive({cleanupWorktree:true})
+ *   3. success-only cache cleanup (+ H5-like PR glyph cache clear)
+ *   4. success-only local notification
  *
- * Does NOT navigate, close panes, or mutate sidebar list order —
- * those stay in the caller's UI context (sidebar next/prev/home vs
- * primary header /code vs secondary pane close).
+ * Does NOT navigate or mutate sidebar list order —
+ * those stay in the caller's UI context (sidebar de next/prev/home).
  *
  * Official index-BELzQL5P:
- *   delete → Lve (drop from list + clearSession)
- *   archive event → isArchived + clearSession + removePrs
- *   sidebar ue → archive/delete then de(next/prev/home) + KEe(pane ref)
+ *   archiveLocalSession: $Yt → CT.archive(id,{cleanupWorktree:!0})
+ *   deleteLocalSession:  $Yt → CT.delete → Lve
+ *   Dve archived/deleted: Eve + clearSession($5) + removePrsForSession(H5)
+ *   sidebar ue (archive): await archive → de(next/prev/home) → KEe (unpin/unstar)
+ *   sidebar ge (delete):  confirm → await delete → de → KEe
+ *   PaneLayout: separate subscribe closes extra panes by ref (not KEe)
  */
 import { desktopBridge } from "../../../adapters/desktopBridge";
 import type { SessionSummary } from "../../../adapters/desktopBridge/types";
+import { removeCodeSidebarPrStateForSession } from "../../../shell/useCodeSidebarPrState";
+import { confirmOfficialWorktreeDisposal } from "../../../shell/officialWorktreeDisposalStore";
 import { sessionHomePath, sessionPath } from "../../../shell/sessionPaths";
 import { officialCodeSessionStore } from "./officialCodeSessionStore";
 import { officialPlanCommentsApi } from "./officialPlanCommentsStore";
@@ -61,13 +66,19 @@ export function replaceAppNavigation(path: string) {
   window.dispatchEvent(new Event("app:navigation"));
 }
 
-function clearCodeSessionCaches(sessionId: string) {
+/**
+ * Official $5.clearSession + H5.removePrsForSession (+ product transcript/stream/eke/side-pane).
+ * Called from archive/delete success AND Dve archived/deleted list arms.
+ */
+export function clearCodeSessionCaches(sessionId: string) {
   officialCodeSessionStore.getState().removeSession(sessionId);
   clearOfficialEkeCache(sessionId);
   officialStreamDrop(sessionId);
   officialClearTurnStarted(sessionId);
   officialPlanCommentsApi.clear(sessionId);
   previewAnnotationQueue.getState().clearSession(sessionId);
+  // Official H5.removePrsForSession — drop sidebar PR glyph cache for this id.
+  removeCodeSidebarPrStateForSession(sessionId);
   // Residual ca0135 Kr: for (const t of Ar) t.getState().evictSession(e) + yr localStorage scrub.
   officialEvictSidePaneSession(sessionId);
 }
@@ -129,6 +140,14 @@ async function runExclusive(
  */
 export async function deleteCodeSession(sessionId: string): Promise<boolean> {
   return runExclusive(inflightDelete, sessionId, async () => {
+    // Official deleteLocalSession: await $Yt(n,"delete") before CT.delete.
+    if (!(await confirmOfficialWorktreeDisposal(
+      sessionId,
+      "delete",
+      desktopBridge.LocalSessions.getUncommittedChanges,
+    ))) {
+      return false;
+    }
     try {
       await desktopBridge.LocalSessions.delete(sessionId);
     } catch {
@@ -147,8 +166,16 @@ export async function deleteCodeSession(sessionId: string): Promise<boolean> {
  */
 export async function archiveCodeSession(sessionId: string): Promise<boolean> {
   return runExclusive(inflightArchive, sessionId, async () => {
+    // Official archiveLocalSession: await $Yt(n,"archive") then CT.archive(n,{cleanupWorktree:!0}).
+    if (!(await confirmOfficialWorktreeDisposal(
+      sessionId,
+      "archive",
+      desktopBridge.LocalSessions.getUncommittedChanges,
+    ))) {
+      return false;
+    }
     try {
-      await desktopBridge.LocalSessions.archive(sessionId);
+      await desktopBridge.LocalSessions.archive(sessionId, { cleanupWorktree: true });
     } catch {
       return false;
     }

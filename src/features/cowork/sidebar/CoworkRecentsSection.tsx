@@ -20,8 +20,7 @@ import { CoworkPinnedSection } from "./CoworkPinnedSection";
 import { CoworkRecentList } from "./CoworkRecentList";
 import { type CoworkRowAction, useCoworkSessionRowActions } from "./CoworkSessionMenus";
 import { CoworkScheduledSection } from "./CoworkScheduledSection";
-import { CoworkSpacesSection } from "./CoworkSpacesSection";
-import { buildCoworkSidebarModel } from "./coworkSidebarModel";
+import { buildCoworkSidebarModel, coworkRecentSessions, type CoworkRecentItem } from "./coworkSidebarModel";
 import { coworkSessionPinKey } from "./coworkSessionPinning";
 import { useCoworkSidebarData } from "./useCoworkSidebarData";
 
@@ -42,6 +41,7 @@ export function CoworkRecentsSection({ frame, onNavigate }: CoworkRecentsSection
   const [renameTarget, setRenameTarget] = useState<SessionSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary | null>(null);
   const selectedSessionId = coworkSelectedSessionId(window.location.pathname);
+  const selectedSpaceId = coworkSelectedSpaceId(window.location.pathname);
   const model = useMemo(
     () => buildCoworkSidebarModel(data.sessions, data.scheduledTasks, data.spaces, frame.pinnedOrder),
     [data.scheduledTasks, data.sessions, data.spaces, frame.pinnedOrder],
@@ -53,7 +53,7 @@ export function CoworkRecentsSection({ frame, onNavigate }: CoworkRecentsSection
   const visibleNavigationOrder = useMemo(() => {
     const pinned = model.pinned;
     const seen = new Set(pinned.map((session) => session.id));
-    const rest = model.recents.filter((session) => {
+    const rest = coworkRecentSessions(model.recents).filter((session) => {
       if (seen.has(session.id)) return false;
       seen.add(session.id);
       return true;
@@ -138,10 +138,12 @@ export function CoworkRecentsSection({ frame, onNavigate }: CoworkRecentsSection
 
   return (
     <div className="dframe-recents-by-mode contents" data-mode="cowork">
-      <CoworkScheduledSection frame={frame} items={model.scheduled} onNavigate={onNavigate} selectedSessionId={selectedSessionId} />
-      <CoworkSpacesSection frame={frame} onNavigate={onNavigate} spaces={model.spaces} />
-      <CoworkPinnedSection frame={frame} onAction={actions} onNavigate={onNavigate} selectedSessionId={selectedSessionId} sessions={model.pinned} />
-      <CoworkRecentSection frame={frame} onAction={actions} onNavigate={onNavigate} selectedSessionId={selectedSessionId} sessions={model.recents} />
+      {/* Official RecentsForKind (ca0135 ~7458): single div.contents data-kind={kind} wrapping Scheduled/Pinned/Recents. */}
+      <div className="contents" data-kind="cowork">
+        <CoworkScheduledSection frame={frame} items={model.scheduled} onNavigate={onNavigate} selectedSessionId={selectedSessionId} />
+        <CoworkPinnedSection frame={frame} onAction={actions} onNavigate={onNavigate} selectedSessionId={selectedSessionId} sessions={model.pinned} />
+        <CoworkRecentSection frame={frame} items={model.recents} onAction={actions} onNavigate={onNavigate} selectedSessionId={selectedSessionId} selectedSpaceId={selectedSpaceId} />
+      </div>
       <CoworkSessionDialogs
         deleteTarget={deleteTarget}
         onConfirmDelete={() => { void confirmDelete(); }}
@@ -154,10 +156,24 @@ export function CoworkRecentsSection({ frame, onNavigate }: CoworkRecentsSection
   );
 }
 
-function CoworkRecentSection({ frame, onAction, onNavigate, selectedSessionId, sessions }: Parameters<typeof CoworkRecentList>[0]) {
+function CoworkRecentSection({
+  frame,
+  items,
+  onAction,
+  onNavigate,
+  selectedSessionId,
+  selectedSpaceId,
+}: {
+  frame: FrameStore;
+  items: CoworkRecentItem[];
+  onAction: Parameters<typeof CoworkRecentList>[0]["onAction"];
+  onNavigate: (path: string) => void;
+  selectedSessionId: string | null;
+  selectedSpaceId: string | null;
+}) {
   const text = useShellText();
   const collapsed = frame.collapsedGroups.includes("recents");
-  if (sessions.length === 0) return null;
+  if (items.length === 0) return null;
   /**
    * Official ca0135 residual:
    *   Ml wraps recents in `div.flex-1.min-h-[120px]` (no overflow-hidden)
@@ -166,11 +182,11 @@ function CoworkRecentSection({ frame, onAction, onNavigate, selectedSessionId, s
    * Parent `.dframe-nav-scroll` (FrameSidebar overflow-y-auto) scrolls the full stack.
    * Product had invent `overflow-hidden` + section `min-h-0 flex-1` → list clipped,
    * scrollHeight===clientHeight, wheel no-op.
-   * Cap already applied in buildCoworkSidebarModel (R=20 for cowork).
+   * Cap applied in buildCoworkSidebarModel after mix (R=20 for cowork).
    */
   return (
     <div className="flex-1 min-h-[120px]" data-cowork-sidebar-section="recents">
-      <section className="group/section flex flex-col gap-px" data-kind="cowork">
+      <section className="group/section flex flex-col gap-px">
         <SidebarSectionHeader
           collapsed={collapsed}
           onToggle={() => frame.toggleGroupCollapsed("recents")}
@@ -181,15 +197,21 @@ function CoworkRecentSection({ frame, onAction, onNavigate, selectedSessionId, s
         <div className={collapsed ? "hidden" : "contents"}>
           <CoworkRecentList
             frame={frame}
+            items={items}
             onAction={onAction}
             onNavigate={onNavigate}
             selectedSessionId={selectedSessionId}
-            sessions={sessions}
+            selectedSpaceId={selectedSpaceId}
           />
         </div>
       </section>
     </div>
   );
+}
+
+function coworkSelectedSpaceId(pathname: string) {
+  const match = /^\/space\/([^/?#]+)/.exec(pathname);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
 /** Official ca0135 Na residual — hover-revealed "查看全部" with CaretRight xsmall. */

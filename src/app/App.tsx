@@ -5,6 +5,8 @@ import { BootstrapConnectionErrorPage } from "../features/public/AccessPages";
 import { LoginDesktopT5tPortal } from "../features/public/LoginDesktop";
 import { subscribeResponseCompletionEvents } from "../features/settings/responseCompletionNotify";
 import { DesktopFrame } from "../shell/DesktopFrame";
+import { DirectoryModal } from "../features/customize/directory/DirectoryModal";
+import { OfficialWorktreeDisposalDialog } from "../shell/OfficialWorktreeDisposalDialog";
 import { OfficialPierreWorkerPool } from "../features/epitaxy/diff/OfficialPierreWorkerPool";
 import {
   accountDetailsFromBootstrap,
@@ -262,9 +264,13 @@ export function App() {
   }, []);
 
   if (route.frame === "standalone") {
+    // Official $8t is globally mounted in the signed-in shell (index-BELzQL5P.js
+    // a.jsx($8t,{})). Customize/settings are product-standalone (E7t unframed)
+    // but still open HT DirectoryModal from el/o7t/qCt.
     return (
       <>
         <route.Component route={route} onNavigate={navigate} />
+        <DirectoryModal />
         {applyRelaunchOverlay}
       </>
     );
@@ -332,6 +338,10 @@ export function App() {
       </DesktopFrame>
       {/* Official T5t: org force-login overlay when interactiveAuth.needsAuth (hide1p). */}
       <LoginDesktopT5tPortal />
+      {/* Official $8t DirectoryModal — HT.open("plugins") from customize / cowork add. */}
+      <DirectoryModal />
+      {/* Official VYt: $Yt uncommitted worktree disposal confirm (archive/delete). */}
+      <OfficialWorktreeDisposalDialog />
       {applyRelaunchOverlay}
     </>
   );

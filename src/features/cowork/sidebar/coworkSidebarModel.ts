@@ -2,7 +2,7 @@ import type { CoworkSpaceSummary, ScheduledTaskSummary, SessionSummary } from ".
 import { isCoworkSessionPinned, orderCoworkPinnedSessions } from "./coworkSessionPinning";
 
 export const OFFICIAL_COWORK_RECENT_LIMIT = 20;
-export const COWORK_SIDEBAR_SECTION_ORDER = ["scheduled", "spaces", "pinned", "recents"] as const;
+export const COWORK_SIDEBAR_SECTION_ORDER = ["scheduled", "pinned", "recents"] as const;
 
 const scheduledWindowMs = 7 * 24 * 60 * 60 * 1000;
 
@@ -13,11 +13,19 @@ export type CoworkScheduledSidebarItem = {
   unreadCount: number;
 };
 
+/**
+ * Official Il `$` mix (ca0135 ~7538): cowork sessions + cowork-space rows,
+ * then Gi pin-split, then Cl slice(0, cap) with cap=20 for cowork.
+ * Spaces are Recents rows (Xa), not a sidebar 「项目」 heading (nav already has 项目).
+ */
+export type CoworkRecentItem =
+  | { entryKind: "session"; session: SessionSummary }
+  | { entryKind: "space"; space: CoworkSpaceSummary };
+
 export type CoworkSidebarModel = {
   pinned: SessionSummary[];
-  recents: SessionSummary[];
+  recents: CoworkRecentItem[];
   scheduled: CoworkScheduledSidebarItem[];
-  spaces: CoworkSpaceSummary[];
 };
 
 export function buildCoworkSidebarModel(
@@ -34,17 +42,29 @@ export function buildCoworkSidebarModel(
   const pinnedIds = new Set(pinned.map((session) => session.id));
   const scheduled = buildScheduledItems(visible, scheduledTasks, pinnedOrder, now);
   const scheduledRunIds = new Set(scheduled.flatMap((item) => item.runs.map((run) => run.id)));
-  const recents = visible
+  const recentsSessions = visible
     .filter((session) => !pinnedIds.has(session.id))
-    .filter((session) => !session.scheduledTaskId || !scheduledRunIds.has(session.id))
-    .slice(0, OFFICIAL_COWORK_RECENT_LIMIT);
+    .filter((session) => !session.scheduledTaskId || !scheduledRunIds.has(session.id));
+  const recents = mixCoworkRecents(recentsSessions, spaces).slice(0, OFFICIAL_COWORK_RECENT_LIMIT);
 
   return {
     scheduled,
-    spaces: [...spaces].sort((left, right) => right.updatedAtMs - left.updatedAtMs),
     pinned,
     recents,
   };
+}
+
+export function coworkRecentSessions(items: CoworkRecentItem[]): SessionSummary[] {
+  return items.flatMap((item) => (item.entryKind === "session" ? [item.session] : []));
+}
+
+function mixCoworkRecents(sessions: SessionSummary[], spaces: CoworkSpaceSummary[]): CoworkRecentItem[] {
+  const mixed: Array<CoworkRecentItem & { updatedAtMs: number }> = [
+    ...sessions.map((session) => ({ entryKind: "session" as const, session, updatedAtMs: session.updatedAtMs })),
+    ...spaces.map((space) => ({ entryKind: "space" as const, space, updatedAtMs: space.updatedAtMs })),
+  ];
+  mixed.sort((left, right) => right.updatedAtMs - left.updatedAtMs);
+  return mixed.map(({ updatedAtMs: _updatedAtMs, ...item }) => item);
 }
 
 function buildScheduledItems(sessions: SessionSummary[], tasks: ScheduledTaskSummary[], pinnedOrder: string[], now: number) {

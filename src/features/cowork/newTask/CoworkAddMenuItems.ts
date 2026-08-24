@@ -1,4 +1,5 @@
 import { createElement, type ComponentType, type ReactElement } from "react";
+import { officialDirectoryStore } from "../../customize/directory/officialDirectoryStore";
 import type { CoworkDropdownItem } from "../ui/CoworkMenuTypes";
 import {
   CoworkAddMenuConnectorsIcon,
@@ -119,7 +120,8 @@ function createCoworkAddMenuRoutes(onNavigate?: (path: string) => void): CoworkA
   return {
     openConnectors: openCoworkAddMenuRoute("/customize/connectors", onNavigate),
     openProjectCreate: openCoworkAddMenuRoute("/projects/create", onNavigate),
-    openPlugins: openCoworkAddMenuRoute("/customize/plugins", onNavigate),
+    // Official qCt: HT.open("plugins"), not /customize/plugins (that route is Not Found).
+    openPlugins: () => officialDirectoryStore.getState().open("plugins", { pluginSeed: {} }),
     openSkills: openCoworkAddMenuRoute("/customize/skills", onNavigate),
     openStyles: openCoworkAddMenuRoute("/settings/general", onNavigate),
   };

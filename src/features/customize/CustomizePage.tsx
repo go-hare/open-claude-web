@@ -4,25 +4,24 @@ import type { RouteViewProps } from "../../app/routes";
 import { Icon } from "../../shell/icons";
 import { readPersistedFrameMode } from "../../stores/frameStoreHelpers";
 import { ConnectorsRoute } from "./connectors/ConnectorsRoute";
+import { useCustomizeText } from "./customizeMessages";
+import { PluginUploadModal } from "./directory/PluginUploadModal";
+import { officialDirectoryStore } from "./directory/officialDirectoryStore";
 import { BROWSE_PLUGINS_CARD_VISIBLE, SKILLS_ENABLED } from "./customizeGates";
 import { CustomizeIndexPictogram } from "./CustomizeIndexPictogram";
 import { CustomizeSideNav } from "./CustomizeSideNav";
 import { SkillDocumentIcon } from "./skills/SkillDocumentIcon";
 import { SkillsRoute } from "./skills/SkillsRoute";
 
-type EmptyAction = {
-  label: string;
-  variant: "primary" | "secondary";
-  onClick?: () => void;
-};
-
 export function CustomizePage({ onNavigate }: RouteViewProps) {
   const pathname = window.location.pathname;
   const needsTrafficLightPadding = useCustomizeTrafficLightPadding();
   // Official H6t: mode-aware back target (cowork → /task/new, code → /code).
   const backHref = useMemo(() => (readPersistedFrameMode() === "cowork" ? "/task/new" : "/code"), []);
-  const [pluginBrowserOpen, setPluginBrowserOpen] = useState(false);
   const [pluginWarningDismissed, setPluginWarningDismissed] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  // Residual: empty pluginSeed selects official R8t (BrowsePluginsContent) over P8t org list.
+  const openDirectory = () => officialDirectoryStore.getState().open("plugins", { pluginSeed: {} });
 
   useEffect(() => {
     const replaceCustomize = () => {
@@ -38,11 +37,17 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
     // c63a78ed4:2210-2255: /plugins/new 无 marketplace 参数时 redirect(/customize)。
     if (pathname === "/customize/plugins/new") {
       const params = new URLSearchParams(window.location.search);
-      if (!params.get("marketplace")) {
+      const marketplace = params.get("marketplace");
+      if (!marketplace) {
         replaceCustomize();
         return;
       }
-      setPluginBrowserOpen(true);
+      officialDirectoryStore.getState().open("plugins", {
+        pluginSeed: {
+          marketplaceSource: marketplace,
+          pluginName: params.get("plugin") ?? undefined,
+        },
+      });
     }
 
     // c63a78ed4:2905-2928 / 2931-3276: pluginId 数据缺失时 redirect(/customize)。
@@ -61,7 +66,7 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
       case "skills":
         return (
           <SkillsRoute
-            onBrowseSkills={() => setPluginBrowserOpen(true)}
+            onBrowseSkills={openDirectory}
             onCreateWithClaude={() => {
               // Official de: /new?q= skill-creator prompt; local shell uses cowork new task.
               onNavigate(
@@ -71,8 +76,8 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
                   ),
               );
             }}
-            onWriteInstructions={() => setPluginBrowserOpen(true)}
-            onUpload={() => setPluginBrowserOpen(true)}
+            onWriteInstructions={openDirectory}
+            onUpload={openDirectory}
             onTryInCowork={(skillName) => {
               onNavigate("/task/new?q=" + encodeURIComponent(`/${skillName}`));
             }}
@@ -89,7 +94,7 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
         return <NotFoundRoute />;
       case "index":
       default:
-        return <CustomizeIndex onNavigate={onNavigate} onBrowsePlugins={() => setPluginBrowserOpen(true)} />;
+        return <CustomizeIndex onNavigate={onNavigate} onBrowsePlugins={openDirectory} />;
     }
   })();
 
@@ -105,8 +110,8 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
           activePath={pathname}
           backHref={backHref}
           onNavigate={onNavigate}
-          onBrowsePlugins={() => setPluginBrowserOpen(true)}
-          onUploadPlugin={() => setPluginBrowserOpen(true)}
+          onBrowsePlugins={openDirectory}
+          onUploadPlugin={() => setUploadOpen(true)}
           onCreateWithClaude={() => {
             // Official E7t K: code → /code?q=… plugin, cowork → /task/new?q=… plugin.
             const isCode = readPersistedFrameMode() === "code";
@@ -121,7 +126,16 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
           {content}
         </div>
       </div>
-      {pluginBrowserOpen ? <PluginBrowserPanel onClose={() => setPluginBrowserOpen(false)} /> : null}
+      <PluginUploadModal
+        isOpen={uploadOpen}
+        onClose={() => {
+          setUploadOpen(false);
+          officialDirectoryStore.getState().open("plugins", { pluginSeed: {} });
+        }}
+        onSuccess={() => {
+          officialDirectoryStore.getState().open("plugins", { pluginSeed: {} });
+        }}
+      />
     </div>
   );
 }
@@ -155,34 +169,35 @@ function useCustomizeTrafficLightPadding() {
 function CustomizeIndex({ onNavigate, onBrowsePlugins }: { onNavigate: (path: string) => void; onBrowsePlugins: () => void }) {
   // Official c63a78ed4 el: centered stack maxWidth 530 + Va pictogram + option cards.
   // Order: Connect tools → Create new skills (fs/QZ) → Browse plugins (!modeAwarenessChat).
+  const text = useCustomizeText();
   return (
     <div className="flex h-full w-full items-center justify-center">
       <div className="flex w-full flex-col items-center gap-10" style={{ maxWidth: 530 }}>
         <div className="flex flex-col items-center gap-4">
           <CustomizeIndexPictogram size="medium" />
-          <h1 className="font-heading text-center text-2xl text-text-000">Customize Claude</h1>
-          <p className="text-center text-sm text-text-300">Skills, connectors, and plugins shape how Claude works with you.</p>
+          <h1 className="font-heading text-center text-2xl text-text-000">{text.customizeClaude}</h1>
+          <p className="text-center text-sm text-text-300">{text.customizeSubtitle}</p>
         </div>
         <div className="flex w-full flex-col gap-3">
           <CustomizeOptionCard
             icon={<Icon name="connectors" customSize={20} />}
-            title="Connect your apps"
-            description="Let Claude read and write to the tools you already use."
+            title={text.connectYourApps}
+            description={text.connectYourAppsDescription}
             onClick={() => onNavigate("/customize/connectors")}
           />
           {SKILLS_ENABLED ? (
             <CustomizeOptionCard
               icon={<SkillDocumentIcon size={20} />}
-              title="Create new skills"
-              description="Teach Claude your processes, team norms, and expertise."
+              title={text.createNewSkills}
+              description={text.createNewSkillsDescription}
               onClick={() => onNavigate("/customize/skills")}
             />
           ) : null}
           {BROWSE_PLUGINS_CARD_VISIBLE ? (
             <CustomizeOptionCard
               icon={<Icon name="plugin" customSize={20} />}
-              title="Browse plugins"
-              description="Add pre-built knowledge for your field."
+              title={text.browsePlugins}
+              description={text.browsePluginsDescription}
               onClick={onBrowsePlugins}
             />
           ) : null}
@@ -229,59 +244,6 @@ function CustomizeOptionCard({ icon, title, description, onClick }: { icon: Reac
         <span className="font-base-bold text-text-100">{title}</span>
         <span className="text-sm text-text-300">{description}</span>
       </div>
-    </button>
-  );
-}
-
-function EmptyState({ icon, pictogram, message, actions }: { icon?: string; pictogram?: ReactNode; message: ReactNode; actions?: EmptyAction[] }) {
-  return (
-    <div className="flex h-full w-full items-center justify-center">
-      <div className="flex flex-col items-center gap-6">
-        {pictogram ?? (
-          <div className="flex size-10 items-center justify-center rounded-full bg-bg-300 text-text-300">
-            <Icon name={icon ?? "connectors"} />
-          </div>
-        )}
-        <p className="text-sm text-text-300 text-center px-6 text-pretty max-w-[300px]">{message}</p>
-        {actions && actions.length > 0 ? (
-          <div className="flex flex-col gap-3 w-full max-w-[200px] items-center">
-            {actions.map((action) => <Button key={action.label} variant={action.variant} onClick={action.onClick}>{action.label}</Button>)}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function PluginBrowserPanel({ onClose }: { onClose: () => void }) {
-  // 原 Browse plugins 通过 pe(e=>e.open)("plugins") 打开全局面板；这里先以同一文案/菜单结构承接。
-  return (
-    <div className="fixed inset-0 z-popover flex justify-end bg-[hsl(var(--always-black)/15%)]" role="dialog" aria-label="Browse plugins">
-      <div className="flex h-full w-[min(520px,100vw)] flex-col border-l border-border-300 bg-bg-000 shadow-panel">
-        <div className="flex items-center justify-between px-6 py-3 min-h-14">
-          <h2 className="font-large-bold truncate">Browse plugins</h2>
-          <IconButton ariaLabel="关闭" icon="x" onClick={onClose} />
-        </div>
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-bg-100 px-6 py-8 text-center">
-          <span className="font-base text-text-300">No plugins found</span>
-          <span className="font-small text-text-500">Add pre-built knowledge for your field.</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Button({ children, onClick, variant, size }: { children: ReactNode; onClick?: () => void; variant: "primary" | "secondary"; size?: "sm" }) {
-  const classes = variant === "primary"
-    ? "bg-text-000 text-bg-000 hover:opacity-90"
-    : "border border-border-300 bg-bg-000 text-text-100 hover:bg-bg-100";
-  return <button type="button" onClick={onClick} className={`inline-flex items-center justify-center rounded-lg px-3 ${size === "sm" ? "h-8 text-sm" : "h-9 text-sm"} ${classes}`}>{children}</button>;
-}
-
-function IconButton({ ariaLabel, icon, onClick }: { ariaLabel: string; icon: string; onClick: () => void }) {
-  return (
-    <button type="button" aria-label={ariaLabel} onClick={onClick} className="inline-flex size-8 items-center justify-center rounded-lg border-0 bg-transparent text-text-300 hover:bg-bg-200 hover:text-text-100">
-      <Icon name={icon} />
     </button>
   );
 }

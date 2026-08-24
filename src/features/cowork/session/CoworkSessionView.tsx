@@ -8,7 +8,6 @@ import { CoworkPermissionApprovals } from "../composer/CoworkPermissionApprovals
 import { CoworkSessionComposer } from "../composer/CoworkSessionComposer";
 import { resolveCoworkComposerToolStates } from "../composer/coworkModelContextStore";
 import { CoworkActivityPanelHeaderToggle } from "./activity/CoworkActivityPanelShell";
-import { parseCoworkBackgroundTasks } from "./activity/coworkBackgroundTasks";
 import { parseCoworkConversationStatus } from "./activity/CoworkConversationStatus";
 import { CoworkSessionActivityPanel } from "./activity/CoworkSessionActivityPanel";
 import {
@@ -72,7 +71,6 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
   const autoscrollRef = useRef<CoworkAutoscrollHandle | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
   const [scrollState, setScrollState] = useState<CoworkScrollState>({ showBottomFade: false, showScrollButton: false });
-  const tasks = useMemo(() => parseCoworkBackgroundTasks(data.messages), [data.messages]);
   // Official cFt resourceActivity for mcp/web_search/browser panels.
   const resourceActivity = useMemo(() => parseCoworkResourceActivity(data.messages), [data.messages]);
   // Official IYe handle: prefer imperative scrollToBottom; fallback to DOM scroll while mounting.
@@ -193,51 +191,58 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
   })();
   return (
     <CoworkTranscriptActions.Provider value={actions}>
-      <div className="relative flex h-full min-h-0 w-full">
-        <CoworkSessionFileDrawerLayout
-          drawer={drawer}
-          isDrawerOpen={isDrawerOpen}
-          main={
-            // Official yUt main column children: gUt header + IYe. min-h-0 keeps flex-1
-            // overflow-y-auto (IYe) bounded so pin-to-bottom can actually scroll.
-            <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              <CoworkSessionHeader
-                isTitleLoading={data.isLoading && !data.session}
-                onNavigate={onNavigate}
-                onSessionPatched={onSessionPatched}
-                rightAction={!data.isSessionNotFound ? <CoworkActivityPanelHeaderToggle sessionId={sessionId} /> : null}
-                session={data.session}
-                sessionId={sessionId}
-                title={title}
-              />
-              <CoworkChatBody
-                autoscrollRef={autoscrollRef}
-                composerRef={composerRef}
-                data={data}
-                onNavigate={onNavigate}
-                scrollState={scrollState}
-                scrollToBottomAndPin={scrollToBottomAndPin}
-                sessionId={sessionId}
-                setScrollState={setScrollState}
-                transcriptScrollRef={transcriptScrollRef}
-              />
-            </div>
-          }
-          rightSidebar={
-            !data.isSessionNotFound ? (
-              <CoworkSessionActivityPanel
-                bridge={coworkSessionsBridge}
-                fsDetectedFiles={data.fsDetectedFiles}
-                messages={data.messages}
-                onNavigate={onNavigate}
-                onOpenFile={openFile}
-                session={data.session}
-                sessionId={sessionId}
-                tasks={tasks}
-              />
-            ) : null
-          }
-        />
+      {/* Official S3t (index-BELzQL5P): relative flex h-full → chat column | xQt sibling.
+          yUt (FileDrawerLayout) wraps v$t main+cFt drawer only — not the activity rail. */}
+      <div
+        className="relative flex h-full min-h-0"
+        data-official-source="index-BELzQL5P.js:S3t relative flex h-full"
+      >
+        <div
+          className="relative flex-1 min-w-0 flex flex-col min-h-0"
+          data-official-source="index-BELzQL5P.js:S3t chat column relative flex-1 min-w-0 flex flex-col"
+        >
+          <CoworkSessionFileDrawerLayout
+            drawer={drawer}
+            isDrawerOpen={isDrawerOpen}
+            main={
+              // Official yUt main column children: gUt header + IYe. min-h-0 keeps flex-1
+              // overflow-y-auto (IYe) bounded so pin-to-bottom can actually scroll.
+              <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <CoworkSessionHeader
+                  isTitleLoading={data.isLoading && !data.session}
+                  onNavigate={onNavigate}
+                  onSessionPatched={onSessionPatched}
+                  rightAction={!data.isSessionNotFound ? <CoworkActivityPanelHeaderToggle sessionId={sessionId} /> : null}
+                  session={data.session}
+                  sessionId={sessionId}
+                  title={title}
+                />
+                <CoworkChatBody
+                  autoscrollRef={autoscrollRef}
+                  composerRef={composerRef}
+                  data={data}
+                  onNavigate={onNavigate}
+                  scrollState={scrollState}
+                  scrollToBottomAndPin={scrollToBottomAndPin}
+                  sessionId={sessionId}
+                  setScrollState={setScrollState}
+                  transcriptScrollRef={transcriptScrollRef}
+                />
+              </div>
+            }
+          />
+        </div>
+        {!data.isSessionNotFound ? (
+          <CoworkSessionActivityPanel
+            bridge={coworkSessionsBridge}
+            fsDetectedFiles={data.fsDetectedFiles}
+            messages={data.messages}
+            onNavigate={onNavigate}
+            onOpenFile={openFile}
+            session={data.session}
+            sessionId={sessionId}
+          />
+        ) : null}
       </div>
     </CoworkTranscriptActions.Provider>
   );

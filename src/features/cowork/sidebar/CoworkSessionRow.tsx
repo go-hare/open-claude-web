@@ -24,7 +24,7 @@ function CoworkSessionRowContext({ frame, onAction, onDropBefore, onNavigate, se
   const key = coworkSessionPinKey(session);
   return (
     <ContextMenu.Root>
-      <ContextMenu.Trigger className={rowWrapperClass} data-jump-hint-row="" data-row="" data-row-key={key} data-selected={selected ? "open" : undefined} onDragOver={(event) => allowDropBefore(event, Boolean(onDropBefore))} onDrop={(event) => handleDropBefore(event, key, onDropBefore)}>
+      <ContextMenu.Trigger className={rowWrapperClass} data-jump-hint-row="" data-row-key={key} data-selected={selected ? "open" : undefined} onDragOver={(event) => allowDropBefore(event, Boolean(onDropBefore))} onDrop={(event) => handleDropBefore(event, key, onDropBefore)}>
         <CoworkSessionRowButton keyValue={key} onNavigate={onNavigate} selected={selected} session={session} />
         <CoworkSessionRowActions frame={frame} onAction={onAction} session={session} />
       </ContextMenu.Trigger>
@@ -37,7 +37,7 @@ function CoworkSessionRowContext({ frame, onAction, onDropBefore, onNavigate, se
 
 function CoworkSessionRowButton({ keyValue, onNavigate, selected, session }: { keyValue: string; onNavigate: (path: string) => void; selected: boolean; session: SessionSummary }) {
   return (
-    <button className={rowButtonClass} data-row-main-button="" data-selected={selected ? "open" : undefined} draggable onClick={() => onNavigate(coworkSessionPath(session))} onDragStart={(event) => writeCoworkSessionDragKey(event, keyValue)} type="button">
+    <button className={rowButtonClass} data-row="" data-roving-item="" data-row-main-button="" data-selected={selected ? "open" : undefined} draggable onClick={() => onNavigate(coworkSessionPath(session))} onDragStart={(event) => writeCoworkSessionDragKey(event, keyValue)} type="button">
       <span className="df-leading-slot text-text-300"><CoworkSidebarStatusGlyph session={session} /></span>
       <span className="flex-1 min-w-0"><CoworkSidebarTitle>{session.title}</CoworkSidebarTitle></span>
     </button>

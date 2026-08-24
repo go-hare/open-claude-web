@@ -106,3 +106,21 @@ export function clearCodeSidebarPrStateCache() {
   prStateCache.clear();
   prStateInflight.clear();
 }
+
+/**
+ * Official H5.removePrsForSession residual for sidebar glyph cache:
+ * drop keys equal to sessionId or starting with `${sessionId}:` / `${sessionId}::`.
+ */
+export function removeCodeSidebarPrStateForSession(sessionId: string) {
+  if (!sessionId) return;
+  for (const key of [...prStateCache.keys()]) {
+    if (key === sessionId || key.startsWith(`${sessionId}:`) || key.startsWith(`${sessionId}::`)) {
+      prStateCache.delete(key);
+    }
+  }
+  for (const key of [...prStateInflight.keys()]) {
+    if (key === sessionId || key.startsWith(`${sessionId}:`) || key.startsWith(`${sessionId}::`)) {
+      prStateInflight.delete(key);
+    }
+  }
+}

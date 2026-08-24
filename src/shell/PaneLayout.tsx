@@ -156,8 +156,10 @@ function usePaneStoreEvents(mode: FrameMode, currentKey: string) {
     return () => window.removeEventListener("dframe:open-pane", onOpenPane);
   }, [currentKey, mode]);
 
-  // Official ZR / KEe: delete or archive of a session still open in an extra pane
-  // removes that pane by stable ref — never navigates the primary route.
+  // Official: delete/archive of a session still open in an extra pane removes that
+  // pane by stable ref — never navigates the primary route.
+  // Note: residual KEe is unpin/unstar (setStarred false + removeFromPinnedOrder),
+  // not pane close; pane close is this subscribe path.
   useEffect(() => {
     if (mode === "code") {
       const closeExtra = (sessionId: string) => {

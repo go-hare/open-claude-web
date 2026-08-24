@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { officialDirectoryStore } from "../directory/officialDirectoryStore";
 import { AddCustomConnectorDialog } from "./AddCustomConnectorDialog";
-import { ConnectorsDirectoryPanel } from "./ConnectorsDirectoryPanel";
 import { ConnectorsEmptyState, ConnectorsLoadErrorState } from "./ConnectorsEmptyState";
 import { ConnectorsListSidebar } from "./ConnectorsListSidebar";
 import type { ConnectorListItem } from "./connectorTypes";
@@ -10,6 +10,7 @@ import {
   disconnectConnector,
   ensureDirectMcpHydrated,
   getConnectorItems,
+  isDirectMcpHydrated,
   removeConnector,
   subscribeConnectorItems,
 } from "./connectorsStore";
@@ -22,21 +23,28 @@ import {
  * non-empty → Rt list + detail pane
  *
  * Residual Direct MCP (ion Rrs/mQe/hQe): hydrate statuses + authorize/disconnect by name.
- * Directory browse uses pe open("connectors"); local panel stands in until directory feed exists.
+ * Directory browse uses official HT.open("connectors") → $8t ($T remaps to plugins).
  */
 export function ConnectorsRoute() {
   const items = useSyncExternalStore(subscribeConnectorItems, getConnectorItems, getConnectorItems);
-  const [loadState, setLoadState] = useState<"ready" | "loading" | "error">("loading");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Official Je()/remoteStream: remounting Ht does not reset f to loading when data exists.
+  // Product ConnectorsRoute remounts on Skills ↔ Connectors — keep ready if App already hydrated.
+  const [loadState, setLoadState] = useState<"ready" | "loading" | "error">(() =>
+    isDirectMcpHydrated() ? "ready" : "loading",
+  );
+  // Official h starts null then an effect picks F/T/first; remount with cached E
+  // would paint "Select a connector" for one frame. Seed from current list.
+  const [selectedId, setSelectedId] = useState<string | null>(
+    () => getConnectorItems()[0]?.id ?? null,
+  );
   const [addOpen, setAddOpen] = useState(false);
-  const [directoryOpen, setDirectoryOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
 
   // Residual Rrs: subscribe + initial getDirectMcpServerStatuses.
   useEffect(() => {
     let cancelled = false;
-    setLoadState("loading");
+    if (!isDirectMcpHydrated()) setLoadState("loading");
     void ensureDirectMcpHydrated()
       .then(() => {
         if (!cancelled) setLoadState("ready");
@@ -49,11 +57,14 @@ export function ConnectorsRoute() {
     };
   }, []);
 
-  // Official: ?directory=true opens connectors directory once.
+  // Official: ?directory=true → pe open("connectors").
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("directory") === "true") {
-      setDirectoryOpen(true);
+      const filter = params.get("connectorTypeFilter");
+      officialDirectoryStore.getState().open("connectors", {
+        connectorTypeFilter: filter ?? null,
+      });
     }
     if (params.get("add-custom-connector") === "true" || params.get("connectorUrl") || params.get("connectorName")) {
       setAddOpen(true);
@@ -72,7 +83,7 @@ export function ConnectorsRoute() {
 
   const selected = useMemo(() => items.find((item) => item.id === selectedId) ?? null, [items, selectedId]);
 
-  const openBrowse = () => setDirectoryOpen(true);
+  const openBrowse = () => officialDirectoryStore.getState().open("connectors");
   const openAdd = () => setAddOpen(true);
 
   if (loadState === "loading" && items.length === 0) {
@@ -108,13 +119,6 @@ export function ConnectorsRoute() {
               setSelectedId(created.id);
               setAddOpen(false);
             }}
-          />
-        ) : null}
-        {directoryOpen ? (
-          <ConnectorsDirectoryPanel
-            connectorTypeFilter={new URLSearchParams(window.location.search).get("connectorTypeFilter")}
-            onClose={() => setDirectoryOpen(false)}
-            onAdded={(item) => setSelectedId(item.id)}
           />
         ) : null}
       </>
@@ -186,13 +190,6 @@ export function ConnectorsRoute() {
             setSelectedId(created.id);
             setAddOpen(false);
           }}
-        />
-      ) : null}
-      {directoryOpen ? (
-        <ConnectorsDirectoryPanel
-          connectorTypeFilter={new URLSearchParams(window.location.search).get("connectorTypeFilter")}
-          onClose={() => setDirectoryOpen(false)}
-          onAdded={(item) => setSelectedId(item.id)}
         />
       ) : null}
     </>

@@ -125,8 +125,11 @@ type RawLocalSessionsBridge = {
   setFocusedSession?: (id: string | null) => Promise<unknown>;
   submitFeedback?: (input?: unknown) => Promise<unknown>;
   submitTranscriptFeedback?: (sessionIdOrInput: unknown, input?: unknown) => Promise<unknown>;
-  archive?: (id: string) => Promise<unknown>;
+  archive?: (id: string, options?: { cleanupWorktree?: boolean }) => Promise<unknown>;
+  unarchive?: (id: string) => Promise<unknown>;
   delete?: (id: string) => Promise<unknown>;
+  /** Official CT.getUncommittedChanges — porcelain lines (string[]) for $Yt. */
+  getUncommittedChanges?: (idOrCwd: string) => Promise<unknown>;
   searchSessions?: (query: string, options?: Record<string, unknown>) => Promise<unknown[]>;
   onEvent?: RawEventSubscription;
   onOnEvent?: RawEventSubscription;
@@ -341,6 +344,30 @@ export type RawClaudeWebBridge = {
     onFullscreenChanged?: (listener: (...args: unknown[]) => void) => () => void;
     zoomFactorChanged?: (listener: (...args: unknown[]) => void) => () => void;
     onZoomFactorChanged?: (listener: (...args: unknown[]) => void) => () => void;
+  };
+  /**
+   * Official _T = globalThis["claude.web"]?.CustomPlugins
+   * (O8t listLocalOrgPlugins + L8t listMarketplaces / listAvailablePlugins).
+   */
+  CustomPlugins?: {
+    addMarketplace?: (...args: unknown[]) => Promise<unknown>;
+    installLocalOrgPlugin?: (
+      pluginName: string,
+    ) => Promise<{ error?: string; pluginId?: string; success: boolean }>;
+    installPlugin?: (...args: unknown[]) => Promise<unknown>;
+    listAvailablePlugins?: (...args: unknown[]) => Promise<unknown>;
+    listLocalOrgPlugins?: () => Promise<unknown>;
+    listMarketplaces?: (...args: unknown[]) => Promise<unknown>;
+    refreshMarketplace?: (...args: unknown[]) => Promise<unknown>;
+    removeMarketplace?: (...args: unknown[]) => Promise<unknown>;
+    uninstallPlugin?: (...args: unknown[]) => Promise<unknown>;
+  };
+  /** Official kT = globalThis["claude.web"]?.LocalPlugins (JZ / S7t uX uploadPlugin). */
+  LocalPlugins?: {
+    deletePlugin?: (...args: unknown[]) => Promise<unknown>;
+    getPlugins?: (...args: unknown[]) => Promise<unknown>;
+    setPluginEnabled?: (...args: unknown[]) => Promise<unknown>;
+    uploadPlugin?: (...args: unknown[]) => Promise<unknown>;
   };
 };
 
@@ -1133,14 +1160,29 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       const item = await raw?.start?.({ kind, title: kind === "code" ? "General coding session" : "New session" });
       return enrichSessionWithGitInfo(normalizeSession(item, kind), raw);
     },
-    archive: async (id) => {
-      await raw?.archive?.(id);
+    archive: async (id, options) => {
+      // Official sidebar: CT.archive(n,{cleanupWorktree:!0})
+      await raw?.archive?.(id, { cleanupWorktree: options?.cleanupWorktree !== false });
     },
     unarchive: async (id) => {
       await raw?.unarchive?.(id);
     },
     delete: async (id) => {
       await raw?.delete?.(id);
+    },
+    getUncommittedChanges: async (idOrCwd) => {
+      // Official IPC: string[] | null. null = no managed worktree → $Yt proceeds.
+      const rawResult = await raw?.getUncommittedChanges?.(idOrCwd);
+      if (rawResult == null) return null;
+      if (Array.isArray(rawResult)) {
+        return rawResult.map((line) => String(line)).filter(Boolean);
+      }
+      // Legacy GitCommandResult-shaped host — normalize to porcelain lines.
+      if (typeof rawResult === "object") {
+        const stdout = String((rawResult as { stdout?: unknown }).stdout ?? "").replace(/\r\n/g, "\n").trim();
+        return stdout ? stdout.split("\n").filter(Boolean) : [];
+      }
+      return null;
     },
     setFocusedSession: async (id) => {
       await raw?.setFocusedSession?.(id);
@@ -1420,9 +1462,21 @@ function createCoworkLifecycleBridge(raw: RawLocalSessionsBridge | undefined): C
       return typeof prompt === "string" ? prompt : null;
     },
     create: async (kind) => normalizeSession(await raw?.start?.({ kind, title: "New session" }), "epitaxy", false),
-    archive: async (id) => { await raw?.archive?.(id); },
+    archive: async (id, options) => {
+      await raw?.archive?.(id, { cleanupWorktree: options?.cleanupWorktree !== false });
+    },
     unarchive: async (id) => { await raw?.unarchive?.(id); },
     delete: async (id) => { await raw?.delete?.(id); },
+    getUncommittedChanges: async (idOrCwd) => {
+      const rawResult = await raw?.getUncommittedChanges?.(idOrCwd);
+      if (rawResult == null) return null;
+      if (Array.isArray(rawResult)) return rawResult.map((line) => String(line)).filter(Boolean);
+      if (typeof rawResult === "object") {
+        const stdout = String((rawResult as { stdout?: unknown }).stdout ?? "").replace(/\r\n/g, "\n").trim();
+        return stdout ? stdout.split("\n").filter(Boolean) : [];
+      }
+      return null;
+    },
     setFocusedSession: async (id) => { await raw?.setFocusedSession?.(id); },
     submitFeedback: async (input) => raw?.submitFeedback?.(input),
     submitTranscriptFeedback: async (sessionIdOrInput, input) => raw?.submitTranscriptFeedback?.(sessionIdOrInput, input),

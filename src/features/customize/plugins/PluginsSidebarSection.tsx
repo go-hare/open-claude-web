@@ -1,6 +1,7 @@
 import { Menu } from "@base-ui-components/react/menu";
 import { BaseMenuItem, BaseMenuPopup, BaseSubmenu } from "../../../shell/BaseMenu";
 import { Icon } from "../../../shell/icons";
+import { useCustomizeText } from "../customizeMessages";
 import { PLUGINS_AWARENESS_EMPTY_CTA } from "../customizeGates";
 
 /**
@@ -27,28 +28,29 @@ export function PluginsSidebarSection({
   plugins?: Array<{ id: string; name: string }>;
 }) {
   const isGlobalEmpty = plugins.length === 0;
+  const text = useCustomizeText();
 
   return (
     <div className="flex flex-col gap-px">
       <hr className="border-t border-border-300 my-2 mx-2" />
       <div className="flex items-center justify-between gap-1.5 pb-1 px-3">
-        <span className="text-text-500 font-small">Personal plugins</span>
+        <span className="text-text-500 font-small">{text.personalPlugins}</span>
         <Menu.Root>
           <Menu.Trigger
-            aria-label="Add plugin"
-            title="Add plugin"
+            aria-label={text.addPlugin}
+            title={text.addPlugin}
             className="cds-reset inline-flex size-5 items-center justify-center rounded-md text-text-500 hover:bg-bg-300 hover:text-text-100 focus-visible:shadow-focus"
           >
             <Icon name="plusSmall" />
           </Menu.Trigger>
           <BaseMenuPopup align="start" side="bottom" sideOffset={4}>
             <BaseMenuItem icon="plugin" onClick={onBrowsePlugins}>
-              Browse plugins
+              {text.browsePlugins}
             </BaseMenuItem>
             {localPluginsVisible ? (
               <BaseSubmenu
                 icon="plusSmall"
-                label="Create plugin"
+                label={text.createPlugin}
                 popupAlign="start"
                 popupSide="right"
               >
@@ -58,7 +60,7 @@ export function PluginsSidebarSection({
                     onUploadPlugin?.();
                   }}
                 >
-                  Upload plugin
+                  {text.uploadPlugin}
                 </BaseMenuItem>
                 <BaseMenuItem
                   icon="spark"
@@ -66,7 +68,7 @@ export function PluginsSidebarSection({
                     onCreateWithClaude?.();
                   }}
                 >
-                  Create with Claude
+                  {text.createWithClaude}
                 </BaseMenuItem>
               </BaseSubmenu>
             ) : null}
@@ -77,18 +79,18 @@ export function PluginsSidebarSection({
       {isGlobalEmpty ? (
         PLUGINS_AWARENESS_EMPTY_CTA ? (
           <div className="flex flex-col gap-3 mt-2 mb-4 px-4 items-center text-center">
-            <p className="text-text-500 text-xs">Give Claude role-level expertise with plugins</p>
+            <p className="text-text-500 text-xs">{text.pluginsAwarenessCta}</p>
             <button
               type="button"
               onClick={onBrowsePlugins}
               className="cds-reset inline-flex h-8 items-center justify-center rounded-lg border border-border-300 bg-bg-000 px-3 text-sm text-text-100 shadow-sm hover:bg-bg-100 focus-visible:shadow-focus"
             >
-              Browse plugins
+              {text.browsePlugins}
             </button>
           </div>
         ) : (
           <p className="text-text-500 text-xs mt-2 mb-4 px-3">
-            Plugins that you add or create will appear here.
+            {text.pluginsEmpty}
           </p>
         )
       ) : (

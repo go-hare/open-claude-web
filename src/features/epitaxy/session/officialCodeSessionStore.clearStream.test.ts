@@ -303,7 +303,10 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(bucket?.session?.isRunning).toBe(true);
   });
 
-  it("applyLoad preserves pendingTurn/queue while host reports settled mid-drain", () => {
+  it("applyLoad drops pendingTurn when host idle even if web queue remains", () => {
+    // Official H=Qke follows host/pendingTurn, not optimistic queuedMessages.
+    // Real drainDeferredSends keeps host isRunning true; web-only queue after markNotRunning
+    // must not sticky Stop/H.
     officialCodeSessionStore.getState().openSession("s1", {
       id: "s1",
       kind: "code",
@@ -330,7 +333,8 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     });
 
     const bucket = officialCodeSessionStore.getState().buckets.s1;
-    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+    expect(bucket?.pendingTurnStartedAt).toBeNull();
+    expect(bucket?.session?.isRunning).toBe(false);
     expect(bucket?.queuedMessages.map((message) => message.id)).toEqual(["q1"]);
   });
 
@@ -587,8 +591,10 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(bucket?.pendingTurnEndTurnSeen).toBe(true);
   });
 
-  it("patchSession keeps isRunning while live stream owns the turn", () => {
-    // Stale isRunning=false mid-stream must not idle the chrome.
+  it("patchSession does not invent isRunning from Va (official H=Qke)", () => {
+    // Official session_updated mirrors host isRunning only. Va/streamingMessageId must
+    // NOT force isRunning true or keep pendingTurn — that stuck Gv after markNotRunning
+    // when Pe lagged (c119 busy:H = Qke; composer busy:H).
     officialCodeSessionStore.getState().openSession("s1", {
       id: "s1",
       kind: "code",
@@ -611,9 +617,125 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     } as never);
 
     const bucket = officialCodeSessionStore.getState().buckets.s1;
-    expect(bucket?.session?.isRunning).toBe(true);
-    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+    expect(bucket?.session?.isRunning).toBe(false);
+    expect(bucket?.pendingTurnStartedAt).toBeNull();
+    // Va ownership flags may linger until result Pke.clear — not H.
     expect(bucket?.streamingMessageId).toBe("msg_live");
+  });
+
+  it("patchSession does not invent isRunning from web queue (official session_updated)", () => {
+    // Official session_updated mirrors host isRunning only. Web queuedMessages alone must
+    // NOT force isRunning or keep pendingTurn — that stuck H/Gv after Esc markNotRunning
+    // when host deferred was empty. Real drainDeferredSends keeps host isRunning true.
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "6"));
+
+    officialCodeSessionStore.getState().patchSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 2,
+      isRunning: false,
+    } as never);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.session?.isRunning).toBe(false);
+    expect(bucket?.pendingTurnStartedAt).toBeNull();
+    // Optimistic Hb queue may still show until result g / cancel — not H.
+    expect(bucket?.queuedMessages.map((message) => message.id)).toEqual(["q1"]);
+  });
+
+  it("noteQueuedSend only bumps when pendingTurn set (official Gr)", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: false,
+    } as never, []);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      streamActivityMode: "responding",
+      streamingMessageId: "msg_live",
+      isRunning: true,
+    });
+    officialCodeSessionStore.getState().noteQueuedSend("s1");
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingQueuedSends).toBe(0);
+
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: Date.now(),
+      isRunning: true,
+    });
+    officialCodeSessionStore.getState().noteQueuedSend("s1");
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingQueuedSends).toBe(1);
+  });
+
+  it("clearPendingTurn drops pendingTurn + compaction only (official Yr/Gr.onError)", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "6"));
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: Date.now(),
+      streamActivityMode: "responding",
+      streamingMessageId: "msg_live",
+      isRunning: true,
+    });
+    officialCodeSessionStore.setState((state) => ({
+      buckets: {
+        ...state.buckets,
+        s1: {
+          ...state.buckets.s1!,
+          compactionStatus: "compacting",
+          pendingQueuedSends: 1,
+        },
+      },
+    }));
+
+    officialCodeSessionStore.getState().clearPendingTurn("s1");
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.pendingTurnStartedAt).toBeNull();
+    expect(bucket?.compactionStatus).toBeNull();
+    // Official clearPendingTurn does not discard queue / Va / isRunning.
+    expect(bucket?.queuedMessages.map((message) => message.id)).toEqual(["q1"]);
+    expect(bucket?.pendingQueuedSends).toBe(1);
+    expect(bucket?.streamingMessageId).toBe("msg_live");
+    expect(bucket?.session?.isRunning).toBe(true);
+  });
+
+  it("Gr.onError mid-turn: dropQueued then clearPending only when queue drained", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().noteQueuedSend("s1");
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingQueuedSends).toBe(1);
+
+    // Local mid-turn may only have pendingQueuedSends until CLI echo (`d`).
+    officialCodeSessionStore.getState().dropQueuedMessage("s1", "missing-uuid");
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingQueuedSends).toBe(0);
+    const afterDrop = officialCodeSessionStore.getState().buckets.s1;
+    if (
+      afterDrop
+      && afterDrop.pendingTurnStartedAt != null
+      && afterDrop.queuedMessages.length === 0
+      && afterDrop.pendingQueuedSends === 0
+    ) {
+      officialCodeSessionStore.getState().clearPendingTurn("s1");
+    }
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt).toBeNull();
   });
 
   it("patchSession drops stale pendingTurn when host idle without live stream", () => {

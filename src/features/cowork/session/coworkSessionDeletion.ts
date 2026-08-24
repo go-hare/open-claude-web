@@ -49,7 +49,12 @@ export function replaceAppNavigation(path: string) {
   window.dispatchEvent(new Event("app:navigation"));
 }
 
-function clearCoworkSessionCaches(sessionId: string) {
+/**
+ * Official Q5 archived/deleted: $5.clearSession + H5.removePrsForSession + K5.dismissNudge.
+ * Product analog for the session caches ($5 / transcript / stop_details).
+ * Exported so n6 onEvent can clear without going through delete/archive commands.
+ */
+export function clearCoworkSessionCaches(sessionId: string) {
   // Runtime uses official stream store for Cowork stream snapshots.
   officialStreamClear(sessionId);
   officialStreamDrop(sessionId);

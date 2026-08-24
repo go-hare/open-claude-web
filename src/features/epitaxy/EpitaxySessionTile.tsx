@@ -296,6 +296,7 @@ function EpitaxyChatPanel({
     messages,
     reload,
     reviewProgress,
+    rollbackLocalUserTurn,
     session,
     spawnLabel,
     stopLiveTurn,
@@ -446,11 +447,16 @@ function EpitaxyChatPanel({
         return;
       }
       const messageUuid = createMessageUuid();
-      beginLocalUserTurn(text, messageUuid);
+      // Official Gr onMutate → mutationFn → onError rollback (ca0135).
+      const { wasMidTurn, uuid } = beginLocalUserTurn(text, messageUuid);
       scrollTranscriptToBottom();
-      await sendMessageToSession(initialSessionId, text, { messageUuid });
+      try {
+        await sendMessageToSession(initialSessionId, text, { messageUuid: uuid });
+      } catch {
+        rollbackLocalUserTurn(uuid, wasMidTurn);
+      }
     },
-    [beginLocalUserTurn, initialSessionId, scrollTranscriptToBottom],
+    [beginLocalUserTurn, initialSessionId, rollbackLocalUserTurn, scrollTranscriptToBottom],
   );
   /**
    * Official Preview Annotate → qy.push residual only.
@@ -941,13 +947,17 @@ function EpitaxyChatPanel({
             }}
             onStop={stopLiveTurn}
             onSubmit={async (text, input) => {
-              // Official Gr onMutate: noteQueuedSend + beginPendingTurn (or queue when mid-turn).
-              // Stable uuid ties optimistic row / cancelQueued / CLI echo (index-BELzQL5P zke).
+              // Official Gr (ca0135): onMutate noteQueuedSend+beginPendingTurn; local Hb via CLI echo `d`.
+              // Stable uuid ties cancelQueued / CLI echo (index-BELzQL5P zke).
               const messageUuid = input?.messageUuid ?? createMessageUuid();
-              beginLocalUserTurn(text, messageUuid);
-              // Official keeps pin and sticks to bottom on send (scrollHeight).
+              const { wasMidTurn, uuid } = beginLocalUserTurn(text, messageUuid);
               scrollTranscriptToBottom();
-              await sendMessageToSession(initialSessionId, text, { ...input, messageUuid });
+              try {
+                await sendMessageToSession(initialSessionId, text, { ...input, messageUuid: uuid });
+              } catch {
+                // Official Gr.onError: mid-turn dropQueued(+clearPending if empty); else clearPendingTurn.
+                rollbackLocalUserTurn(uuid, wasMidTurn);
+              }
             }}
             reload={reload}
             session={session}

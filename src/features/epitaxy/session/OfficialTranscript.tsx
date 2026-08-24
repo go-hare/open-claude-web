@@ -720,7 +720,10 @@ function useOfficialTranscriptVirtualizer<TItem>({
     lastProgrammaticScrollTopRef.current = node.scrollTop;
     lastObservedScrollTopRef.current = node.scrollTop;
     lastObservedTotalSizeRef.current = liveTotal;
-  }, [isScrolling, itemCount, totalSize, tryRestoreAnchorKey, virtualizer]);
+    // Residual pin layout deps are primitives (h/k/N/…) — NOT the virtualizer object.
+    // @tanstack useVirtualizer returns a new object each render; putting it in deps
+    // re-runs scrollTop=total → notify → setState → Maximum update depth.
+  }, [isScrolling, itemCount, totalSize, tryRestoreAnchorKey]);
 
   // Residual prepend layout: head key change → I(delta) when unpinned.
   useLayoutEffect(() => {
@@ -832,7 +835,8 @@ function useOfficialTranscriptVirtualizer<TItem>({
       lastObservedTotalSizeRef.current = nextTotal;
     });
     return { observed, ro };
-  }, [virtualizer]);
+    // RO callback reads virtualizerRef — do not depend on unstable virtualizer object.
+  }, []);
 
   useEffect(() => {
     if (!resizeObserveBag) return undefined;

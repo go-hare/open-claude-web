@@ -29,6 +29,12 @@ import {
   unarchiveCodeSession,
 } from "../features/epitaxy/session/codeSessionDeletion";
 import { officialCodeSessionStore } from "../features/epitaxy/session/officialCodeSessionStore";
+import {
+  applyOfficialRecentsListEvent,
+  officialRecentsMarkArchived,
+  officialRecentsMarkUnarchived,
+  officialRecentsRemove,
+} from "./officialCodeRecentsList";
 
 type RecentsSectionProps = {
   frame: FrameStore;
@@ -48,43 +54,37 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
   useEffect(() => {
     let mounted = true;
     const source = desktopBridge.LocalSessions;
+    // Official index-BELzQL5P Rve / Dve (Code list store kve):
+    //   Rve: CT.getAll / list once on mount — set sessions only (no openSession invent).
+    //   Dve: onOnEvent switch meta types → Ive upsert / archived / deleted / initialized;
+    //        ignores message / stream_event (product invent was onEvent→list every tick).
     // Residual ca0135 Ml / Cl: Code recents is map + overflow parent — NOT Fu virtualizer.
-    // Cold empty paints 最近 + filter (ie/Oa), not invent "Loading…" text or jd spinner.
-    // Pw isLoadingLocal|Remote drives Action Center (_w null), not this sidebar section.
     const loadSessions = () =>
       source.list().then((items) => {
         if (!mounted) return;
-        const sorted = [...items].sort(byNewest);
-        setSessions(sorted);
-        // Official: session meta is shared with chat buckets — seed openSession meta so
-        // selecting a recent can paint title/cwd immediately from the same store as tm.
-        // Official Recents list paints titles from the list API only.
-        // Do NOT invent openSession(meta) for every row — that created empty
-        // buckets for all sessions and competed with real open/load on switch.
-        // openSession + seed is the chat-open path (c119 tm / BELz openSession).
-        const store = officialCodeSessionStore.getState();
-        const openId = selectedSessionIdFromPath(window.location.pathname);
-        if (openId) {
-          const open = sorted.find((session) => session.id === openId);
-          if (open) {
-            const existing = store.buckets[openId];
-            // Residual: list API paints Recents titles only. Chat open path seeds meta.
-            // Do NOT openSession when messages=[] after settle — that resurrected B → sticky Ja.
-            // Only cold/missing (!session) openSession; already-open meta uses patchSession.
-            if (!existing?.session) {
-              store.openSession(openId, open);
-            } else {
-              store.patchSession(openId, open);
-            }
-          }
-        }
+        setSessions([...items].sort(byNewest));
       }).catch(() => {
         // Keep last painted rows; residual list does not invent error chrome here.
       });
     void loadSessions();
-    const unsubscribe = source.onEvent?.(() => {
-      // Event-driven hot refresh: replace rows in place (no loading chrome flash).
-      void loadSessions();
+    const unsubscribe = source.onEvent?.((event) => {
+      applyOfficialRecentsListEvent(
+        event,
+        (updater) => {
+          if (!mounted) return;
+          setSessions((current) => {
+            const next = updater(current);
+            return next === current ? current : [...next].sort(byNewest);
+          });
+        },
+        async (sessionId) => {
+          const session = await source.getSession?.(sessionId);
+          return session ?? null;
+        },
+        () => {
+          void loadSessions();
+        },
+      );
     });
     return () => {
       mounted = false;
@@ -127,7 +127,9 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
   const rawActions = useSessionRowActions(frame, setSessions);
   /**
    * Official sidebar archive residual (ue):
-   * await archive → de(next/prev/home) if current → KEe pane ref clear.
+   * await archiveLocalSession ($Yt + CT.archive cleanupWorktree) → de(next/prev/home) if current
+   * → KEe({kind:"code",id}) = setStarred(false) + removeFromPinnedOrder (NOT pane close).
+   * Extra-pane close is PaneLayout subscribe (separate from KEe).
    * Archived rows stay in sessions with isArchived; default filter hides them.
    */
   const archiveSession = useCallback(async (session: SessionSummary) => {
@@ -135,21 +137,19 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
     const fallbackPath = resolveDeletedCodeSessionFallback(ordered, session.id);
     const ok = await archiveCodeSession(session.id);
     if (!ok) return;
-    // Drop pin flag + order so PinnedSection cannot re-surface via isPinned fallback.
-    setSessions((current) => current.map((item) => (
-      item.id === session.id ? { ...item, isArchived: true, isPinned: false } : item
-    )));
-    frame.clearSessionSidebarMeta(sessionPinKey(session));
+    // Official archived: Eve.add + isArchived/worktree clear (via MarkArchived) before meta race.
+    setSessions((current) => officialRecentsMarkArchived(current, session.id));
+    // Official ue order: de(next/prev/home) then KEe (unpin/unstar) — not pane close.
     if (selectedSessionIdFromPath(window.location.pathname) === session.id) {
       replaceAppNavigation(fallbackPath);
     }
+    frame.clearSessionSidebarMeta(sessionPinKey(session));
   }, [frame, visibleNavigationOrder]);
   const unarchiveSession = useCallback(async (session: SessionSummary) => {
     const ok = await unarchiveCodeSession(session.id);
     if (!ok) return;
-    setSessions((current) => current.map((item) => (
-      item.id === session.id ? { ...item, isArchived: false } : item
-    )));
+    // Official Ave: Eve.delete + isArchived:false.
+    setSessions((current) => officialRecentsMarkUnarchived(current, session.id));
   }, []);
   const actions = useCallback((session: SessionSummary, action: RowAction) => {
     if (action === "rename") {
@@ -179,22 +179,23 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
     const fallbackPath = resolveDeletedCodeSessionFallback(ordered, target.id);
     const ok = await deleteCodeSession(target.id);
     if (!ok) return;
-    setSessions((current) => current.filter((item) => item.id !== target.id));
-    // Official: drop pin + custom-group assignment/order (orphan keys).
-    frame.clearSessionSidebarMeta(sessionPinKey(target));
-    // Only leave the route if still viewing the deleted session (race-safe).
+    // Official Lve: Eve.add + drop row (before any racing session_updated upsert).
+    setSessions((current) => officialRecentsRemove(current, target.id));
+    // Official ge order: de(next/prev/home) then KEe (unpin/unstar).
     if (selectedSessionIdFromPath(window.location.pathname) === target.id) {
       replaceAppNavigation(fallbackPath);
     }
+    frame.clearSessionSidebarMeta(sessionPinKey(target));
   }, [deleteTarget, frame, visibleNavigationOrder]);
 
   // Header/other-window deletes also drop the sidebar row + pin/group meta.
+  // Official Lve/archived also arrive via Dve onEvent — helpers keep array identity when no-op.
   useEffect(() => {
     return subscribeCodeSessionDeleted((sessionId) => {
       setSessions((current) => {
         const target = current.find((item) => item.id === sessionId);
         if (target) frame.clearSessionSidebarMeta(sessionPinKey(target));
-        return current.filter((item) => item.id !== sessionId);
+        return officialRecentsRemove(current, sessionId);
       });
     });
   }, [frame]);
@@ -205,18 +206,14 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
       setSessions((current) => {
         const target = current.find((item) => item.id === sessionId);
         if (target) frame.clearSessionSidebarMeta(sessionPinKey(target));
-        return current.map((item) => (
-          item.id === sessionId ? { ...item, isArchived: true, isPinned: false } : item
-        ));
+        return officialRecentsMarkArchived(current, sessionId);
       });
     });
   }, [frame]);
 
   useEffect(() => {
     return subscribeCodeSessionUnarchived((sessionId) => {
-      setSessions((current) => current.map((item) => (
-        item.id === sessionId ? { ...item, isArchived: false } : item
-      )));
+      setSessions((current) => officialRecentsMarkUnarchived(current, sessionId));
     });
   }, []);
   const createGroupForSession = useCallback((session: SessionSummary, name: string) => {

@@ -8,6 +8,14 @@ const SHELL_MESSAGES = {
   allProjects: { defaultMessage: "All projects", id: "NZLQi1PTsg", zhCN: "全部项目" },
   archive: { defaultMessage: "Archive", id: "hrgo+EleAn", zhCN: "归档" },
   archived: { defaultMessage: "Archived", id: "0HT+IbyW6O", zhCN: "已归档" },
+  /** Official VYt / $Yt — Archive anyway (RG7DQpwgjC). */
+  archiveAnyway: { defaultMessage: "Archive anyway", id: "RG7DQpwgjC", zhCN: "仍要归档" },
+  /** Official VYt title rcZ8QdQjDl. */
+  archiveWithUncommittedTitle: {
+    defaultMessage: "Archive session with uncommitted changes?",
+    id: "rcZ8QdQjDl",
+    zhCN: "归档含未提交更改的会话？",
+  },
   unarchive: { defaultMessage: "Unarchive", id: "__local.unarchive", zhCN: "取消归档" },
   cancel: { defaultMessage: "Cancel", id: "47FYwba+bI", zhCN: "取消" },
   clearFilters: { defaultMessage: "Clear filters", id: "F4gyn3vRX6", zhCN: "清除筛选" },
@@ -24,10 +32,33 @@ const SHELL_MESSAGES = {
   customizeSidebarDescription: { defaultMessage: "Choose which items appear in your sidebar.", id: "KTKw0eMHnY", zhCN: "选择哪些项目显示在侧边栏中。" },
   date: { defaultMessage: "Date", id: "P7PLVjLe4f", zhCN: "日期" },
   delete: { defaultMessage: "Delete", id: "K3r6DQW7h+", zhCN: "删除" },
+  /** Official VYt / $Yt — Delete anyway (9w/oawRjHR). */
+  deleteAnyway: { defaultMessage: "Delete anyway", id: "9w/oawRjHR", zhCN: "仍要删除" },
   deleteGroup: { defaultMessage: "Delete group", id: "BpuMwRROLB", zhCN: "删除分组" },
   deleteSession: { defaultMessage: "Delete session", id: "Anjya1uoz1", zhCN: "删除会话" },
   deleteSessionPrefix: { defaultMessage: "Delete", id: "__local.deleteSessionPrefix", zhCN: "删除" },
   deleteSessionSuffix: { defaultMessage: "This can’t be undone.", id: "__local.deleteSessionSuffix", zhCN: "此操作无法撤销。" },
+  /** Official VYt title aL/o54ZWx3. */
+  deleteWithUncommittedTitle: {
+    defaultMessage: "Delete session with uncommitted changes?",
+    id: "aL/o54ZWx3",
+    zhCN: "删除含未提交更改的会话？",
+  },
+  /**
+   * Official jmqxvZTZAZ body — interpolate `{count}`.
+   * Product keeps one string; dialog picks singular/plural EN or CN.
+   */
+  uncommittedDiscardBody: {
+    defaultMessage: "This session's worktree has {count} uncommitted changes that will be permanently discarded.",
+    id: "jmqxvZTZAZ",
+    zhCN: "此会话的 worktree 有 {count} 个未提交更改，将被永久丢弃。",
+  },
+  /** Official wHChJytals — interpolate `{more}`. */
+  uncommittedAndMore: {
+    defaultMessage: "… and {more} more",
+    id: "wHChJytals",
+    zhCN: "… 以及另外 {more} 项",
+  },
   done: { defaultMessage: "Done", id: "JXdbo8GiGF", zhCN: "完成" },
   dragToPin: { defaultMessage: "Drag to pin", id: "__local.dragToPin", zhCN: "拖动以固定" },
   dropToPin: { defaultMessage: "Drop here", id: "__local.dropToPin", zhCN: "拖到这里" },

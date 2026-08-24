@@ -1447,9 +1447,11 @@ function OfficialSessionTitle({
   );
 
   /**
-   * Official titlebar archive residual:
-   * shared archiveCodeSession → onSessionRemoved / leave /code/:id.
-   * Sidebar archive additionally does next/prev; header leaves current session (same as delete).
+   * Titlebar archive/delete (not sidebar ue/ge):
+   * shared archiveCodeSession/deleteCodeSession ($Yt + bridge + $5/H5 caches).
+   * KEe = setStarred(false)+removeFromPinnedOrder — sidebar clearSessionSidebarMeta, not here.
+   * Extra-pane close is PaneLayout subscribe / onSessionRemoved (Close pane X), separate from KEe.
+   * Lone primary: leave /code home if URL still on this id (sidebar ue/ge uses next/prev/home).
    */
   const archiveSession = useCallback(async () => {
     const ok = await archiveCodeSession(sessionId);
@@ -1464,14 +1466,14 @@ function OfficialSessionTitle({
   }, [onSessionRemoved, sessionId]);
 
   const deleteSession = useCallback(async () => {
-    // Shared delete: bridge + cache clear + notify. Navigation/pane close stays in caller.
+    // Shared delete: bridge + cache clear + notify. Pane close / home leave stays in caller.
     const ok = await deleteCodeSession(sessionId);
     if (!ok) return;
     if (onSessionRemoved) {
       onSessionRemoved();
       return;
     }
-    // Primary without callback: only leave if URL still points at this session.
+    // Lone primary without Close-pane callback: leave if URL still points at this session.
     if (selectedSessionIdFromPath(window.location.pathname) === sessionId) {
       replaceAppNavigation(sessionHomePath("code"));
     }

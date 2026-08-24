@@ -1,17 +1,37 @@
 import { Popover } from "@base-ui-components/react/popover";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ContextUsage, SessionSummary } from "../../adapters/desktopBridge";
 import type { LocalSessionsBridge } from "../../adapters/desktopBridge/types";
 import { OfficialButton, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
 import { OfficialContextProgressBar, OfficialContextWindowSummary, OfficialUsageCircle, composerUsageCircumference, formatUsageTokenCount, officialClampPercent } from "./OfficialComposerContextUsage";
+import { useOfficialCodeSessionBucket } from "./session/officialCodeSessionStore";
 
 const officialContextUsageCache = new Map<string, ContextUsage>();
 
+/**
+ * Official c4bf `Ue` residual:
+ *   queryKey: ["epitaxy", type, "contextUsage", id, model]
+ *   enabled: Boolean(id&&type) && hasGetContextUsage && !Xke
+ *   staleTime: 0
+ * Xke = Qke(pendingTurn && !endTurnSeen). When the turn settles (!Xke) or model
+ * changes, react-query refetches. Product mirrors that with a module cache +
+ * refetch when busy clears / model changes (plus mount + popover open).
+ */
 export function OfficialComposerUsageIndicator({ bridge, session, sessionRef }: { bridge: LocalSessionsBridge; session?: SessionSummary | null; sessionRef?: OfficialSessionRef | null }) {
   const sessionId = sessionRef?.id;
+  const bucket = useOfficialCodeSessionBucket(sessionId);
+  // Official Qke / Xke: pendingTurn exists AND endTurnSeen is still false.
+  const xke = bucket.pendingTurnStartedAt !== null && !bucket.pendingTurnEndTurnSeen;
+  const model =
+    session?.model
+    ?? bucket.session?.model
+    ?? bucket.liveMeta?.model
+    ?? null;
   const [bridgeUsage, setBridgeUsage] = useState<ContextUsage | null>(() => sessionId ? officialContextUsageCache.get(sessionId) ?? null : null);
   const [isFetching, setIsFetching] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const prevXkeRef = useRef(xke);
+  const prevModelRef = useRef<string | null>(null);
   const setUsageForSession = useCallback((nextUsage: ContextUsage | null) => {
     if (!sessionId) {
       setBridgeUsage(null);
@@ -20,12 +40,13 @@ export function OfficialComposerUsageIndicator({ bridge, session, sessionRef }: 
     if (nextUsage) officialContextUsageCache.set(sessionId, nextUsage);
     setBridgeUsage(nextUsage ?? officialContextUsageCache.get(sessionId) ?? null);
   }, [sessionId]);
-  const refreshUsage = useCallback(async () => {
+  const refreshUsage = useCallback(async (opts?: { invalidate?: boolean }) => {
     if (!sessionId || !bridge.getContextUsage) {
       setUsageForSession(null);
       setIsFetching(false);
       return;
     }
+    if (opts?.invalidate) officialContextUsageCache.delete(sessionId);
     setIsFetching(true);
     let alive = true;
     await bridge.getContextUsage(sessionId).then((nextUsage) => {
@@ -37,8 +58,11 @@ export function OfficialComposerUsageIndicator({ bridge, session, sessionRef }: 
     });
     alive = false;
   }, [bridge, sessionId, setUsageForSession]);
+  // Mount / sessionId change — official Ue runs when enabled becomes true.
   useEffect(() => {
     let alive = true;
+    prevXkeRef.current = xke;
+    prevModelRef.current = model;
     if (!sessionId || !bridge.getContextUsage) {
       setUsageForSession(null);
       setIsFetching(false);
@@ -56,7 +80,25 @@ export function OfficialComposerUsageIndicator({ bridge, session, sessionRef }: 
     return () => {
       alive = false;
     };
+    // xke/model intentionally omitted — settle/model effects own those refetches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- session switch only
   }, [bridge, sessionId, setUsageForSession]);
+  // Official Ue staleTime:0 + enabled:!Xke — refetch when turn settles (busy→idle).
+  useEffect(() => {
+    const wasBusy = prevXkeRef.current;
+    prevXkeRef.current = xke;
+    if (wasBusy && !xke && sessionId && bridge.getContextUsage) {
+      void refreshUsage({ invalidate: true });
+    }
+  }, [xke, sessionId, bridge, refreshUsage]);
+  // Official queryKey includes model — refetch when model changes (not on first paint).
+  useEffect(() => {
+    const prev = prevModelRef.current;
+    prevModelRef.current = model;
+    if (prev == null || prev === model) return;
+    if (!sessionId || !bridge.getContextUsage) return;
+    void refreshUsage({ invalidate: true });
+  }, [model, sessionId, bridge, refreshUsage]);
 
   const isLocalContext = sessionRef?.type === "local";
   const usage = bridgeUsage;

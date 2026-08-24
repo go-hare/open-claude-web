@@ -6,23 +6,28 @@ const coworkActivityPanelExpandedListeners = new Set<() => void>();
 
 export function CoworkActivityPanelShell({
   children,
+  isFileDrawerOpen = false,
   sessionId,
 }: {
   children: ReactNode;
+  /** Official xQt `P` — selectedItem && isDrawerExpanded. Width is iQt only when C && !P. */
+  isFileDrawerOpen?: boolean;
   sessionId: string;
 }) {
   const [expanded] = useCoworkActivityPanelExpanded(sessionId);
+  // Official C6: expandedBySession[id] ?? true. Width: M || C && !P ? iQt : 0 (desktop non-overlay).
+  const open = expanded && !isFileDrawerOpen;
 
   return (
     <aside
-      aria-hidden={!expanded || undefined}
+      aria-hidden={!open || undefined}
       aria-label="Session activity panel"
       className="h-full flex-shrink-0 relative z-20 overflow-hidden"
       data-cowork-session-activity-panel
-      data-expanded={expanded || undefined}
+      data-expanded={open || undefined}
       data-official-source="index-BELzQL5P.js:xQt Session activity panel aside"
-      inert={!expanded || undefined}
-      style={{ width: expanded ? coworkActivityPanelWidth : 0, transition: "width 200ms cubic-bezier(0, 0, 0.2, 1)", willChange: "width" }}
+      inert={!open || undefined}
+      style={{ width: open ? coworkActivityPanelWidth : 0, transition: "width 200ms cubic-bezier(0, 0, 0.2, 1)", willChange: "width" }}
     >
       <div
         className="h-full pl-2 pr-2 flex flex-col pt-0"
@@ -56,13 +61,17 @@ export function useCoworkActivityPanelExpanded(sessionId: string) {
   }, []);
 
   const expanded = coworkActivityPanelExpandedBySession.get(sessionId) ?? true;
-  const toggleExpanded = useCallback(() => {
-    const nextExpanded = !(coworkActivityPanelExpandedBySession.get(sessionId) ?? true);
+  const setExpanded = useCallback((nextExpanded: boolean) => {
+    const current = coworkActivityPanelExpandedBySession.get(sessionId) ?? true;
+    if (current === nextExpanded) return;
     coworkActivityPanelExpandedBySession.set(sessionId, nextExpanded);
     coworkActivityPanelExpandedListeners.forEach((listener) => listener());
   }, [sessionId]);
+  const toggleExpanded = useCallback(() => {
+    setExpanded(!(coworkActivityPanelExpandedBySession.get(sessionId) ?? true));
+  }, [sessionId, setExpanded]);
 
-  return [expanded, toggleExpanded] as const;
+  return [expanded, toggleExpanded, setExpanded] as const;
 }
 
 function CoworkActivityPanelToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {

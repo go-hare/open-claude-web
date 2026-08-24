@@ -21,7 +21,7 @@ import {
   type OfficialLiveMeta,
 } from "./officialLiveMeta";
 import { officialUserMessageIsInterrupt } from "./officialTranscriptParse";
-import { officialMarkTurnStarted } from "./officialStreamSessionStore";
+import { officialClearTurnStarted, officialMarkTurnStarted } from "./officialStreamSessionStore";
 
 export type StreamActivityMode = "idle" | "requesting" | "thinking" | "responding" | "tool-use";
 
@@ -128,7 +128,7 @@ function seedPendingTurnIfHostRunning(
   officialMarkTurnStarted(sessionId, at);
   // pendingTurn only — do NOT invent streamActivityMode requesting. That would make
   // host isRunning=false treat the seed as live stream and sticky-busy forever.
-  // H = pendingTurn || isRunning || real Va/queue; re-entry spark comes from those.
+  // Official H = Qke(pendingTurn && !endTurnSeen); re-entry spark comes from seeded pendingTurn.
   return {
     pendingTurnStartedAt: at,
     pendingTurnEndTurnSeen: false,
@@ -224,6 +224,12 @@ type OfficialCodeSessionActions = {
   /** Official beginPendingTurn — mark turn started (optimistic send). */
   beginPendingTurn: (sessionId: string, optimisticUser?: ChatMessage) => void;
   /**
+   * Official clearPendingTurn (index-BELzQL5P) — pendingTurn=null + compactionStatus=null.
+   * Also clears je (turnStartedAt). Does not touch queuedMessages / isRunning / Va.
+   * Yr / Gr.onError when queue drained; not Esc (Esc is markInterrupting).
+   */
+  clearPendingTurn: (sessionId: string) => void;
+  /**
    * Official he.failPendingTurn(id, message, category?) residual.
    * Only when pendingTurn is active — sets error + errorCategory for FM shell.
    */
@@ -236,13 +242,13 @@ type OfficialCodeSessionActions = {
    */
   applyRuntimeError: (sessionId: string, error: Error, errorCategory?: string | null) => void;
   /**
-   * Official noteQueuedSend — only bumps pendingQueuedSends when a turn is already pending.
-   * Gr onMutate always calls this before beginPendingTurn / echo.
+   * Official noteQueuedSend (index-BELzQL5P) — only bumps pendingQueuedSends when
+   * pendingTurn is already set. Gr always calls this; no-op when idle.
    */
   noteQueuedSend: (sessionId: string) => void;
   /**
-   * Optimistic mid-turn user bubble into queuedMessages (local Hb path).
-   * Official local waits for CLI echo; we seed the queue immediately so isQueued chrome shows.
+   * Product/test helper to seed queuedMessages. Official Gr local does NOT enqueue on
+   * mutate — Hb isQueued rows land via mergeMessage `d` (CLI user echo + pendingQueuedSends).
    */
   enqueueQueuedMessage: (sessionId: string, message: ChatMessage) => void;
   /** Official dropQueuedMessage — Remove queued message / cancel mid-turn send. */
@@ -703,6 +709,28 @@ function createOfficialCodeSessionStore() {
     });
   },
 
+  // Official clearPendingTurn: pendingTurn=null + compactionStatus=null (+ product je clear).
+  clearPendingTurn: (sessionId) => {
+    officialClearTurnStarted(sessionId);
+    set((state) => {
+      const raw = state.buckets[sessionId];
+      if (!raw) return state;
+      const prev = withQueueDefaults(raw);
+      if (prev.pendingTurnStartedAt === null && prev.compactionStatus === null) return state;
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: {
+            ...prev,
+            pendingTurnStartedAt: null,
+            pendingTurnEndTurnSeen: false,
+            compactionStatus: null,
+          },
+        },
+      };
+    });
+  },
+
   // Official failPendingTurn: only when pendingTurn set → error + category (bridge_offline path).
   failPendingTurn: (sessionId, message, errorCategory) => {
     set((state) => {
@@ -768,18 +796,15 @@ function createOfficialCodeSessionStore() {
     });
   },
 
-  // Official noteQueuedSend: only when pendingTurn already set (mid-turn follow-up).
+  // Official noteQueuedSend (index-BELzQL5P): only when pendingTurn already set.
+  // Do NOT invent mid-turn from isRunning / Va / stream — that desynced web queue
+  // from host deferredSends and left Esc sticky after markNotRunning.
   noteQueuedSend: (sessionId) => {
     set((state) => {
       const raw = state.buckets[sessionId];
       if (!raw) return state;
       const prev = withQueueDefaults(raw);
-      const turnActive = prev.pendingTurnStartedAt !== null
-        || prev.session?.isRunning === true
-        || prev.streamActivityMode !== idleStreamActivityMode
-        || prev.streamingMessageId !== null
-        || prev.streamSnapshot !== null;
-      if (!turnActive) return state;
+      if (prev.pendingTurnStartedAt === null) return state;
       return {
         buckets: {
           ...state.buckets,
@@ -916,22 +941,16 @@ function createOfficialCodeSessionStore() {
           : prev.session
             ? { ...prev.session, messages }
             : null;
-        // Host isRunning mirror only when payload has it; do not clear pendingTurn
-        // while real Va/queue live. Cold re-entry seeds when host still running.
+        // Host isRunning mirror only when payload has it. Cold re-entry seeds when host running.
         const nextSession = sessionForLoad(baseSession, messages, liveMeta)
           ?? sessionWithLiveMeta(baseSession, liveMeta);
-        const hasLiveStream = Boolean(
-          prev.streamSnapshot !== null
-          || prev.streamingMessageId !== null
-          || prev.streamActivityMode !== idleStreamActivityMode,
-        );
-        // Bare leftover pendingTurn + host idle → settle (same as patchSession).
-        // Real Va/queue keep pendingTurn even if host meta lags false.
+        // Host idle → settle leftover pendingTurn (official H=Qke). Do NOT keep H from
+        // web queuedMessages alone — host drainDeferredSends keeps isRunning true when
+        // real deferred continues; web-only queue after markNotRunning must not sticky Stop.
+        // Do NOT gate on Va — session_updated does not Pke.clear.
         let pendingSeed = seedPendingTurnIfHostRunning(prev, nextSession, sessionId);
         if (
           nextSession?.isRunning !== true
-          && !hasLiveStream
-          && !hasDeferredQueue
           && prev.pendingTurnStartedAt !== null
         ) {
           pendingSeed = {
@@ -961,21 +980,23 @@ function createOfficialCodeSessionStore() {
       const nextMessages = filterStreamEvents(payload.messages);
       // Always union — never wholesale-replace history (even when settled).
       const messages = mergeTranscriptUnion(prev.messages, nextMessages);
-      // Official transcript load does not clear pendingTurn while host still running
-      // or local Va/queue owns the turn. Host idle + no Va/queue → settle leftover.
+      // Official H=Qke: host idle settles leftover pendingTurn. Web queue alone must not
+      // keep H (host drain keeps isRunning when deferred continues). Va may linger until result.
+      const hostIdle = payload.session ? payload.session.isRunning !== true : true;
       const hasLiveStream = Boolean(
         prev.streamSnapshot !== null
         || prev.streamingMessageId !== null
         || prev.streamActivityMode !== idleStreamActivityMode,
       );
-      const hostIdle = payload.session ? payload.session.isRunning !== true : true;
-      const sessionSettled = hostIdle && !hasDeferredQueue && !hasLiveStream;
+      // Clear Va ownership only when host idle AND no live Pe/Va — never invent-clear mid-typewriter
+      // from a stale isRunning:false snapshot. Do NOT gate on web queue (Hb only).
+      const clearStreamOwnership = hostIdle && !hasLiveStream;
       const liveMeta = liveMetaPreferCurrent(prev.liveMeta, liveMetaFromMessages(messages));
       const nextSession = payload.session
         ? sessionForLoad({ ...payload.session, messages }, messages, liveMeta)
         : null;
       // Host isRunning on getSession/getTranscript → seed pendingTurn (re-entry H).
-      const pendingSeed = sessionSettled
+      const pendingSeed = hostIdle
         ? { pendingTurnStartedAt: null as number | null, pendingTurnEndTurnSeen: false }
         : seedPendingTurnIfHostRunning(prev, nextSession ?? payload.session, sessionId);
       return {
@@ -993,9 +1014,9 @@ function createOfficialCodeSessionStore() {
             session: nextSession,
             pendingTurnStartedAt: pendingSeed.pendingTurnStartedAt,
             pendingTurnEndTurnSeen: pendingSeed.pendingTurnEndTurnSeen,
-            streamActivityMode: sessionSettled ? idleStreamActivityMode : prev.streamActivityMode,
-            streamingMessageId: sessionSettled ? null : prev.streamingMessageId,
-            streamSnapshot: sessionSettled ? null : prev.streamSnapshot,
+            streamActivityMode: clearStreamOwnership ? idleStreamActivityMode : prev.streamActivityMode,
+            streamingMessageId: clearStreamOwnership ? null : prev.streamingMessageId,
+            streamSnapshot: clearStreamOwnership ? null : prev.streamSnapshot,
           },
         },
       };
@@ -1076,33 +1097,20 @@ function createOfficialCodeSessionStore() {
         modelFilled && modelFilled !== nextSession.model
           ? { ...nextSession, model: modelFilled }
           : nextSession;
-      // Host isRunning=false while real Va/queue still live = stale race. Keep busy.
-      // Bare pendingTurn alone is NOT protect evidence — residual p leaves pendingTurn
-      // until result; background completed must settle leftover pendingTurn (no sticky Stop).
-      // streamActivityMode from real stream events counts; seed must not invent it.
-      const hasLiveStream = Boolean(
-        prev.streamingMessageId != null
-        || prev.streamSnapshot != null
-        || prev.streamActivityMode !== idleStreamActivityMode,
-      );
-      const hasDeferredQueue = Boolean(
-        (prev.queuedMessages?.length ?? 0) > 0
-        || (prev.pendingQueuedSends ?? 0) > 0,
-      );
-      if (session.isRunning === false && (hasLiveStream || hasDeferredQueue)) {
-        session = { ...session, isRunning: true };
-      }
       // Official session_updated / formatSessionForEvent: metadata + isRunning only.
-      // Official web H (isResponding) = stream || isRunning || pendingTurn || queue.
+      // Do NOT invent force-isRunning from web queuedMessages / Va — that stuck Gv/H after
+      // Esc markNotRunning when host deferred was empty but optimistic queue lingered.
+      // Real drainDeferredSends keeps host isRunning true; mirror that, don't invent it.
+      // Official web H = pe = Qke(pendingTurn && !endTurnSeen) — not stream||isRunning||queue.
       // Host isRunning true with no local pendingTurn seeds pendingTurn for re-entry H.
       let pendingSeed = seedPendingTurnIfHostRunning(prev, session, sessionId);
       if (
         session.isRunning === false
-        && !hasLiveStream
-        && !hasDeferredQueue
         && prev.pendingTurnStartedAt !== null
       ) {
-        // Host idle + no Va/queue: settle leftover pendingTurn (unsubscribed completed).
+        // Host idle: settle leftover pendingTurn so Qke/H clears.
+        // Web queue alone must not keep H — continue-turn is result `g` (or host still running
+        // after drain). Do NOT gate on Va — session_updated does not Pke.clear.
         pendingSeed = {
           pendingTurnStartedAt: null,
           pendingTurnEndTurnSeen: false,
@@ -1604,7 +1612,7 @@ function migrateBucketsWithQueueDefaults(
  * Bump when queue pipeline action bodies change so HMR rebinds implementations
  * without wiping transcript buckets (zustand keeps old closures otherwise).
  */
-const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 10;
+const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 11;
 const OFFICIAL_CODE_SESSION_STORE_REV_KEY = "__hareOfficialCodeSessionStoreQueueRev__";
 
 function resolveOfficialCodeSessionStore() {
@@ -1620,7 +1628,8 @@ function resolveOfficialCodeSessionStore() {
     };
     const hasQueueActions = typeof state.noteQueuedSend === "function"
       && typeof state.removeSession === "function"
-      && typeof (state as { markInterrupting?: unknown }).markInterrupting === "function";
+      && typeof (state as { markInterrupting?: unknown }).markInterrupting === "function"
+      && typeof (state as { clearPendingTurn?: unknown }).clearPendingTurn === "function";
     if (hasQueueActions && prevRev === OFFICIAL_CODE_SESSION_STORE_QUEUE_REV) {
       return existing;
     }

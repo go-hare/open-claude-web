@@ -38,10 +38,8 @@ import {
   officialStreamActiveMessageId,
   officialStreamClear,
   officialStreamFeed,
-  officialStreamGetSnapshot,
   officialStreamHasListeners,
   officialStreamSetVisibility,
-  officialStreamSettleAfterReveal,
   officialStreamSubscribe,
 } from "./officialStreamSessionStore";
 import {
@@ -194,15 +192,16 @@ export function useEpitaxySessionData(sessionId?: string) {
     setStreamingMessageId((current) => (current === nextId ? current : nextId));
   }, [sessionId, streamSnapshot]);
 
-  // useLayoutEffect: Va is per sessionId (official Pe). useState would keep the previous
-  // session's streamSnapshot / activity for one paint → Working / empty chrome flash on switch.
-  // Hydrate + subscribe before paint; openSession re-entry does not Jwe/clear target Va.
+  // Official Va (c119): useState(null) + useEffect(Pe.subscribe) + startTransition same-id.
+  // Product bridge: useLayoutEffect so Pe.subscribe is live before paint (Electron/3p burst
+  // otherwise lets result clear abort pending startTransition paints → dump-at-end).
+  // Still NO lastSnapshot hydrate (official starts null until next emit).
   useLayoutEffect(() => {
-    // Official openSession re-entry: only bump refCount — do NOT Jwe / Pe.clear.
-    // streamGeneration only gates in-flight settle finalize for THIS mount cycle.
+    // Product settle-generation gate (not in official Va). Bump on sessionId change / remount.
     streamGenerationRef.current += 1;
     finalizeStreamGenerationRef.current = null;
 
+    // Official: if (!s || !t) return void i(null);
     if (!sessionId) {
       setStreamSnapshot(null);
       setStreamActivityMode(idleStreamActivityMode);
@@ -210,27 +209,9 @@ export function useEpitaxySessionData(sessionId?: string) {
       setStreamingMessageId(null);
       return undefined;
     }
-    // Residual Va: Pe.subscribe + visibility only — no window.__simulateOfficialStream invent.
-    store.getState().ensureBucket(sessionId);
-    // Residual Va(sessionId, enabled, visible=true): Pe.subscribe + setVisibility(() => r.current)
-    // Product: Pe keeps lastSnapshot per sessionId. On re-subscribe after switch, hydrate
-    // from lastSnapshot so live typewriter does not invent-blank until next delta.
+    officialCodeSessionStore.getState().ensureBucket(sessionId);
+    // Official does NOT clear useState here — keep prior until subscribe emit / null.
     let lastMessageId: string | null = null;
-    const hydrate = officialStreamGetSnapshot(sessionId);
-    const bucketNow = store.getState().buckets[sessionId];
-    if (hydrate) {
-      lastMessageId = hydrate.messageId;
-      setStreamSnapshot(hydrate);
-      streamMessageIdRef.current = hydrate.messageId;
-      setStreamingMessageId(hydrate.messageId);
-      setStreamActivityMode(bucketNow?.streamActivityMode ?? idleStreamActivityMode);
-    } else {
-      lastMessageId = null;
-      setStreamSnapshot(null);
-      streamMessageIdRef.current = null;
-      setStreamingMessageId(null);
-      setStreamActivityMode(bucketNow?.streamActivityMode ?? idleStreamActivityMode);
-    }
     const unsubscribe = officialStreamSubscribe(sessionId, (snapshot) => {
       if (snapshot === null) {
         lastMessageId = null;
@@ -247,12 +228,11 @@ export function useEpitaxySessionData(sessionId?: string) {
     officialStreamSetVisibility(sessionId, () => transcriptVisibleRef.current);
     return () => {
       unsubscribe();
-      // Official: if no listeners left, setVisibility(() => false)
       if (!officialStreamHasListeners(sessionId)) {
         officialStreamSetVisibility(sessionId, () => false);
       }
     };
-  }, [sessionId, store]);
+  }, [sessionId]);
 
   // Residual: je (turnStartedAt) is Gv elapsed only; cleared on settle — no idle-scan invent.
 
@@ -294,44 +274,64 @@ export function useEpitaxySessionData(sessionId?: string) {
     }
   }, [sessionId, store]);
 
+  /**
+   * Official Gr onMutate (ca0135bc5):
+   *   wasMidTurn = null !== pendingTurn
+   *   noteQueuedSend always; beginPendingTurn always (no-op mid-turn)
+   * Local does NOT echoPending / enqueueQueuedMessage — Hb via merge `d` CLI echo.
+   * Returns wasMidTurn so callers can Gr.onError rollback.
+   */
   const beginLocalUserTurn = useCallback((text: string, messageUuid?: string) => {
-    if (!sessionId) return;
+    if (!sessionId) return { wasMidTurn: false as const, uuid: messageUuid ?? "" };
     const bucket = store.getState().buckets[sessionId];
-    // Official wasMidTurn = null !== buckets[id]?.pendingTurn before this send.
-    const wasMidTurn = Boolean(
-      bucket
-      && (
-        bucket.pendingTurnStartedAt !== null
-        || bucket.session?.isRunning === true
-        || bucket.streamActivityMode !== idleStreamActivityMode
-        || bucket.streamingMessageId !== null
-        || bucket.streamSnapshot !== null
-        || (bucket.queuedMessages?.length ?? 0) > 0
-        || (bucket.pendingQueuedSends ?? 0) > 0
-      ),
-    );
+    // Official wasMidTurn = null !== buckets[id]?.pendingTurn (Gr). Do NOT invent
+    // from isRunning/Va/queue — that desynced web queue from host deferredSends.
+    const wasMidTurn = bucket != null && bucket.pendingTurnStartedAt !== null;
+    store.getState().clearError(sessionId);
     // Official Gr: noteQueuedSend always (only increments when pendingTurn already set).
     store.getState().noteQueuedSend(sessionId);
     const optimistic = makeOptimisticUserChatMessage(text, messageUuid);
-    if (wasMidTurn) {
-      // Local optimistic seed into queuedMessages so Hb isQueued chrome shows immediately
-      // (official local waits for CLI user echo via pendingQueuedSends route).
-      store.getState().enqueueQueuedMessage(sessionId, optimistic);
-      return { queued: true as const, uuid: optimistic.id };
+    if (!wasMidTurn) {
+      // Fresh turn: official beginPendingTurn = mCe.reset + Pke.clear then pendingTurn.
+      officialStreamClear(sessionId);
+      clearOfficialEkeCache(sessionId);
+      setStreamSnapshot(null);
+      setStreamingMessageId(null);
+      streamMessageIdRef.current = null;
+      streamSnapshotRef.current = null;
+      officialMarkTurnStarted(sessionId);
+      store.getState().beginPendingTurn(sessionId, optimistic);
+      setStreamActivityMode("requesting");
+      streamActivityModeRef.current = "requesting";
+    } else {
+      // Mid-turn: beginPendingTurn no-ops; do NOT invent enqueueQueuedMessage.
+      store.getState().beginPendingTurn(sessionId);
     }
-    // Fresh turn: official beginPendingTurn = mCe.reset + Pke.clear then pendingTurn.
-    // Residual only clears when no pendingTurn yet (beginPendingTurn no-ops mid-turn).
-    officialStreamClear(sessionId);
-    clearOfficialEkeCache(sessionId);
-    setStreamSnapshot(null);
-    setStreamingMessageId(null);
-    streamMessageIdRef.current = null;
-    streamSnapshotRef.current = null;
-    officialMarkTurnStarted(sessionId);
-    store.getState().beginPendingTurn(sessionId, optimistic);
-    setStreamActivityMode("requesting");
-    streamActivityModeRef.current = "requesting";
-    return { queued: false as const, uuid: optimistic.id };
+    return { wasMidTurn, uuid: optimistic.id };
+  }, [sessionId, store]);
+
+  /**
+   * Official Gr.onError (ca0135bc5):
+   *   wasMidTurn → dropQueuedMessage(uuid); if queue+pendingQueuedSends empty → clearPendingTurn
+   *   else → clearPendingTurn
+   * Local mid-turn may only have pendingQueuedSends (no optimistic Hb row) until CLI echo.
+   */
+  const rollbackLocalUserTurn = useCallback((uuid: string, wasMidTurn: boolean) => {
+    if (!sessionId) return;
+    if (wasMidTurn) {
+      store.getState().dropQueuedMessage(sessionId, uuid);
+      const bucket = store.getState().buckets[sessionId];
+      if (
+        bucket
+        && bucket.pendingTurnStartedAt != null
+        && bucket.queuedMessages.length === 0
+        && bucket.pendingQueuedSends === 0
+      ) {
+        store.getState().clearPendingTurn(sessionId);
+      }
+      return;
+    }
+    store.getState().clearPendingTurn(sessionId);
   }, [sessionId, store]);
 
   // Official ca0135 Yr:
@@ -352,8 +352,7 @@ export function useEpitaxySessionData(sessionId?: string) {
         bucket.queuedMessages.length === 0 &&
         bucket.pendingQueuedSends === 0
       ) {
-        // Residual clearPendingTurn — do not mark session settled (turn may still stream).
-        store.getState().setStreamActivity(sessionId, { pendingTurnStartedAt: null });
+        store.getState().clearPendingTurn(sessionId);
       }
     })();
   }, [sessionId, store]);
@@ -434,23 +433,16 @@ export function useEpitaxySessionData(sessionId?: string) {
         const streamMessageId = isStart
           ? (stringValue(asRecord(innerEvent.message).id) ?? null)
           : null;
-        // Official Xke/pe: stream only advances an open turn (Gr pendingTurn / isRunning).
-        // densable orphan flush after stopSession/result settle must not re-open busy —
-        // that made the Stop square "close then reopen by itself".
-        // Esc→queue residual: after markInterrupting, Va/stream flags are idle but
-        // pendingTurn + queuedMessages still own the continue turn — keep turnOpen so
-        // post-interrupt message_start can re-arm typewriter for the drained follow-up.
+        // Official mergeMessage always Pke.feed(stream_event) (index-BELzQL5P) — no Va gate.
+        // Product residual gate: only while open turn (pendingTurn / host isRunning).
+        // Orphan densable after settle must not re-seed pendingTurn/H (Stop reopen).
+        // Esc→drain: markInterrupting keeps pendingTurn; host drain keeps isRunning —
+        // follow-up message_start re-arms. Do NOT invent turnOpen from Va /
+        // streamingMessageId / web queuedMessages (leftover Hb after markNotRunning).
         const bucketBeforeStream = store.getState().buckets[sessionId];
         const turnOpen =
           bucketBeforeStream?.pendingTurnStartedAt != null
-          || bucketBeforeStream?.session?.isRunning === true
-          || bucketBeforeStream?.streamingMessageId != null
-          || (
-            bucketBeforeStream != null
-            && bucketBeforeStream.streamActivityMode !== idleStreamActivityMode
-          )
-          || (bucketBeforeStream?.queuedMessages?.length ?? 0) > 0
-          || (bucketBeforeStream?.pendingQueuedSends ?? 0) > 0;
+          || bucketBeforeStream?.session?.isRunning === true;
         if (!turnOpen) {
           return;
         }
@@ -555,108 +547,66 @@ export function useEpitaxySessionData(sessionId?: string) {
           return;
         }
         if (shouldClearOfficialStreamForEvent(event)) {
+          // Official residual (index-BELzQL5P mergeMessage): result → Pke.clear immediately.
+          // Do NOT invent settleAfterReveal / wait-for-smoother catch-up before clear —
+          // that forced Va dump-at-end while mid-turn reveal was still catching 3p burst.
           const streamGeneration = streamGenerationRef.current;
-          const finalize = () => {
-            if (streamGenerationRef.current !== streamGeneration) return;
-            finalizeStreamGenerationRef.current = null;
-            const eventType = stringValue(asRecord(event).type);
-            // Official stopSession / close / clear: drop optimistic queue (host
-            // deferredSends already cleared). Distinct from Esc interrupt-continue.
-            if (eventType === "stopped" || eventType === "close" || eventType === "cleared") {
-              clearStreamState(true, true);
-              return;
-            }
-            const after = store.getState().buckets[sessionId];
-            // Official BELz g/h: queue promote only on type:result mergeMessage.
-            // Do NOT invent hasQueue from pendingTurn alone — that blocked
-            // success-result settle forever (Stop stuck after host idle).
-            // Real deferred queue: flush Va only; g continues on next result merge.
-            const hasDeferredQueue = Boolean(
-              after
-              && (
-                (after.queuedMessages?.length ?? 0) > 0
-                || (after.pendingQueuedSends ?? 0) > 0
-              ),
-            );
-            if (hasDeferredQueue) {
-              officialStreamClear(sessionId);
-              clearOfficialEkeCache(sessionId);
-              setStreamSnapshot(null);
-              setStreamingMessageId(null);
-              setStreamActivityMode(idleStreamActivityMode);
-              streamMessageIdRef.current = null;
-              streamSnapshotRef.current = null;
-              streamActivityModeRef.current = idleStreamActivityMode;
-              store.getState().setStreamActivity(sessionId, {
-                streamingMessageId: null,
-                streamActivityMode: idleStreamActivityMode,
-              });
-              return;
-            }
-            clearStreamState(true);
-            // Official settles from live merge only. Product residual (3p end_turn /
-            // Esc→queue multi-send): durable assistants can land on CLI jsonl while
-            // live merge/stream suppress races leave bucket.messages user-only — UI
-            // shows stacked user bubbles and no reply. One silent getTranscript after
-            // final settle recovers jsonl SoT.
-            void reload({ silent: true }).finally(() => {
-              if (streamGenerationRef.current !== streamGeneration) return;
-              void refreshSessionTitleAfterSettle(sessionId).then((nextSession) => {
-                if (!nextSession) return;
-                if (streamGenerationRef.current !== streamGeneration) return;
-                store.getState().patchSession(sessionId, nextSession);
-              });
-            });
-          };
-          if (shouldSettleOfficialStreamForEvent(event)) {
-            if (finalizeStreamGenerationRef.current === streamGeneration) return;
-            finalizeStreamGenerationRef.current = streamGeneration;
-            void officialStreamSettleAfterReveal(sessionId).finally(() => {
-              if (streamGenerationRef.current !== streamGeneration) return;
-              finalize();
-            });
-          } else {
-            finalize();
+          if (streamGenerationRef.current !== streamGeneration) return;
+          finalizeStreamGenerationRef.current = null;
+          const eventType = stringValue(asRecord(event).type);
+          // Official stopSession / close / clear: drop optimistic queue (host
+          // deferredSends already cleared). Distinct from Esc interrupt-continue.
+          if (eventType === "stopped" || eventType === "close" || eventType === "cleared") {
+            clearStreamState(true, true);
+            return;
           }
+          const after = store.getState().buckets[sessionId];
+          // Official BELz g/h: queue promote only on type:result mergeMessage.
+          // Do NOT invent hasQueue from pendingTurn alone — that blocked
+          // success-result settle forever (Stop stuck after host idle).
+          // Real deferred queue: flush Va only; g continues on next result merge.
+          const hasDeferredQueue = Boolean(
+            after
+            && (
+              (after.queuedMessages?.length ?? 0) > 0
+              || (after.pendingQueuedSends ?? 0) > 0
+            ),
+          );
+          if (hasDeferredQueue) {
+            officialStreamClear(sessionId);
+            clearOfficialEkeCache(sessionId);
+            setStreamSnapshot(null);
+            setStreamingMessageId(null);
+            setStreamActivityMode(idleStreamActivityMode);
+            streamMessageIdRef.current = null;
+            streamSnapshotRef.current = null;
+            streamActivityModeRef.current = idleStreamActivityMode;
+            store.getState().setStreamActivity(sessionId, {
+              streamingMessageId: null,
+              streamActivityMode: idleStreamActivityMode,
+            });
+            return;
+          }
+          clearStreamState(true);
+          // Official residual: result → Pke.clear only. No post-settle silent getTranscript.
+          // Title refresh is metadata-only (not a transcript reload bandage).
+          void refreshSessionTitleAfterSettle(sessionId).then((nextSession) => {
+            if (!nextSession) return;
+            if (streamGenerationRef.current !== streamGeneration) return;
+            store.getState().patchSession(sessionId, nextSession);
+          });
         } else if (stringValue(asRecord(event).type) === "session_updated") {
           // Official session_updated: metadata only (title/folders/permissions) — never
           // getTranscript/reload the conversation body mid-turn.
           const nextSession = asRecord(event).session ?? asRecord(asRecord(event).payload).session;
           if (nextSession) {
             const prevBucket = store.getState().buckets[sessionId];
-            const prevRunning = prevBucket?.session?.isRunning === true;
             const patched = normalizeSessionSummaryPatch(prevBucket?.session ?? null, nextSession);
             if (patched) store.getState().patchSession(sessionId, patched);
-            // Official session_updated: metadata + isRunning only (no queue promote).
-            // Host markNotRunning (isRunning false): settle Va only when web has no
-            // open turn (pendingTurn/queue). Official g continues with pendingTurn
-            // after result promote — keep that. Real deferred queue: flush stream only.
-            if (prevRunning && patched?.isRunning === false) {
-              const after = store.getState().buckets[sessionId];
-              // patchSession already dropped stale pendingTurn when host idle + no Va/queue.
-              // Only block settle while live stream/queue still owns the turn (not bare pendingTurn).
-              const hasDeferredQueue = Boolean(
-                after
-                && (
-                  (after.queuedMessages?.length ?? 0) > 0
-                  || (after.pendingQueuedSends ?? 0) > 0
-                ),
-              );
-              const hasLiveStream = Boolean(
-                after
-                && (
-                  after.streamingMessageId != null
-                  || after.streamSnapshot != null
-                  || after.streamActivityMode !== idleStreamActivityMode
-                ),
-              );
-              // Official markNotRunning settles when turn is over. Stale false mid-stream
-              // (disk lag) must NOT clear Pe/Va — hasLiveStream/queue blocks that.
-              // After patchSession, bare leftover pendingTurn is already cleared when host idle.
-              if (!hasLiveStream && !hasDeferredQueue) {
-                clearStreamState(true);
-              }
-            }
+            // Official session_updated: metadata + isRunning only.
+            // Does NOT Pke.clear / promote queue / invent clearStream — result `u&&Pke.clear`
+            // and Esc markInterrupting (Pke.flush) own Va. patchSession already drops leftover
+            // pendingTurn when host idle so Qke/H clears (no sticky spark from web queue alone).
           }
         } else if (stringValue(asRecord(event).type) === "initialization_status") {
           // Official $s / initialization_status → Gv spawnLabel step (plugins/worktree/…).
@@ -707,14 +657,8 @@ export function useEpitaxySessionData(sessionId?: string) {
               store.getState().patchSession(sessionId, { ...current, permissionMode: priorMode });
             }
           }
-        } else {
-          // Non-stream lifecycle events (stopped/error/cleared): metadata reload only when
-          // no live typewriter is active.
-          const liveId = streamMessageIdRef.current
-            ?? streamingMessageId
-            ?? officialStreamActiveMessageId(sessionId);
-          if (!liveId) void reload({ silent: true });
         }
+        // Non-stream lifecycle events: no silent getTranscript invent (official Pke/Va path).
       } else if (
         stringValue(asRecord(event).type) === "tool_permission_request"
         || stringValue(asRecord(event).type) === "tool_permission_resolved"
@@ -735,7 +679,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     return () => {
       offCode?.();
     };
-  }, [clearStreamState, reload, sessionId, store]);
+  }, [clearStreamState, sessionId, store]);
 
   /**
    * Official c119 residual:
@@ -747,11 +691,8 @@ export function useEpitaxySessionData(sessionId?: string) {
     if (!sessionId) return undefined;
     const session = bucket.session;
     if (!session || session.sessionType !== "bridge") return undefined;
-    const turnActive = bucket.pendingTurnStartedAt !== null
-      || session.isRunning === true
-      || bucket.streamActivityMode !== idleStreamActivityMode
-      || bucket.streamingMessageId !== null;
-    if (!turnActive) return undefined;
+    // Official: bridge + pendingTurn + disconnected (not Va / isRunning invent).
+    if (bucket.pendingTurnStartedAt === null) return undefined;
     if (session.connectionState !== "disconnected") return undefined;
     let cancelled = false;
     void desktopBridge.LocalSessions.getSession(sessionId)
@@ -778,8 +719,6 @@ export function useEpitaxySessionData(sessionId?: string) {
   }, [
     bucket.pendingTurnStartedAt,
     bucket.session,
-    bucket.streamActivityMode,
-    bucket.streamingMessageId,
     sessionId,
     store,
   ]);
@@ -837,37 +776,27 @@ export function useEpitaxySessionData(sessionId?: string) {
     }),
     [bucket.isMetaPending, bucket.isSessionNotFound, bucket.session, isUltrareviewLaunching, sessionId],
   );
-  // Residual Xb isResponding paint: H || "spawning"===Os || null!==Js || bs
-  // Official store comment (patchSession): H = stream || isRunning || pendingTurn || queue.
-  // Xke/pe Qke = pendingTurn && !endTurnSeen is NOT H. Residual p (assistant end_turn) sets
-  // endTurnSeen but keeps pendingTurn + Va until result/Pke.clear — using Qke for H painted
-  // static spark + Send between end_turn and result (and on re-entry after end_turn).
-  // Do NOT invent busy from tags alone (spawnLabel is bs-only).
+  // Residual Xb isResponding paint (c11959232): H || "spawning"===Os || null!==Js || bs
+  // Official H = pe = Xke = Qke(pendingTurn && !endTurnSeen) — index-BELzQL5P.
+  // Composer busy:H (c119 Qj). Residual p (assistant end_turn) sets endTurnSeen → H false
+  // while Va stays until result `u&&Pke.clear` (typewriter continues; Stop→Send).
+  // Do NOT invent OR of streamSnapshot / streamingMessageId / isRunning / queue / streamActivity
+  // into Xb isResponding — that stuck Gv spark after host idle when Pe/Va lagged.
+  // Local Js (optimistic draft) is unused on existing /code/:id; spawnLabel covers
+  // "spawning"===Os + bs label; isUltrareviewLaunching covers bs in flight.
   // Residual Gv tokens/elapsed: _e / je maps only — do NOT invent streamTokenEstimate prop.
   const pendingTurnStartedAt = bucket.pendingTurnStartedAt;
-  // H arm: pendingTurn object exists (startedAt set), regardless of endTurnSeen.
-  const hasPendingTurn = pendingTurnStartedAt !== null;
+  // Official Qke / H: pendingTurn exists AND endTurnSeen is still false.
+  const H = pendingTurnStartedAt !== null && !bucket.pendingTurnEndTurnSeen;
   // Residual we = gw(U) — ultrareview progress from system hook_progress/hook_response.
   const reviewProgress = useMemo(
     () => residualExtractUltrareviewProgress(bucket.messages),
     [bucket.messages],
   );
-  // Residual isResponding arm for ultrareview: bs (launch in flight) or di (we running).
-  // Do NOT invent tag+isRunning → sticky busy / Launching (spawnLabel is bs-only).
-  const isUltrareviewBusy = isUltrareviewLaunching
-    || reviewProgress?.status === "running";
-  // Keep stream-owned chrome while Va still has snapshot / streamingMessageId (after end_turn
-  // residual keeps Va until result clears). Host isRunning covers re-entry without Va.
-  // pendingTurn (not Qke) covers end_turn→result and warm re-entry with endTurnSeen.
   const isResponding =
-    hasPendingTurn
-    || bucket.session?.isRunning === true
-    || streamActivityMode !== idleStreamActivityMode
-    || streamSnapshot !== null
-    || streamingMessageId !== null
-    || (bucket.queuedMessages?.length ?? 0) > 0
-    || (bucket.pendingQueuedSends ?? 0) > 0
-    || isUltrareviewBusy;
+    H
+    || Boolean(spawnLabel)
+    || isUltrareviewLaunching;
   // Official Ya = Kwe(Xa, Va). Tool settle is eke/rke object-ref mutation — no settleOrphan invent.
   // Official also appends ge (queued Hb rows) after the main stream-merged transcript.
   const entries = useMemo(() => {
@@ -924,6 +853,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     messages: bucket.messages,
     reload,
     reviewProgress,
+    rollbackLocalUserTurn,
     session: bucket.session,
     spawnLabel,
     stopLiveTurn,
@@ -1464,16 +1394,6 @@ function shouldClearOfficialStreamForEvent(event: unknown) {
     || type === "error"
     || type === "cleared"
     || type === "stopped";
-}
-
-function shouldSettleOfficialStreamForEvent(event: unknown) {
-  const raw = asRecord(event);
-  const type = stringValue(raw.type);
-  if (type === "message") {
-    const messageType = stringValue(asRecord(raw.message).type);
-    return messageType === "result" || messageType === "completed";
-  }
-  return type === "result" || type === "completed" || type === "close";
 }
 
 function streamActivityModeFromStreamEvent(streamMessage: Record<string, unknown>, currentMode: StreamActivityMode): StreamActivityMode {

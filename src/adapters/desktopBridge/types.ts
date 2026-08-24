@@ -696,10 +696,19 @@ export type LocalSessionsBridge = {
   forkSession?: (id: string, messageId?: string) => Promise<SessionSummary | null>;
   rewind?: (id: string, messageId?: string) => Promise<unknown>;
   create: (kind: SessionSummary["kind"]) => Promise<SessionSummary>;
-  archive: (id: string) => Promise<void>;
+  /**
+   * Official CT.archive(id, { cleanupWorktree: true }).
+   * Second arg optional for back-compat; product sidebar always passes cleanupWorktree:true.
+   */
+  archive: (id: string, options?: { cleanupWorktree?: boolean }) => Promise<void>;
   /** Official LocalSessions.unarchive residual — restore archived row. */
   unarchive?: (id: string) => Promise<void>;
   delete: (id: string) => Promise<void>;
+  /**
+   * Official CT.getUncommittedChanges → porcelain lines | null for $Yt confirm.
+   * null / empty / missing method → $Yt proceeds without dialog.
+   */
+  getUncommittedChanges?: (idOrCwd: string) => Promise<string[] | null>;
   setFocusedSession?: (id: string | null) => Promise<void>;
   submitTranscriptFeedback?: (sessionIdOrInput: unknown, input?: unknown) => Promise<unknown>;
   onEvent?: (listener: (event: unknown) => void) => () => void;
@@ -807,9 +816,10 @@ export type CoworkSessionsBridge = {
   forkSession?: (id: string, messageId?: string) => Promise<SessionSummary | null>;
   rewind?: (id: string, messageId?: string) => Promise<string | null>;
   create: (kind: SessionSummary["kind"]) => Promise<SessionSummary>;
-  archive: (id: string) => Promise<void>;
+  archive: (id: string, options?: { cleanupWorktree?: boolean }) => Promise<void>;
   unarchive?: (id: string) => Promise<void>;
   delete: (id: string) => Promise<void>;
+  getUncommittedChanges?: (idOrCwd: string) => Promise<string[] | null>;
   setFocusedSession?: (id: string | null) => Promise<void>;
   submitTranscriptFeedback?: (sessionIdOrInput: unknown, input?: unknown) => Promise<unknown>;
   onEvent?: (listener: (event: unknown) => void) => () => void;

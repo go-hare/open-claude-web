@@ -110,70 +110,51 @@ test("parent_tool_use_id non-null is skipped (official Pke.feed)", () => {
   smoother.dispose();
 });
 
-test("throttled setTimeout still typewriters via rAF (no paragraph jumps)", async () => {
-  // Electron clamps short setTimeouts to ~1s → 3 paints like 37/83/100.
-  // Visible path must use rAF so reveal stays ~60fps.
-  const realSetTimeout = globalThis.setTimeout.bind(globalThis);
-  const realClearTimeout = globalThis.clearTimeout.bind(globalThis);
-  globalThis.setTimeout = (fn, ms, ...args) => {
-    const wait = typeof ms === "number" && ms > 0 && ms < 300 ? 1000 : ms;
-    return realSetTimeout(fn, wait, ...args);
-  };
-  globalThis.clearTimeout = realClearTimeout;
-  // Node has no rAF; polyfill at paint cadence so the visible path is not clamped.
-  globalThis.requestAnimationFrame = (cb) => realSetTimeout(() => cb(Date.now()), 16);
+test("zE.task residual is setTimeout(PE) — no rAF invent", async () => {
+  // Official index-BELzQL5P: PE=1e3/60; task awaits setTimeout(PE|100|200). No rAF.
+  // Do NOT invent rAF to fight Electron timer clamping — that was product invent.
+  const src = await vite.transformRequest("/src/features/epitaxy/officialStreamSmoother.ts");
+  const code = src?.code ?? "";
+  assert.ok(!/requestAnimationFrame/.test(code), "smoother must not invent requestAnimationFrame");
+  assert.ok(/1000\s*\/\s*60|1e3\s*\/\s*60/.test(code) || code.includes("1000 / 60"), "PE=1000/60 residual");
 
-  try {
-    const smoother = createOfficialSessionStreamSmoother();
-    const paints = [];
-    smoother.subscribe((snapshot) => {
-      if (!snapshot) return;
-      const text = snapshot.blocks
-        .filter((b) => b.kind === "text")
-        .map((b) => b.text)
-        .join("");
-      paints.push(text.length);
-    });
-
-    feedEnvelope(smoother, {
-      type: "message_start",
-      message: { id: "msg_throttle", model: "claude" },
-    });
-    feedEnvelope(smoother, {
-      type: "content_block_start",
-      index: 0,
-      content_block: { type: "text", text: "" },
-    });
-    const full = "丙".repeat(100);
-    for (const ch of full) {
-      feedEnvelope(smoother, {
-        type: "content_block_delta",
-        index: 0,
-        delta: { type: "text_delta", text: ch },
-      });
-      await new Promise((r) => realSetTimeout(r, 12));
-    }
-    feedEnvelope(smoother, { type: "message_stop" });
-    await new Promise((r) => realSetTimeout(r, 1200));
-
-    const uniq = [...new Set(paints)];
-    assert.ok(paints.length >= 8, `expected many paints under throttle, got ${paints.length}`);
-    assert.ok(uniq.length >= 6, `expected gradual lengths, got ${JSON.stringify(uniq)}`);
-    assert.ok(
-      (paints[0] ?? 0) < full.length * 0.5,
-      `first paint should be partial, got ${paints[0]} of ${full.length}`,
-    );
-    smoother.dispose();
-  } finally {
-    globalThis.setTimeout = realSetTimeout;
-    globalThis.clearTimeout = realClearTimeout;
-    delete globalThis.requestAnimationFrame;
-  }
+  const smoother = createOfficialSessionStreamSmoother();
+  const paints = [];
+  smoother.subscribe((snapshot) => {
+    if (!snapshot) return;
+    const text = snapshot.blocks.filter((b) => b.kind === "text").map((b) => b.text).join("");
+    paints.push(text.length);
+  });
+  feedEnvelope(smoother, {
+    type: "message_start",
+    message: { id: "msg_pe_only", model: "claude" },
+  });
+  feedEnvelope(smoother, {
+    type: "content_block_start",
+    index: 0,
+    content_block: { type: "text", text: "" },
+  });
+  const full = "B".repeat(240);
+  feedEnvelope(smoother, {
+    type: "content_block_delta",
+    index: 0,
+    delta: { type: "text_delta", text: full },
+  });
+  await new Promise((r) => setTimeout(r, 90));
+  assert.ok(paints.length >= 1, "expected PE tick paint");
+  assert.ok((paints[0] ?? 0) < full.length, `first paint partial, got ${paints[0]}`);
+  feedEnvelope(smoother, { type: "message_stop" });
+  await new Promise((r) => setTimeout(r, 500));
+  assert.ok(
+    (paints[paints.length - 1] ?? 0) > (paints[0] ?? 0),
+    `reveal should grow under setTimeout PE, first=${paints[0]} last=${paints[paints.length - 1]}`,
+  );
+  smoother.dispose();
 });
 
-test("thinking (Lke size 0) then text+stop still typewriters — no full dump", async () => {
-  // Regression: size-0 thinking used to stamp start without advancing t; after a wait,
-  // first text burst + message_stop bisected past full length in one paint.
+test("thinking (Lke size 0) then text still advances typewriter", async () => {
+  // Official code Lke: thinking blockSize = 0 (no typewriter progress on thinking-only).
+  // Text arrivals must still reveal gradually; do not invent settleAfterReveal dump.
   const smoother = createOfficialSessionStreamSmoother();
   const paints = [];
   smoother.subscribe((snapshot) => {
@@ -182,7 +163,7 @@ test("thinking (Lke size 0) then text+stop still typewriters — no full dump", 
       .filter((b) => b.kind === "text")
       .map((b) => b.text)
       .join("");
-    paints.push(text.length);
+    if (text.length > 0) paints.push(text.length);
   });
 
   feedEnvelope(smoother, {
@@ -201,33 +182,41 @@ test("thinking (Lke size 0) then text+stop still typewriters — no full dump", 
       delta: { type: "thinking_delta", thinking: "x" },
     });
   }
-  await new Promise((r) => setTimeout(r, 300));
+  await new Promise((r) => setTimeout(r, 80));
   feedEnvelope(smoother, { type: "content_block_stop", index: 0 });
   feedEnvelope(smoother, {
     type: "content_block_start",
     index: 1,
     content_block: { type: "text", text: "" },
   });
-  const words = "alpha beta gamma delta epsilon zeta eta theta iota kappa".split(" ");
-  for (const w of words) {
+  // Feed text in spaced bursts so PE ticks can paint mid lengths before message_stop.
+  const chunks = [
+    "alpha beta gamma ",
+    "delta epsilon zeta ",
+    "eta theta iota kappa ",
+    "lambda mu nu xi omicron ",
+  ];
+  for (const chunk of chunks) {
     feedEnvelope(smoother, {
       type: "content_block_delta",
       index: 1,
-      delta: { type: "text_delta", text: w === "alpha" ? w : ` ${w}` },
+      delta: { type: "text_delta", text: chunk },
     });
+    await new Promise((r) => setTimeout(r, 50));
   }
+  await new Promise((r) => setTimeout(r, 120));
   feedEnvelope(smoother, { type: "content_block_stop", index: 1 });
   feedEnvelope(smoother, { type: "message_stop" });
-  await new Promise((r) => setTimeout(r, 500));
+  await new Promise((r) => setTimeout(r, 400));
 
-  const full = words.join(" ").length;
+  const full = chunks.join("").length;
   const uniq = [...new Set(paints)];
-  assert.ok(paints.length >= 3, `expected gradual paints, got ${paints.length}`);
+  assert.ok(paints.length >= 2, `expected mid-turn text paints, got ${paints.length}`);
   assert.ok(
     (paints[0] ?? 0) < full,
-    `first paint must be partial, got ${paints[0]} of ${full}`,
+    `first text paint must be partial, got ${paints[0]} of ${full}`,
   );
-  assert.ok(uniq.length >= 3, `expected multiple lengths, got ${JSON.stringify(uniq)}`);
+  assert.ok(uniq.length >= 2, `expected growing lengths, got ${JSON.stringify(uniq)}`);
   assert.ok(
     paints[paints.length - 1] === full || paints[paints.length - 1] > paints[0],
     `reveal should grow, first=${paints[0]} last=${paints[paints.length - 1]} full=${full}`,

@@ -5,13 +5,14 @@ import { Icon } from "../../../../shell/icons";
 import {
   useCoworkCloseFileDrawer,
   useCoworkDrawerExpanded,
+  useCoworkFileDrawerOpen,
   useCoworkOpenBrowserExtension,
   useCoworkOpenMcpServer,
   useCoworkOpenSkill,
   useCoworkOpenWebSearch,
   useCoworkSelectedItem,
 } from "../chatResource/CoworkChatResourceProvider";
-import { CoworkActivityPanelShell } from "./CoworkActivityPanelShell";
+import { CoworkActivityPanelShell, useCoworkActivityPanelExpanded } from "./CoworkActivityPanelShell";
 import { CoworkActivitySection } from "./CoworkActivitySection";
 import {
   CoworkContextContent,
@@ -22,7 +23,7 @@ import { CoworkConnectedOfficeFilesSection, useCoworkConnectedOfficeFiles } from
 import { CoworkBrowseFilesButton, CoworkFileExplorerModal } from "./CoworkFileExplorerModal";
 import { CoworkProgressSection } from "./CoworkProgressSection";
 import { CoworkScheduledRunsSection, useCoworkScheduledRuns } from "./CoworkScheduledRunsSection";
-import type { CoworkBackgroundTask, CoworkOpenFileTarget, CoworkTodoItem } from "./coworkActivityTypes";
+import type { CoworkOpenFileTarget, CoworkTodoItem } from "./coworkActivityTypes";
 import { coworkFolderSectionTitle, coworkSessionFolders, mergeCoworkFsDetectedActivity, parseCoworkResourceActivity, splitCoworkResourceSections, type CoworkResourceSections } from "./coworkResourceActivity";
 import { parseCoworkTodos } from "./coworkTodoActivity";
 import type { CoworkDetectedFile } from "../../../../adapters/desktopBridge/types";
@@ -30,7 +31,7 @@ import type { CoworkRawMessage } from "../types";
 
 export type { CoworkBackgroundTask } from "./coworkActivityTypes";
 
-export function CoworkSessionActivityPanel({ bridge, fsDetectedFiles, messages, onNavigate, onOpenFile, session, sessionId, tasks }: {
+export function CoworkSessionActivityPanel({ bridge, fsDetectedFiles, messages, onNavigate, onOpenFile, session, sessionId }: {
   bridge: CoworkSessionsBridge;
   /** Official Me Map / array — merged into resourceActivity as fs_detected. */
   fsDetectedFiles?: CoworkDetectedFile[] | Map<string, CoworkDetectedFile> | null;
@@ -39,7 +40,6 @@ export function CoworkSessionActivityPanel({ bridge, fsDetectedFiles, messages, 
   onOpenFile: (target: CoworkOpenFileTarget) => void;
   session: CoworkSessionSnapshot | null;
   sessionId: string;
-  tasks: CoworkBackgroundTask[];
 }) {
   const todos = useMemo(() => parseCoworkTodos(messages), [messages]);
   const toolResources = useMemo(() => parseCoworkResourceActivity(messages), [messages]);
@@ -54,6 +54,8 @@ export function CoworkSessionActivityPanel({ bridge, fsDetectedFiles, messages, 
   const scheduledRuns = useCoworkScheduledRuns(bridge, session?.scheduledTaskId);
   const selectedItem = useCoworkSelectedItem();
   const { isDrawerExpanded } = useCoworkDrawerExpanded();
+  const isFileDrawerOpen = useCoworkFileDrawerOpen();
+  const [, , setActivityExpanded] = useCoworkActivityPanelExpanded(sessionId);
   const closeDrawer = useCoworkCloseFileDrawer();
   const openMcpServer = useCoworkOpenMcpServer();
   const openWebSearch = useCoworkOpenWebSearch();
@@ -64,7 +66,9 @@ export function CoworkSessionActivityPanel({ bridge, fsDetectedFiles, messages, 
   const [foldersOpen, setFoldersOpen] = useState(() => hasFolderActivity(folders, resourceSections, connectedOfficeFiles));
   const [contextOpen, setContextOpen] = useState(true);
   const [officeFilesOpen, setOfficeFilesOpen] = useState(true);
-  const hasActivity = hasCoworkActivity({ connectedOfficeFiles, folders, mountedProjects: session?.mountedProjects ?? [], resources, scheduledRuns, session, tasks, todos });
+  // Official xQt (index-BELzQL5P): aside always mounts; Progress lQt always
+  // (todos → vZt else empty pQt); Working folder lQt always; Context lQt always.
+  // Do not hide the rail when todos/folders/resources are empty.
   const allTodosCompleted = useMemo(() => todos.length > 0 && todos.every((todo) => todo.status === "completed"), [todos]);
   const previousAllTodosCompletedRef = useRef(allTodosCompleted);
 
@@ -128,7 +132,21 @@ export function CoworkSessionActivityPanel({ bridge, fsDetectedFiles, messages, 
     previousAllTodosCompletedRef.current = allTodosCompleted;
   }, [allTodosCompleted, todos.length]);
 
-  if (!hasActivity) return null;
+  // Official xQt `je` one-shot: if session has todos/folders/projects/context and width≥640, expand.
+  const hasExpandableActivity =
+    todos.length > 0 ||
+    hasFolderActivity(folders, resourceSections, connectedOfficeFiles) ||
+    (session?.mountedProjects?.length ?? 0) > 0 ||
+    resourceSections.contextResources.length > 0;
+  const autoExpandedRef = useRef({ conversationUuid: sessionId, didExpand: false });
+  if (autoExpandedRef.current.conversationUuid !== sessionId) {
+    autoExpandedRef.current = { conversationUuid: sessionId, didExpand: false };
+  }
+  useEffect(() => {
+    if (!sessionId || !hasExpandableActivity || autoExpandedRef.current.didExpand) return;
+    autoExpandedRef.current.didExpand = true;
+    if (window.innerWidth >= 640) setActivityExpanded(true);
+  }, [hasExpandableActivity, sessionId, setActivityExpanded]);
 
   const selectedPath =
     selectedItem?.type === "file"
@@ -144,7 +162,7 @@ export function CoworkSessionActivityPanel({ bridge, fsDetectedFiles, messages, 
               : undefined;
 
   return (
-    <CoworkActivityPanelShell sessionId={sessionId}>
+    <CoworkActivityPanelShell isFileDrawerOpen={isFileDrawerOpen} sessionId={sessionId}>
       <CoworkActivityPanelBody
         allTodosCompleted={allTodosCompleted}
         connectedOfficeFiles={connectedOfficeFiles}
@@ -167,14 +185,13 @@ export function CoworkSessionActivityPanel({ bridge, fsDetectedFiles, messages, 
         selectedPath={selectedPath}
         session={session}
         sessionId={sessionId}
-        tasks={tasks}
         todos={todos}
       />
     </CoworkActivityPanelShell>
   );
 }
 
-function CoworkActivityPanelBody({ allTodosCompleted, connectedOfficeFiles, contextOpen, folders, foldersOpen, officeFilesOpen, onContextToggle, onFoldersToggle, onNavigate, onOfficeFilesToggle, onOpenContextResource, onOpenFile, onProgressToggle, onRunsToggle, progressOpen, resourceSections, runsOpen, scheduledRuns, selectedPath, session, sessionId, tasks, todos }: CoworkActivityPanelBodyProps) {
+function CoworkActivityPanelBody({ allTodosCompleted, connectedOfficeFiles, contextOpen, folders, foldersOpen, officeFilesOpen, onContextToggle, onFoldersToggle, onNavigate, onOfficeFilesToggle, onOpenContextResource, onOpenFile, onProgressToggle, onRunsToggle, progressOpen, resourceSections, runsOpen, scheduledRuns, selectedPath, session, sessionId, todos }: CoworkActivityPanelBodyProps) {
   const hasFolderRows = hasFolderActivity(folders, resourceSections, connectedOfficeFiles);
   const instructionFolder = useMemo(() => coworkInstructionFolder(session), [session]);
   const [fileExplorerOpen, setFileExplorerOpen] = useState(false);
@@ -253,16 +270,11 @@ type CoworkActivityPanelBodyProps = {
   selectedPath?: string;
   session: CoworkSessionSnapshot | null;
   sessionId: string;
-  tasks: CoworkBackgroundTask[];
   todos: CoworkTodoItem[];
 };
 
 function hasFolderActivity(folders: string[], sections: CoworkResourceSections, connectedOfficeFiles: unknown[]) {
   return folders.length > 0 || sections.workingResources.length > 0 || sections.scratchpadResources.length > 0 || connectedOfficeFiles.length > 0;
-}
-
-function hasCoworkActivity({ connectedOfficeFiles, folders, mountedProjects, resources, scheduledRuns, session, tasks, todos }: { connectedOfficeFiles: unknown[]; folders: string[]; mountedProjects: unknown[]; resources: unknown[]; scheduledRuns: unknown[]; session: CoworkSessionSnapshot | null; tasks: unknown[]; todos: unknown[] }) {
-  return todos.length > 0 || tasks.length > 0 || resources.length > 0 || folders.length > 0 || connectedOfficeFiles.length > 0 || mountedProjects.length > 0 || scheduledRuns.length > 0 || Boolean(session?.scheduledTaskId);
 }
 
 function coworkInstructionFolder(session: CoworkSessionSnapshot | null) {
