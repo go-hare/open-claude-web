@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { desktopBridge, type SessionSummary } from "../adapters/desktopBridge";
-import { setSelectedFolder } from "../features/customize/selectedFolderStore";
+import { applyOfficialProjectGroupAdd, projectGroupFolder } from "./officialProjectGroupAdd";
+import { NO_PROJECT_KEY } from "./officialProjectGroup";
 import { useShellText, type ShellText } from "../i18n/shellMessages";
 import type { FrameStore } from "../stores/frameStore";
 import { BaseContextMenuPopup, ContextMenu } from "./BaseMenu";
@@ -374,22 +375,16 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
 }
 
 /**
- * Official ca0135 fl: project bucket Add — set folder (local cwd) then
- * `epitaxy:reset-draft` + navigate code home. Residual skips `__no_project__`
- * unless a cwd/target mapping exists.
+ * Official ca0135 fl: project bucket Add — mapped `u(c)` setSelectedFolder +
+ * push `/code`; unmapped `epitaxy:reset-draft` + push. Residual skips
+ * `__no_project__` unless a cwd/target mapping exists.
  */
-function projectGroupFolder(sessions: SessionSummary[]): string | null {
-  for (const session of sessions) {
-    const cwd = session.cwd?.trim();
-    if (!cwd || cwd.startsWith("remote-control:")) continue;
-    return cwd;
-  }
-  return null;
-}
-
 function isNoProjectGroup(group: RecentDisplayGroup, text: ShellText): boolean {
   const other = text.other || "Other";
-  return group.key === other || group.label === other || group.key === "__no_project__";
+  return group.key === `project-${NO_PROJECT_KEY}`
+    || group.key === NO_PROJECT_KEY
+    || group.key === other
+    || group.label === other;
 }
 
 function projectGroupNewSessionTrailing(
@@ -410,9 +405,10 @@ function projectGroupNewSessionTrailing(
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          if (folder) setSelectedFolder(folder);
-          window.dispatchEvent(new CustomEvent("epitaxy:reset-draft"));
-          onNavigate(sessionHomePath("code"));
+          applyOfficialProjectGroupAdd({
+            folder,
+            navigate: () => onNavigate(sessionHomePath("code")),
+          });
         }}
       >
         <Icon name="Add" customSize={14} />

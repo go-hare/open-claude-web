@@ -81,7 +81,7 @@ export function BaseContextMenuPopup({ align, children, className, side, sideOff
   );
 }
 
-export function BaseMenuItem({ children, checked, checkedRole = "checkbox", className, icon, keepOpen, lang, onClick, trailing }: { children: ReactNode; checked?: boolean; checkedRole?: "checkbox" | "radio"; className?: string; /** Official residual accepts string icon-font name or ReactNode SVG glyph (`icon:a.jsx(Lv,{})`). */ icon?: string | ReactNode; keepOpen?: boolean; lang?: string; onClick?: () => void; trailing?: ReactNode }) {
+export function BaseMenuItem({ children, checked, checkedRole = "checkbox", className, description, icon, keepOpen, lang, onClick, trailing }: { children: ReactNode; checked?: boolean; checkedRole?: "checkbox" | "radio"; className?: string; /** Official SIe `description` — second line under the item label. */ description?: string; /** Official residual accepts string icon-font name or ReactNode SVG glyph (`icon:a.jsx(Lv,{})`). */ icon?: string | ReactNode; keepOpen?: boolean; lang?: string; onClick?: () => void; trailing?: ReactNode }) {
   const checkedProps = checked === undefined ? {} : { "aria-checked": checked, role: checkedRole === "radio" ? "menuitemradio" : "menuitemcheckbox" };
   return (
     <Menu.Item {...checkedProps} className={`${itemClassName} ${className ?? ""}`} closeOnClick={keepOpen ? false : undefined} lang={lang} onClick={onClick}>
@@ -90,7 +90,14 @@ export function BaseMenuItem({ children, checked, checkedRole = "checkbox", clas
           {typeof icon === "string" ? <Icon name={icon} /> : icon}
         </span>
       ) : null}
-      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {description ? (
+        <div className="flex shrink grow basis-0 flex-col justify-start gap-1">
+          <div className="font-normal">{children}</div>
+          <div className="text-text-300 text-xs">{description}</div>
+        </div>
+      ) : (
+        <span className="min-w-0 flex-1 truncate">{children}</span>
+      )}
       {trailing}
       {checked !== undefined ? <span className="flex size-icon shrink-0 items-center justify-center ml-xs" style={{ color: "var(--cds-fill-accent)" }}>{checked ? <Icon name="check" /> : null}</span> : null}
     </Menu.Item>

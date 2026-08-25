@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { desktopBridge, type WorkspaceContext, type WorkspaceSshConfig } from "../../../adapters/desktopBridge";
+import { setSelectedFolder } from "../../customize/selectedFolderStore";
 import {
   OfficialComposerFolderPill,
   OfficialComposerPill,
@@ -88,6 +89,9 @@ export function OfficialWorkspaceControls({
         if (!nextIsGitRepo) {
           onSourceBranchChange("");
           onUseWorktreeChange(false);
+        } else if (gitBranch && !workspace.branchName) {
+          // Overlay from fl `+` seeds empty branchName; fill HEAD like Ikt getGitInfo.
+          onSourceBranchChange(gitBranch);
         }
       })
       .catch(() => {
@@ -124,6 +128,8 @@ export function OfficialWorkspaceControls({
       onSourceBranchChange("");
       onUseWorktreeChange(false);
       setRecentFolders((current) => buildRecentFolders([], selectedPath, current));
+      // Official Ikt J: setSelectedFolder after picking a folder.
+      setSelectedFolder(selectedPath);
       return;
     }
     const gitInfo = await desktopBridge.LocalSessions.getGitInfo?.(selectedPath).catch(() => null);
@@ -144,6 +150,8 @@ export function OfficialWorkspaceControls({
     onSourceBranchChange(nextIsGitRepo ? branch : "");
     onUseWorktreeChange(false);
     setRecentFolders((current) => buildRecentFolders([], selectedPath, current));
+    // Official Ikt J: setSelectedFolder after picking a folder.
+    setSelectedFolder(selectedPath);
   }, [onSourceBranchChange, onUseWorktreeChange, onWorkspaceChange, workspace.mode, workspace.sshConfig]);
 
   const chooseWorkspace = useCallback(async () => {

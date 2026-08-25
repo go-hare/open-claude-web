@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { desktopBridge, type EffortLevel, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
@@ -25,6 +25,11 @@ import {
 } from "./session/officialComposerOptions";
 import { officialCodeSessionStore } from "./session/officialCodeSessionStore";
 import { kickOfficialAutoSessionTitle } from "./session/useOfficialAutoSessionTitle";
+import {
+  getSelectedFolder,
+  subscribeSelectedFolder,
+} from "../customize/selectedFolderStore";
+import { applySelectedFolderToDraftWorkspace } from "../customize/applySelectedFolderToDraftWorkspace";
 
 /**
  * Official c119 react-query residual for Code home draft seed:
@@ -89,8 +94,17 @@ export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
   const sticky = getCodeDraftComposerState();
   const workspaceQuery = useCodeWorkspaceContext();
   const effortQuery = useCcdDefaultEffort();
-  const workspace = workspaceQuery.data ?? null;
-  const hostDefaultModeQuery = useEpitaxyProjectDefaultMode(workspace?.cwd);
+  const selectedFolder = useSyncExternalStore(subscribeSelectedFolder, getSelectedFolder, () => null);
+  const hostWorkspace = workspaceQuery.data ?? null;
+  /**
+   * Official c119 zm: `_ = P?.cwd ?? p ?? undefined`. Home has no session
+   * meta so draft cwd is vK selectedFolder (ca0135 fl mapped `+`).
+   */
+  const workspace = useMemo(
+    () => applySelectedFolderToDraftWorkspace(hostWorkspace ?? EMPTY_DRAFT_WORKSPACE, selectedFolder),
+    [hostWorkspace, selectedFolder],
+  );
+  const hostDefaultModeQuery = useEpitaxyProjectDefaultMode(workspace.cwd);
 
   /**
    * Official draft seed (c119):
@@ -101,12 +115,12 @@ export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
   const permissionMode = useMemo(
     () =>
       resolveDraftPermissionMode({
-        cwd: workspace?.cwd,
+        cwd: workspace.cwd,
         hostDefaultMode:
           typeof hostDefaultModeQuery.data === "string" ? hostDefaultModeQuery.data : null,
         preferOverride: true,
       }),
-    [workspace?.cwd, hostDefaultModeQuery.data],
+    [workspace.cwd, hostDefaultModeQuery.data],
   );
   const effort: EffortLevel =
     (effortQuery.data as EffortLevel | null | undefined)
@@ -122,33 +136,31 @@ export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
    * Full tt path lives on EpitaxySessionTile when a session is open.
    */
   useEffect(() => {
-    if (!workspace?.cwd) return;
+    if (!selectedFolder) return;
     const menuEvents = window["claude.web"]?.MenuEvents as
       | { onOpenFile?: (cb: () => void) => (() => void) | void; openFile?: (cb: () => void) => (() => void) | void }
       | undefined;
     if (!menuEvents?.onOpenFile && !menuEvents?.openFile) return;
-    const cwd = workspace.cwd;
+    const je = selectedFolder;
     const pick = () => {
-      void desktopBridge.LocalSessions.pickFileAtCwd?.(cwd);
+      void desktopBridge.LocalSessions.pickFileAtCwd?.(je);
     };
     const subscribe = menuEvents.onOpenFile ?? menuEvents.openFile;
     return subscribe?.(pick) ?? undefined;
-  }, [workspace?.cwd]);
+  }, [selectedFolder]);
 
   /**
    * Official draft home mounts real Qj Prompt immediately (tipTap + RNt).
    * Do NOT invent a fake Prompt skeleton → live editor swap (blank ::before
-   * then data-placeholder flash). Seed empty workspace until host
-   * getWorkspaceContext resolves; CodeNewSessionPage syncs when data arrives.
+   * then data-placeholder flash). Overlay selectedFolder onto host seed
+   * (EMPTY_DRAFT_WORKSPACE until getWorkspaceContext resolves).
    */
-  const draftWorkspace = workspace ?? EMPTY_DRAFT_WORKSPACE;
-
   return (
     <CodeNewSessionPage
       initialEffort={effort}
       initialPermissionMode={permissionMode}
       onNavigate={onNavigate}
-      workspace={draftWorkspace}
+      workspace={workspace}
     />
   );
 }
@@ -192,10 +204,22 @@ function CodeNewSessionPage({
   /** Official c119: epitaxy:reset-draft remount key when no session id (void 0===o). */
   const [draftEpoch, setDraftEpoch] = useState(0);
 
+  /**
+   * Seed composer from parent overlay. If cwd already matches (Ikt browse
+   * wrote git-enriched workspace then setSelectedFolder), keep local state —
+   * do not wipe branch/worktree with the empty overlay object.
+   */
   useEffect(() => {
-    setComposerWorkspace(workspace);
-    setSourceBranch(workspace.cwd ? workspace.branchName : "");
-    setUseWorktree(false);
+    let replaced = false;
+    setComposerWorkspace((current) => {
+      if (workspace.cwd && current.cwd === workspace.cwd) return current;
+      replaced = true;
+      return workspace;
+    });
+    if (replaced) {
+      setSourceBranch(workspace.cwd ? workspace.branchName : "");
+      setUseWorktree(false);
+    }
   }, [workspace]);
 
   /**

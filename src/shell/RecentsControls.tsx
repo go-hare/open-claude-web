@@ -4,6 +4,12 @@ import { type ShellText, useShellText } from "../i18n/shellMessages";
 import type { DFrameGroupBy, DFrameSortBy, FrameMode } from "../stores/frameStore";
 import { BaseMenuItem, BaseMenuPopup, BaseMenuSeparator, BaseSubmenu, Menu } from "./BaseMenu";
 import { Icon } from "./icons";
+import {
+  detectOfficialProjects,
+  groupSessionsByOfficialProject,
+  officialProjectGroupKeyFromSession,
+  toOfficialCodeSessionData,
+} from "./officialProjectGroup";
 
 export type RecentsFilterState = {
   status: "active" | "archived" | "all";
@@ -16,7 +22,7 @@ export type RecentsFilterState = {
 
 type DisplayGroup = { key: string; label?: string; sessions: SessionSummary[] };
 type MenuKey = keyof RecentsFilterState;
-type Option<T extends string> = { label: string; value: T };
+type Option<T extends string> = { label: string; value: T; description?: string };
 
 type FilterRow = { kind: "row"; key: Exclude<MenuKey, "selectedProjects">; label: string; summary: string; value: string; accent?: boolean; options: Option<string>[] };
 type SeparatorRow = { kind: "separator"; key: "separator" };
@@ -117,6 +123,7 @@ export function buildRecentsGroups(sessions: SessionSummary[], value: RecentsFil
   const visible = sessions.filter((session) => includeSession(session, value));
   const sorted = [...visible].sort(sorterFor(value.sortBy));
   if (value.groupBy === "none") return [{ key: "all", sessions: sorted }];
+  if (value.groupBy === "project") return groupSessionsByOfficialProject(sorted, text);
   return groupByValue(sorted, value.groupBy, text);
 }
 
@@ -176,7 +183,17 @@ function ProjectSubmenu({ options, selectedProjects, text, onChange }: { options
       trigger={<span className="flex w-full items-center gap-sm"><span className="flex-1 truncate">{text.project}</span><span className={`shrink-0 text-footnote max-w-[100px] truncate ${selectedProjects.length > 0 ? "text-accent" : "text-muted"}`}>{summary}</span></span>}
     >
       <BaseMenuItem checked={selectedProjects.length === 0} keepOpen onClick={() => onChange([])}>{text.allProjects}</BaseMenuItem>
-      {options.map((option) => <BaseMenuItem checked={selected.has(option.value)} keepOpen key={option.value} onClick={() => toggle(option.value)}>{option.label}</BaseMenuItem>)}
+      {options.map((option) => (
+        <BaseMenuItem
+          checked={selected.has(option.value)}
+          description={option.description}
+          keepOpen
+          key={option.value}
+          onClick={() => toggle(option.value)}
+        >
+          {option.label}
+        </BaseMenuItem>
+      ))}
     </BaseSubmenu>
   );
 }
@@ -205,8 +222,12 @@ function summaryClassName(row: FilterRow) {
 }
 
 function makeProjectOptions(sessions: SessionSummary[]): Option<string>[] {
-  const names = new Set(sessions.map((session) => projectLabel(session)).filter(Boolean));
-  return [...names].sort().map((name) => ({ label: name, value: name }));
+  // Official ca0135 _Component27: `_t(t, "name")` then Item value=key, children=name, description=disambiguationText.
+  return detectOfficialProjects(sessions.map(toOfficialCodeSessionData), "name").map((project) => ({
+    label: project.name,
+    value: project.key,
+    description: project.disambiguationText ?? undefined,
+  }));
 }
 
 function includeSession(session: SessionSummary, value: RecentsFilterState) {
@@ -220,7 +241,9 @@ function includeByStatus(session: SessionSummary, status: RecentsFilterState["st
 }
 
 function includeByProject(session: SessionSummary, selectedProjects: string[]) {
-  return selectedProjects.length === 0 || selectedProjects.includes(projectLabel(session));
+  if (selectedProjects.length === 0) return true;
+  const key = officialProjectGroupKeyFromSession(session);
+  return key !== undefined && selectedProjects.includes(key);
 }
 
 function includeByEnvironment(session: SessionSummary, environment: RecentsFilterState["environment"]) {
@@ -252,15 +275,13 @@ function groupByValue(sessions: SessionSummary[], groupBy: Exclude<RecentsFilter
 }
 
 function groupLabel(session: SessionSummary, groupBy: Exclude<RecentsFilterState["groupBy"], "none">, text?: ShellText) {
-  if (groupBy === "project" || groupBy === "homespace") return projectLabel(session, text);
+  if (groupBy === "homespace") {
+    return session.repo?.name || session.cwd?.split("/").filter(Boolean).at(-1) || text?.other || "Other";
+  }
   if (groupBy === "environment") return session.cwd ? text?.local ?? "本地" : text?.cloud ?? "云端";
   if (groupBy === "state") return session.isArchived ? text?.archived ?? "已归档" : text?.active ?? "进行中";
   if (groupBy === "custom") return text?.ungrouped ?? "Ungrouped";
   return dateLabel(session.updatedAtMs, text);
-}
-
-function projectLabel(session: SessionSummary, text?: ShellText) {
-  return session.repo?.name || session.cwd?.split("/").filter(Boolean).at(-1) || text?.other || "Other";
 }
 
 function dateLabel(updatedAtMs: number, text?: ShellText) {
