@@ -58,6 +58,20 @@ import {
 } from "./residualUltrareviewProgress";
 import type { EpitaxySessionType } from "./epitaxyTranscriptActionContext";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
+import {
+  shouldClearOfficialStreamForEvent,
+  shouldDiscardQueuedMessagesForLifecycleEvent,
+  shouldFlushOfficialStreamAfterMergedResult,
+  shouldKeepPendingTurnOnOfficialPkeClear,
+} from "./officialStreamLifecycleEvents";
+
+export {
+  isOfficialParentResultEvent,
+  shouldClearOfficialStreamForEvent,
+  shouldDiscardQueuedMessagesForLifecycleEvent,
+  shouldFlushOfficialStreamAfterMergedResult,
+  shouldKeepPendingTurnOnOfficialPkeClear,
+} from "./officialStreamLifecycleEvents";
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -384,6 +398,9 @@ export function useEpitaxySessionData(sessionId?: string) {
         && existing.session?.isRunning === true
         && existing.pendingTurnStartedAt === null
       ) {
+        // Official pendingTurn.startTime = Date.now() when the turn is newly opened.
+        // Leftover je from a settled turn must not seed Gv elapsed.
+        officialClearTurnStarted(sessionId);
         officialMarkTurnStarted(sessionId);
         // pendingTurn only — inventing streamActivityMode would sticky-protect against
         // real host idle. Host isActive OR + isResponding(pendingTurn|isRunning) cover paint.
@@ -449,7 +466,12 @@ export function useEpitaxySessionData(sessionId?: string) {
         if (isStart) {
           streamGenerationRef.current += 1;
           finalizeStreamGenerationRef.current = null;
-          officialMarkTurnStarted(sessionId);
+          // Official Pke.feed does not write pendingTurn. g already reminted
+          // startTime:Date.now(); leftover je must not clobber that stamp.
+          const existingPending = bucketBeforeStream?.pendingTurnStartedAt;
+          if (existingPending == null) {
+            officialMarkTurnStarted(sessionId);
+          }
           // Stamp live id on the ref immediately so eke suppress cannot race
           // the first durable assistant merge before React commits setState.
           // Drop Xwe cache: durable multi-emit may have already been parsed without
@@ -458,19 +480,15 @@ export function useEpitaxySessionData(sessionId?: string) {
             streamMessageIdRef.current = streamMessageId;
             setStreamingMessageId(streamMessageId);
             clearOfficialEkeCache(sessionId);
-            store.getState().setStreamActivity(sessionId, {
-              pendingTurnStartedAt: officialGetTurnStartedAt(sessionId) ?? Date.now(),
-              streamActivityMode: "requesting",
-              streamingMessageId: streamMessageId,
-              isRunning: true,
-            });
-          } else {
-            store.getState().setStreamActivity(sessionId, {
-              pendingTurnStartedAt: officialGetTurnStartedAt(sessionId) ?? Date.now(),
-              streamActivityMode: "requesting",
-              isRunning: true,
-            });
           }
+          store.getState().setStreamActivity(sessionId, {
+            streamActivityMode: "requesting",
+            isRunning: true,
+            ...(streamMessageId ? { streamingMessageId: streamMessageId } : {}),
+            ...(existingPending == null
+              ? { pendingTurnStartedAt: officialGetTurnStartedAt(sessionId) ?? Date.now() }
+              : {}),
+          });
         } else if (
           // Only re-assert isRunning while pendingTurn/open busy still owns the turn.
           bucketBeforeStream?.pendingTurnStartedAt != null
@@ -515,11 +533,11 @@ export function useEpitaxySessionData(sessionId?: string) {
         if (isAssistantEndTurnBridgeEvent(event)) {
           return;
         }
-        // Official `g` (result + queue + pendingTurn): mergeMessage already promoted
-        // and opened a new pendingTurn — do not settle Va here.
-        // Empty-queue parent result (success or error): mergeMessage already
-        // cleared pendingTurn / isRunning (h); fall through to clearStream for Va.
-        if (!shouldSettleEmptyQueueAfterMergedResult(event, store.getState().buckets[sessionId])) {
+        // Official `u && Pke.clear`: parent result always clears Va, including `g`
+        // (which remints pendingTurn). Do NOT skip Pke.clear because g left
+        // pendingTurn set — that is independent of h's clearPendingTurn.
+        // `p` (end_turn) already returned above and does not Pke.clear.
+        if (!shouldFlushOfficialStreamAfterMergedResult(event)) {
           return;
         }
       }
@@ -546,6 +564,20 @@ export function useEpitaxySessionData(sessionId?: string) {
           clearStreamState(true);
           return;
         }
+        const eventType = stringValue(asRecord(event).type);
+        // Official mergeMessage (index-BELzQL5P): no case close/stopped.
+        // Those only update list-store Ive metadata. Host stop() emits stopped then
+        // session_updated — do NOT discardQueued / clear pendingTurn (Esc+queue
+        // interrupt timeout still keeps web queue until result g/h).
+        if (eventType === "stopped" || eventType === "close") {
+          const nextSession = asRecord(event).session ?? asRecord(asRecord(event).payload).session;
+          if (nextSession) {
+            const prevBucket = store.getState().buckets[sessionId];
+            const patched = normalizeSessionSummaryPatch(prevBucket?.session ?? null, nextSession);
+            if (patched) store.getState().patchSession(sessionId, patched);
+          }
+          return;
+        }
         if (shouldClearOfficialStreamForEvent(event)) {
           // Official residual (index-BELzQL5P mergeMessage): result → Pke.clear immediately.
           // Do NOT invent settleAfterReveal / wait-for-smoother catch-up before clear —
@@ -553,26 +585,17 @@ export function useEpitaxySessionData(sessionId?: string) {
           const streamGeneration = streamGenerationRef.current;
           if (streamGenerationRef.current !== streamGeneration) return;
           finalizeStreamGenerationRef.current = null;
-          const eventType = stringValue(asRecord(event).type);
-          // Official stopSession / close / clear: drop optimistic queue (host
-          // deferredSends already cleared). Distinct from Esc interrupt-continue.
-          if (eventType === "stopped" || eventType === "close" || eventType === "cleared") {
+          // Official mergeMessage `cleared` resets the transcript bucket (queue too).
+          // Distinct from close/stopped (Ive only) and Esc interrupt-continue.
+          if (shouldDiscardQueuedMessagesForLifecycleEvent(event)) {
             clearStreamState(true, true);
             return;
           }
           const after = store.getState().buckets[sessionId];
-          // Official BELz g/h: queue promote only on type:result mergeMessage.
-          // Do NOT invent hasQueue from pendingTurn alone — that blocked
-          // success-result settle forever (Stop stuck after host idle).
-          // Real deferred queue: flush Va only; g continues on next result merge.
-          const hasDeferredQueue = Boolean(
-            after
-            && (
-              (after.queuedMessages?.length ?? 0) > 0
-              || (after.pendingQueuedSends ?? 0) > 0
-            ),
-          );
-          if (hasDeferredQueue) {
+          // Official u && Pke.clear: flush Va immediately.
+          // `g` remints pendingTurn — must not clearStream (clearPendingTurn).
+          // Leftover deferred queue (result before merge dump): same Va-only flush.
+          if (shouldKeepPendingTurnOnOfficialPkeClear(event, after)) {
             officialStreamClear(sessionId);
             clearOfficialEkeCache(sessionId);
             setStreamSnapshot(null);
@@ -604,9 +627,9 @@ export function useEpitaxySessionData(sessionId?: string) {
             const patched = normalizeSessionSummaryPatch(prevBucket?.session ?? null, nextSession);
             if (patched) store.getState().patchSession(sessionId, patched);
             // Official session_updated: metadata + isRunning only.
-            // Does NOT Pke.clear / promote queue / invent clearStream — result `u&&Pke.clear`
-            // and Esc markInterrupting (Pke.flush) own Va. patchSession already drops leftover
-            // pendingTurn when host idle so Qke/H clears (no sticky spark from web queue alone).
+            // Does NOT Pke.clear / promote queue / invent clearStream / clear pendingTurn.
+            // Result `g`/`h` / done / error / clearPendingTurn own pendingTurn. Esc drain
+            // then late markNotRunning must keep pendingTurn so parent result can `g`.
           }
         } else if (stringValue(asRecord(event).type) === "initialization_status") {
           // Official $s / initialization_status → Gv spawnLabel step (plugins/worktree/…).
@@ -1354,46 +1377,6 @@ function streamActivityModeFromInnerEvent(event: Record<string, unknown>, curren
     if (deltaType === "text_delta" || deltaType === "connector_text_delta") return "responding";
   }
   return currentMode;
-}
-
-/**
- * After mergeMessage of a parent result: official `g` is false when the queue is
- * empty, so pendingTurn is already null. Fall through to settle Va.
- * Continue (`g`) leaves a fresh pendingTurn — keep running (return false).
- * Success and error results both merge (BELz u); only empty-queue h settles here.
- */
-function shouldSettleEmptyQueueAfterMergedResult(
-  event: unknown,
-  bucket: {
-    pendingTurnStartedAt: number | null;
-    queuedMessages?: unknown[];
-    pendingQueuedSends?: number;
-  } | undefined,
-): boolean {
-  const raw = asRecord(event);
-  const message = raw.type === "message" ? asRecord(raw.message) : raw;
-  if (stringValue(message.type) !== "result") return false;
-  // Official u: parent result only (subagent results keep parent_tool_use_id).
-  if (message.parent_tool_use_id != null && message.parent_tool_use_id !== "") return false;
-  if (!bucket) return false;
-  return bucket.pendingTurnStartedAt === null
-    && (bucket.queuedMessages?.length ?? 0) === 0
-    && (bucket.pendingQueuedSends ?? 0) === 0;
-}
-
-function shouldClearOfficialStreamForEvent(event: unknown) {
-  const raw = asRecord(event);
-  const type = stringValue(raw.type);
-  if (type === "message") {
-    const messageType = stringValue(asRecord(raw.message).type);
-    return messageType === "result" || messageType === "error" || messageType === "completed";
-  }
-  return type === "result"
-    || type === "completed"
-    || type === "close"
-    || type === "error"
-    || type === "cleared"
-    || type === "stopped";
 }
 
 function streamActivityModeFromStreamEvent(streamMessage: Record<string, unknown>, currentMode: StreamActivityMode): StreamActivityMode {

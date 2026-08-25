@@ -2,6 +2,18 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { ChatMessage } from "../../../adapters/desktopBridge/types";
 import { officialCodeSessionStore } from "./officialCodeSessionStore";
 import { parseOfficialTranscriptEntries } from "./officialTranscriptParse";
+import {
+  officialClearTurnStarted,
+  officialGetTurnStartedAt,
+  officialMarkTurnStarted,
+} from "./officialStreamSessionStore";
+import {
+  isOfficialParentResultEvent,
+  shouldClearOfficialStreamForEvent,
+  shouldDiscardQueuedMessagesForLifecycleEvent,
+  shouldFlushOfficialStreamAfterMergedResult,
+  shouldKeepPendingTurnOnOfficialPkeClear,
+} from "./officialStreamLifecycleEvents";
 
 function queuedUser(id: string, text: string): ChatMessage {
   return {
@@ -134,9 +146,11 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
       isRunning: true,
     } as never, [interruptUser()]);
     officialCodeSessionStore.getState().setStreamActivity("s1", {
-      pendingTurnStartedAt: Date.now(),
+      pendingTurnStartedAt: 1_000,
       isRunning: true,
     });
+    officialClearTurnStarted("s1");
+    officialMarkTurnStarted("s1", 1_000);
     officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "222"));
     officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q2", "333"));
 
@@ -147,6 +161,18 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(bucket?.messages.map((message) => message.id)).toEqual(["interrupt", "r1", "q1", "q2"]);
     expect(bucket?.session?.isRunning).toBe(true);
     expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+    // Official g: pendingTurn.startTime = Date.now() (not leftover je).
+    expect(bucket?.pendingTurnStartedAt).toBeGreaterThan(1_000);
+    expect(officialGetTurnStartedAt("s1")).toBe(bucket?.pendingTurnStartedAt);
+    // Official Pke.feed does not write pendingTurn — follow-up message_start
+    // must not clobber g's stamp with leftover je.
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      streamActivityMode: "requesting",
+      isRunning: true,
+    });
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt).toBe(
+      bucket?.pendingTurnStartedAt,
+    );
     // jke: queued sit AFTER the interrupt result, so skip still holds.
     const entries = parseOfficialTranscriptEntries(bucket!.messages);
     expect(entries.some((entry) => entry.items.some((item) => item.kind === "turn_error"))).toBe(false);
@@ -303,10 +329,9 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(bucket?.session?.isRunning).toBe(true);
   });
 
-  it("applyLoad drops pendingTurn when host idle even if web queue remains", () => {
-    // Official H=Qke follows host/pendingTurn, not optimistic queuedMessages.
-    // Real drainDeferredSends keeps host isRunning true; web-only queue after markNotRunning
-    // must not sticky Stop/H.
+  it("applyLoad keeps pendingTurn when host idle if web queue remains (official transcript)", () => {
+    // Official BELz transcript merge does NOT clear pendingTurn. Esc drain then late
+    // markNotRunning still needs pendingTurn so parent result `g` continues.
     officialCodeSessionStore.getState().openSession("s1", {
       id: "s1",
       kind: "code",
@@ -320,6 +345,7 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
       isRunning: true,
     });
     officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "6"));
+    const startedAt = officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt;
 
     officialCodeSessionStore.getState().applyLoad("s1", generation, {
       session: {
@@ -333,7 +359,7 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     });
 
     const bucket = officialCodeSessionStore.getState().buckets.s1;
-    expect(bucket?.pendingTurnStartedAt).toBeNull();
+    expect(bucket?.pendingTurnStartedAt).toBe(startedAt);
     expect(bucket?.session?.isRunning).toBe(false);
     expect(bucket?.queuedMessages.map((message) => message.id)).toEqual(["q1"]);
   });
@@ -593,8 +619,7 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
 
   it("patchSession does not invent isRunning from Va (official H=Qke)", () => {
     // Official session_updated mirrors host isRunning only. Va/streamingMessageId must
-    // NOT force isRunning true or keep pendingTurn — that stuck Gv after markNotRunning
-    // when Pe lagged (c119 busy:H = Qke; composer busy:H).
+    // NOT force isRunning true. pendingTurn stays until result g/h (Qke/H).
     officialCodeSessionStore.getState().openSession("s1", {
       id: "s1",
       kind: "code",
@@ -607,6 +632,7 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
       streamActivityMode: "responding",
       isRunning: true,
     });
+    const startedAt = officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt;
 
     officialCodeSessionStore.getState().patchSession("s1", {
       id: "s1",
@@ -618,15 +644,14 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
 
     const bucket = officialCodeSessionStore.getState().buckets.s1;
     expect(bucket?.session?.isRunning).toBe(false);
-    expect(bucket?.pendingTurnStartedAt).toBeNull();
+    expect(bucket?.pendingTurnStartedAt).toBe(startedAt);
     // Va ownership flags may linger until result Pke.clear — not H.
     expect(bucket?.streamingMessageId).toBe("msg_live");
   });
 
   it("patchSession does not invent isRunning from web queue (official session_updated)", () => {
-    // Official session_updated mirrors host isRunning only. Web queuedMessages alone must
-    // NOT force isRunning or keep pendingTurn — that stuck H/Gv after Esc markNotRunning
-    // when host deferred was empty. Real drainDeferredSends keeps host isRunning true.
+    // Official session_updated mirrors host isRunning only — never force isRunning from
+    // queuedMessages. pendingTurn is kept so parent result `g` can continue.
     officialCodeSessionStore.getState().openSession("s1", {
       id: "s1",
       kind: "code",
@@ -635,6 +660,7 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
       isRunning: true,
     } as never, [interruptUser()]);
     officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "6"));
+    const startedAt = officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt;
 
     officialCodeSessionStore.getState().patchSession("s1", {
       id: "s1",
@@ -646,9 +672,56 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
 
     const bucket = officialCodeSessionStore.getState().buckets.s1;
     expect(bucket?.session?.isRunning).toBe(false);
-    expect(bucket?.pendingTurnStartedAt).toBeNull();
-    // Optimistic Hb queue may still show until result g / cancel — not H.
+    expect(bucket?.pendingTurnStartedAt).toBe(startedAt);
     expect(bucket?.queuedMessages.map((message) => message.id)).toEqual(["q1"]);
+  });
+
+  it("patchSession host idle with queue then parent result still g continues", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "6"));
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q2", "6b"));
+
+    officialCodeSessionStore.getState().patchSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 2,
+      isRunning: false,
+    } as never);
+
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt).not.toBeNull();
+    expect(officialCodeSessionStore.getState().buckets.s1?.session?.isRunning).toBe(false);
+
+    const result: ChatMessage = {
+      id: "r1",
+      role: "assistant",
+      text: "",
+      createdAt: "2026-08-13T00:00:05.000Z",
+      raw: {
+        type: "result",
+        uuid: "r1",
+        subtype: "success",
+        is_error: false,
+      },
+    };
+    officialCodeSessionStore.getState().mergeMessage("s1", result);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.queuedMessages).toEqual([]);
+    expect(bucket?.messages.map((message) => message.id)).toEqual([
+      "interrupt",
+      "r1",
+      "q1",
+      "q2",
+    ]);
+    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
+    expect(bucket?.session?.isRunning).toBe(true);
   });
 
   it("noteQueuedSend only bumps when pendingTurn set (official Gr)", () => {
@@ -738,9 +811,9 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt).toBeNull();
   });
 
-  it("patchSession drops stale pendingTurn when host idle without live stream", () => {
-    // Background completed while unsubscribed: host isRunning=false, result merge missed,
-    // bare pendingTurn must not sticky Stop forever.
+  it("patchSession keeps pendingTurn when host idle without live stream", () => {
+    // Official session_updated never clears pendingTurn. Missed-result hollow Stop
+    // is a missed-result problem — do not invent idle-clear here.
     officialCodeSessionStore.getState().openSession("s1", {
       id: "s1",
       kind: "code",
@@ -748,7 +821,8 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
       updatedAtMs: 1,
       isRunning: true,
     } as never, [interruptUser()]);
-    expect(officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt).not.toBeNull();
+    const startedAt = officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt;
+    expect(startedAt).not.toBeNull();
 
     officialCodeSessionStore.getState().patchSession("s1", {
       id: "s1",
@@ -760,6 +834,91 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
 
     const bucket = officialCodeSessionStore.getState().buckets.s1;
     expect(bucket?.session?.isRunning).toBe(false);
-    expect(bucket?.pendingTurnStartedAt).toBeNull();
+    expect(bucket?.pendingTurnStartedAt).toBe(startedAt);
+  });
+
+  it("close/stopped do not dump queue (official Ive metadata only)", () => {
+    // Official mergeMessage has no case close/stopped. Host stop() emits stopped
+    // then session_updated; web must keep queuedMessages + pendingTurn.
+    expect(shouldClearOfficialStreamForEvent({ type: "stopped" })).toBe(false);
+    expect(shouldClearOfficialStreamForEvent({ type: "close" })).toBe(false);
+    expect(shouldDiscardQueuedMessagesForLifecycleEvent({ type: "stopped" })).toBe(false);
+    expect(shouldDiscardQueuedMessagesForLifecycleEvent({ type: "close" })).toBe(false);
+    expect(shouldClearOfficialStreamForEvent({ type: "cleared" })).toBe(true);
+    expect(shouldDiscardQueuedMessagesForLifecycleEvent({ type: "cleared" })).toBe(true);
+    expect(shouldClearOfficialStreamForEvent({ type: "result" })).toBe(true);
+    expect(shouldDiscardQueuedMessagesForLifecycleEvent({ type: "result" })).toBe(false);
+
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "22222"));
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q2", "2222"));
+    const startedAt = officialCodeSessionStore.getState().buckets.s1?.pendingTurnStartedAt;
+
+    officialCodeSessionStore.getState().patchSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 2,
+      isRunning: false,
+    } as never);
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.queuedMessages.map((message) => message.id)).toEqual(["q1", "q2"]);
+    expect(bucket?.pendingTurnStartedAt).toBe(startedAt);
+    expect(bucket?.session?.isRunning).toBe(false);
+  });
+
+  it("parent result always Pke.clear; g keeps reminted pendingTurn (official u && Pke.clear)", () => {
+    const parentResult = { type: "result", subtype: "success", is_error: false };
+    const nestedResult = { type: "message", message: parentResult };
+    const subagentResult = { type: "result", parent_tool_use_id: "tool_1" };
+    const endTurn = {
+      type: "assistant",
+      message: { stop_reason: "end_turn" },
+    };
+
+    expect(isOfficialParentResultEvent(parentResult)).toBe(true);
+    expect(isOfficialParentResultEvent(nestedResult)).toBe(true);
+    expect(isOfficialParentResultEvent(subagentResult)).toBe(false);
+    expect(shouldFlushOfficialStreamAfterMergedResult(parentResult)).toBe(true);
+    expect(shouldFlushOfficialStreamAfterMergedResult(nestedResult)).toBe(true);
+    expect(shouldFlushOfficialStreamAfterMergedResult(subagentResult)).toBe(false);
+    expect(shouldFlushOfficialStreamAfterMergedResult(endTurn)).toBe(false);
+
+    // Official g: merge reminted pendingTurn, queue already dumped → Va-only.
+    expect(shouldKeepPendingTurnOnOfficialPkeClear(parentResult, {
+      pendingTurnStartedAt: 1_787_639_205_212,
+      queuedMessages: [],
+      pendingQueuedSends: 0,
+    })).toBe(true);
+    // Official h: empty-queue parent result already cleared pendingTurn → full settle.
+    expect(shouldKeepPendingTurnOnOfficialPkeClear(parentResult, {
+      pendingTurnStartedAt: null,
+      queuedMessages: [],
+      pendingQueuedSends: 0,
+    })).toBe(false);
+    // Leftover deferred (result before merge dump): Va-only, keep pendingTurn.
+    expect(shouldKeepPendingTurnOnOfficialPkeClear(parentResult, {
+      pendingTurnStartedAt: 1_000,
+      queuedMessages: [{}],
+      pendingQueuedSends: 0,
+    })).toBe(true);
+    expect(shouldKeepPendingTurnOnOfficialPkeClear(parentResult, {
+      pendingTurnStartedAt: 1_000,
+      queuedMessages: [],
+      pendingQueuedSends: 1,
+    })).toBe(true);
+    // Subagent result must not invent keep-from-pendingTurn (u is false).
+    expect(shouldKeepPendingTurnOnOfficialPkeClear(subagentResult, {
+      pendingTurnStartedAt: 1_000,
+      queuedMessages: [],
+      pendingQueuedSends: 0,
+    })).toBe(false);
   });
 });

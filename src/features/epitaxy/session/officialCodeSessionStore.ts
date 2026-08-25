@@ -102,9 +102,9 @@ function emptyBucket(pending: boolean): OfficialCodeSessionBucket {
 }
 
 /**
- * Official Qke / cowork hydrate: host `isRunning` means an open pendingTurn until
- * result/error/clear. Seed only when missing — never invent sticky busy for idle,
- * never clear endTurnSeen on an already-open turn.
+ * Official Qke / cowork hydrate: host `isRunning` seeds pendingTurn when missing.
+ * Idle does not seed and does not clear — result g/h / done / error / clearPendingTurn
+ * own settle. Never clear endTurnSeen on an already-open turn.
  * Also stamps je (turnStartedAt) so Gv spark elapsed does not wait on first stream tick.
  */
 function seedPendingTurnIfHostRunning(
@@ -125,6 +125,9 @@ function seedPendingTurnIfHostRunning(
     };
   }
   const at = Date.now();
+  // Official pendingTurn.startTime is this stamp. Leftover je from a settled turn
+  // must not keep Gv elapsed across a newly seeded turn.
+  officialClearTurnStarted(sessionId);
   officialMarkTurnStarted(sessionId, at);
   // pendingTurn only — do NOT invent streamActivityMode requesting. That would make
   // host isRunning=false treat the seed as live stream and sticky-busy forever.
@@ -297,9 +300,11 @@ type OfficialCodeSessionActions = {
   promoteQueueAndContinue: (sessionId: string) => boolean;
   /**
    * Local stream settle / stop.
-   * Official result+queue+pendingTurn (`g`) is handled in mergeMessage — reset
-   * pendingTurn and keep isRunning so host drain can continue.
-   * `discardQueued` is host stopSession teardown only (not Esc).
+   * Official `g` remints pendingTurn in mergeMessage then Pke.clear (Va only) —
+   * do not call this for g. `h` / done / error call with markSessionSettled.
+   * `discardQueued` is official mergeMessage `cleared` only. close/stopped are
+   * Ive list-store metadata (do not dump queue / pendingTurn). Esc is
+   * markInterrupting + interrupt, not this.
    */
   clearStream: (sessionId: string, markSessionSettled?: boolean, discardQueued?: boolean) => void;
   /**
@@ -685,6 +690,11 @@ function createOfficialCodeSessionStore() {
       const raw = state.buckets[sessionId] ?? emptyBucket(false);
       const prev = withQueueDefaults(raw);
       if (prev.pendingTurnStartedAt !== null) return state;
+      const at = Date.now();
+      // Official pendingTurn.startTime is this stamp. Product je (Gv elapsed) must
+      // remint — leftover je from a prior turn would poison spark + message_start.
+      officialClearTurnStarted(sessionId);
+      officialMarkTurnStarted(sessionId, at);
       const messages = optimisticUser ? upsertMessage(prev.messages, optimisticUser) : prev.messages;
       return {
         buckets: {
@@ -696,7 +706,7 @@ function createOfficialCodeSessionStore() {
             isTranscriptPending: false,
             isMetaPending: false,
             messages,
-            pendingTurnStartedAt: Date.now(),
+            pendingTurnStartedAt: at,
             pendingTurnEndTurnSeen: false,
             // Residual: Pke.clear companion — lift prior Va ownership flags for the new turn.
             streamActivityMode: "requesting",
@@ -736,6 +746,7 @@ function createOfficialCodeSessionStore() {
     set((state) => {
       const prev = state.buckets[sessionId];
       if (!prev || prev.pendingTurnStartedAt === null) return state;
+      officialClearTurnStarted(sessionId);
       return {
         buckets: {
           ...state.buckets,
@@ -775,6 +786,7 @@ function createOfficialCodeSessionStore() {
   applyRuntimeError: (sessionId, error, errorCategory) => {
     set((state) => {
       const prev = state.buckets[sessionId] ?? emptyBucket(false);
+      officialClearTurnStarted(sessionId);
       return {
         buckets: {
           ...state.buckets,
@@ -944,20 +956,10 @@ function createOfficialCodeSessionStore() {
         // Host isRunning mirror only when payload has it. Cold re-entry seeds when host running.
         const nextSession = sessionForLoad(baseSession, messages, liveMeta)
           ?? sessionWithLiveMeta(baseSession, liveMeta);
-        // Host idle → settle leftover pendingTurn (official H=Qke). Do NOT keep H from
-        // web queuedMessages alone — host drainDeferredSends keeps isRunning true when
-        // real deferred continues; web-only queue after markNotRunning must not sticky Stop.
-        // Do NOT gate on Va — session_updated does not Pke.clear.
-        let pendingSeed = seedPendingTurnIfHostRunning(prev, nextSession, sessionId);
-        if (
-          nextSession?.isRunning !== true
-          && prev.pendingTurnStartedAt !== null
-        ) {
-          pendingSeed = {
-            pendingTurnStartedAt: null,
-            pendingTurnEndTurnSeen: false,
-          };
-        }
+        // Official BELz transcript: merge messages / liveMeta only — does NOT clear
+        // pendingTurn. Host idle must not invent-settle Qke; result g/h / done / error
+        // / clearPendingTurn own that. Seed only when host isRunning and pendingTurn missing.
+        const pendingSeed = seedPendingTurnIfHostRunning(prev, nextSession, sessionId);
         return {
           buckets: {
             ...state.buckets,
@@ -980,8 +982,8 @@ function createOfficialCodeSessionStore() {
       const nextMessages = filterStreamEvents(payload.messages);
       // Always union — never wholesale-replace history (even when settled).
       const messages = mergeTranscriptUnion(prev.messages, nextMessages);
-      // Official H=Qke: host idle settles leftover pendingTurn. Web queue alone must not
-      // keep H (host drain keeps isRunning when deferred continues). Va may linger until result.
+      // Official transcript does not clear pendingTurn. Host idle must not invent-settle
+      // Qke (Esc+queue: late markNotRunning then result needs pendingTurn for `g`).
       const hostIdle = payload.session ? payload.session.isRunning !== true : true;
       const hasLiveStream = Boolean(
         prev.streamSnapshot !== null
@@ -995,10 +997,7 @@ function createOfficialCodeSessionStore() {
       const nextSession = payload.session
         ? sessionForLoad({ ...payload.session, messages }, messages, liveMeta)
         : null;
-      // Host isRunning on getSession/getTranscript → seed pendingTurn (re-entry H).
-      const pendingSeed = hostIdle
-        ? { pendingTurnStartedAt: null as number | null, pendingTurnEndTurnSeen: false }
-        : seedPendingTurnIfHostRunning(prev, nextSession ?? payload.session, sessionId);
+      const pendingSeed = seedPendingTurnIfHostRunning(prev, nextSession ?? payload.session, sessionId);
       return {
         buckets: {
           ...state.buckets,
@@ -1098,24 +1097,11 @@ function createOfficialCodeSessionStore() {
           ? { ...nextSession, model: modelFilled }
           : nextSession;
       // Official session_updated / formatSessionForEvent: metadata + isRunning only.
-      // Do NOT invent force-isRunning from web queuedMessages / Va — that stuck Gv/H after
-      // Esc markNotRunning when host deferred was empty but optimistic queue lingered.
-      // Real drainDeferredSends keeps host isRunning true; mirror that, don't invent it.
-      // Official web H = pe = Qke(pendingTurn && !endTurnSeen) — not stream||isRunning||queue.
-      // Host isRunning true with no local pendingTurn seeds pendingTurn for re-entry H.
-      let pendingSeed = seedPendingTurnIfHostRunning(prev, session, sessionId);
-      if (
-        session.isRunning === false
-        && prev.pendingTurnStartedAt !== null
-      ) {
-        // Host idle: settle leftover pendingTurn so Qke/H clears.
-        // Web queue alone must not keep H — continue-turn is result `g` (or host still running
-        // after drain). Do NOT gate on Va — session_updated does not Pke.clear.
-        pendingSeed = {
-          pendingTurnStartedAt: null,
-          pendingTurnEndTurnSeen: false,
-        };
-      }
+      // Does NOT clear pendingTurn (BELz merge `session_updated` is list-store only).
+      // Do NOT invent force-isRunning from web queuedMessages / Va. Do NOT invent-settle
+      // pendingTurn on host idle — official g needs pendingTurn after Esc drain / late
+      // markNotRunning. Result g/h / done / error / clearPendingTurn own settle.
+      const pendingSeed = seedPendingTurnIfHostRunning(prev, session, sessionId);
       return {
         buckets: {
           ...state.buckets,
@@ -1325,6 +1311,15 @@ function createOfficialCodeSessionStore() {
       const nextPendingTurn = settleWithQueue
         ? (continueTurn ? Date.now() : null)
         : prev.pendingTurnStartedAt;
+      // Official h: pendingTurn = g ? {startTime:Date.now(),endTurnSeen:false} : null
+      // Official u also mCe.reset. Product je is Gv elapsed densable of startTime —
+      // remint on g, clear on empty-queue h. Do not leave leftover je for message_start.
+      if (settleWithQueue) {
+        officialClearTurnStarted(sessionId);
+        if (continueTurn && nextPendingTurn != null) {
+          officialMarkTurnStarted(sessionId, nextPendingTurn);
+        }
+      }
       // Residual p: end_turn + pendingTurn → endTurnSeen=true. Does NOT Pke.clear / lift Va.
       const nextEndTurnSeen = settleWithQueue
         ? false
@@ -1410,6 +1405,9 @@ function createOfficialCodeSessionStore() {
       for (const queued of prev.queuedMessages) {
         messages = upsertMessage(messages, queued);
       }
+      const at = Date.now();
+      officialClearTurnStarted(sessionId);
+      officialMarkTurnStarted(sessionId, at);
       return {
         buckets: {
           ...state.buckets,
@@ -1418,7 +1416,7 @@ function createOfficialCodeSessionStore() {
             messages,
             queuedMessages: EMPTY_QUEUED_MESSAGES,
             pendingQueuedSends: 0,
-            pendingTurnStartedAt: Date.now(),
+            pendingTurnStartedAt: at,
             pendingTurnEndTurnSeen: false,
             compactionStatus: null,
             streamActivityMode: idleStreamActivityMode,
@@ -1517,13 +1515,15 @@ function createOfficialCodeSessionStore() {
 
   clearStream: (sessionId, markSessionSettled = false, discardQueued = false) => {
     let shouldNotifyCompletion = false;
+    officialClearTurnStarted(sessionId);
     set((state) => {
       const raw = state.buckets[sessionId];
       if (!raw) return state;
       const prev = withQueueDefaults(raw);
       // Official result/error/done: remaining queuedMessages append into messages.
       // Esc is markInterrupting + interrupt (not clearPendingTurn / not discard).
-      // discardQueued is stopSession teardown only (stopped/close/cleared).
+      // discardQueued is official mergeMessage `cleared` only. close/stopped are
+      // Ive list-store metadata (do not dump queue / pendingTurn).
       let messages = prev.messages;
       let queuedMessages = prev.queuedMessages;
       let pendingQueuedSends = prev.pendingQueuedSends;

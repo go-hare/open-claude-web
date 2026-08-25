@@ -46,6 +46,13 @@ export function OfficialComposerUsageIndicator({ bridge, session, sessionRef }: 
       setIsFetching(false);
       return;
     }
+    // Official Ue enabled:!Xke — never get_context_usage while the turn is open
+    // (CLI stdin for-await serializes it with interrupt; would miss GkA=1500).
+    if (xke) {
+      setUsageForSession(officialContextUsageCache.get(sessionId) ?? null);
+      setIsFetching(false);
+      return;
+    }
     if (opts?.invalidate) officialContextUsageCache.delete(sessionId);
     setIsFetching(true);
     let alive = true;
@@ -57,8 +64,8 @@ export function OfficialComposerUsageIndicator({ bridge, session, sessionRef }: 
       if (alive) setIsFetching(false);
     });
     alive = false;
-  }, [bridge, sessionId, setUsageForSession]);
-  // Mount / sessionId change — official Ue runs when enabled becomes true.
+  }, [bridge, sessionId, setUsageForSession, xke]);
+  // Mount / sessionId change — official Ue runs when enabled becomes true (!Xke).
   useEffect(() => {
     let alive = true;
     prevXkeRef.current = xke;
@@ -69,6 +76,10 @@ export function OfficialComposerUsageIndicator({ bridge, session, sessionRef }: 
       return undefined;
     }
     setBridgeUsage(officialContextUsageCache.get(sessionId) ?? null);
+    if (xke) {
+      setIsFetching(false);
+      return undefined;
+    }
     setIsFetching(true);
     void bridge.getContextUsage(sessionId).then((nextUsage) => {
       if (alive) setUsageForSession(nextUsage);
@@ -91,14 +102,14 @@ export function OfficialComposerUsageIndicator({ bridge, session, sessionRef }: 
       void refreshUsage({ invalidate: true });
     }
   }, [xke, sessionId, bridge, refreshUsage]);
-  // Official queryKey includes model — refetch when model changes (not on first paint).
+  // Official queryKey includes model — refetch when model changes *and* enabled (!Xke).
   useEffect(() => {
     const prev = prevModelRef.current;
     prevModelRef.current = model;
     if (prev == null || prev === model) return;
-    if (!sessionId || !bridge.getContextUsage) return;
+    if (!sessionId || !bridge.getContextUsage || xke) return;
     void refreshUsage({ invalidate: true });
-  }, [model, sessionId, bridge, refreshUsage]);
+  }, [model, sessionId, bridge, refreshUsage, xke]);
 
   const isLocalContext = sessionRef?.type === "local";
   const usage = bridgeUsage;
@@ -111,9 +122,10 @@ export function OfficialComposerUsageIndicator({ bridge, session, sessionRef }: 
   const ariaParts = [isLocalContext ? `context ${usagePercent !== null ? `${usagePercent}%` : contextSummary}` : null].filter(Boolean);
   const ariaLabel = ariaParts.length > 0 ? `Usage: ${ariaParts.join(", ")}` : "Usage";
   const handleOpenChange = useCallback((open: boolean) => {
-    if (open && isLocalContext) void refreshUsage();
+    // Official Ue enabled:!Xke — popover while busy shows cache, does not fetch.
+    if (open && isLocalContext && !xke) void refreshUsage();
     if (!open) setExpanded(false);
-  }, [isLocalContext, refreshUsage]);
+  }, [isLocalContext, refreshUsage, xke]);
   return (
     <Popover.Root onOpenChange={handleOpenChange}>
       <Popover.Trigger render={<OfficialButton ariaLabel={ariaLabel} className="shrink-0" customIcon={<OfficialUsageCircle strokeDashoffset={strokeDashoffset} usagePercent={triggerPercent} />} size="small" variant="uncontained" />} />

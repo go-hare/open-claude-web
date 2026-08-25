@@ -265,9 +265,11 @@ function SummaryActions() {
 const SummaryStatsBar = memo(function SummaryStatsBar({
   sessionRef,
   entries,
+  isResponding,
 }: {
   sessionRef: OfficialSessionRef;
   entries: TranscriptEntry[];
+  isResponding: boolean;
 }) {
   const [contextTokens, setContextTokens] = useState<number | null>(null);
   const [durationMs, setDurationMs] = useState<number | undefined>(undefined);
@@ -293,6 +295,13 @@ const SummaryStatsBar = memo(function SummaryStatsBar({
         setDurationMs(updated - created);
       }
     }).catch(() => {});
+    // Official Ue enabled:!Xke — get_context_usage serializes on CLI stdin with
+    // interrupt. Skip while H/Xke; refetch when the turn settles.
+    if (isResponding) {
+      return () => {
+        alive = false;
+      };
+    }
     void bridge.getContextUsage?.(sessionRef.id).then((usage) => {
       if (!alive || !usage) return;
       const total = typeof usage.totalTokens === "number" ? usage.totalTokens : null;
@@ -301,7 +310,7 @@ const SummaryStatsBar = memo(function SummaryStatsBar({
     return () => {
       alive = false;
     };
-  }, [sessionRef.id, entries.length]);
+  }, [sessionRef.id, entries.length, isResponding]);
 
   const { turnCount, toolCount } = useMemo(() => {
     let turns = 0;
@@ -508,7 +517,7 @@ export const OfficialSummaryTranscriptBody = memo(function OfficialSummaryTransc
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-[var(--chat-turn-gap)]">
       <div className="min-h-0 flex flex-col gap-g6">
-        <SummaryStatsBar sessionRef={sessionRef} entries={entries} />
+        <SummaryStatsBar sessionRef={sessionRef} entries={entries} isResponding={isResponding} />
         {summary ? (
           <SummaryMarkdown summary={summary} />
         ) : status === "generating" ? (
