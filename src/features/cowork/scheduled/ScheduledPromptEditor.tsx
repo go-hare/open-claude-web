@@ -7,6 +7,7 @@ import { Placeholder } from "@tiptap/extensions/placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
+import { officialTiptapEditorAttributes } from "../../shared/officialTiptapEditorAttributes";
 import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
 import {
   markControlledTiptapUserEdit,
@@ -75,12 +76,12 @@ export function ScheduledPromptEditor({
       ],
       content: textToDoc(value || emitRef.current.lastEmittedValue),
       editorProps: {
-        attributes: {
+        attributes: officialTiptapEditorAttributes({
           "aria-label": ariaLabel,
           // TipTap adds "tiptap"; ProseMirror is always present — official min-h targets .ProseMirror
           class: "outline-none border-0",
           enterkeyhint: "enter",
-        },
+        }),
         handleDOMEvents: {
           // Packaged app:// Chromium adaptation (d5f261d): transaction-owned insertText.
           beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),

@@ -9,6 +9,7 @@ import {
   imageFilesFromClipboardData,
 } from "../cowork/composer/coworkComposerStagedImages";
 import { OfficialRNtPlaceholder } from "../shared/officialRNtPlaceholder";
+import { officialTiptapEditorAttributes } from "../shared/officialTiptapEditorAttributes";
 import { handleEmptyDocBeforeInput } from "../shared/tiptapEmptyDocBeforeInput";
 import { OfficialButton, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
 import {
@@ -176,12 +177,12 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
     // Official c119 Qj / aYt: setEditable(!disabled) only.
     editable: !disabled,
     editorProps: {
-      attributes: {
+      attributes: officialTiptapEditorAttributes({
         "aria-label": "Prompt",
         // epitaxy-root is select-none; contenteditable must opt back into text selection.
         class: "tiptap select-text",
         enterkeyhint: "enter",
-      },
+      }),
       // Host packaged app:// empty trailingBreak only (d5f261d) — not UI residual invent.
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
@@ -388,15 +389,6 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   return (
     <div
       className={`epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300 ${isBashMode ? "[&_.tiptap]:font-mono [&_.tiptap]:text-[length:var(--text-code)]" : ""}`}
-      onClick={(event) => {
-        if (event.target instanceof HTMLElement && event.target.closest("button")) return;
-        // Official Pe: focus end.
-        try {
-          editor?.commands.focus("end");
-        } catch {
-          /* destroyed */
-        }
-      }}
     >
       <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" data-surface="prompt" />
       {isBashMode ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-r7 shadow-[inset_0_0_0_1px_var(--extended-purple)]" /> : null}

@@ -6,6 +6,8 @@ import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { desktopBridge, type CoworkMountedProject, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { CoworkSessionsBridge, SessionSummary } from "../../adapters/desktopBridge/types";
+import { shouldOfficialClickToFocus } from "../shared/officialClickToFocus";
+import { officialTiptapEditorAttributes } from "../shared/officialTiptapEditorAttributes";
 import { handleEmptyDocBeforeInput } from "../shared/tiptapEmptyDocBeforeInput";
 import {
   markControlledTiptapUserEdit,
@@ -185,7 +187,8 @@ export function OfficialCoworkPromptBox({
           <div
             className="!box-content flex flex-col bg-bg-000 mx-2 md:mx-0 items-stretch transition-all duration-200 relative z-10 rounded-[20px] cursor-text relative z-[1] border border-transparent md:w-full shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-300)/0.15)] hover:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] focus-within:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/7.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] hover:focus-within:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/7.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)]"
             onClick={(event) => {
-              if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+              // Official EYe(focusInput): skip [role=textbox] so click-in-text keeps caret.
+              if (!shouldOfficialClickToFocus(event)) return;
               inputRef.current?.focus();
             }}
           >
@@ -564,11 +567,11 @@ const OfficialCoworkPromptInput = forwardRef<OfficialCoworkPromptInputHandle, {
     content: tiptapDocFromPlainText(value || emitRef.current.lastEmittedValue),
     editable: !disabled,
     editorProps: {
-      attributes: {
+      attributes: officialTiptapEditorAttributes({
         "aria-label": "Prompt",
         class: "tiptap",
         "data-placeholder": placeholder,
-      },
+      }),
       // Packaged app:// Chromium adaptation (d5f261d): transaction-owned insertText.
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),

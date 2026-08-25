@@ -14,6 +14,7 @@ import { CoworkDropdownButton } from "../ui/CoworkDropdownButton";
 import type { CoworkDropdownItem } from "../ui/CoworkMenuTypes";
 import { CoworkDraftRiskBanner } from "./CoworkDraftRiskBanner";
 import { CoworkFolderPicker } from "./CoworkFolderPicker";
+import { shouldOfficialClickToFocus } from "../../shared/officialClickToFocus";
 import { CoworkPromptInput, type CoworkPromptInputHandle } from "./CoworkPromptInput";
 import {
   coworkPermissionModeOptionsForModes,
@@ -190,7 +191,9 @@ function CoworkPromptSurface({
         <div
           className="!box-content flex flex-col bg-bg-000 mx-2 md:mx-0 items-stretch transition-all duration-200 relative z-10 rounded-[20px] cursor-text border border-transparent md:w-full shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-300)/0.15)] hover:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] focus-within:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/7.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)]"
           onClick={(event) => {
-            if (!(event.target instanceof HTMLElement && event.target.closest("button"))) inputRef.current?.focus();
+            // Official EYe(focusInput): skip [role=textbox] so click-in-text keeps caret.
+            if (!shouldOfficialClickToFocus(event)) return;
+            inputRef.current?.focus();
           }}
         >
           <div className="flex flex-col m-3.5 gap-3">

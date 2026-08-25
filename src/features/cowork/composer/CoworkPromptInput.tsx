@@ -3,6 +3,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import type { SessionSummary } from "../../../adapters/desktopBridge/types";
+import { officialTiptapEditorAttributes } from "../../shared/officialTiptapEditorAttributes";
 import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInput";
 import {
   markControlledTiptapUserEdit,
@@ -165,7 +166,11 @@ function useCoworkPromptEditor(input: CoworkPromptEditorInput) {
     content: tiptapDoc(input.value || input.emitRef.current.lastEmittedValue),
     editable: !input.disabled,
     editorProps: {
-      attributes: { "aria-label": "Prompt", class: "tiptap", "data-placeholder": input.placeholder },
+      attributes: officialTiptapEditorAttributes({
+        "aria-label": "Prompt",
+        class: "tiptap",
+        "data-placeholder": input.placeholder,
+      }),
       // Packaged app:// Chromium adaptation (d5f261d): transaction-owned insertText.
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),

@@ -25,6 +25,8 @@ import { useCoworkModelContextToolStates } from "./coworkModelContextStore";
 import { registerCoworkSessionComposerActions } from "./coworkSessionComposerActions";
 import type { CoworkClaudeAvatarState } from "../session/transcript/CoworkClaudeAvatar";
 import { useCoworkConversationAvatar } from "../session/transcript/CoworkConversationAvatarContext";
+import { shouldOfficialClickToFocus } from "../../shared/officialClickToFocus";
+import { officialTiptapEditorAttributes } from "../../shared/officialTiptapEditorAttributes";
 import { CoworkSessionComposerSurface } from "./CoworkSessionComposerSurface";
 import { CoworkAskUserQuestionBanner } from "./CoworkAskUserQuestionBanner";
 import { useCoworkAskUserQuestion } from "./CoworkAskUserQuestionContext";
@@ -95,9 +97,10 @@ export function CoworkSessionComposer(props: CoworkSessionComposerProps) {
       modelLabel={controller.modelLabel}
       nextReconnectTime={props.nextReconnectTime}
       onContainerClick={(event) => {
-        if (!(event.target instanceof HTMLElement && event.target.closest("button"))) {
-          controller.editor?.commands.focus("end");
-        }
+        // Official EYe(focusInput): skip button/a/input/select/textarea/[role].
+        // ProseMirror is role="textbox" — click-in-text must not snap caret to end.
+        if (!shouldOfficialClickToFocus(event)) return;
+        controller.editor?.commands.focus("end");
       }}
       onKeyDownCapture={controller.onKeyDownCapture}
       onRemoveFile={controller.removeFile}
@@ -293,7 +296,7 @@ function useCoworkComposerEditor(input: {
     content: "",
     editable: !input.disabled,
     editorProps: {
-      attributes: {
+      attributes: officialTiptapEditorAttributes({
         "aria-describedby": "legacy-model-warning-text claude-code-nudge-body",
         "aria-invalid": "false",
         "aria-label": "Write your prompt to Claude",
@@ -302,8 +305,7 @@ function useCoworkComposerEditor(input: {
         class: "tiptap",
         "data-placeholder": "Write a message...",
         "data-testid": "chat-input",
-        role: "textbox",
-      },
+      }),
       // Packaged app:// Chromium adaptation (d5f261d): transaction-owned insertText.
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
