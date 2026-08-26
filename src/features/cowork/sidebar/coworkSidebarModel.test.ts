@@ -45,6 +45,31 @@ describe("buildCoworkSidebarModel mix-then-cap", () => {
     expect(model.recents.map((item) => item.entryKind)).toEqual(["space", "session"]);
   });
 
+  it("excludes official r6 agent/radar sessionTypes from pinned and recents", () => {
+    const agent = session({
+      id: "agent-1",
+      title: "agent",
+      updatedAtMs: 50,
+      sessionType: "agent",
+    });
+    const radar = session({
+      id: "radar-1",
+      title: "radar",
+      updatedAtMs: 40,
+      sessionType: "radar",
+    });
+    const child = session({
+      id: "child-1",
+      title: "child",
+      updatedAtMs: 30,
+      sessionType: "dispatch_child",
+    });
+    const visible = session({ id: "s1", title: "visible", updatedAtMs: 20 });
+    const model = buildCoworkSidebarModel([agent, radar, child, visible], [], [], ["agent-1", "radar-1"]);
+    expect(model.pinned.map((item) => item.id)).toEqual([]);
+    expect(model.recents.map((item) => (item.entryKind === "session" ? item.session.id : item.space.id))).toEqual(["s1"]);
+  });
+
   it("keeps scheduled runs out of recents", () => {
     const task: ScheduledTaskSummary = { id: "t1", title: "nightly", schedule: "0 0 * * *", enabled: true };
     const run = session({ id: "r1", title: "run", updatedAtMs: Date.now(), scheduledTaskId: "t1" });

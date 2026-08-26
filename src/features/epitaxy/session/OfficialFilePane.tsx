@@ -15,12 +15,11 @@ import {
 import { OfficialFileMarkdownContent } from "../OfficialCodeMarkdown";
 import { officialPierreLangFromPath } from "../diff/officialPierreLang";
 import { useOfficialPierreTheme, useWorkerPool } from "../diff/OfficialPierreWorkerPool";
-import { pierreTokenPaintOnPostRender } from "../diff/pierreTokenPaint";
+import { useErrorsOptional } from "../../settings/errorsToast";
 import { OfficialSpinner } from "./OfficialWorkingStatus";
 import {
   OFFICIAL_FILE_UNREADABLE_MESSAGE,
   OfficialPaneSubheader,
-  isHtmlPreviewPath,
   isMarkdownPreviewPath,
   isPreviewImagePath,
   officialShowInFolderLabel,
@@ -189,15 +188,15 @@ function OfficialFileFindBar({
  *   div.h-full.flex.flex-col.overflow-hidden
  *     lN epitaxy-pane-subheader
  *       button.text-code.text-t6.truncate.flex-1  (full path → copy path)
- *       view: [md Eye/代码] [Pencil when F] [Open in… Folder1Open] [CopySquareBehind]
+ *       view: [md Eye/代码] [Find 搜索 always] [Pencil when F] [Open in… Folder1Open] [CopySquareBehind]
  *       edit: Cancel + Save
  *     [uN find bar when findQuery / open]
  *     body: textarea | markdown | pierre File under epitaxy-diff
  *
  * Tile chrome title is VR "File" (renderSidePaneTitle), not basename.
  * F = session local/bridge + writeSessionFile + hash defined (c119).
- * Note: official JS mounts Find with icon:"搜索", but 汉化 icon table has no 搜索/*
- * path → empty SVG; user screenshots show no magnifier. Match visible chrome.
+ * Official vN always mounts Find (yd icon:"搜索", aria-pressed=K.isOpen).
+ * Open-in: B ? Ou dropdown : !$ && f ? disabled Folder1Open : null.
  */
 export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: LocalSessionsBridge; fileView: OfficialFileViewTarget | null; sessionRef: EpitaxySessionRef | null }) {
   const [state, setState] = useState<{
@@ -224,6 +223,7 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
   const markdownPreview = isMarkdown && !sourceMode && !editing && state.text !== undefined;
   const theme = useOfficialPierreTheme();
   const workerPool = useWorkerPool();
+  const errors = useErrorsOptional();
   const find = useOfficialFileFind(editing ? undefined : state.text);
   const fileBodyRef = useRef<HTMLDivElement | null>(null);
   const lastLineScrollKey = useRef<string | undefined>(undefined);
@@ -233,16 +233,15 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
       name: filePath,
       contents: state.text,
       lang: officialPierreLangFromPath(basename(filePath) ?? filePath) as FileContents["lang"],
+      cacheKey: state.hash ?? state.text,
     };
-  }, [editing, filePath, state.text]);
+  }, [editing, filePath, state.hash, state.text]);
   // Official Z: { theme, disableFileHeader:true, overflow:"wrap" }
-  // package 1.2: onPostRender token paint (FileRenderer.hydrate marks highlighted early).
   const pierreOptions = useMemo(
     () => ({
       theme,
       disableFileHeader: true,
       overflow: "wrap" as const,
-      onPostRender: pierreTokenPaintOnPostRender,
     }),
     [theme],
   );
@@ -420,10 +419,15 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
     }
   };
 
-  // Official ae(): clipboard path (+ toast "Path copied to clipboard." when toast host exists).
+  // Official ae(): clipboard path then DC/PC addSuccess "Path copied to clipboard." (hxPm8s77hY).
   const copyPath = () => {
     if (!filePath) return;
-    void navigator.clipboard?.writeText(filePath).catch(() => undefined);
+    void navigator.clipboard
+      ?.writeText(filePath)
+      .then(() => {
+        errors?.addSuccess("Path copied to clipboard.");
+      })
+      .catch(() => undefined);
   };
   // Official ne(): copy file contents via copyToClipboard (button shows Copied)
   const copyContents = () => {
@@ -542,14 +546,23 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
                 onClick={() => setSourceMode((value) => !value)}
               />
             ) : null}
-            {/*
-              Official vN always mounts Find: yd icon:"搜索" (c119).
-              Official Icon (c87b) looks up paths as `${name}/s/outline` with NO alias —
-              key 搜索/s/outline does not exist (only Search/s/outline), so the 汉化 app paints
-              an empty SVG. Screenshot shows path + Pencil + Folder + Copy with no magnifier.
-              Keep find state/bar for findQuery + ⌘F (dN claims find-in-page); do not show a
-              visible Search glyph that the running official package does not.
-            */}
+            <OfficialButton
+              size="small"
+              icon="搜索"
+              ariaLabel="Find in file"
+              pressed={find.isOpen}
+              onClick={() => {
+                // Official vN: if markdown preview S then C(true); K.open(); else toggle K.
+                if (markdownPreview) {
+                  setSourceMode(true);
+                  find.open();
+                } else if (find.isOpen) {
+                  find.close();
+                } else {
+                  find.open();
+                }
+              }}
+            />
             {canEdit ? (
               <OfficialButton size="small" ariaLabel="Edit file" icon="Pencil" onClick={beginEdit} />
             ) : null}
@@ -563,6 +576,15 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
                 header={openInHeader}
                 items={editorItems}
                 extraSections={extraItems.length > 0 ? [{ items: extraItems }] : undefined}
+              />
+            ) : sessionRef?.type === "remote" ? (
+              // Official xN: disabled Open-in when !$ && f (remote, not local/bridge).
+              <OfficialButton
+                size="small"
+                icon="Folder1Open"
+                ariaLabel="Open in…"
+                tooltip="Only available in local sessions"
+                disabled
               />
             ) : null}
             <OfficialButton
@@ -635,15 +657,13 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
             <OfficialFileMarkdownContent text={state.text ?? ""} />
           </div>
         </div>
-      ) : isHtmlPreviewPath(filePath) && state.text !== undefined ? (
-        <iframe className="flex-1 min-h-0 w-full border-0 bg-white" sandbox="allow-scripts allow-same-origin" srcDoc={state.text} title={basename(filePath) ?? filePath} />
       ) : (
         // Official: epitaxy-diff flex-1 min-h-0 (data-file-viewer) > eu scroll > iu File
         <div ref={fileBodyRef} className="epitaxy-diff flex-1 min-h-0" data-file-viewer="">
           {pierreFile ? (
             <div className="h-full overflow-y-auto select-text">
               <PierreFile
-                key={`sidefile:${workerPool ? "ready" : "pending"}:${filePath}:${state.text?.length ?? 0}:${fileView.scrollNonce ?? 0}`}
+                key={`sidefile:${workerPool ? "ready" : "pending"}:${filePath}:${fileView.scrollNonce ?? 0}`}
                 file={pierreFile}
                 options={pierreOptions}
               />

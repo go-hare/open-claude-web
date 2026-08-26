@@ -1,7 +1,6 @@
-import { Dialog } from "@base-ui-components/react/dialog";
 import type { ReactNode } from "react";
 import { useI18nText, type MessageDescriptors } from "../../../i18n/footerMenuMessages";
-import { OfficialButton } from "../OfficialEpitaxyComponents";
+import { ConfirmDialog } from "../../../shell/ConfirmDialog";
 
 /**
  * Official ion-dist `EpitaxyPermissionModeModal` (c11959232 Fk) on ConfirmationModal (rp):
@@ -51,42 +50,22 @@ export function EpitaxyPermissionModeModal({ mode, onCancel, onConfirm, workspac
   const confirmText = isBypass ? text.bypassConfirm : text.autoConfirm;
   const footnoteTemplate = workspace ? text.workspaceFootnote : text.footnote;
 
+  // Official Fk mounts ConfirmationModal `_Component83` / rp — product ConfirmDialog.
   return (
-    <Dialog.Root
-      open={mode !== null}
-      onOpenChange={(open) => {
-        if (!open) onCancel();
-      }}
+    <ConfirmDialog
+      cancelText={text.cancel}
+      confirmText={confirmText}
+      isOpen={mode !== null}
+      message={message}
+      onClose={onCancel}
+      onConfirm={onConfirm}
+      title={title}
     >
-      <Dialog.Portal>
-        <Dialog.Backdrop forceRender className="fixed inset-0 z-modal bg-always-black/50 draggable-none" />
-        <Dialog.Popup className="epitaxy-root fixed left-1/2 top-1/2 z-modal -translate-x-1/2 -translate-y-1/2 w-[28rem] max-w-[calc(100vw-2rem)] draggable-none outline-none">
-          <div className="relative isolate rounded-r6 p-p8 flex flex-col gap-g6">
-            {/* Official c119 Fk / Nn elevation:"popover" residual surface (not effect-hud). */}
-            <span
-              aria-hidden="true"
-              className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-stroke-shadow"
-              data-surface="popover"
-            />
-            <Dialog.Title className="text-heading-semibold text-t9">{title}</Dialog.Title>
-            <p className="text-body text-t7">{message}</p>
-            {workspace ? <div className="text-code text-t8 break-all">{workspace}</div> : null}
-            <p className="text-footnote text-t6">
-              <SecurityGuideMessage template={footnoteTemplate} />
-            </p>
-            <div className="flex justify-end gap-g4">
-              {/* Official ConfirmationModal (c36ba223f je): K without size → default base */}
-              <OfficialButton onClick={onCancel} variant="contained">
-                {text.cancel}
-              </OfficialButton>
-              <OfficialButton onClick={onConfirm} variant="primary">
-                {confirmText}
-              </OfficialButton>
-            </div>
-          </div>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+      {workspace ? <div className="text-code text-t8 break-all">{workspace}</div> : null}
+      <p className="text-footnote text-t6">
+        <SecurityGuideMessage template={footnoteTemplate} />
+      </p>
+    </ConfirmDialog>
   );
 }
 

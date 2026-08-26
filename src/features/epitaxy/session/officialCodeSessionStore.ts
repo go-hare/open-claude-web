@@ -224,8 +224,8 @@ type OfficialCodeSessionActions = {
   seedTranscript: (sessionId: string, messages: ChatMessage[]) => void;
   /** Official openSession — attach session meta (and optional messages). */
   openSession: (sessionId: string, session: SessionSummary | null, messages?: ChatMessage[]) => void;
-  /** Official beginPendingTurn — mark turn started (optimistic send). */
-  beginPendingTurn: (sessionId: string, optimisticUser?: ChatMessage) => void;
+  /** Official beginPendingTurn — pendingTurn + promptSuggestion:null only. */
+  beginPendingTurn: (sessionId: string) => void;
   /**
    * Official clearPendingTurn (index-BELzQL5P) — pendingTurn=null + compactionStatus=null.
    * Also clears je (turnStartedAt). Does not touch queuedMessages / isRunning / Va.
@@ -683,36 +683,25 @@ function createOfficialCodeSessionStore() {
     });
   },
 
-  beginPendingTurn: (sessionId, optimisticUser) => {
+  beginPendingTurn: (sessionId) => {
     // Official beginPendingTurn: if pendingTurn already set → no-op.
-    // Else mCe.reset + Pke.clear (caller clears Pe/Va) then pendingTurn={start,endTurnSeen:false}.
+    // Else mCe.reset + Pke.clear (caller) then pendingTurn={start,endTurnSeen:false}
+    // + promptSuggestion:null. Does not write messages / isRunning / Va.
     set((state) => {
-      const raw = state.buckets[sessionId] ?? emptyBucket(false);
+      const raw = state.buckets[sessionId];
+      if (!raw) return state;
       const prev = withQueueDefaults(raw);
       if (prev.pendingTurnStartedAt !== null) return state;
       const at = Date.now();
-      // Official pendingTurn.startTime is this stamp. Product je (Gv elapsed) must
-      // remint — leftover je from a prior turn would poison spark + message_start.
       officialClearTurnStarted(sessionId);
       officialMarkTurnStarted(sessionId, at);
-      const messages = optimisticUser ? upsertMessage(prev.messages, optimisticUser) : prev.messages;
       return {
         buckets: {
           ...state.buckets,
           [sessionId]: {
             ...prev,
-            error: null,
-            errorCategory: null,
-            isTranscriptPending: false,
-            isMetaPending: false,
-            messages,
             pendingTurnStartedAt: at,
             pendingTurnEndTurnSeen: false,
-            // Residual: Pke.clear companion — lift prior Va ownership flags for the new turn.
-            streamActivityMode: "requesting",
-            streamingMessageId: null,
-            streamSnapshot: null,
-            session: prev.session ? { ...prev.session, isRunning: true, messages } : prev.session,
           },
         },
       };
@@ -741,12 +730,20 @@ function createOfficialCodeSessionStore() {
     });
   },
 
-  // Official failPendingTurn: only when pendingTurn set → error + category (bridge_offline path).
+  // Official failPendingTurn → mergeMessage kind:"error": dump queue, clear pendingTurn.
   failPendingTurn: (sessionId, message, errorCategory) => {
     set((state) => {
-      const prev = state.buckets[sessionId];
-      if (!prev || prev.pendingTurnStartedAt === null) return state;
+      const raw = state.buckets[sessionId];
+      if (!raw) return state;
+      const prev = withQueueDefaults(raw);
+      if (prev.pendingTurnStartedAt === null) return state;
       officialClearTurnStarted(sessionId);
+      let messages = prev.messages;
+      if (prev.queuedMessages.length > 0) {
+        for (const queued of prev.queuedMessages) {
+          messages = upsertMessage(messages, queued);
+        }
+      }
       return {
         buckets: {
           ...state.buckets,
@@ -754,12 +751,13 @@ function createOfficialCodeSessionStore() {
             ...prev,
             error: new Error(message),
             errorCategory: errorCategory ?? null,
+            messages,
+            queuedMessages: EMPTY_QUEUED_MESSAGES,
+            pendingQueuedSends: 0,
             pendingTurnStartedAt: null,
             pendingTurnEndTurnSeen: false,
-            streamActivityMode: idleStreamActivityMode,
-            streamingMessageId: null,
-            streamSnapshot: null,
-            session: prev.session ? { ...prev.session, isRunning: false } : prev.session,
+            compactionStatus: null,
+            session: prev.session ? { ...prev.session, messages } : prev.session,
           },
         },
       };
@@ -1160,59 +1158,28 @@ function createOfficialCodeSessionStore() {
       const isUser = message.role === "user" || rawRecord.type === "user";
       const isSynthetic = rawRecord.isSynthetic === true || rawRecord.isMeta === true;
       const hasParentTool = Boolean(rawRecord.parent_tool_use_id);
-      const turnStillActive = prev.pendingTurnStartedAt !== null
-        || prev.session?.isRunning === true
-        || prev.streamActivityMode !== idleStreamActivityMode
-        || prev.streamingMessageId !== null
-        || prev.streamSnapshot !== null
-        || prev.pendingQueuedSends > 0
-        || prev.queuedMessages.length > 0;
-      // Same uuid already in queuedMessages:
-      // - While turn active → update in place (optimistic → durable CLI echo). Do NOT promote.
-      // - Official same-uuid promote-to-messages only applies after the row was already
-      //   seen; for mid-turn follow-ups we keep the Hb isQueued tail until settle.
+      // Official same-uuid (seenUuids + queuedIndex): promote queued object `n`.
+      // Do not in-place replace, do not --pendingQueuedSends, no turnStillActive gate.
       const queuedIndex = prev.queuedMessages.findIndex((item) => messageIdentity(item) === identity);
       if (queuedIndex >= 0) {
-        if (turnStillActive || prev.pendingQueuedSends > 0) {
-          // Official same-uuid: durable CLI echo replaces optimistic queued row in place.
-          const nextQueued = prev.queuedMessages.slice();
-          nextQueued[queuedIndex] = message;
-          return {
-            buckets: {
-              ...state.buckets,
-              [sessionId]: {
-                ...prev,
-                isTranscriptPending: false,
-                queuedMessages: nextQueued,
-                // Consume one pending slot when durable echo replaces optimistic.
-                pendingQueuedSends: prev.pendingQueuedSends > 0
-                  ? prev.pendingQueuedSends - 1
-                  : prev.pendingQueuedSends,
-              },
+        const n = prev.queuedMessages[queuedIndex]!;
+        const nextQueued = [
+          ...prev.queuedMessages.slice(0, queuedIndex),
+          ...prev.queuedMessages.slice(queuedIndex + 1),
+        ];
+        const messages = filterStreamEvents([...prev.messages, n]);
+        return {
+          buckets: {
+            ...state.buckets,
+            [sessionId]: {
+              ...prev,
+              isTranscriptPending: false,
+              messages,
+              queuedMessages: nextQueued.length > 0 ? nextQueued : EMPTY_QUEUED_MESSAGES,
+              session: prev.session ? { ...prev.session, messages } : prev.session,
             },
-          };
-        }
-        // Settled: promote queued row into main transcript (official re-delivery path).
-        if (prev.messages.every((item) => messageIdentity(item) !== identity)) {
-          const nextQueued = [
-            ...prev.queuedMessages.slice(0, queuedIndex),
-            ...prev.queuedMessages.slice(queuedIndex + 1),
-          ];
-          // Live/settle promote: official replace semantics — use the durable echo as-is.
-          const messages = filterStreamEvents(upsertMessage(prev.messages, message));
-          return {
-            buckets: {
-              ...state.buckets,
-              [sessionId]: {
-                ...prev,
-                isTranscriptPending: false,
-                messages,
-                queuedMessages: nextQueued.length > 0 ? nextQueued : EMPTY_QUEUED_MESSAGES,
-                session: prev.session ? { ...prev.session, messages } : prev.session,
-              },
-            },
-          };
-        }
+          },
+        };
       }
       // Official d: mid-turn durable user echo while pendingQueuedSends > 0 → queue, not transcript.
       // Official _ke interrupt marker is a current-turn user row, never a queued follow-up.
@@ -1376,13 +1343,6 @@ function createOfficialCodeSessionStore() {
                 ? {
                     ...prev.session,
                     messages,
-                    // Official g keeps session running; non-g result settles.
-                    // end_turn does not invent isRunning=false here (host session_updated).
-                    isRunning: continueTurn
-                      ? true
-                      : settleWithQueue
-                        ? false
-                        : prev.session.isRunning,
                   }
                 : prev.session,
               mirrorMeta,

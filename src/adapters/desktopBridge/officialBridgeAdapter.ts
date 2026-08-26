@@ -1803,10 +1803,12 @@ function normalizeSession(
   const raw = asRecord(item);
   const original = asRecord(raw._originalSession);
   const id = stringValue(raw.id) ?? stringValue(raw.sessionId) ?? stringValue(original.sessionId) ?? `session_${Date.now()}`;
-  const cwd = stringValue(raw.cwd)
-    ?? stringValue(raw.originCwd)
+  // Official mapper M: `originCwd || cwd` (worktree origin wins over worktree cwd).
+  const cwd = stringValue(raw.originCwd)
+    ?? stringValue(raw.cwd)
     ?? firstString(raw.folders)
     ?? firstString(raw.userSelectedFolders)
+    ?? stringValue(original.originCwd)
     ?? stringValue(original.cwd)
     ?? firstString(original.folders)
     ?? firstString(original.userSelectedFolders);
@@ -1857,7 +1859,7 @@ function normalizeSession(
     permissionMode: stringValue(raw.permissionMode) ?? stringValue(original.permissionMode),
     repo: repoInfo(raw, cwd),
     scheduledTaskId: stringValue(raw.scheduledTaskId) ?? stringValue(original.scheduledTaskId),
-    sessionType: stringValue(raw.sessionType) ?? stringValue(original.sessionType),
+    sessionType: mappedOfficialSessionType(raw, original, kind),
     spaceId: stringValue(raw.spaceId) ?? stringValue(original.spaceId),
     connectionState: stringValue(raw.connectionState) ?? stringValue(original.connectionState),
     nextReconnectTime: timestampValue(raw.nextReconnectTime) ?? timestampValue(original.nextReconnectTime),
@@ -2881,6 +2883,24 @@ function basename(value?: string): string | undefined {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/**
+ * Official mapper M hardcodes type:"local"; remote mapper `r ? "bridge" : "remote"`.
+ * Persist onto existing SessionSummary.sessionType. Code host defaults "local"
+ * when raw.type is missing.
+ */
+function mappedOfficialSessionType(
+  raw: Record<string, unknown>,
+  original: Record<string, unknown>,
+  kind: SessionSummary["kind"],
+): string | undefined {
+  const explicit = stringValue(raw.type) ?? stringValue(raw.sessionType) ?? stringValue(original.type) ?? stringValue(original.sessionType);
+  if (explicit === "local" || explicit === "remote" || explicit === "bridge") return explicit;
+  const cwd = stringValue(raw.originCwd) ?? stringValue(raw.cwd) ?? stringValue(original.originCwd) ?? stringValue(original.cwd);
+  if (cwd?.startsWith("remote-control:")) return "bridge";
+  if (kind === "code") return "local";
+  return explicit;
 }
 
 function normalizeStringArray(value: unknown): string[] {

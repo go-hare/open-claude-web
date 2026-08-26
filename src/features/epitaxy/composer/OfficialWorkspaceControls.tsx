@@ -48,7 +48,11 @@ export function OfficialWorkspaceControls({
   workspace,
 }: OfficialWorkspaceControlsProps) {
   const [branches, setBranches] = useState<string[]>([sourceBranch].filter(Boolean));
-  const [isGitRepo, setIsGitRepo] = useState(false);
+  /**
+   * Official Vn = Mt(local cwd) ?? true. SSH never calls Mt so Vn stays true.
+   * Default true so empty-cwd / pending probe still allow Gn until git says otherwise.
+   */
+  const [isGitRepo, setIsGitRepo] = useState(true);
   const [recentFolders, setRecentFolders] = useState<OfficialComposerFolderRecent[]>([]);
 
   useEffect(() => {
@@ -66,11 +70,13 @@ export function OfficialWorkspaceControls({
   }, [workspace.cwd]);
 
   useEffect(() => {
+    const isSsh = workspace.mode === "ssh";
     if (!workspace.cwd) {
       setBranches([]);
-      setIsGitRepo(false);
+      // Official Mt(null) ?? true (local) / SSH never probes Vn.
+      setIsGitRepo(true);
       onSourceBranchChange("");
-      onUseWorktreeChange(false);
+      // Do not wipe sticky Kn when Gn is still true (empty cwd / pending probe).
       return;
     }
     let alive = true;
@@ -84,11 +90,12 @@ export function OfficialWorkspaceControls({
         const gitBranch = stringValue(git.branch) ?? workspace.branchName;
         const nextBranches = parseLocalBranches(branchResult, gitBranch);
         const nextIsGitRepo = Boolean(stringValue(git.root) || gitBranch || nextBranches.length > 0);
-        setIsGitRepo(nextIsGitRepo);
-        setBranches(nextIsGitRepo ? nextBranches : []);
-        if (!nextIsGitRepo) {
+        // Official Vn: SSH skips Mt → always true. Local uses git probe.
+        setIsGitRepo(isSsh ? true : nextIsGitRepo);
+        setBranches(nextIsGitRepo || isSsh ? nextBranches : []);
+        if (!nextIsGitRepo && !isSsh) {
           onSourceBranchChange("");
-          onUseWorktreeChange(false);
+          // Official hides the switch when !Gn; Kn sticky stays.
         } else if (gitBranch && !workspace.branchName) {
           // Overlay from fl `+` seeds empty branchName; fill HEAD like Ikt getGitInfo.
           onSourceBranchChange(gitBranch);
@@ -97,14 +104,13 @@ export function OfficialWorkspaceControls({
       .catch(() => {
         if (!alive) return;
         setBranches([]);
-        setIsGitRepo(false);
+        setIsGitRepo(isSsh);
         onSourceBranchChange("");
-        onUseWorktreeChange(false);
       });
     return () => {
       alive = false;
     };
-  }, [onSourceBranchChange, onUseWorktreeChange, workspace.branchName, workspace.cwd]);
+  }, [onSourceBranchChange, workspace.branchName, workspace.cwd, workspace.mode]);
 
   const isSsh = workspace.mode === "ssh" && Boolean(workspace.sshConfig);
 
@@ -122,11 +128,10 @@ export function OfficialWorkspaceControls({
           remoteCwd: selectedPath,
         },
       };
-      setIsGitRepo(false);
+      setIsGitRepo(true);
       setBranches([]);
       onWorkspaceChange(nextWorkspace);
       onSourceBranchChange("");
-      onUseWorktreeChange(false);
       setRecentFolders((current) => buildRecentFolders([], selectedPath, current));
       // Official Ikt J: setSelectedFolder after picking a folder.
       setSelectedFolder(selectedPath);
@@ -148,11 +153,10 @@ export function OfficialWorkspaceControls({
     setBranches(nextIsGitRepo ? [branch].filter(Boolean) : []);
     onWorkspaceChange(nextWorkspace);
     onSourceBranchChange(nextIsGitRepo ? branch : "");
-    onUseWorktreeChange(false);
     setRecentFolders((current) => buildRecentFolders([], selectedPath, current));
     // Official Ikt J: setSelectedFolder after picking a folder.
     setSelectedFolder(selectedPath);
-  }, [onSourceBranchChange, onUseWorktreeChange, onWorkspaceChange, workspace.mode, workspace.sshConfig]);
+  }, [onSourceBranchChange, onWorkspaceChange, workspace.mode, workspace.sshConfig]);
 
   const chooseWorkspace = useCallback(async () => {
     if (isSsh && workspace.sshConfig) {
@@ -190,8 +194,7 @@ export function OfficialWorkspaceControls({
     };
     onWorkspaceChange(next);
     onSourceBranchChange(next.branchName);
-    onUseWorktreeChange(false);
-  }, [onSourceBranchChange, onUseWorktreeChange, onWorkspaceChange, workspace.branchName, workspace.cwd, workspace.mode, workspace.projectName]);
+  }, [onSourceBranchChange, onWorkspaceChange, workspace.branchName, workspace.cwd, workspace.mode, workspace.projectName]);
 
   const selectSshEnv = useCallback((config: WorkspaceSshConfig) => {
     const remoteCwd = config.remoteCwd || workspace.cwd || "~";
@@ -208,8 +211,7 @@ export function OfficialWorkspaceControls({
     };
     onWorkspaceChange(next);
     onSourceBranchChange("");
-    onUseWorktreeChange(false);
-  }, [onSourceBranchChange, onUseWorktreeChange, onWorkspaceChange, workspace.cwd]);
+  }, [onSourceBranchChange, onWorkspaceChange, workspace.cwd]);
 
   const selectBranch = useCallback((branch: string) => {
     const apply = () => onSourceBranchChange(branch);
@@ -220,7 +222,11 @@ export function OfficialWorkspaceControls({
     apply();
   }, [ensureTrusted, onSourceBranchChange, useWorktree, workspace.branchName, workspace.cwd]);
 
-  const showGitControls = Boolean(workspace.cwd && isGitRepo);
+  /** Official Dt(rs): worktree chrome only for local/ssh. Product composer is local|ssh. */
+  const envSupportsWorktree = workspace.mode === "local" || workspace.mode === "ssh";
+  /** Official Gn = Dt(rs) && Vn. When false hide switch; do not write Kn false. */
+  const worktreeSupported = envSupportsWorktree && isGitRepo;
+  const showGitControls = Boolean(workspace.cwd) && worktreeSupported;
   const branchItems = useMemo(() => (
     showGitControls ? uniqueStrings([sourceBranch, workspace.branchName, ...branches]) : []
   ), [branches, showGitControls, sourceBranch, workspace.branchName]);

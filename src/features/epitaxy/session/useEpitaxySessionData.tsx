@@ -304,9 +304,9 @@ export function useEpitaxySessionData(sessionId?: string) {
     store.getState().clearError(sessionId);
     // Official Gr: noteQueuedSend always (only increments when pendingTurn already set).
     store.getState().noteQueuedSend(sessionId);
-    const optimistic = makeOptimisticUserChatMessage(text, messageUuid);
     if (!wasMidTurn) {
       // Fresh turn: official beginPendingTurn = mCe.reset + Pke.clear then pendingTurn.
+      // Local does not echoPending — no optimistic user row in messages.
       officialStreamClear(sessionId);
       clearOfficialEkeCache(sessionId);
       setStreamSnapshot(null);
@@ -314,14 +314,14 @@ export function useEpitaxySessionData(sessionId?: string) {
       streamMessageIdRef.current = null;
       streamSnapshotRef.current = null;
       officialMarkTurnStarted(sessionId);
-      store.getState().beginPendingTurn(sessionId, optimistic);
+      store.getState().beginPendingTurn(sessionId);
       setStreamActivityMode("requesting");
       streamActivityModeRef.current = "requesting";
     } else {
       // Mid-turn: beginPendingTurn no-ops; do NOT invent enqueueQueuedMessage.
       store.getState().beginPendingTurn(sessionId);
     }
-    return { wasMidTurn, uuid: optimistic.id };
+    return { wasMidTurn, uuid: messageUuid ?? "" };
   }, [sessionId, store]);
 
   /**
@@ -450,24 +450,11 @@ export function useEpitaxySessionData(sessionId?: string) {
         const streamMessageId = isStart
           ? (stringValue(asRecord(innerEvent.message).id) ?? null)
           : null;
-        // Official mergeMessage always Pke.feed(stream_event) (index-BELzQL5P) — no Va gate.
-        // Product residual gate: only while open turn (pendingTurn / host isRunning).
-        // Orphan densable after settle must not re-seed pendingTurn/H (Stop reopen).
-        // Esc→drain: markInterrupting keeps pendingTurn; host drain keeps isRunning —
-        // follow-up message_start re-arms. Do NOT invent turnOpen from Va /
-        // streamingMessageId / web queuedMessages (leftover Hb after markNotRunning).
+        // Official mergeMessage always Pke.feed(stream_event), then mint pendingTurn if null.
         const bucketBeforeStream = store.getState().buckets[sessionId];
-        const turnOpen =
-          bucketBeforeStream?.pendingTurnStartedAt != null
-          || bucketBeforeStream?.session?.isRunning === true;
-        if (!turnOpen) {
-          return;
-        }
         if (isStart) {
           streamGenerationRef.current += 1;
           finalizeStreamGenerationRef.current = null;
-          // Official Pke.feed does not write pendingTurn. g already reminted
-          // startTime:Date.now(); leftover je must not clobber that stamp.
           const existingPending = bucketBeforeStream?.pendingTurnStartedAt;
           if (existingPending == null) {
             officialMarkTurnStarted(sessionId);
@@ -483,18 +470,17 @@ export function useEpitaxySessionData(sessionId?: string) {
           }
           store.getState().setStreamActivity(sessionId, {
             streamActivityMode: "requesting",
-            isRunning: true,
             ...(streamMessageId ? { streamingMessageId: streamMessageId } : {}),
             ...(existingPending == null
               ? { pendingTurnStartedAt: officialGetTurnStartedAt(sessionId) ?? Date.now() }
               : {}),
           });
-        } else if (
-          // Only re-assert isRunning while pendingTurn/open busy still owns the turn.
-          bucketBeforeStream?.pendingTurnStartedAt != null
-          && bucketBeforeStream?.session?.isRunning !== true
-        ) {
-          store.getState().setStreamActivity(sessionId, { isRunning: true });
+        } else if (bucketBeforeStream?.pendingTurnStartedAt == null) {
+          // Official stream_event: if pendingTurn === null mint {startTime, endTurnSeen:false}.
+          officialMarkTurnStarted(sessionId);
+          store.getState().setStreamActivity(sessionId, {
+            pendingTurnStartedAt: officialGetTurnStartedAt(sessionId) ?? Date.now(),
+          });
         }
         // Activity mode from inner event (official stream_event.event).
         setStreamActivityMode((current) => streamActivityModeFromInnerEvent(innerEvent, current));
@@ -865,6 +851,7 @@ export function useEpitaxySessionData(sessionId?: string) {
 
   return {
     beginLocalUserTurn,
+    busy: H,
     cancelQueuedMessage,
     entries,
     error: bucket.error,
@@ -1037,35 +1024,6 @@ export async function sendMessageToSession(sessionId: string, text: string, inpu
   await desktopBridge.LocalSessions.sendMessage?.(sessionId, text, input);
 }
 
-/**
- * Optimistic user transcript row so send does not wait on getTranscript.
- * Prefer durable UUID (createMessageUuid) so CLI echo / cancelQueued share identity (official zke).
- * Fallback local-user-* still matches isOptimisticLocalUser for text promote.
- */
-function makeOptimisticUserChatMessage(text: string, messageUuid?: string): ChatMessage {
-  const createdAt = new Date().toISOString();
-  const id = messageUuid && messageUuid.length > 0
-    ? messageUuid
-    : `local-user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  return {
-    id,
-    role: "user",
-    text,
-    createdAt,
-    raw: {
-      type: "user",
-      uuid: id,
-      timestamp: createdAt,
-      // Store marker — stripped naturally when CLI durable echo replaces the row.
-      isLocalOptimistic: true,
-      message: {
-        role: "user",
-        content: [{ type: "text", text }],
-      },
-    },
-  };
-}
-
 function inferSessionType(sessionId?: string, session?: SessionSummary): EpitaxySessionType {
   if (!sessionId) return "local";
   if (session?.kind === "code") return "local";
@@ -1103,11 +1061,11 @@ function shouldReloadTranscriptForEvent(event: unknown) {
   if (type === "message") {
     const messageType = stringValue(asRecord(raw.message).type);
     // Keep result so shouldClearOfficialStreamForEvent can settle Va → durable.
-    return messageType === "result" || messageType === "error" || messageType === "completed";
+    return messageType === "result" || messageType === "error" || messageType === "done";
   }
   return type === "transcript_loaded"
     || type === "result"
-    || type === "completed"
+    || type === "done"
     || type === "close"
     || type === "error"
     || type === "cleared"

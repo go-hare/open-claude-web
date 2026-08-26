@@ -8,6 +8,7 @@ import {
   officialPathBasename,
   officialProjectGroupKey,
   officialProjectGroupKeyFromSession,
+  officialSessionType,
   toOfficialCodeSessionData,
 } from "./officialProjectGroup";
 
@@ -152,5 +153,103 @@ describe("buildRecentsGroups groupBy=project", () => {
       "open-claude-desktop",
     ]);
     expect(groups[0]?.sessions).toHaveLength(2);
+  });
+});
+
+describe("officialSessionType (mapper M / remote mapper)", () => {
+  it("prefers persisted sessionType over cwd heuristic", () => {
+    expect(officialSessionType(session({ id: "r", sessionType: "remote", cwd: WIN_CWD }))).toBe("remote");
+    expect(officialSessionType(session({ id: "b", sessionType: "bridge" }))).toBe("bridge");
+    expect(officialSessionType(session({ id: "l", sessionType: "local" }))).toBe("local");
+  });
+
+  it("cwd remote-control: falls back to bridge; otherwise local", () => {
+    expect(officialSessionType(session({ id: "rc", cwd: "remote-control:abc" }))).toBe("bridge");
+    expect(officialSessionType(session({ id: "empty" }))).toBe("local");
+  });
+});
+
+describe("buildRecentsGroups scheduled / date / environment / state", () => {
+  const DAY_MS = 864e5;
+
+  function todayMidnightMs() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today.getTime();
+  }
+
+  it("excludes scheduledTaskId unless archived (CCSessionList Q)", () => {
+    const groups = buildRecentsGroups(
+      [
+        session({ id: "live", updatedAtMs: 3 }),
+        session({ id: "sched", scheduledTaskId: "task-1", updatedAtMs: 2 }),
+        session({ id: "arch-sched", scheduledTaskId: "task-2", isArchived: true, updatedAtMs: 1 }),
+      ],
+      { ...defaultRecentsFilter, status: "all" },
+    );
+    expect(groups[0]?.sessions.map((row) => row.id)).toEqual(["live", "arch-sched"]);
+  });
+
+  it("groupBy=date uses $a calendar-day buckets, not 24h/48h windows", () => {
+    const todayMs = todayMidnightMs();
+    const groups = buildRecentsGroups(
+      [
+        session({ id: "today", updatedAtMs: todayMs + 8 * 3600_000 }),
+        session({ id: "yesterday", updatedAtMs: todayMs - 12 * 3600_000 }),
+        session({ id: "day3", updatedAtMs: todayMs - 2 * DAY_MS - 12 * 3600_000 }),
+        session({ id: "old", updatedAtMs: todayMs - 10 * DAY_MS }),
+      ],
+      { ...defaultRecentsFilter, groupBy: "date" },
+    );
+    expect(groups.map((group) => group.key)).toEqual(["day-0", "day-1", "day-3", "older"]);
+    expect(groups[0]?.label).toBe("Today");
+    expect(groups[1]?.label).toBe("Yesterday");
+    expect(groups[2]?.sessions.map((row) => row.id)).toEqual(["day3"]);
+    expect(groups[3]?.label).toBe("Older");
+  });
+
+  it("groupBy=environment uses sessionType local/remote/bridge (kl/wl)", () => {
+    const groups = buildRecentsGroups(
+      [
+        session({ id: "b", sessionType: "bridge", updatedAtMs: 3 }),
+        session({ id: "r", sessionType: "remote", updatedAtMs: 2 }),
+        session({ id: "l", sessionType: "local", cwd: WIN_CWD, updatedAtMs: 1 }),
+      ],
+      { ...defaultRecentsFilter, groupBy: "environment" },
+    );
+    expect(groups.map((group) => group.key)).toEqual(["local", "remote", "bridge"]);
+    expect(groups.map((group) => group.label)).toEqual(["Local", "Cloud", "Remote Control"]);
+  });
+
+  it("environment filter matches sessionType, not empty-cwd cloud heuristic", () => {
+    const groups = buildRecentsGroups(
+      [
+        session({ id: "no-cwd", updatedAtMs: 2 }),
+        session({ id: "cloud", sessionType: "remote", updatedAtMs: 1 }),
+      ],
+      { ...defaultRecentsFilter, environment: "remote" },
+    );
+    expect(groups[0]?.sessions.map((row) => row.id)).toEqual(["cloud"]);
+  });
+
+  it("groupBy=state uses yl four-state iSe/oSe order", () => {
+    const groups = buildRecentsGroups(
+      [
+        session({ id: "done", updatedAtMs: 5 }),
+        session({ id: "run", isRunning: true, updatedAtMs: 4 }),
+        session({ id: "block", pendingToolPermissions: [{ requestId: "p", sessionId: "block", toolName: "Bash" }], updatedAtMs: 3 }),
+        session({ id: "review", hasCompleted: true, isUnread: true, updatedAtMs: 2 }),
+        session({ id: "arch", isArchived: true, updatedAtMs: 1 }),
+      ],
+      { ...defaultRecentsFilter, status: "all", groupBy: "state" },
+    );
+    expect(groups.map((group) => group.key)).toEqual(["blocked", "review", "working", "done"]);
+    expect(groups.map((group) => group.label)).toEqual([
+      "Needs input",
+      "Ready for review",
+      "Working",
+      "Completed",
+    ]);
+    expect(groups.find((group) => group.key === "done")?.sessions.map((row) => row.id)).toEqual(["done", "arch"]);
   });
 });

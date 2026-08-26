@@ -87,12 +87,13 @@ function officialRepoInfoFromSession(session: SessionSummary): OfficialCodeSessi
   return undefined;
 }
 
-function officialSessionType(session: SessionSummary): OfficialCodeSessionData["type"] {
-  const cwd = session.cwd?.trim() ?? "";
-  if (cwd.startsWith("remote-control:")) return "bridge";
-  if (session.sessionType === "remote" || session.sessionType === "bridge") {
+/** Official session.type local/remote/bridge (mapper M / remote mapper). */
+export function officialSessionType(session: SessionSummary): OfficialCodeSessionData["type"] {
+  if (session.sessionType === "local" || session.sessionType === "remote" || session.sessionType === "bridge") {
     return session.sessionType;
   }
+  const cwd = session.cwd?.trim() ?? "";
+  if (cwd.startsWith("remote-control:")) return "bridge";
   return "local";
 }
 

@@ -7,21 +7,42 @@ import { permissionModeOptions } from "./options";
  *   prefs.bypassPermissionsModeEnabled === true → bypass available in Mode menu.
  * SSA default is false; settings page toggle writes the pref.
  *
- * Product: filter composer Mode items so bypass is not offered when disabled.
- * Main process also clamps setPermissionMode / spawn (acceptEdits fallback).
+ * Official Sn (c119): Os.map then, if Fs && As && !_s, **push disabled bypass**
+ * with hint id 9aM6b8EJG/ "Enable in Claude Code settings". Do not filter it out.
+ * Main process still clamps setPermissionMode / spawn (acceptEdits fallback).
  */
 export function useBypassPermissionsEnabled(): boolean {
   const [preferences] = useDesktopPreferences();
   return preferences.bypassPermissionsModeEnabled === true;
 }
 
-/** Official Os subset for Code Mode menu, gated by bypass pref. */
-export function useCodePermissionModeOptions(): Array<{
+/** Official Sn residual: unavailable bypass is a disabled row, not omitted. */
+export const BYPASS_PERMISSIONS_SETTINGS_HINT = "Enable in Claude Code settings";
+
+export type CodePermissionModeOption = {
+  disabled?: boolean;
+  hint?: string;
   label: string;
   value: PermissionMode;
-}> {
+};
+
+/** Official Os + disabled bypass append for Code Mode menu. */
+export function useCodePermissionModeOptions(): CodePermissionModeOption[] {
   const bypassEnabled = useBypassPermissionsEnabled();
-  return permissionModeOptions.filter(
-    (option) => option.value !== "bypassPermissions" || bypassEnabled,
-  );
+  const items: CodePermissionModeOption[] = permissionModeOptions
+    .filter((option) => option.value !== "bypassPermissions")
+    .map((option) => ({ label: option.label, value: option.value }));
+  const bypass = permissionModeOptions.find((option) => option.value === "bypassPermissions");
+  if (!bypass) return items;
+  if (bypassEnabled) {
+    items.push({ label: bypass.label, value: bypass.value });
+  } else {
+    items.push({
+      disabled: true,
+      hint: BYPASS_PERMISSIONS_SETTINGS_HINT,
+      label: bypass.label,
+      value: bypass.value,
+    });
+  }
+  return items;
 }

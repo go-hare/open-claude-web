@@ -17,17 +17,22 @@
  *
  * Product: localStorage keys match official dual-write residual
  *   `persisted.cc-landing-draft-permission-mode`
- *   `persisted.epitaxy-folder-permission-mode`
- * plus in-memory override for the current mount. No invent OAuth/account uuid scope —
- * folder map is global like official when account uuid missing (c=!a||uuid).
+ *   `persisted.epitaxy-folder-permission-mode.${accountUuid}` (fc scope:"account")
+ *   `persisted.cc-landing-worktree-enabled` (fc default true; not account-scoped)
+ * Official co: account scope without uuid → no write (`c=!a||uuid`).
  */
 import type { EffortLevel, PermissionMode } from "../../adapters/desktopBridge";
+import { bootstrapAccountUuidForStorage } from "./composer/usePermissionModeConfirm";
 import { normalizePermissionMode } from "./composer/options";
 
 const LANDING_KEY = "persisted.cc-landing-draft-permission-mode";
-const FOLDER_KEY = "persisted.epitaxy-folder-permission-mode";
+const FOLDER_BASE_KEY = "epitaxy-folder-permission-mode";
+const LEGACY_FOLDER_KEY = "persisted.epitaxy-folder-permission-mode";
+const WORKTREE_KEY = "persisted.cc-landing-worktree-enabled";
 /** Official fc default for landing sticky. */
 const LANDING_DEFAULT: PermissionMode = "acceptEdits";
+/** Official fc("cc-landing-worktree-enabled", true). */
+const WORKTREE_DEFAULT = true;
 
 export type CodeDraftComposerState = {
   /** In-mount override (official `en`) — null after remount until user picks again. */
@@ -92,19 +97,40 @@ function writeLandingSticky(mode: PermissionMode) {
   }
 }
 
+/** Official `persisted.${key}.${accountUuid}` when fc scope is account. */
+export function epitaxyFolderPermissionModeStorageKey(
+  accountUuid: string | undefined = bootstrapAccountUuidForStorage(),
+): string | null {
+  if (!accountUuid) return null;
+  return `persisted.${FOLDER_BASE_KEY}.${accountUuid}`;
+}
+
+function parseFolderMap(raw: string | null): Record<string, PermissionMode> {
+  if (!raw) return {};
+  const parsed = safeJsonParse(raw);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const out: Record<string, PermissionMode> = {};
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof v === "string" && v) out[k] = normalizePermissionMode(v);
+  }
+  return out;
+}
+
 function readFolderMap(): Record<string, PermissionMode> {
   const ls = browserStorage();
   if (!ls) return {};
+  const key = epitaxyFolderPermissionModeStorageKey();
+  // Residual: account scope without uuid → no durable read.
+  if (!key) return {};
   try {
-    const raw = ls.getItem(FOLDER_KEY);
-    if (!raw) return {};
-    const parsed = safeJsonParse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    const out: Record<string, PermissionMode> = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof v === "string" && v) out[k] = normalizePermissionMode(v);
+    const scoped = parseFolderMap(ls.getItem(key));
+    if (Object.keys(scoped).length > 0) return scoped;
+    const legacy = parseFolderMap(ls.getItem(LEGACY_FOLDER_KEY));
+    if (Object.keys(legacy).length > 0) {
+      ls.setItem(key, JSON.stringify(legacy));
+      return legacy;
     }
-    return out;
+    return {};
   } catch {
     return {};
   }
@@ -113,11 +139,41 @@ function readFolderMap(): Record<string, PermissionMode> {
 function writeFolderMap(map: Record<string, PermissionMode>) {
   const ls = browserStorage();
   if (!ls) return;
+  const key = epitaxyFolderPermissionModeStorageKey();
+  // Residual co: if (!c) return — no write without account uuid when scope is account.
+  if (!key) return;
   try {
-    ls.setItem(FOLDER_KEY, JSON.stringify(map));
+    ls.setItem(key, JSON.stringify(map));
   } catch {
     /* ignore */
   }
+}
+
+export function getLandingWorktreeEnabled(): boolean {
+  const ls = browserStorage();
+  if (!ls) return WORKTREE_DEFAULT;
+  try {
+    const raw = ls.getItem(WORKTREE_KEY);
+    if (raw == null || raw === "") return WORKTREE_DEFAULT;
+    const parsed = safeJsonParse(raw);
+    if (typeof parsed === "boolean") return parsed;
+    if (parsed === "true") return true;
+    if (parsed === "false") return false;
+    return WORKTREE_DEFAULT;
+  } catch {
+    return WORKTREE_DEFAULT;
+  }
+}
+
+export function setLandingWorktreeEnabled(enabled: boolean): boolean {
+  const ls = browserStorage();
+  if (!ls) return enabled;
+  try {
+    ls.setItem(WORKTREE_KEY, JSON.stringify(enabled));
+  } catch {
+    /* ignore quota */
+  }
+  return enabled;
 }
 
 function safeJsonParse(raw: string): unknown {

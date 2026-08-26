@@ -21,10 +21,10 @@ export function shouldClearOfficialStreamForEvent(event: unknown) {
   const type = stringValue(raw.type);
   if (type === "message") {
     const messageType = stringValue(asRecord(raw.message).type);
-    return messageType === "result" || messageType === "error" || messageType === "completed";
+    return messageType === "result" || messageType === "error" || messageType === "done";
   }
   return type === "result"
-    || type === "completed"
+    || type === "done"
     || type === "error"
     || type === "cleared";
 }

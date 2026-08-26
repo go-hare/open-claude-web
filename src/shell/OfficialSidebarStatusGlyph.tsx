@@ -1,10 +1,13 @@
+import type { ReactNode } from "react";
 import type { SessionSummary } from "../adapters/desktopBridge";
+import { OfficialTooltip } from "../features/shared/OfficialTooltip";
 import { Icon } from "./icons";
 
 /**
  * Official CodeStatusGlyph (vje / u_e / pje / gje) from index-BELzQL5P:
  * awaiting → running → ready(unread) → archived → idle ring.
  * Code path does NOT use CheckCircle/Warning (those are cowork xje/mje).
+ * Wrapper is official ije: span.flex.shrink-0 + tooltip delay 500 / sideOffset 4.
  */
 type SidebarStatusSession = Pick<
   SessionSummary,
@@ -65,50 +68,74 @@ const PR_STATE_ICON: Record<Exclude<OfficialCodePrState, "none">, { name: string
   closed: { name: "GitPullRequestClosed", className: "text-[var(--extended-pink)]" },
 };
 
+/** Official oje catalog (index-BELzQL5P). */
+const PR_STATE_LABEL: Record<Exclude<OfficialCodePrState, "none">, string> = {
+  open: "Pull request open",
+  approved: "Pull request approved",
+  changesRequested: "Changes requested",
+  conflicting: "Merge conflict",
+  draft: "Draft pull request",
+  queued: "Queued to merge",
+  merged: "Pull request merged",
+  closed: "Pull request closed",
+};
+
+/** Official lje catalog + archived 0HT+IbyW6O. */
+function officialGlyphIjeLabel(session: SidebarStatusSession, state: ReturnType<typeof officialCodeStatusState>): string {
+  if (state === "pr" && session.prState && session.prState !== "none") return PR_STATE_LABEL[session.prState];
+  if (state === "awaiting") return "Awaiting input";
+  if (state === "running") return "Running";
+  if (state === "ready") return "Ready";
+  if (session.isArchived) return "已归档";
+  return "Idle";
+}
+
 export function OfficialSidebarStatusGlyph({ className = "", session }: { className?: string; session: SidebarStatusSession }) {
   const state = officialCodeStatusState(session);
+  const label = officialGlyphIjeLabel(session, state);
+  // Official ije live: awaiting/running/ready (gje live = e !== "idle"); pr + idle default false.
+  const live = state === "awaiting" || state === "running" || state === "ready";
 
+  let inner: ReactNode;
   if (state === "pr" && session.prState && session.prState !== "none") {
     const pr = PR_STATE_ICON[session.prState];
-    return (
+    inner = (
       <Icon
         className={[pr.className, className].filter(Boolean).join(" ")}
         name={pr.name}
         size="sm"
       />
     );
-  }
-
-  if (state === "awaiting") {
-    return <span className={["status-dot", className].filter(Boolean).join(" ")} data-kind="awaiting" />;
-  }
-
-  if (state === "running") {
-    return (
+  } else if (state === "awaiting") {
+    inner = <span className={["status-dot", className].filter(Boolean).join(" ")} data-kind="awaiting" />;
+  } else if (state === "running") {
+    inner = (
       <span aria-hidden="true" className={["inline-flex size-3 items-center justify-center gap-[2px] leading-none", className].filter(Boolean).join(" ")}>
         <span className="dframe-dot" />
         <span className="dframe-dot" />
         <span className="dframe-dot" />
       </span>
     );
+  } else if (state === "ready") {
+    inner = <span className={["status-dot", className].filter(Boolean).join(" ")} data-kind="ready" />;
+  } else if (session.isArchived) {
+    inner = <Icon name="Archive" size="sm" className={["text-text-500 opacity-80", className].filter(Boolean).join(" ")} />;
+  } else {
+    // Official pje({ square: false }) — index-BELzQL5P:
+    // className:"block size-[6px] border border-text-400 opacity-50 "+(e?"rounded-[2px]":"rounded-full")
+    inner = (
+      <span
+        aria-hidden="true"
+        className={["block size-[6px] border border-text-400 opacity-50 rounded-full", className].filter(Boolean).join(" ")}
+      />
+    );
   }
 
-  if (state === "ready") {
-    return <span className={["status-dot", className].filter(Boolean).join(" ")} data-kind="ready" />;
-  }
-
-  // Official: idle && archived → Archive; idle → pje 6px hollow ring
-  if (session.isArchived) {
-    return <Icon name="Archive" size="sm" className={["text-text-500 opacity-80", className].filter(Boolean).join(" ")} />;
-  }
-
-  // Official pje({ square: false }) — index-BELzQL5P:
-  // className:"block size-[6px] border border-text-400 opacity-50 "+(e?"rounded-[2px]":"rounded-full")
-  // Mounted under ije wrapper `span.flex.shrink-0` (tooltip trigger); leading slot already flex-centers.
   return (
-    <span
-      aria-hidden="true"
-      className={["block size-[6px] border border-text-400 opacity-50 rounded-full", className].filter(Boolean).join(" ")}
-    />
+    <OfficialTooltip delayDuration={500} sideOffset={4} tooltipContent={label}>
+      <span className="flex shrink-0" role={live ? "status" : "img"} aria-label={label}>
+        {inner}
+      </span>
+    </OfficialTooltip>
   );
 }

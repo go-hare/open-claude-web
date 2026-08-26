@@ -96,6 +96,7 @@ export function ExistingSessionComposer({
   bridge,
   composerApiRef,
   disabled,
+  isPanelActive = true,
   isResponding,
   onOpenDiff,
   onOpenPlan,
@@ -114,6 +115,12 @@ export function ExistingSessionComposer({
   /** Official Ye.current residual: setText / focus / getText for rewind + Esc Esc. */
   composerApiRef?: MutableRefObject<OfficialComposerSurfaceApi | null>;
   disabled: boolean;
+  /** Official Qj `v` isPanelActive — gates window Escape. Distinct from disabled. */
+  isPanelActive?: boolean;
+  /**
+   * Official Qj `f` busy = H/Xke (pendingTurn && !endTurnSeen).
+   * Distinct from Xb isResponding paint (H || spawning || ultrareview).
+   */
   isResponding: boolean;
   onOpenDiff?: () => void;
   /** Official Wk onOpenPlan → setSidePane("plan"). */
@@ -256,15 +263,15 @@ export function ExistingSessionComposer({
    * Reset when busy/isResponding clears so the next stream can be stopped again.
    */
   const stopOnceRef = useRef(false);
-  /** Official Qj `B` isPanelActive — product footer uses !disabled. */
-  const isPanelActiveRef = useRef(!disabled);
+  /** Official Qj `B` isPanelActive — window Escape gated by panel, not !disabled. */
+  const isPanelActiveRef = useRef(isPanelActive);
   /** Official Qj `H` onStop ref — product path is stopResponse (Wr markInterrupting + interrupt). */
   const stopResponseRef = useRef<() => void | Promise<void>>(async () => {});
   const isBashMode = text.trimStart().startsWith("!");
   // Official Qj: bash → shell placeholder; else chat. Ref-backed for RNt without remount.
   const placeholderRef = useRef("Type / for commands");
   placeholderRef.current = isBashMode ? "Enter a shell command" : "Type / for commands";
-  const canStop = isResponding && Boolean(sessionRef && (bridge.interrupt || bridge.stop));
+  const canStop = isResponding && Boolean(onStop || (sessionRef && (bridge.interrupt || bridge.stop)));
   const readyImageCount = stagedImages.filter((image) => image.status === "ready" && image.base64).length;
   // Residual Qj submitDisabled: cn.isProcessingImages || mn.isUploading || bi
   // Product: staged image status==="loading" ≡ isProcessingImages; remote mn N/A local-first.
@@ -281,8 +288,7 @@ export function ExistingSessionComposer({
   const canSubmit =
     (text.trim().length > 0 || readyImageCount > 0)
     && !disabled
-    && !submitDisabled
-    && !isSubmitting;
+    && !submitDisabled;
 
   /**
    * Official c119 Qj Escape residual (editor path):
@@ -396,7 +402,7 @@ export function ExistingSessionComposer({
 
   bashModeRef.current = isBashMode;
   respondingRef.current = isResponding;
-  isPanelActiveRef.current = !disabled;
+  isPanelActiveRef.current = isPanelActive;
 
   // Official Ase residual: printable keys while focus is on chrome still insert into TipTap.
   // Official does not gate Ase on busy/isResponding — only disabled locks the editor.
@@ -617,8 +623,8 @@ export function ExistingSessionComposer({
   useEffect(() => {
     bashModeRef.current = isBashMode;
     respondingRef.current = isResponding;
-    isPanelActiveRef.current = !disabled;
-  }, [disabled, isBashMode, isResponding]);
+    isPanelActiveRef.current = isPanelActive;
+  }, [disabled, isBashMode, isPanelActive, isResponding]);
 
   useEffect(() => {
     const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { disabled?: boolean } | undefined;
@@ -804,7 +810,7 @@ export function ExistingSessionComposer({
   }, [editor]);
 
   const submit = useCallback(async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || isSubmitting) return;
     const trimmed = text.trim();
     // Official Ms: /^\/ultrareview\b/ → fe.launchUltrareview, bs chrome while in flight.
     const ultraMatch = trimmed.match(/^\/ultrareview\b\s*(.*)$/is);
@@ -869,7 +875,7 @@ export function ExistingSessionComposer({
     } finally {
       setSubmitting(false);
     }
-  }, [bridge, canSubmit, clearComposer, onSubmit, permissionMode, sessionRef, text]);
+  }, [bridge, canSubmit, clearComposer, isSubmitting, onSubmit, permissionMode, sessionRef, text]);
 
   useEffect(() => {
     submitRef.current = submit;
@@ -1035,12 +1041,14 @@ export function ExistingSessionComposer({
     checked: option.value === selectedModel,
     onSelect: () => void applyModel(option.value),
   }));
-  // Official te() residual: Mode menu omits bypass unless pref enabled.
+  // Official Sn: Os.map then disabled bypass row (hint 9aM6b8EJG/) when pref off.
   const codePermissionModeOptions = useCodePermissionModeOptions();
   const permissionItems = codePermissionModeOptions.map((option) => ({
     label: option.label,
     checked: option.value === permissionMode,
-    onSelect: () => permissionModeConfirm.select(option.value),
+    disabled: option.disabled,
+    hint: option.hint,
+    onSelect: option.disabled ? undefined : () => permissionModeConfirm.select(option.value),
   }));
   const effortItems = buildOfficialEffortMenuItems({
     current: effort,
@@ -1121,7 +1129,7 @@ export function ExistingSessionComposer({
             {/* Official Qj (c119): yd icon Stop | ReturnArrowCornerDownLeft; aria Stop | Send. */}
             <OfficialButton
               ariaLabel={canStop ? "Stop" : "Send"}
-              disabled={!canSubmit && !canStop}
+              disabled={!canStop && !canSubmit}
               icon={canStop ? "Stop" : "ReturnArrowCornerDownLeft"}
               onClick={() => void (canStop ? stopResponse() : submit())}
               tooltipShortcut={canStop ? "escape" : "enter"}
@@ -1136,7 +1144,7 @@ export function ExistingSessionComposer({
         coordinatorMode={false}
         fastModeOn={false}
         hideDictation
-        isPanelActive={!disabled}
+        isPanelActive={isPanelActive}
         loops={undefined}
         modelExtraSections={modelExtraSections}
         modelItems={modelItems}

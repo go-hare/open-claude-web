@@ -1,11 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { uuidRef } = vi.hoisted(() => ({
+  uuidRef: { current: "acct-1" as string | undefined },
+}));
+
+vi.mock("./composer/usePermissionModeConfirm", () => ({
+  bootstrapAccountUuidForStorage: () => uuidRef.current,
+}));
+
 import {
+  epitaxyFolderPermissionModeStorageKey,
   getFolderPermissionMode,
   getLandingDraftPermissionMode,
+  getLandingWorktreeEnabled,
   isSmPermissionMode,
   resetCodeDraftComposer,
   resolveDraftPermissionMode,
   setDraftPermissionMode,
+  setLandingWorktreeEnabled,
   folderPermissionModeKey,
 } from "./codeDraftComposerStore";
 
@@ -13,6 +25,7 @@ const mem = new Map<string, string>();
 
 beforeEach(() => {
   mem.clear();
+  uuidRef.current = "acct-1";
   resetCodeDraftComposer();
   vi.stubGlobal("localStorage", {
     getItem: (k: string) => mem.get(k) ?? null,
@@ -106,5 +119,37 @@ describe("codeDraftComposerStore residual (c119 fc keys)", () => {
     setDraftPermissionMode("bypassPermissions", { cwd: "/repo" });
     resetCodeDraftComposer();
     expect(getFolderPermissionMode("/repo")).toBe("bypassPermissions");
+  });
+
+  it("folder map writes account-scoped key (official fc scope:account)", () => {
+    setDraftPermissionMode("plan", { cwd: "/repo" });
+    expect(epitaxyFolderPermissionModeStorageKey("acct-1")).toBe(
+      "persisted.epitaxy-folder-permission-mode.acct-1",
+    );
+    expect(mem.get("persisted.epitaxy-folder-permission-mode.acct-1")).toContain("/repo");
+    expect(mem.get("persisted.epitaxy-folder-permission-mode")).toBeUndefined();
+  });
+
+  it("account scope without uuid does not write folder map", () => {
+    uuidRef.current = undefined;
+    setDraftPermissionMode("plan", { cwd: "/repo" });
+    expect(getFolderPermissionMode("/repo")).toBeUndefined();
+    expect(mem.get("persisted.epitaxy-folder-permission-mode")).toBeUndefined();
+    expect(mem.get("persisted.epitaxy-folder-permission-mode.acct-1")).toBeUndefined();
+  });
+
+  it("migrates legacy bare folder map into account-scoped key", () => {
+    mem.set("persisted.epitaxy-folder-permission-mode", JSON.stringify({ "/repo": "plan" }));
+    expect(getFolderPermissionMode("/repo")).toBe("plan");
+    expect(mem.get("persisted.epitaxy-folder-permission-mode.acct-1")).toContain("/repo");
+  });
+
+  it("landing worktree sticky defaults true and persists", () => {
+    expect(getLandingWorktreeEnabled()).toBe(true);
+    setLandingWorktreeEnabled(false);
+    expect(getLandingWorktreeEnabled()).toBe(false);
+    expect(mem.get("persisted.cc-landing-worktree-enabled")).toBe("false");
+    setLandingWorktreeEnabled(true);
+    expect(getLandingWorktreeEnabled()).toBe(true);
   });
 });

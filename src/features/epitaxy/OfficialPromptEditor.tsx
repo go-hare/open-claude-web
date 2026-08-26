@@ -51,6 +51,7 @@ type OfficialPromptEditorProps = {
    */
   submitDisabled?: boolean;
   onChange: (value: string) => void;
+  onStop?: () => void;
   onSubmit: () => void;
   placeholder: string;
   session?: SessionSummary | null;
@@ -93,6 +94,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   disabled = false,
   submitDisabled = false,
   onChange,
+  onStop,
   onSubmit,
   placeholder,
   session = null,
@@ -106,6 +108,9 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
 }, ref) {
   const editorRef = useRef<Editor | null>(null);
   const submitRef = useRef(onSubmit);
+  const onStopRef = useRef(onStop);
+  const busyRef = useRef(busy);
+  const stopOnceRef = useRef(false);
   const disabledRef = useRef(disabled);
   // Residual z / Te block: disabled || submitDisabled — busy is NOT in Te gate.
   const submitBlockedRef = useRef(disabled || submitDisabled);
@@ -135,6 +140,8 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   const canSubmit = (hasText || hasAttachments) && !disabled && !submitDisabled;
 
   submitRef.current = onSubmit;
+  onStopRef.current = onStop;
+  busyRef.current = busy;
   disabledRef.current = disabled;
   submitBlockedRef.current = disabled || submitDisabled;
   onChangeRef.current = onChange;
@@ -144,6 +151,51 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   // Official: bash → "Enter a shell command"; else prop placeholder.
   placeholderRef.current = isBashMode ? "Enter a shell command" : placeholder;
   hasTextRef.current = hasText;
+
+  useEffect(() => {
+    if (!busy) stopOnceRef.current = false;
+  }, [busy]);
+
+  /**
+   * Official Qj editor Escape (c119 Ae): slash/mention skip; busy&&!q → prevent+stop+onStop;
+   * still-busy after q → swallow; bash clear; else blur.
+   */
+  const handleQjEscape = (event: {
+    defaultPrevented: boolean;
+    key: string;
+    preventDefault: () => void;
+    stopPropagation: () => void;
+  }) => {
+    const slashStorage = (editorRef.current?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
+    const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
+    if (event.key !== "Escape") return false;
+    if (hasSlashMenu) return false;
+    if (event.defaultPrevented) return false;
+    if (busyRef.current && !stopOnceRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      stopOnceRef.current = true;
+      onStopRef.current?.();
+      return true;
+    }
+    if (busyRef.current) return true;
+    if (bashModeRef.current) {
+      event.preventDefault();
+      userEditedRef.current = false;
+      hasTextRef.current = false;
+      setHasText(false);
+      lastParentValueRef.current = "";
+      onChangeRef.current("");
+      editorRef.current?.commands.clearContent(true);
+      return true;
+    }
+    try {
+      editorRef.current?.commands.blur();
+    } catch {
+      /* destroyed */
+    }
+    return false;
+  };
 
   const slashMenuComponent = useMemo(() => function OfficialComposerSlashCommandMenuRenderer(props: OfficialSlashCommandMenuProps) {
     const state = slashMenuStateRef.current;
@@ -207,21 +259,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         onAddImageFilesRef.current(imageFiles);
         return true;
       },
-      handleKeyDown: (_view, event) => {
-        const slashStorage = (editorRef.current?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
-        const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
-        if (event.key === "Escape" && bashModeRef.current && !hasSlashMenu) {
-          event.preventDefault();
-          userEditedRef.current = false;
-          hasTextRef.current = false;
-          setHasText(false);
-          lastParentValueRef.current = "";
-          onChangeRef.current("");
-          editorRef.current?.commands.clearContent(true);
-          return true;
-        }
-        return false;
-      },
+      handleKeyDown: (_view, event) => handleQjEscape(event),
     },
     extensions: [
       StarterKit.configure({
@@ -414,18 +452,9 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
           className="epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0"
           editor={editor}
           onKeyDownCapture={(event) => {
+            if (handleQjEscape(event)) return;
             const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
             const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
-            if (event.key === "Escape" && isBashMode && !hasSlashMenu) {
-              event.preventDefault();
-              userEditedRef.current = false;
-              hasTextRef.current = false;
-              setHasText(false);
-              lastParentValueRef.current = "";
-              onChangeRef.current("");
-              editor?.commands.clearContent(true);
-              return;
-            }
             // Official Qj: Enter + !shift + !alt + !nativeEvent.isComposing (no keyCode 229 invent).
             if (
               event.key !== "Enter"
@@ -444,10 +473,11 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         {/* Official Qj: absolute placeholder span ONLY when _e (promptSuggestion). No default value span. */}
         <div className="flex self-end p-p7 pl-p3">
           <OfficialButton
-            ariaLabel="Send"
-            disabled={!canSubmit}
-            icon={busy ? "Stop" : "ArrowReturn"}
-            onClick={onSubmit}
+            ariaLabel={busy ? "Stop" : "Send"}
+            disabled={!busy && !canSubmit}
+            icon={busy ? "Stop" : "ReturnArrowCornerDownLeft"}
+            onClick={() => (busy ? onStop?.() : onSubmit())}
+            tooltipShortcut={busy ? "escape" : "enter"}
           />
         </div>
       </div>

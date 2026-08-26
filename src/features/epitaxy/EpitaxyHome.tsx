@@ -13,11 +13,13 @@ import { useEpitaxyActionCenterState } from "./epitaxyActionCenterState";
 import { OfficialCodeComposer, type OfficialCodeComposerSubmitOptions } from "./composer/OfficialCodeComposer";
 import {
   getCodeDraftComposerState,
+  getLandingWorktreeEnabled,
   resetCodeDraftComposer,
   resolveDraftPermissionMode,
   setCodeDraftEffort,
   setCodeDraftModel,
   setDraftPermissionMode,
+  setLandingWorktreeEnabled,
 } from "./codeDraftComposerStore";
 import {
   clampEffortToCatalog,
@@ -200,7 +202,8 @@ function CodeNewSessionPage({
   const [ultracodeOfferable, setUltracodeOfferable] = useState<boolean | null>(null);
   const [composerWorkspace, setComposerWorkspace] = useState(workspace);
   const [sourceBranch, setSourceBranch] = useState(workspace.cwd ? workspace.branchName : "");
-  const [useWorktree, setUseWorktree] = useState(false);
+  /** Official fc("cc-landing-worktree-enabled", true) — sticky Kn; cwd change does not wipe. */
+  const [useWorktree, setUseWorktree] = useState(() => getLandingWorktreeEnabled());
   /** Official c119: epitaxy:reset-draft remount key when no session id (void 0===o). */
   const [draftEpoch, setDraftEpoch] = useState(0);
 
@@ -218,7 +221,7 @@ function CodeNewSessionPage({
     });
     if (replaced) {
       setSourceBranch(workspace.cwd ? workspace.branchName : "");
-      setUseWorktree(false);
+      // Official Kn sticky survives cwd change. Qn = Gn && Kn at startIntent.
     }
   }, [workspace]);
 
@@ -412,7 +415,10 @@ function CodeNewSessionPage({
                 }}
                 onSourceBranchChange={setSourceBranch}
                 onSubmit={(options) => void submit(options)}
-                onUseWorktreeChange={setUseWorktree}
+                onUseWorktreeChange={(enabled) => {
+                  setUseWorktree(enabled);
+                  setLandingWorktreeEnabled(enabled);
+                }}
                 onWorkspaceChange={setComposerWorkspace}
                 permissionMode={permissionMode}
                 prompt={prompt}

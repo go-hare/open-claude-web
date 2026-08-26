@@ -23,7 +23,7 @@ export const COWORK_ACTIVE_TASKS_MESSAGES = {
   noNewActivity: { defaultMessage: "No new activity", id: "J4QXXuiCoV" },
   showMore: { defaultMessage: "Show more", id: "aWpBzjCXKS" },
   showLess: { defaultMessage: "Show less", id: "qyJtWyZ0yt" },
-  scheduled: { defaultMessage: "定时任务", id: "cXAlMRerxW" },
+  scheduled: { defaultMessage: "Scheduled tasks", id: "cXAlMRerxW" },
   review: { defaultMessage: "Review", id: "R+J5oxt1Fc" },
 } as const satisfies Record<string, MessageDescriptor>;
 

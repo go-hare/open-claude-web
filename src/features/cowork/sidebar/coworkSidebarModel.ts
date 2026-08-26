@@ -4,6 +4,12 @@ import { isCoworkSessionPinned, orderCoworkPinnedSessions } from "./coworkSessio
 export const OFFICIAL_COWORK_RECENT_LIMIT = 20;
 export const COWORK_SIDEBAR_SECTION_ORDER = ["scheduled", "pinned", "recents"] as const;
 
+/**
+ * Official r6 (index-BELzQL5P): hide sessionType agent | radar from Recents.
+ * dispatch_child is product safety (not in official a6).
+ */
+const COWORK_SIDEBAR_HIDDEN_SESSION_TYPES = new Set(["agent", "radar", "dispatch_child"]);
+
 const scheduledWindowMs = 7 * 24 * 60 * 60 * 1000;
 
 export type CoworkScheduledSidebarItem = {
@@ -35,9 +41,7 @@ export function buildCoworkSidebarModel(
   pinnedOrder: string[],
   now = Date.now(),
 ): CoworkSidebarModel {
-  const visible = sessions
-    .filter((session) => !session.isArchived && session.sessionType !== "dispatch_child")
-    .sort(compareUpdated);
+  const visible = sessions.filter(isCoworkSidebarVisibleSession).sort(compareUpdated);
   const pinned = orderCoworkPinnedSessions(visible, pinnedOrder);
   const pinnedIds = new Set(pinned.map((session) => session.id));
   const scheduled = buildScheduledItems(visible, scheduledTasks, pinnedOrder, now);
@@ -90,6 +94,11 @@ function buildScheduledItems(sessions: SessionSummary[], tasks: ScheduledTaskSum
     });
   }
   return items.sort((left, right) => right.latestRun.updatedAtMs - left.latestRun.updatedAtMs);
+}
+
+function isCoworkSidebarVisibleSession(session: SessionSummary): boolean {
+  if (session.isArchived) return false;
+  return !COWORK_SIDEBAR_HIDDEN_SESSION_TYPES.has(session.sessionType ?? "");
 }
 
 function compareUpdated(left: SessionSummary, right: SessionSummary) {

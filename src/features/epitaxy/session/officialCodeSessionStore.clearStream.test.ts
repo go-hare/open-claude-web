@@ -221,6 +221,67 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(bucket?.queuedMessages).toEqual([]);
     expect(bucket?.pendingTurnStartedAt).toBeNull();
     expect(bucket?.pendingQueuedSends).toBe(0);
+    // Official g/h does not write isRunning — host session_updated is authoritative.
+    expect(bucket?.session?.isRunning).toBe(true);
+  });
+
+  it("done clears stream; completed is not an official settle type", () => {
+    expect(shouldClearOfficialStreamForEvent({ type: "done" })).toBe(true);
+    expect(shouldClearOfficialStreamForEvent({ type: "completed" })).toBe(false);
+    expect(shouldClearOfficialStreamForEvent({ type: "message", message: { type: "done" } })).toBe(true);
+    expect(shouldClearOfficialStreamForEvent({ type: "message", message: { type: "completed" } })).toBe(false);
+  });
+
+  it("failPendingTurn dumps queue and does not write isRunning", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "222"));
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q2", "333"));
+
+    officialCodeSessionStore.getState().failPendingTurn("s1", "turn failed", "error");
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.queuedMessages).toEqual([]);
+    expect(bucket?.pendingQueuedSends).toBe(0);
+    expect(bucket?.pendingTurnStartedAt).toBeNull();
+    expect(bucket?.messages.map((message) => message.id)).toEqual(["interrupt", "q1", "q2"]);
+    expect(bucket?.session?.isRunning).toBe(true);
+  });
+
+  it("same-uuid promote uses queued object n and does not decrement pendingQueuedSends", () => {
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, [interruptUser()]);
+    officialCodeSessionStore.getState().noteQueuedSend("s1");
+    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "queued-text"));
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingQueuedSends).toBe(1);
+
+    officialCodeSessionStore.getState().mergeMessage("s1", {
+      id: "q1",
+      role: "user",
+      text: "incoming-text",
+      createdAt: "2026-08-13T00:00:09.000Z",
+      raw: {
+        type: "user",
+        uuid: "q1",
+        message: { role: "user", content: [{ type: "text", text: "incoming-text" }] },
+      },
+    });
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.queuedMessages).toEqual([]);
+    expect(bucket?.pendingQueuedSends).toBe(1);
+    const promoted = bucket?.messages.find((message) => message.id === "q1");
+    expect(promoted?.text).toBe("queued-text");
   });
 
   it("hard stop discardQueued does not promote (stopSession teardown)", () => {
@@ -721,7 +782,8 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
       "q2",
     ]);
     expect(bucket?.pendingTurnStartedAt).not.toBeNull();
-    expect(bucket?.session?.isRunning).toBe(true);
+    // Official g remints pendingTurn only — does not write isRunning.
+    expect(bucket?.session?.isRunning).toBe(false);
   });
 
   it("noteQueuedSend only bumps when pendingTurn set (official Gr)", () => {

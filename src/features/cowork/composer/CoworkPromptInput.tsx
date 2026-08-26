@@ -89,13 +89,6 @@ export const CoworkPromptInput = forwardRef<CoworkPromptInputHandle, CoworkPromp
       emitRef.current = { lastEmittedValue: text, userEdited: false };
       onChangeRef.current(text);
       ed.commands.focus("end");
-      try {
-        const end = ed.state.doc.content.size;
-        ed.commands.setTextSelection(end);
-        ed.view.dispatch(ed.state.tr.scrollIntoView());
-      } catch {
-        /* editor may be mid-destroy */
-      }
     },
     scrollToEnd: () => {
       const ed = editor ?? editorRef.current;

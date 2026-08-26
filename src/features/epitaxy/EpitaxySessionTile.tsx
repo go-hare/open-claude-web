@@ -290,6 +290,7 @@ function EpitaxyChatPanel({
     error,
     errorCategory,
     isLoading,
+    busy,
     isResponding,
     isSessionNotFound,
     isUltrareviewTagged,
@@ -560,7 +561,7 @@ function EpitaxyChatPanel({
   const canOpenRewindPicker =
     isPanelActive
     && Boolean(bridge.rewind)
-    && !isResponding
+    && !busy
     && (effectiveSessionRef?.type ?? "local") === "local";
 
   const openRewindPicker = useCallback(() => {
@@ -623,14 +624,14 @@ function EpitaxyChatPanel({
       if (event.key !== "Escape" || event.defaultPrevented || event.repeat) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       // Leave busy-stop and permission cards alone when they already claimed Escape.
-      if (isResponding) return;
+      if (busy) return;
       if (rewindPickerOpen) return;
       event.preventDefault();
       closeLastSidePane();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closeLastSidePane, isPanelActive, isResponding, rewindPickerOpen, sideTiles.length]);
+  }, [busy, closeLastSidePane, isPanelActive, rewindPickerOpen, sideTiles.length]);
   // Bridge OfficialCodeMarkdown / Hb inline path clicks (ob/db/Db) → file pane.
   useEffect(() => {
     const onOpenFile = (event: Event) => {
@@ -857,7 +858,7 @@ function EpitaxyChatPanel({
                     <div className="epitaxy-chat-column epitaxy-chat-size h-full flex flex-col pt-[48px] pb-[32px]">
                       <OfficialSummaryTranscriptBody
                         entries={entries}
-                        isResponding={isResponding}
+                        isResponding={busy}
                         sessionRef={effectiveSessionRef}
                       />
                     </div>
@@ -909,7 +910,8 @@ function EpitaxyChatPanel({
             // Residual Qj disabled via residualQjDisabled (Os/J/Ns/Ga/xn). See qjDisabled above.
             // Error stays banner-only (W); not folded into disabled.
             disabled={qjDisabled}
-            isResponding={isResponding}
+            isPanelActive={isPanelActive}
+            isResponding={busy}
             onOpenDiff={openDiff}
             onOpenPlan={openPlan}
             onPermissionModeChange={async (mode) => {

@@ -8,6 +8,7 @@ import {
   detectOfficialProjects,
   groupSessionsByOfficialProject,
   officialProjectGroupKeyFromSession,
+  officialSessionType,
   toOfficialCodeSessionData,
 } from "./officialProjectGroup";
 
@@ -231,6 +232,8 @@ function makeProjectOptions(sessions: SessionSummary[]): Option<string>[] {
 }
 
 function includeSession(session: SessionSummary, value: RecentsFilterState) {
+  // Official CCSessionList Q: main list excludes scheduled unless archived.
+  if (session.scheduledTaskId && !session.isArchived) return false;
   return includeByStatus(session, value.status) && includeByProject(session, value.selectedProjects) && includeByEnvironment(session, value.environment) && includeByActivity(session, value.activityDays);
 }
 
@@ -248,8 +251,7 @@ function includeByProject(session: SessionSummary, selectedProjects: string[]) {
 
 function includeByEnvironment(session: SessionSummary, environment: RecentsFilterState["environment"]) {
   if (environment === "all") return true;
-  if (environment === "bridge") return session.sessionKind === "code" && session.cwd?.startsWith("remote-control:") === true;
-  return environment === "local" ? Boolean(session.cwd) : !session.cwd;
+  return officialSessionType(session) === environment;
 }
 
 function includeByActivity(session: SessionSummary, days: RecentsFilterState["activityDays"]) {
@@ -264,6 +266,9 @@ function sorterFor(sortBy: RecentsFilterState["sortBy"]) {
 }
 
 function groupByValue(sessions: SessionSummary[], groupBy: Exclude<RecentsFilterState["groupBy"], "none">, text?: ShellText) {
+  if (groupBy === "date") return groupByDate(sessions, text);
+  if (groupBy === "environment") return groupByEnvironment(sessions, text);
+  if (groupBy === "state") return groupByState(sessions);
   const groups = new Map<string, DisplayGroup>();
   for (const session of sessions) {
     const label = groupLabel(session, groupBy, text);
@@ -278,17 +283,123 @@ function groupLabel(session: SessionSummary, groupBy: Exclude<RecentsFilterState
   if (groupBy === "homespace") {
     return session.repo?.name || session.cwd?.split("/").filter(Boolean).at(-1) || text?.other || "Other";
   }
-  if (groupBy === "environment") return session.cwd ? text?.local ?? "本地" : text?.cloud ?? "云端";
-  if (groupBy === "state") return session.isArchived ? text?.archived ?? "已归档" : text?.active ?? "进行中";
   if (groupBy === "custom") return text?.ungrouped ?? "Ungrouped";
   return dateLabel(session.updatedAtMs, text);
 }
 
+/** Official ca0135 $a: calendar-day distance from today midnight. */
+const DAY_MS = 864e5;
+
+function calendarDayDistance(updatedAtMs: number, todayMidnightMs: number): number {
+  if (updatedAtMs >= todayMidnightMs) return 0;
+  return Math.floor((todayMidnightMs - updatedAtMs) / DAY_MS) + 1;
+}
+
+function groupByDate(sessions: SessionSummary[], text?: ShellText): DisplayGroup[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayMs = today.getTime();
+  const buckets: SessionSummary[][] = Array.from({ length: 7 }, () => []);
+  const older: SessionSummary[] = [];
+  for (const session of sessions) {
+    const distance = calendarDayDistance(session.updatedAtMs, todayMs);
+    if (distance < 7) buckets[distance].push(session);
+    else older.push(session);
+  }
+  const groups: DisplayGroup[] = [];
+  for (let day = 0; day < 7; day++) {
+    if (buckets[day].length === 0) continue;
+    groups.push({
+      key: `day-${day}`,
+      label: dateBucketLabel(day, todayMs, text),
+      sessions: buckets[day],
+    });
+  }
+  if (older.length > 0) {
+    groups.push({ key: "older", label: text?.older ?? "Older", sessions: older });
+  }
+  return groups;
+}
+
+function dateBucketLabel(day: number, todayMs: number, text?: ShellText): string {
+  if (day === 0) return text?.today ?? "Today";
+  if (day === 1) return text?.yesterday ?? "Yesterday";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(todayMs - day * DAY_MS));
+}
+
 function dateLabel(updatedAtMs: number, text?: ShellText) {
-  const age = Date.now() - updatedAtMs;
-  if (age < 24 * 60 * 60 * 1000) return text?.today ?? "今天";
-  if (age < 48 * 60 * 60 * 1000) return text?.yesterday ?? "昨天";
-  return text?.older ?? "更早";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const distance = calendarDayDistance(updatedAtMs, today.getTime());
+  if (distance === 0) return text?.today ?? "Today";
+  if (distance === 1) return text?.yesterday ?? "Yesterday";
+  if (distance < 7) {
+    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(today.getTime() - distance * DAY_MS));
+  }
+  return text?.older ?? "Older";
+}
+
+/** Official ca0135 kl / wl. */
+const ENVIRONMENT_ORDER = ["local", "remote", "bridge"] as const;
+
+function groupByEnvironment(sessions: SessionSummary[], text?: ShellText): DisplayGroup[] {
+  const buckets = new Map<string, SessionSummary[]>();
+  for (const session of sessions) {
+    const key = officialSessionType(session);
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(session);
+    buckets.set(key, bucket);
+  }
+  const labels: Record<(typeof ENVIRONMENT_ORDER)[number], string> = {
+    local: text?.local ?? "Local",
+    remote: text?.cloud ?? "Cloud",
+    bridge: text?.remoteControl ?? "Remote Control",
+  };
+  const groups: DisplayGroup[] = [];
+  for (const key of ENVIRONMENT_ORDER) {
+    const bucket = buckets.get(key);
+    if (!bucket?.length) continue;
+    groups.push({ key, label: labels[key], sessions: bucket });
+  }
+  return groups;
+}
+
+/**
+ * Official DFrame yl + belz iSe/oSe.
+ * Product store has no go()/mo()/gn() Sets — map from session fields only:
+ * archived → done; pending → blocked; running → working; completed+unread → review; else done.
+ */
+const STATE_ORDER = ["blocked", "review", "working", "done"] as const;
+const STATE_LABELS: Record<(typeof STATE_ORDER)[number], string> = {
+  blocked: "Needs input",
+  review: "Ready for review",
+  working: "Working",
+  done: "Completed",
+};
+
+function recentsSessionState(session: SessionSummary): (typeof STATE_ORDER)[number] {
+  if (session.isArchived) return "done";
+  if ((session.pendingToolPermissions?.length ?? 0) > 0) return "blocked";
+  if (session.isRunning) return "working";
+  if (session.hasCompleted && session.isUnread) return "review";
+  return "done";
+}
+
+function groupByState(sessions: SessionSummary[]): DisplayGroup[] {
+  const buckets = new Map<string, SessionSummary[]>();
+  for (const session of sessions) {
+    const key = recentsSessionState(session);
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(session);
+    buckets.set(key, bucket);
+  }
+  const groups: DisplayGroup[] = [];
+  for (const key of STATE_ORDER) {
+    const bucket = buckets.get(key);
+    if (!bucket?.length) continue;
+    groups.push({ key, label: STATE_LABELS[key], sessions: bucket });
+  }
+  return groups;
 }
 
 function isFilterActive(value: RecentsFilterState) {

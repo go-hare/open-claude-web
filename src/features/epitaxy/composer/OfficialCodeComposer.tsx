@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   desktopBridge,
   type EffortLevel,
@@ -9,27 +9,21 @@ import type { CoworkImagePayload } from "../../../adapters/desktopBridge/types";
 import {
   filterCoworkImageFiles,
 } from "../../cowork/composer/coworkComposerStagedImages";
-import {
-  OfficialDropdownButton,
-  type OfficialDropdownItem,
-} from "../OfficialEpitaxyComponents";
 import { OfficialPromptEditor, type OfficialPromptEditorHandle } from "../OfficialPromptEditor";
+import { OfficialComposerFooter } from "../OfficialComposerFooter";
 import { useWorkspaceTrustGate } from "../trust/useWorkspaceTrustGate";
 import {
   normalizeSelectorModelValue,
   useCodeModelOptions,
 } from "../../cowork/composer/useCoworkModelOptions";
 import { permissionModeLabel } from "./options";
-import { numberComposerMenuItems } from "./composerMenuItems";
 import { EpitaxyPermissionModeModal } from "./EpitaxyPermissionModeModal";
-import { OfficialEffortControl, type OfficialEffortItem } from "./OfficialEffortControl";
 import { OfficialWorkspaceControls } from "./OfficialWorkspaceControls";
 import { usePermissionModeConfirm } from "./usePermissionModeConfirm";
 import { useCodePermissionModeOptions } from "./useBypassPermissionsEnabled";
 import { useClaudeCodeGitAvailable } from "./useClaudeCodeGitAvailable";
 import {
   buildOfficialEffortMenuItems,
-  clampEffortToCatalog,
 } from "../session/officialComposerOptions";
 import {
   dataUrlToImagePayload,
@@ -81,8 +75,6 @@ type OfficialCodeComposerProps = {
   useWorktree: boolean;
   workspace: WorkspaceContext;
 };
-
-const composerIconButtonClass = "group/btn relative isolate inline-flex items-center whitespace-nowrap border-0 cursor-default select-none outline-none hide-focus-ring text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled disabled:hover:text-uncontained-disabled busy:text-uncontained-busy pressed:text-uncontained-selected pressed:hover:text-uncontained-selected ring-focus h-base text-body rounded-base justify-center aspect-square px-p3";
 
 export function OfficialCodeComposer({
   busy,
@@ -147,7 +139,6 @@ export function OfficialCodeComposer({
   const [stagedImages, setStagedImages] = useState<StagedComposerImage[]>([]);
   const stagedImagesRef = useRef(stagedImages);
   stagedImagesRef.current = stagedImages;
-  const imageFileInputRef = useRef<HTMLInputElement | null>(null);
   const readyImageCount = stagedImages.filter((image) => image.status === "ready" && image.base64).length;
   const isProcessingImages = stagedImages.some((image) => image.status === "loading");
   // Residual Qj submitDisabled: cn.isProcessingImages || mn.isUploading || bi
@@ -169,7 +160,6 @@ export function OfficialCodeComposer({
   // to the prompt so keystrokes land in TipTap (not the folder Menu.Trigger / body).
   const promptEditorRef = useRef<OfficialPromptEditorHandle | null>(null);
   const [replayKey, setReplayKey] = useState(0);
-  const [openFooterMenu, setOpenFooterMenu] = useState<"effort" | "mode" | "model" | null>(null);
   // Official Te (he||m): text or ready staged images.
   const hasPrompt = prompt.trim().length > 0 || readyImageCount > 0;
   const allowedModelValues = useMemo(
@@ -209,14 +199,16 @@ export function OfficialCodeComposer({
     if (normalized !== model) onModelChange(normalized);
   }, [allowedModelValues, codeModelOptions.ready, model, onModelChange]);
 
-  // Official te() + Os residual: hide bypass when bypassPermissionsModeEnabled is off.
+  // Official Sn: Os.map then disabled bypass (hint 9aM6b8EJG/) when pref off.
   const codePermissionModeOptions = useCodePermissionModeOptions();
-  const permissionItems: OfficialDropdownItem[] = codePermissionModeOptions.map((option) => ({
+  const permissionItems = codePermissionModeOptions.map((option) => ({
     checked: option.value === permissionMode,
+    disabled: option.disabled,
+    hint: option.hint,
     label: option.label,
-    onSelect: () => permissionModeConfirm.select(option.value),
+    onSelect: option.disabled ? undefined : () => permissionModeConfirm.select(option.value),
   }));
-  const modelItems: OfficialDropdownItem[] = codeModelOptions.items.map((option) => ({
+  const modelItems = codeModelOptions.items.map((option) => ({
     checked: option.value === selectedModel,
     label: option.label,
     onSelect: () => {
@@ -224,8 +216,7 @@ export function OfficialCodeComposer({
       onModelChange(option.value);
     },
   }));
-  const effortItems: OfficialEffortItem[] = useMemo(() => {
-    // CLI applied.effortLevels when present; else model residual of CLI catalog (no 5-stop flash).
+  const effortItems = useMemo(() => {
     return buildOfficialEffortMenuItems({
       current: effort,
       effortLevels,
@@ -235,56 +226,14 @@ export function OfficialCodeComposer({
       onSelect: (level, nextUltracode) => onEffortChange(level, nextUltracode),
     });
   }, [effort, effortLevels, onEffortChange, selectedModel, ultracode, ultracodeOfferable]);
-  const numberedPermissionItems = useMemo(() => (
-    openFooterMenu === "mode" ? numberComposerMenuItems(permissionItems) : permissionItems
-  ), [openFooterMenu, permissionItems]);
-  const numberedModelItems = useMemo(() => (
-    openFooterMenu === "model" ? numberComposerMenuItems(modelItems) : modelItems
-  ), [modelItems, openFooterMenu]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const hasOnlyDigit = !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey);
-      if (openFooterMenu && hasOnlyDigit && event.code.startsWith("Digit")) {
-        const index = Number(event.code.slice(5)) - 1;
-        // Official Dne: digit quick-keys also apply while Effort slider popover is open.
-        const items = openFooterMenu === "mode"
-          ? numberedPermissionItems
-          : openFooterMenu === "effort"
-            ? effortItems
-            : numberedModelItems;
-        const item = items[index];
-        if (item?.onSelect && !item.disabled) {
-          event.preventDefault();
-          event.stopPropagation();
-          item.onSelect();
-          setOpenFooterMenu(null);
-        }
-        return;
-      }
-
-      if (openFooterMenu && hasOnlyDigit && event.key === "Escape") {
-        event.preventDefault();
-        setOpenFooterMenu(null);
-        return;
-      }
-
-      const commandKey = navigator.platform.toLowerCase().includes("mac") ? event.metaKey : event.ctrlKey;
-      if (!commandKey || !event.shiftKey || event.altKey) return;
-      if (event.code === "KeyM" && permissionItems.length > 0) {
-        event.preventDefault();
-        setOpenFooterMenu("mode");
-      } else if (event.code === "KeyI" && modelItems.length > 0) {
-        event.preventDefault();
-        setOpenFooterMenu("model");
-      } else if (event.code === "KeyE" && effortItems.length > 0) {
-        event.preventDefault();
-        setOpenFooterMenu("effort");
-      }
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [effortItems, modelItems, numberedModelItems, numberedPermissionItems, openFooterMenu, permissionItems.length]);
+  const plusMenuItems = useMemo(
+    () => [{ icon: "Folder1", label: "Add folder" }],
+    [],
+  );
+  const modelExtraSections = useMemo(
+    () => [{ key: "effort", header: "Effort", items: effortItems }],
+    [effortItems],
+  );
 
   const removeStagedImage = useCallback((id: string) => {
     setStagedImages((prev) => {
@@ -360,16 +309,6 @@ export function OfficialCodeComposer({
       if (image.previewUrl.startsWith("blob:")) URL.revokeObjectURL(image.previewUrl);
     }
   }, []);
-
-  const openImagePicker = useCallback(() => {
-    imageFileInputRef.current?.click();
-  }, []);
-
-  const onImageFileInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = "";
-    if (files.length > 0) addImageFiles(files);
-  }, [addImageFiles]);
 
   const submitWithTrust = useCallback(() => {
     const state = submitStateRef.current;
@@ -515,76 +454,23 @@ export function OfficialCodeComposer({
           Git is required for local sessions.
         </div>
       ) : null}
-      <div className="w-full flex items-center gap-g5 py-[4px]">
-        <div className="flex items-center gap-g5 min-w-0">
-          <OfficialDropdownButton
-            align="start"
-            ariaLabel="Permission mode"
-            disabled={qjDisabled}
-            header="模式"
-            items={numberedPermissionItems}
-            label={<span className={permissionMode === "bypassPermissions" ? "text-extended-yellow" : undefined}>{permissionModeLabel(permissionMode)}</span>}
-            mode="text"
-            onOpenChange={(open) => setOpenFooterMenu(open ? "mode" : null)}
-            open={openFooterMenu === "mode"}
-            revealChevron="never"
-            side="top"
-            size="small"
-            triggerKey="cmd+shift+m"
-            variant="uncontained"
-          />
-          {/* Official Plus: Add image (cn) + Add folder stub (folder via WorkspaceControls). */}
-          <OfficialDropdownButton
-            ariaLabel="Add"
-            disabled={qjDisabled}
-            icon="PlusLarge"
-            items={[
-              { icon: "PaperclipAttach", label: "Add image", onSelect: openImagePicker },
-              { icon: "Folder1", label: "Add folder" },
-            ]}
-            revealChevron="never"
-            side="top"
-            size="small"
-            variant="uncontained"
-          />
-          <input
-            ref={imageFileInputRef}
-            accept="image/png,image/jpeg,image/gif,image/webp"
-            className="hidden"
-            multiple
-            onChange={onImageFileInputChange}
-            type="file"
-          />
-        </div>
-        <div className="ml-auto flex items-center gap-g4">
-          <OfficialDropdownButton
-            align="end"
-            ariaLabel="Model"
-            disabled={qjDisabled}
-            header="Models"
-            items={numberedModelItems}
-            label={codeModelOptions.labelFor(selectedModel)}
-            mode="text"
-            onOpenChange={(open) => setOpenFooterMenu(open ? "model" : null)}
-            open={openFooterMenu === "model"}
-            revealChevron="never"
-            side="top"
-            size="small"
-            triggerKey="cmd+shift+i"
-            variant="uncontained"
-          />
-          <OfficialEffortControl
-            disabled={qjDisabled}
-            items={effortItems}
-            onOpenChange={(open) => setOpenFooterMenu(open ? "effort" : null)}
-            open={openFooterMenu === "effort"}
-          />
-          <button className={`${composerIconButtonClass} h-small text-footnote rounded-small shrink-0`} type="button" aria-label="Usage">
-            <span aria-hidden="true" className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)] group-hover/btn:bg-[var(--fill-uncontained-hover)]" />
-            <span className="size-[12px] rounded-full border-2 border-border-400" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
+      {/* Official c119 `_Component175` / Dne — reuse existing-session footer, not a third draft footer. */}
+      <OfficialComposerFooter
+        bridge={desktopBridge.LocalSessions}
+        hideDictation
+        isPanelActive
+        modelExtraSections={modelExtraSections}
+        modelItems={modelItems}
+        modelLabel={codeModelOptions.labelFor(selectedModel)}
+        modelPickerDisabled={qjDisabled}
+        onAddFiles={addImageFiles}
+        permissionDanger={permissionMode === "bypassPermissions"}
+        permissionItems={permissionItems}
+        permissionLabel={permissionModeLabel(permissionMode)}
+        plusMenuItems={plusMenuItems}
+        session={null}
+        sessionRef={null}
+      />
       {modal}
       <EpitaxyPermissionModeModal
         mode={permissionModeConfirm.confirming}
