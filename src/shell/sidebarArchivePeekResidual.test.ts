@@ -53,6 +53,8 @@ describe("sidebar collapse peek residual", () => {
     // Official cbc59a8af: .dframe-root[data-collapsed][data-hovering] .dframe-sidebar-body { opacity:1 }
     expect(desktopFrame).toMatch(/data-hovering=\{\(frame\.sidebarCollapsed && frame\.sidebarHovering\) \|\| undefined\}/);
     expect(desktopFrame).toMatch(/data-collapsed=\{frame\.sidebarCollapsed \|\| undefined\}/);
+    // Official H6t setHovering(true) also sets peeked:true; Qn data-peeked is hovering, not collapsed.
+    expect(desktopFrame).toMatch(/data-peeked=\{\(frame\.sidebarCollapsed && frame\.sidebarHovering\) \|\| undefined\}/);
   });
 
   it("useSidebarPeek sets sidebarHovering on collapsed enter", () => {

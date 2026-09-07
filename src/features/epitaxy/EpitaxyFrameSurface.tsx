@@ -64,12 +64,22 @@ const tileWrapStyle: CSSProperties = {
   flexBasis: 0,
 };
 
+// Official YI (c11959232):
+//   overflowMin (chat always, iE `{width:320, anchor:M}`):
+//     `{...BI.tileShell, position:"absolute", top:0, bottom:0, [anchor]:0, width:"100%", minWidth:320}`
+//   idle (non-chat tiles only): `{...BI.tileShell, transform:"translateZ(1px)", zIndex:1}`
+// This shell is the chat tile (side panes are in-column, not KI siblings). Chat must
+// not get the idle 3D layer — a parent translateZ makes shelf/Pk transforms composite
+// the whole transcript.
 const tileShellStyle: CSSProperties = {
   width: "100%",
   height: "100%",
   transformStyle: "preserve-3d",
-  transform: "translateZ(1px)",
-  zIndex: 1,
+  position: "absolute",
+  top: 0,
+  bottom: 0,
+  left: 0,
+  minWidth: 320,
 };
 
 export function EpitaxyTileLayout({ children }: { children: ReactNode }) {
@@ -93,12 +103,13 @@ export function EpitaxyTileLayout({ children }: { children: ReactNode }) {
 }
 
 export function EpitaxyRouteFrame({ children }: { children: ReactNode }) {
+  // Official bE (c11959232): `epitaxy-root select-none h-full w-full flex flex-col`
+  // then `flex-1 min-h-0` + KI. PaneLayout already owns
+  // `overflow-x-clip overflow-y-auto`. Do not wrap a second scroller.
   return (
-    <div className="flex-1 min-h-0 relative flex flex-col overflow-x-clip overflow-y-auto">
-      <div className="epitaxy-root select-none h-full w-full flex flex-col">
-        <div className="flex-1 min-h-0">
-          <EpitaxyTileLayout>{children}</EpitaxyTileLayout>
-        </div>
+    <div className="epitaxy-root select-none h-full w-full flex flex-col">
+      <div className="flex-1 min-h-0">
+        <EpitaxyTileLayout>{children}</EpitaxyTileLayout>
       </div>
     </div>
   );

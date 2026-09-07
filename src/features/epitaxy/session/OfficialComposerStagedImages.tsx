@@ -36,8 +36,13 @@ import {
   readResolvedColorMode,
   THEME_MODE_CHANGE_EVENT,
 } from "../../settings/appearanceSettings";
+import { OfficialTooltip } from "../../shared/OfficialTooltip";
 import { OfficialComposerImagePreview } from "./OfficialComposerImagePreview";
 import { OfficialSpinner } from "./OfficialWorkingStatus";
+import {
+  officialFileExtensionLabel,
+  type StagedComposerFileAttachment,
+} from "./officialComposerFileAttachments";
 
 /** Portaled hover float needs CDS token re-root (ring/bg-z0). */
 function CdsHoverPortalRoot({ children }: { children: ReactNode }) {
@@ -271,12 +276,144 @@ function OfficialAttachmentImagePill({
   );
 }
 
-export function OfficialComposerStagedImages({
-  images,
+/**
+ * Official yv non-string thumbnail residual (c119):
+ *   thumbnail = Folder1 | wv(fileName)
+ *   body: epitaxy-pill-body grid place-items-stretch w/h --h7 rounded-r3
+ *   inner: w-full h-full grid place-items-center
+ *   Md tooltip wraps body; filename is tooltip, not inline Sv strip.
+ */
+function OfficialAttachmentFilePill({
+  file,
   onRemove,
 }: {
+  file: StagedComposerFileAttachment;
+  onRemove: (id: string) => void;
+}) {
+  const triggerRef = useRef<HTMLDivElement | null>(null);
+  const extension = officialFileExtensionLabel(file.fileName);
+  const label = file.relativePath || file.fileName;
+
+  const remove = useCallback(() => {
+    const current = triggerRef.current;
+    const neighbor = current?.nextElementSibling ?? current?.previousElementSibling;
+    neighbor?.querySelector<HTMLElement>(".epitaxy-pill-body")?.focus();
+    onRemove(file.id);
+  }, [file.id, onRemove]);
+
+  const onPillKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      const pill = event.currentTarget.closest(".epitaxy-attachment-pill");
+      const focusBody = (el: Element | null | undefined) => {
+        el?.querySelector<HTMLElement>(".epitaxy-pill-body")?.focus();
+      };
+      switch (event.key) {
+        case "Delete":
+        case "Backspace":
+          event.preventDefault();
+          remove();
+          return;
+        case "ArrowLeft":
+          event.preventDefault();
+          event.stopPropagation();
+          focusBody(pill?.previousElementSibling);
+          return;
+        case "ArrowRight":
+          event.preventDefault();
+          event.stopPropagation();
+          focusBody(pill?.nextElementSibling);
+          return;
+        case "Home":
+          event.preventDefault();
+          event.stopPropagation();
+          focusBody(pill?.parentElement?.firstElementChild);
+          return;
+        case "End":
+          event.preventDefault();
+          event.stopPropagation();
+          focusBody(pill?.parentElement?.lastElementChild);
+          return;
+        default:
+          return;
+      }
+    },
+    [remove],
+  );
+
+  const thumbnail = file.isDirectory ? (
+    <Icon name="Folder1" size="m" />
+  ) : (
+    <span className="text-t9 text-caption-medium lowercase">{extension}</span>
+  );
+
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger
+        render={(props) => (
+          <div
+            {...props}
+            ref={(node) => {
+              triggerRef.current = node;
+              const incoming = (
+                props as {
+                  ref?:
+                    | ((el: HTMLDivElement | null) => void)
+                    | { current: HTMLDivElement | null }
+                    | null;
+                }
+              ).ref;
+              if (typeof incoming === "function") incoming(node);
+              else if (incoming && typeof incoming === "object") incoming.current = node;
+            }}
+            className="epitaxy-attachment-pill group/pill relative shrink-0 hover:z-10 focus-within:z-10"
+            style={{ "--pill-vt-name": pillVtName(file.id) } as CSSProperties}
+          >
+            <OfficialTooltip tooltipContent={label}>
+              <button
+                type="button"
+                aria-label={label}
+                onKeyDown={onPillKeyDown}
+                className="epitaxy-pill-body grid place-items-stretch w-[var(--h7)] h-[var(--h7)] rounded-r3 overflow-hidden outline-none border-0 p-0 ring-focus hide-focus-ring bg-fill-contained-default"
+              >
+                <div className="w-full h-full grid place-items-center">{thumbnail}</div>
+              </button>
+            </OfficialTooltip>
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label={`Remove ${label}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                remove();
+              }}
+              onMouseDown={(event) => event.preventDefault()}
+              className="epitaxy-pill-remove absolute -top-1.5 -right-1.5 z-10 grid place-items-center w-4 h-4 rounded-full bg-z0 text-t7 ring-1 ring-[var(--t2)] opacity-0 pointer-events-none transition-opacity group-hover/pill:opacity-100 group-hover/pill:pointer-events-auto group-focus-within/pill:opacity-100 group-focus-within/pill:pointer-events-auto hover:text-t9"
+            >
+              <Icon name="XCrossCloseMedium" size="s" />
+            </button>
+          </div>
+        )}
+      />
+      <BaseContextMenuPopup>
+        <BaseContextMenuItem className="text-destructive-default" onClick={remove}>
+          Delete
+        </BaseContextMenuItem>
+      </BaseContextMenuPopup>
+    </ContextMenu.Root>
+  );
+}
+
+export function OfficialComposerStagedImages({
+  fileAttachments = [],
+  images,
+  onRemove,
+  onRemoveFile,
+}: {
+  fileAttachments?: StagedComposerFileAttachment[];
   images: StagedComposerImage[];
   onRemove: (id: string) => void;
+  onRemoveFile?: (id: string) => void;
 }) {
   /** Official Cv: M preview id, S lightbox open, R {src,alt}. */
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -330,7 +467,7 @@ export function OfficialComposerStagedImages({
     setLightboxOpen(true);
   }, [clearPreview]);
 
-  if (images.length === 0) return null;
+  if (images.length === 0 && fileAttachments.length === 0) return null;
 
   return (
     <>
@@ -353,6 +490,13 @@ export function OfficialComposerStagedImages({
               previewOpen={previewId === image.id}
               onPreviewIntent={onPreviewIntent}
               onOpenLightbox={() => openLightbox(image)}
+            />
+          ))}
+          {fileAttachments.map((file) => (
+            <OfficialAttachmentFilePill
+              key={file.id}
+              file={file}
+              onRemove={onRemoveFile ?? onRemove}
             />
           ))}
         </div>

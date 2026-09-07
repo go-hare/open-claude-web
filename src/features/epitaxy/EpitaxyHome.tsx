@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { desktopBridge, type EffortLevel, type PermissionMode, type WorkspaceContext } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
@@ -6,11 +6,14 @@ import { useI18nText, type MessageDescriptors } from "../../i18n/footerMenuMessa
 import { fetchBootstrapPayload } from "../settings/accountSettingsApi";
 import { BOOTSTRAP_QUERY_KEY } from "../settings/bootstrapQuery";
 import { sessionPath } from "../../shell/sessionPaths";
+import { paneStore } from "../../stores/paneStore";
 import { EpitaxyRouteFrame } from "./EpitaxyFrameSurface";
+import { OfficialChatTileShell } from "./OfficialEpitaxyComponents";
 import { CodeStatsCard } from "./CodeStatsCard";
 import { EpitaxyActionCenter } from "./EpitaxyActionCenter";
 import { useEpitaxyActionCenterState } from "./epitaxyActionCenterState";
 import { OfficialCodeComposer, type OfficialCodeComposerSubmitOptions } from "./composer/OfficialCodeComposer";
+import { OfficialEpitaxyDropZone, type OfficialEpitaxyDropHandlers } from "./session/OfficialEpitaxyDropZone";
 import {
   getCodeDraftComposerState,
   getLandingWorktreeEnabled,
@@ -206,6 +209,11 @@ function CodeNewSessionPage({
   const [useWorktree, setUseWorktree] = useState(() => getLandingWorktreeEnabled());
   /** Official c119: epitaxy:reset-draft remount key when no session id (void 0===o). */
   const [draftEpoch, setDraftEpoch] = useState(0);
+  /**
+   * Official Ek on the session column; tC/Qj chrome publishes handlers.
+   * Drop overlay is `absolute inset-0` of this h-full box — not the shrink-0 composer.
+   */
+  const dropHandlersRef = useRef<OfficialEpitaxyDropHandlers | null>(null);
 
   /**
    * Seed composer from parent overlay. If cwd already matches (Ikt browse
@@ -322,15 +330,16 @@ function CodeNewSessionPage({
   const submit = useCallback(async (options?: OfficialCodeComposerSubmitOptions) => {
     const normalized = prompt.trim();
     const images = options?.images?.filter((image) => typeof image?.base64 === "string" && image.base64.length > 0);
-    // Official Te (he||m): allow image-only first turn; host still needs a prompt string.
-    if ((!normalized && !(images && images.length > 0)) || busy) return;
+    const fileMentionPrefix = options?.fileMentionPrefix ?? "";
+    // Official Te (he||m) + f(): text, images, or local file mention prefix (@relativePath ).
+    if ((!normalized && !(images && images.length > 0) && !fileMentionPrefix.trim()) || busy) return;
     setBusy(true);
     try {
       const shouldUseGitControls = Boolean(composerWorkspace.cwd && sourceBranch);
       const isSsh = composerWorkspace.mode === "ssh" && Boolean(composerWorkspace.sshConfig);
       // Wire residual: Ultracode → "ultracode"; else ladder id (same as setEffort).
       const wireEffort = ultracode ? "ultracode" : effort;
-      const startPrompt = normalized || " ";
+      const startPrompt = `${fileMentionPrefix}${normalized || " "}`;
       const session = await desktopBridge.LocalSessions.start({
         kind: "code",
         effort: wireEffort,
@@ -368,10 +377,18 @@ function CodeNewSessionPage({
   // Official Pw shared by Tw greeting + _w ActionCenter / $x stats branch.
   const actionCenter = useEpitaxyActionCenterState();
 
+  // Official bE (c11959232) always mounts iE for draft (sessionRef may be null):
+  // isolate rounded-r6 + Nn sidebar, then Ek as the chat-column child. Do not
+  // hand-roll a second isolate around Ek.
   return (
     <EpitaxyRouteFrame>
-      <div className="h-full w-full min-w-0 relative isolate rounded-r6">
-        <div className="h-full min-w-0 flex flex-col">
+      <OfficialChatTileShell onActivate={() => paneStore.setFocusedIndex("code", 0)}>
+        <OfficialEpitaxyDropZone
+          className="h-full min-w-0 flex flex-col"
+          onFilesDropped={(files) => dropHandlersRef.current?.onFilesDropped(files)}
+          onFolderDropped={(folders) => dropHandlersRef.current?.onFolderDropped(folders)}
+          onNonImageFilesDropped={(files) => dropHandlersRef.current?.onNonImageFilesDropped(files)}
+        >
           <div className="relative">
             <CodeGreeting greetEmpty={actionCenter.greetEmpty} workspace={workspace} />
           </div>
@@ -396,6 +413,7 @@ function CodeNewSessionPage({
               <OfficialCodeComposer
                 key={draftEpoch}
                 busy={busy}
+                dropHandlersRef={dropHandlersRef}
                 effort={effort}
                 effortLevels={effortLevels}
                 model={model}
@@ -431,8 +449,8 @@ function CodeNewSessionPage({
               />
             </div>
           </div>
-        </div>
-      </div>
+        </OfficialEpitaxyDropZone>
+      </OfficialChatTileShell>
     </EpitaxyRouteFrame>
   );
 }

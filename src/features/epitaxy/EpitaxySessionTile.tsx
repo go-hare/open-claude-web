@@ -81,6 +81,7 @@ import {
   ExistingSessionComposer,
   type OfficialComposerSurfaceApi,
 } from "./session/OfficialExistingSessionComposer";
+import { OfficialEpitaxyDropZone, type OfficialEpitaxyDropHandlers } from "./session/OfficialEpitaxyDropZone";
 import { OfficialCodeSessionErrorBanner } from "./session/OfficialCodeSessionErrorBanner";
 import { EpitaxyChatPanelErrorBoundary } from "./session/EpitaxyChatPanelErrorBoundary";
 import { useErrorsOptional } from "../settings/errorsToast";
@@ -159,7 +160,7 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
   //   .dframe-root[data-collapsed] .dframe-pane-primary .epitaxy-root [data-top-left]{margin-left:112px}
   // Official wt: Ho(EpitaxyChatPanel) → fallback uc({ message, onBack, error }).
   const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft = true, dragHandle?: ReactNode) => (
-    <OfficialChatTileShell>
+    <OfficialChatTileShell onActivate={() => paneStore.setFocusedIndex("code", 0)}>
       <EpitaxyChatPanelErrorBoundary onBack={onChatPanelBack} sessionId={activeSessionId}>
         <EpitaxyChatPanel
           draftPersistKey={activeSessionId ? `epitaxy-${activeSessionId}` : draftPersistKey}
@@ -225,7 +226,7 @@ function EpitaxySecondPane({ onClose, onNavigate, paneIndex, sessionId, slot }: 
   // Official ZR residual: secondary delete also calls a (close pane by stable ref).
   // Never fall back to onNavigate(home) — that would steal the primary route.
   const renderChatTile = useCallback((_onViewDragOut?: unknown, isTopLeft?: boolean, dragHandle?: ReactNode) => (
-    <OfficialChatTileShell>
+    <OfficialChatTileShell onActivate={() => paneStore.setFocusedIndex("code", paneIndex)}>
       <EpitaxyChatPanelErrorBoundary onBack={onChatPanelBack} sessionId={sessionId}>
         <EpitaxyChatPanel
           draftPersistKey={`epitaxy-pane-${sessionId}`}
@@ -412,6 +413,8 @@ function EpitaxyChatPanel({
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const composerAttachRef = useRef<((text: string) => void) | null>(null);
   const composerApiRef = useRef<OfficialComposerSurfaceApi | null>(null);
+  /** Official Ek on the session column; Qj publishes handlers. */
+  const dropHandlersRef = useRef<OfficialEpitaxyDropHandlers | null>(null);
   const [rewindPickerOpen, setRewindPickerOpen] = useState(false);
   const rewindDismissedAtRef = useRef(0);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -907,6 +910,7 @@ function EpitaxyChatPanel({
             attachRef={composerAttachRef}
             bridge={bridge}
             composerApiRef={composerApiRef}
+            dropHandlersRef={dropHandlersRef}
             // Residual Qj disabled via residualQjDisabled (Os/J/Ns/Ga/xn). See qjDisabled above.
             // Error stays banner-only (W); not folded into disabled.
             disabled={qjDisabled}
@@ -997,40 +1001,44 @@ function EpitaxyChatPanel({
   // Official iE row stack: gap from nE.gap (12). Side tile FI uses DI + Nn sidebar elevation.
   // Chat tile also sits in the same padded container (EpitaxyTileLayout padding:8) so elevated rings show.
   // Pierre pool (`sg`) is provided by EpitaxyFramePage / outer shell (official kI), not here.
+  // Official vI (c11959232) return is jsxs(Ek) filling iE isolate. KI stack wrap
+  // (relative h-full min-w-0 flex + nE.gap=12) only when a side column exists.
+  const chatColumn = (
+    <OfficialEpitaxyDropZone
+      className="h-full min-w-0 flex flex-col"
+      onFilesDropped={(files) => dropHandlersRef.current?.onFilesDropped(files)}
+      onFolderDropped={(folders) => dropHandlersRef.current?.onFolderDropped(folders)}
+      onNonImageFilesDropped={(files) => dropHandlersRef.current?.onNonImageFilesDropped(files)}
+      // Official Ek has no style. YI flex lives on the KI wrap only when a side column exists.
+      style={hasSidePanes ? chatTileStyle : undefined}
+    >
+      <EpitaxyChatHeader
+        activeView={activeView}
+        canOpenBrowser={canOpenBrowser}
+        canOpenFramebuffer={canOpenFramebuffer}
+        canOpenRuns={sessionHasOfficialRuns(session, effectiveSessionRef)}
+        dragHandle={dragHandle}
+        hasRunningTasks={hasRunningTasks}
+        isTitleLoading={isLoading && !session}
+        isTopLeft={isTopLeft}
+        onSessionRemoved={onSessionRemoved}
+        onTranscriptModeChange={applyTranscriptMode}
+        onViewSelect={selectView}
+        openViews={sideTiles}
+        paneIndex={paneIndex}
+        session={session}
+        sessionRef={effectiveSessionRef}
+        title={title}
+        transcriptMode={transcriptMode}
+      />
+      {chatBody}
+    </OfficialEpitaxyDropZone>
+  );
   return (
     <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
-      {/* Official stack gap nE.gap=12 between chat tile and side column(s). */}
-      <div className="relative h-full min-w-0 flex" style={{ gap: hasSidePanes ? 12 : 0 }}>
-        {/* Chat shell matches iE: h-full w-full min-w-0 relative isolate rounded-r6 + Nn sidebar elevation.
-            Official c119 iE: Nn(elevation:"sidebar") is opacity-0 until .tiles-dragging — ring is NOT always on.
-            data-official-source: ion-dist c11959232 iE + Nn / k_e */}
-        <div className="relative min-w-0 h-full flex flex-col rounded-r6 isolate" style={chatTileStyle}>
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated opacity-0 transition-opacity duration-200 [.tiles-dragging_&]:opacity-100"
-            data-surface="sidebar"
-          />
-          <EpitaxyChatHeader
-            activeView={activeView}
-            canOpenBrowser={canOpenBrowser}
-            canOpenFramebuffer={canOpenFramebuffer}
-            canOpenRuns={sessionHasOfficialRuns(session, effectiveSessionRef)}
-            dragHandle={dragHandle}
-            hasRunningTasks={hasRunningTasks}
-            isTitleLoading={isLoading && !session}
-            isTopLeft={isTopLeft}
-            onSessionRemoved={onSessionRemoved}
-            onTranscriptModeChange={applyTranscriptMode}
-            onViewSelect={selectView}
-            openViews={sideTiles}
-            paneIndex={paneIndex}
-            session={session}
-            sessionRef={effectiveSessionRef}
-            title={title}
-            transcriptMode={transcriptMode}
-          />
-          {chatBody}
-        </div>
+      {hasSidePanes ? (
+      <div className="relative h-full min-w-0 flex" style={{ gap: 12 }}>
+        {chatColumn}
         {sideColumns.map((column, columnIndex) => {
           // Residual column tiles → OfficialViewPane ids (product supports these kinds only).
           const renderTiles = column.tiles.filter((id): id is OfficialViewPane =>
@@ -1064,6 +1072,7 @@ function EpitaxyChatPanel({
           );
         })}
       </div>
+      ) : chatColumn}
       {/* Official DM rewind picker — Esc Esc / openRewindPicker residual. */}
       <OfficialRewindPicker
         isOpen={rewindPickerOpen}

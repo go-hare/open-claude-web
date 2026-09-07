@@ -61,35 +61,3 @@ textarea {
   line-height: 18px;
   font-weight: 500;
 }
-
-/*
- * 官方 dframe CSS 在 Epitaxy/Cowork 体验里把内容区额外 gutter 归零：
- * `.epitaxy-root .dframe-content-inner { --df-content-gutter: 0px }`。
- *
- * 我们的 React 转正层是 DesktopFrame -> dframe-content-inner -> epitaxy-root，
- * DOM 方向和官方 compiled route wrapper 相反，导致官方选择器命不中，
- * 左侧栏和会话标题之间多出 8px 空隙。这里用 :has 补同一语义。
- */
-.dframe-content-inner:has(.epitaxy-root) {
-  --df-content-gutter: 0px;
-}
-
-/*
- * Official ion-dist (c6a992d55-CgNGFRYw.css):
- *   .draggable { app-region: drag }
- *   .draggable a,button,input,label,select,textarea,.draggable-none { app-region: no-drag }
- *
- * Electron drag hit-tests the topmost painted node. Official rules do not set
- * no-drag on SVG/path descendants, so under a .draggable chrome row those nodes
- * keep the initial app-region and the parent drag region steals the top of icon
- * hits (only the lower part of the 28px control feels clickable).
- *
- * Extend the official control list to their descendants only — do NOT cascade
- * `.draggable-none *` (that would no-drag every .draggable region under
- * `.dframe-root.draggable-none` and break intended window-drag strips).
- */
-.draggable :is(a, button, input, label, select, textarea),
-.draggable :is(a, button, input, label, select, textarea) * {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-}

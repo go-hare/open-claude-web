@@ -7,7 +7,6 @@ import { bootstrapAppearanceFromStorage } from "./features/settings/appearanceSe
 import { ErrorsProvider, ErrorsToastHost } from "./features/settings/errorsToast";
 import { getInitialLocale, loadI18nResource } from "./i18n/footerMenuMessages";
 import "./styles/global.css";
-import "./styles/sidebarInteractions.css";
 
 bootstrapAppearanceFromStorage();
 

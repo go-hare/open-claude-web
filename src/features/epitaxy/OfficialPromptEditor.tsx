@@ -5,7 +5,6 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import type { LocalSessionsBridge } from "../../adapters/desktopBridge/types";
 import {
-  filterCoworkImageFiles,
   imageFilesFromClipboardData,
 } from "../cowork/composer/coworkComposerStagedImages";
 import { OfficialRNtPlaceholder } from "../shared/officialRNtPlaceholder";
@@ -16,6 +15,10 @@ import {
   OfficialComposerStagedImages,
   type StagedComposerImage,
 } from "./session/OfficialComposerStagedImages";
+import {
+  splitOfficialComposerDropFiles,
+  type StagedComposerFileAttachment,
+} from "./session/officialComposerFileAttachments";
 import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCommandMenu";
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
 import { OfficialSlashCommandSuggestion } from "./slash/OfficialSlashCommandSuggestion";
@@ -68,9 +71,13 @@ type OfficialPromptEditorProps = {
    * TipTap paste/drop only stages when this callback is provided.
    */
   onAddImageFiles?: (files: File[]) => void;
+  /** Official cn.addFileAttachments (local Ps). */
+  onAddFileAttachments?: (files: File[]) => void;
   /** Official cn.images strip above the prompt (draft + existing share residual). */
   stagedImages?: StagedComposerImage[];
+  stagedFileAttachments?: StagedComposerFileAttachment[];
   onRemoveStagedImage?: (id: string) => void;
+  onRemoveStagedFile?: (id: string) => void;
   /**
    * Official Te `(he||m)` — ready staged images count as attachments so Send
    * stays enabled for image-only submits.
@@ -102,8 +109,11 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   slashCwd,
   value,
   onAddImageFiles,
+  onAddFileAttachments,
   stagedImages = [],
+  stagedFileAttachments = [],
   onRemoveStagedImage,
+  onRemoveStagedFile,
   hasAttachments = false,
 }, ref) {
   const editorRef = useRef<Editor | null>(null);
@@ -117,6 +127,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   const onChangeRef = useRef(onChange);
   /** Official Qj handleImagePaste → un(addImages); stable for TipTap editorProps. */
   const onAddImageFilesRef = useRef(onAddImageFiles);
+  const onAddFileAttachmentsRef = useRef(onAddFileAttachments);
   const bashModeRef = useRef(false);
   const slashMenuStateRef = useRef({ bridge, session, sessionRef, slashCwd });
   /** Official vTt `g` / `x.current` — live placeholder string for RNt. */
@@ -146,6 +157,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   submitBlockedRef.current = disabled || submitDisabled;
   onChangeRef.current = onChange;
   onAddImageFilesRef.current = onAddImageFiles;
+  onAddFileAttachmentsRef.current = onAddFileAttachments;
   bashModeRef.current = isBashMode;
   slashMenuStateRef.current = { bridge, session, sessionRef, slashCwd };
   // Official: bash → "Enter a shell command"; else prop placeholder.
@@ -239,26 +251,23 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
       },
-      // Official Qj handleImagePaste: clipboard images ∩ Fy allowlist → un(addImages).
-      // Filter before preventDefault so SVG/BMP/HEIC fall through (not swallowed).
+      // Official Qj handleImagePaste: clipboard files ∩ Fy → un; others → addFileAttachments.
       handlePaste: (_view, event) => {
-        if (!onAddImageFilesRef.current) return false;
-        const imageFiles = filterCoworkImageFiles(
-          imageFilesFromClipboardData(event.clipboardData),
+        const clipboardFiles = imageFilesFromClipboardData(event.clipboardData);
+        const listed = Array.from(event.clipboardData?.files ?? []);
+        const { images, other } = splitOfficialComposerDropFiles(
+          clipboardFiles.length > 0 ? clipboardFiles : listed,
         );
-        if (imageFiles.length === 0) return false;
+        if (images.length === 0 && other.length === 0) return false;
+        const handledImages = images.length > 0 && Boolean(onAddImageFilesRef.current);
+        const handledFiles = other.length > 0 && Boolean(onAddFileAttachmentsRef.current);
+        if (!handledImages && !handledFiles) return false;
         event.preventDefault();
-        onAddImageFilesRef.current(imageFiles);
+        if (handledImages) onAddImageFilesRef.current?.(images);
+        if (handledFiles) onAddFileAttachmentsRef.current?.(other);
         return true;
       },
-      handleDrop: (_view, event) => {
-        if (!onAddImageFilesRef.current) return false;
-        const imageFiles = filterCoworkImageFiles(Array.from(event.dataTransfer?.files ?? []));
-        if (imageFiles.length === 0) return false;
-        event.preventDefault();
-        onAddImageFilesRef.current(imageFiles);
-        return true;
-      },
+      // Official Qj / vTt: no handleDrop — Files bubble to Ek DropZone (c119 Ek).
       handleKeyDown: (_view, event) => handleQjEscape(event),
     },
     extensions: [
@@ -266,6 +275,9 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         blockquote: false,
         bulletList: false,
         code: false,
+        // Official Qj vTt: disableDropCursor:!0 → MEt dropcursor:false (index-BELzQL5P).
+        // Default TipTap dropCursor paints a full-width black line on file dragover.
+        dropcursor: false,
         heading: false,
         horizontalRule: false,
         listItem: false,
@@ -284,6 +296,9 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
     ],
     onCreate: ({ editor }) => {
       editorRef.current = editor;
+    },
+    onDestroy: () => {
+      editorRef.current = null;
     },
     onUpdate: ({ editor }) => {
       // Official vTt: k.current = true; setTipTapEditorState(json); Qj: he from trim.
@@ -321,15 +336,29 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         /* destroyed */
       }
     },
-    getEditor: () => editor ?? editorRef.current,
+    getEditor: () => {
+      const ed = editor ?? editorRef.current;
+      if (!ed || ed.isDestroyed || !ed.view) return null;
+      return ed;
+    },
     insertSlashCommand: () => {
-      editor?.chain().focus("start").insertContent("/").run();
+      const ed = editor ?? editorRef.current;
+      if (!ed || ed.isDestroyed || !ed.view) return;
+      try {
+        ed.chain().focus("start").insertContent("/").run();
+      } catch {
+        /* destroyed */
+      }
     },
     insertText: (text: string) => {
       const ed = editor ?? editorRef.current;
-      if (!ed || !text) return;
-      if (ed.view?.composing) return;
-      ed.chain().insertContent(text).focus("end").run();
+      if (!ed || !text || ed.isDestroyed || !ed.view) return;
+      if (ed.view.composing) return;
+      try {
+        ed.chain().insertContent(text).focus("end").run();
+      } catch {
+        /* destroyed */
+      }
     },
     setText: (text: string) => {
       const ed = editor ?? editorRef.current;
@@ -434,8 +463,13 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       <div aria-hidden="true" className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}>
         <div className="min-h-0 overflow-hidden" />
       </div>
-      {onRemoveStagedImage ? (
-        <OfficialComposerStagedImages images={stagedImages} onRemove={onRemoveStagedImage} />
+      {onRemoveStagedImage || onRemoveStagedFile ? (
+        <OfficialComposerStagedImages
+          fileAttachments={stagedFileAttachments}
+          images={stagedImages}
+          onRemove={onRemoveStagedImage ?? (() => {})}
+          onRemoveFile={onRemoveStagedFile}
+        />
       ) : null}
       <div className="relative flex w-full">
         {isBashMode ? <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}

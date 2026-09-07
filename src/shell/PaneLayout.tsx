@@ -46,12 +46,12 @@ export function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLay
   usePaneSplitBounds(hostRef);
 
   const isSessionRoute = currentRoute.id === "code-session" || currentRoute.id === "cowork-session";
-  // Official cbc59a8af PaneLayout: session panes set --df-header-h:0 so yUt's
-  // md:-mt-[var(--df-header-h)] does not pull main/drawer/rightSidebar into chrome.
-  // FrameHeader is null on these routes; in-session headers (gUt / xQt) own top inset.
-  const contentClassName = isSessionRoute
-    ? "flex-1 min-h-0 relative flex flex-col overflow-hidden"
-    : "flex-1 min-h-0 relative flex flex-col overflow-x-clip overflow-y-auto";
+  // Official cbc59a8af PaneLayout content is ALWAYS
+  // `flex-1 min-h-0 relative flex flex-col overflow-x-clip overflow-y-auto`.
+  // Session routes only add `--df-header-h:0px` (yUt md:-mt). Inventing a
+  // session overflow:hidden class makes classic scrollbar gutter + overlay
+  // scale jump the column right.
+  const contentClassName = "flex-1 min-h-0 relative flex flex-col overflow-x-clip overflow-y-auto";
   const contentStyle = useMemo(
     () => (isSessionRoute ? ({ "--df-header-h": "0px" } as CSSProperties) : undefined),
     [isSessionRoute],

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type MutableRefObject } from "react";
 import {
   desktopBridge,
   type EffortLevel,
@@ -29,6 +29,15 @@ import {
   dataUrlToImagePayload,
   type StagedComposerImage,
 } from "../session/OfficialComposerStagedImages";
+import type { OfficialEpitaxyDropHandlers } from "../session/OfficialEpitaxyDropZone";
+import {
+  capOfficialComposerFileAttachments,
+  officialComposerFileAttachmentsFromFiles,
+  officialComposerFileMentionPrefix,
+  officialNativeFilePath,
+  splitOfficialComposerDropFiles,
+  type StagedComposerFileAttachment,
+} from "../session/officialComposerFileAttachments";
 import { useOfficialTypeToComposer } from "../../shared/useOfficialTypeToComposer";
 import { coworkRateLimitStore } from "../../cowork/session/rateLimit/coworkRateLimitStore";
 import {
@@ -41,6 +50,8 @@ import {
 export type OfficialCodeComposerSubmitOptions = {
   /** Official start residual first-turn images (cn.images → LocalSessions.start). */
   images?: CoworkImagePayload[];
+  /** Official f() `@relativePath` prefix for local file drops. */
+  fileMentionPrefix?: string;
 };
 
 type OfficialCodeComposerProps = {
@@ -49,6 +60,11 @@ type OfficialCodeComposerProps = {
    * Maps residual Ns create mutate counter — NOT residual H busy/Stop chrome.
    */
   busy: boolean;
+  /**
+   * Official Ek lives on the session column (c119 Qj: `jsxs(Ek,{className:"h-full min-w-0 flex flex-col"`).
+   * Composer chrome (tC / xI / Qj / xk) publishes drop handlers; home mounts Ek.
+   */
+  dropHandlersRef?: MutableRefObject<OfficialEpitaxyDropHandlers | null>;
   /** Ladder stop only — Ultracode is a separate session flag (official jR / 5f75ff4). */
   effort: EffortLevel;
   /** Official get_settings.applied (CLI 2.7.16+) for the new-session draft ladder. */
@@ -78,6 +94,7 @@ type OfficialCodeComposerProps = {
 
 export function OfficialCodeComposer({
   busy,
+  dropHandlersRef,
   effort,
   effortLevels = null,
   model,
@@ -137,8 +154,11 @@ export function OfficialCodeComposer({
    * TipTap paste/drop + Plus Add image → strip → LocalSessions.start({ images }).
    */
   const [stagedImages, setStagedImages] = useState<StagedComposerImage[]>([]);
+  const [stagedFiles, setStagedFiles] = useState<StagedComposerFileAttachment[]>([]);
   const stagedImagesRef = useRef(stagedImages);
+  const stagedFilesRef = useRef(stagedFiles);
   stagedImagesRef.current = stagedImages;
+  stagedFilesRef.current = stagedFiles;
   const readyImageCount = stagedImages.filter((image) => image.status === "ready" && image.base64).length;
   const isProcessingImages = stagedImages.some((image) => image.status === "loading");
   // Residual Qj submitDisabled: cn.isProcessingImages || mn.isUploading || bi
@@ -161,7 +181,7 @@ export function OfficialCodeComposer({
   const promptEditorRef = useRef<OfficialPromptEditorHandle | null>(null);
   const [replayKey, setReplayKey] = useState(0);
   // Official Te (he||m): text or ready staged images.
-  const hasPrompt = prompt.trim().length > 0 || readyImageCount > 0;
+  const hasPrompt = prompt.trim().length > 0 || readyImageCount > 0 || stagedFiles.length > 0;
   const allowedModelValues = useMemo(
     () => codeModelOptions.items.map((item) => item.value),
     [codeModelOptions.items],
@@ -243,6 +263,24 @@ export function OfficialCodeComposer({
     });
   }, []);
 
+  const removeStagedFile = useCallback((id: string) => {
+    setStagedFiles((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  const addFileAttachments = useCallback((files: File[], isDirectory = false) => {
+    const { other } = isDirectory
+      ? { other: files }
+      : splitOfficialComposerDropFiles(files);
+    const incoming = officialComposerFileAttachmentsFromFiles(
+      isDirectory ? files : other,
+      workspace.cwd,
+      isDirectory,
+    );
+    if (incoming.length === 0) return;
+    setStagedFiles((prev) => capOfficialComposerFileAttachments(prev, incoming));
+    promptEditorRef.current?.focus();
+  }, [workspace.cwd]);
+
   /**
    * Official un(File[]) residual — stage image Files (max 5; PNG/JPEG/GIF/WebP).
    * Shared with existing-session TipTap paste/drop + footer picker.
@@ -298,10 +336,14 @@ export function OfficialCodeComposer({
       });
       return [...prev, ...loading];
     });
-    queueMicrotask(() => {
-      promptEditorRef.current?.focus();
-    });
+    promptEditorRef.current?.focus();
   }, []);
+
+  const addDroppedFiles = useCallback((files: File[]) => {
+    const { images, other } = splitOfficialComposerDropFiles(files);
+    if (images.length > 0) addImageFiles(images);
+    if (other.length > 0) addFileAttachments(other);
+  }, [addFileAttachments, addImageFiles]);
 
   // Revoke blob URLs if draft composer unmounts (route leave / draftEpoch remount).
   useEffect(() => () => {
@@ -325,9 +367,13 @@ export function OfficialCodeComposer({
             filename: image.name,
           }))
         : undefined;
+    const fileMentionPrefix = officialComposerFileMentionPrefix(stagedFilesRef.current);
     // On success EpitaxyHome navigates away (unmount revokes blobs). Keep strip on start failure.
     void state.ensureTrusted(state.workspaceCwd, () => {
-      state.onSubmit(images ? { images } : undefined);
+      state.onSubmit({
+        ...(images ? { images } : {}),
+        ...(fileMentionPrefix ? { fileMentionPrefix } : {}),
+      });
     });
   }, []);
 
@@ -358,9 +404,14 @@ export function OfficialCodeComposer({
       if (submitStateRef.current.qjDisabled) return;
       // Official: T.current?.getEditor()?.chain().insertContent(e).focus().run()
       const ed = promptEditorRef.current?.getEditor?.();
+      if (ed?.isDestroyed || (ed && !ed.view)) return;
       if (ed?.view?.composing) return;
       if (ed) {
-        ed.chain().insertContent(key).focus("end").run();
+        try {
+          ed.chain().insertContent(key).focus("end").run();
+        } catch {
+          /* destroyed */
+        }
         return;
       }
       promptEditorRef.current?.insertText?.(key);
@@ -401,8 +452,40 @@ export function OfficialCodeComposer({
     focusPromptEditor();
   }, [focusPromptEditor, onWorkspaceChange]);
 
+  const onFolderDropped = useCallback((folders: File[]) => {
+    const first = folders[0];
+    if (!first) return;
+    const abs = officialNativeFilePath(first);
+    if (abs) {
+      onWorkspaceChange({
+        ...workspace,
+        cwd: abs,
+        mode: workspace.mode || "local",
+      });
+      return;
+    }
+    addFileAttachments(folders, true);
+  }, [addFileAttachments, onWorkspaceChange, workspace]);
+
+  const onNonImageFilesDropped = useCallback((files: File[]) => {
+    addFileAttachments(files);
+  }, [addFileAttachments]);
+
+  useLayoutEffect(() => {
+    if (!dropHandlersRef) return;
+    const handlers: OfficialEpitaxyDropHandlers = {
+      onFilesDropped: addDroppedFiles,
+      onFolderDropped,
+      onNonImageFilesDropped,
+    };
+    dropHandlersRef.current = handlers;
+    return () => {
+      if (dropHandlersRef.current === handlers) dropHandlersRef.current = null;
+    };
+  }, [addDroppedFiles, dropHandlersRef, onFolderDropped, onNonImageFilesDropped]);
+
   return (
-    <div className="flex flex-col gap-g5">
+    <>
       <OfficialWorkspaceControls
         disabled={qjDisabled}
         ensureTrusted={ensureTrusted}
@@ -434,10 +517,13 @@ export function OfficialCodeComposer({
         // Draft create in-flight maps Ns → disabled; not residual H busy/Stop.
         busy={false}
         disabled={qjDisabled}
-        hasAttachments={readyImageCount > 0}
+        hasAttachments={readyImageCount > 0 || stagedFiles.length > 0}
+        onAddFileAttachments={addFileAttachments}
         onAddImageFiles={addImageFiles}
         onChange={setPrompt}
+        onRemoveStagedFile={removeStagedFile}
         onRemoveStagedImage={removeStagedImage}
+        stagedFileAttachments={stagedFiles}
         onSubmit={submitWithTrust}
         placeholder="描述一个任务，或提一个问题"
         slashCwd={workspace.cwd || undefined}
@@ -463,13 +549,14 @@ export function OfficialCodeComposer({
         modelItems={modelItems}
         modelLabel={codeModelOptions.labelFor(selectedModel)}
         modelPickerDisabled={qjDisabled}
-        onAddFiles={addImageFiles}
+        onAddFiles={addDroppedFiles}
         permissionDanger={permissionMode === "bypassPermissions"}
         permissionItems={permissionItems}
         permissionLabel={permissionModeLabel(permissionMode)}
         plusMenuItems={plusMenuItems}
         session={null}
         sessionRef={null}
+        supportsFileAttachments
       />
       {modal}
       <EpitaxyPermissionModeModal
@@ -478,6 +565,6 @@ export function OfficialCodeComposer({
         onConfirm={permissionModeConfirm.confirm}
         workspace={permissionModeConfirm.workspace}
       />
-    </div>
+    </>
   );
 }

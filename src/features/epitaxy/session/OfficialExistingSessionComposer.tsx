@@ -2,7 +2,7 @@
  * Official existing-session composer (TipTap + footer + usage) — c11959232 / c360a9e1c Effort.
  * Effort chip is OfficialComposerFooter → OfficialEffortControl (not Models extraSections list).
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
@@ -45,6 +45,15 @@ import {
   dataUrlToImagePayload,
   type StagedComposerImage,
 } from "./OfficialComposerStagedImages";
+import type { OfficialEpitaxyDropHandlers } from "./OfficialEpitaxyDropZone";
+import {
+  capOfficialComposerFileAttachments,
+  officialComposerFileAttachmentsFromFiles,
+  officialComposerFileMentionPrefix,
+  officialNativeFilePath,
+  splitOfficialComposerDropFiles,
+  type StagedComposerFileAttachment,
+} from "./officialComposerFileAttachments";
 import {
   previewAnnotationQueue,
   usePreviewAnnotationPendingCount,
@@ -96,6 +105,7 @@ export function ExistingSessionComposer({
   bridge,
   composerApiRef,
   disabled,
+  dropHandlersRef,
   isPanelActive = true,
   isResponding,
   onOpenDiff,
@@ -115,6 +125,11 @@ export function ExistingSessionComposer({
   /** Official Ye.current residual: setText / focus / getText for rewind + Esc Esc. */
   composerApiRef?: MutableRefObject<OfficialComposerSurfaceApi | null>;
   disabled: boolean;
+  /**
+   * Official Ek is the session column (`h-full min-w-0 flex flex-col`), not this shrink-0 composer.
+   * Qj chrome publishes drop handlers; the tile mounts Ek.
+   */
+  dropHandlersRef?: MutableRefObject<OfficialEpitaxyDropHandlers | null>;
   /** Official Qj `v` isPanelActive — gates window Escape. Distinct from disabled. */
   isPanelActive?: boolean;
   /**
@@ -225,6 +240,7 @@ export function ExistingSessionComposer({
   stagedImagesRef.current = stagedImages;
   /** Stable ref for TipTap paste/drop — addImageFiles is declared after useEditor. */
   const addImageFilesRef = useRef<(files: File[]) => void>(() => undefined);
+  const addFileAttachmentsRef = useRef<(files: File[]) => void>(() => undefined);
   const pendingAnnotationCount = usePreviewAnnotationPendingCount(sessionRef?.id);
   /**
    * Official jR `N`/`R(L)` lock: after user picks effort via X, local b/H win over
@@ -272,6 +288,9 @@ export function ExistingSessionComposer({
   const placeholderRef = useRef("Type / for commands");
   placeholderRef.current = isBashMode ? "Enter a shell command" : "Type / for commands";
   const canStop = isResponding && Boolean(onStop || (sessionRef && (bridge.interrupt || bridge.stop)));
+  const [stagedFiles, setStagedFiles] = useState<StagedComposerFileAttachment[]>([]);
+  const stagedFilesRef = useRef(stagedFiles);
+  stagedFilesRef.current = stagedFiles;
   const readyImageCount = stagedImages.filter((image) => image.status === "ready" && image.base64).length;
   // Residual Qj submitDisabled: cn.isProcessingImages || mn.isUploading || bi
   // Product: staged image status==="loading" ≡ isProcessingImages; remote mn N/A local-first.
@@ -286,7 +305,7 @@ export function ExistingSessionComposer({
   // Mid-turn Enter/send → Gr noteQueuedSend + enqueue (pendingQueuedSends); button click while busy = Stop.
   // isSubmitting is only ultrareview/in-flight double-click guard (not residual disabled matrix).
   const canSubmit =
-    (text.trim().length > 0 || readyImageCount > 0)
+    (text.trim().length > 0 || readyImageCount > 0 || stagedFiles.length > 0)
     && !disabled
     && !submitDisabled;
 
@@ -341,24 +360,20 @@ export function ExistingSessionComposer({
       handleDOMEvents: {
         beforeinput: (view, event) => handleEmptyDocBeforeInput(view, event),
       },
-      // Official Qj handleImagePaste: clipboard images ∩ Fy allowlist → un(addImages).
-      // Filter before preventDefault so SVG/BMP/HEIC fall through (not swallowed).
+      // Official Qj handleImagePaste: clipboard files ∩ Fy → un; others → addFileAttachments.
       handlePaste: (_view, event) => {
-        const imageFiles = filterCoworkImageFiles(
-          imageFilesFromClipboardData(event.clipboardData),
+        const clipboardFiles = imageFilesFromClipboardData(event.clipboardData);
+        const listed = Array.from(event.clipboardData?.files ?? []);
+        const { images, other } = splitOfficialComposerDropFiles(
+          clipboardFiles.length > 0 ? clipboardFiles : listed,
         );
-        if (imageFiles.length === 0) return false;
+        if (images.length === 0 && other.length === 0) return false;
         event.preventDefault();
-        addImageFilesRef.current(imageFiles);
+        if (images.length > 0) addImageFilesRef.current(images);
+        if (other.length > 0) addFileAttachmentsRef.current(other);
         return true;
       },
-      handleDrop: (_view, event) => {
-        const imageFiles = filterCoworkImageFiles(Array.from(event.dataTransfer?.files ?? []));
-        if (imageFiles.length === 0) return false;
-        event.preventDefault();
-        addImageFilesRef.current(imageFiles);
-        return true;
-      },
+      // Official Qj / vTt: no handleDrop — Files bubble to Ek DropZone (c119 Ek).
       handleKeyDown: (_view, event) => {
         // Enter submit is handled in onKeyDownCapture (official wTt residual).
         // ProseMirror skips handleKeyDown while view.composing / keyCode 229.
@@ -371,11 +386,16 @@ export function ExistingSessionComposer({
     onCreate: ({ editor }) => {
       tiptapEditorRef.current = editor;
     },
+    onDestroy: () => {
+      tiptapEditorRef.current = null;
+    },
     extensions: [
       StarterKit.configure({
         blockquote: false,
         bulletList: false,
         code: false,
+        // Official Qj vTt: disableDropCursor:!0 → MEt dropcursor:false (index-BELzQL5P).
+        dropcursor: false,
         heading: false,
         horizontalRule: false,
         listItem: false,
@@ -400,6 +420,30 @@ export function ExistingSessionComposer({
     shouldRerenderOnTransaction: false,
   }, [slashMenuComponent]);
 
+  /**
+   * Official Pe / Ye.current?.focus after ka drop — not queueMicrotask after shelf layout.
+   * TipTap focus("end") can scrollIntoView; pin caret with preventScroll first.
+   */
+  const focusComposerEnd = useCallback(() => {
+    const ed = tiptapEditorRef.current ?? editor;
+    if (!ed || ed.isDestroyed) return;
+    if (ed.view?.composing) return;
+    const dom = ed.view?.dom as HTMLElement | undefined;
+    if (dom && document.activeElement === dom) return;
+    if (dom && typeof dom.focus === "function") {
+      try {
+        dom.focus({ preventScroll: true });
+      } catch {
+        dom.focus();
+      }
+    }
+    try {
+      ed.commands.focus("end");
+    } catch {
+      /* destroyed */
+    }
+  }, [editor]);
+
   bashModeRef.current = isBashMode;
   respondingRef.current = isResponding;
   isPanelActiveRef.current = isPanelActive;
@@ -409,9 +453,13 @@ export function ExistingSessionComposer({
   useOfficialTypeToComposer(
     useCallback((key: string) => {
       const ed = tiptapEditorRef.current ?? editor;
-      if (!ed || disabled) return;
-      if (ed.view?.composing) return;
-      ed.chain().insertContent(key).focus("end").run();
+      if (!ed || disabled || ed.isDestroyed || !ed.view) return;
+      if (ed.view.composing) return;
+      try {
+        ed.chain().insertContent(key).focus("end").run();
+      } catch {
+        /* HMR / destroyed view — official Ase no-ops when editor is gone */
+      }
     }, [disabled, editor]),
     !disabled,
   );
@@ -461,17 +509,17 @@ export function ExistingSessionComposer({
       if (editor.view?.composing) return;
       const dom = editor.view?.dom as HTMLElement | undefined;
       if (dom && document.activeElement === dom) return;
-      try {
-        editor.commands.focus("end");
-      } catch {
-        /* ignore */
-      }
       if (dom) {
         try {
           dom.focus({ preventScroll: true });
         } catch {
           dom.focus();
         }
+      }
+      try {
+        editor.commands.focus("end");
+      } catch {
+        /* ignore */
       }
     };
     run();
@@ -643,6 +691,7 @@ export function ExistingSessionComposer({
       if (image.previewUrl.startsWith("blob:")) URL.revokeObjectURL(image.previewUrl);
     }
     setStagedImages([]);
+    setStagedFiles([]);
     contextNotesRef.current.clear();
   }, [editor]);
 
@@ -709,8 +758,31 @@ export function ExistingSessionComposer({
       });
       return [...prev, ...loading];
     });
-  }, []);
+    focusComposerEnd();
+  }, [focusComposerEnd]);
   addImageFilesRef.current = addImageFiles;
+
+  const addFileAttachments = useCallback((files: File[], isDirectory = false) => {
+    const incoming = officialComposerFileAttachmentsFromFiles(
+      isDirectory ? files : splitOfficialComposerDropFiles(files).other,
+      session?.cwd,
+      isDirectory,
+    );
+    if (incoming.length === 0) return;
+    setStagedFiles((prev) => capOfficialComposerFileAttachments(prev, incoming));
+    focusComposerEnd();
+  }, [focusComposerEnd, session?.cwd]);
+  addFileAttachmentsRef.current = addFileAttachments;
+
+  const addDroppedFiles = useCallback((files: File[]) => {
+    const { images, other } = splitOfficialComposerDropFiles(files);
+    if (images.length > 0) addImageFiles(images);
+    if (other.length > 0) addFileAttachments(other);
+  }, [addFileAttachments, addImageFiles]);
+
+  const removeStagedFile = useCallback((id: string) => {
+    setStagedFiles((prev) => prev.filter((item) => item.id !== id));
+  }, []);
 
   /**
    * Official yn residual: on real session switch, clear local staged strip + previous
@@ -729,7 +801,9 @@ export function ExistingSessionComposer({
         if (image.previewUrl.startsWith("blob:")) URL.revokeObjectURL(image.previewUrl);
       }
       stagedImagesRef.current = [];
+      stagedFilesRef.current = [];
       setStagedImages([]);
+      setStagedFiles([]);
       contextNotesRef.current.clear();
       previewAnnotationQueue.getState().clearSession(prev);
     }
@@ -762,12 +836,9 @@ export function ExistingSessionComposer({
     }
     if (next.length > 0) {
       setStagedImages((prev) => [...prev, ...next].slice(0, 5));
-      // Official residual after stage: focus composer so user can Send (not auto-submit).
-      queueMicrotask(() => {
-        tiptapEditorRef.current?.commands.focus("end");
-      });
+      focusComposerEnd();
     }
-  }, [pendingAnnotationCount, sessionRef?.id]);
+  }, [focusComposerEnd, pendingAnnotationCount, sessionRef?.id]);
 
   const insertSlashCommand = useCallback(() => {
     editor?.chain().focus("start").insertContent("/").run();
@@ -797,8 +868,8 @@ export function ExistingSessionComposer({
     if (!editor || editor.isDestroyed) return;
     editor.commands.setContent(tiptapDocFromPlainText(value), { emitUpdate: true });
     setText(editor.getText());
-    editor.commands.focus("end");
-  }, [editor]);
+    focusComposerEnd();
+  }, [editor, focusComposerEnd]);
 
   const getComposerText = useCallback(() => {
     if (!editor || editor.isDestroyed) return text;
@@ -806,8 +877,8 @@ export function ExistingSessionComposer({
   }, [editor, text]);
 
   const focusComposer = useCallback(() => {
-    editor?.commands.focus("end");
-  }, [editor]);
+    focusComposerEnd();
+  }, [focusComposerEnd]);
 
   const submit = useCallback(async () => {
     if (!canSubmit || isSubmitting) return;
@@ -855,9 +926,11 @@ export function ExistingSessionComposer({
             .map(([, note]) => note),
         ),
       ).join("\n\n");
+      const fileMentionPrefix = officialComposerFileMentionPrefix(stagedFilesRef.current);
       const textWithNotes = notes ? `${notes}\n\n${trimmed}` : trimmed;
+      const textWithFiles = `${fileMentionPrefix}${textWithNotes}`;
       // Official allows image-only send; still require non-empty combined payload.
-      if (!textWithNotes.trim() && ready.length === 0) return;
+      if (!textWithFiles.trim() && ready.length === 0) return;
       const images =
         ready.length > 0
           ? ready.map((image) => ({
@@ -867,7 +940,7 @@ export function ExistingSessionComposer({
             }))
           : undefined;
       // Pass live Mode pill so host spawn matches UI even if session store lags.
-      await onSubmit(textWithNotes.trim() || " ", {
+      await onSubmit(textWithFiles.trim() || " ", {
         ...(images ? { images } : {}),
         permissionMode,
       });
@@ -1063,8 +1136,45 @@ export function ExistingSessionComposer({
   const modelExtraSections = bridge.setEffort ? [{ key: "effort", header: "Effort", items: effortItems }] : undefined;
   const plusMenuItems = [{ icon: "Folder1", label: "Add folder", onSelect: () => void addFolder() }];
 
+  const onFolderDropped = useCallback((folders: File[]) => {
+    const first = folders[0];
+    const abs = first ? officialNativeFilePath(first) : null;
+    if (abs && sessionRef) {
+      void (async () => {
+        setConfigBusy(true);
+        try {
+          await bridge.addFolderToSession?.(sessionRef.id, abs);
+          await reload({ silent: true });
+        } finally {
+          setConfigBusy(false);
+        }
+      })();
+      return;
+    }
+    addFileAttachments(folders, true);
+  }, [addFileAttachments, bridge, reload, sessionRef]);
+
+  const onNonImageFilesDropped = useCallback((files: File[]) => {
+    addFileAttachments(files);
+  }, [addFileAttachments]);
+
+  useLayoutEffect(() => {
+    if (!dropHandlersRef) return;
+    const handlers: OfficialEpitaxyDropHandlers = {
+      onFilesDropped: addDroppedFiles,
+      onFolderDropped,
+      onNonImageFilesDropped,
+    };
+    dropHandlersRef.current = handlers;
+    return () => {
+      // Only clear if we still own the slot — HMR / Strict Mode must not
+      // null a replacement composer's handlers.
+      if (dropHandlersRef.current === handlers) dropHandlersRef.current = null;
+    };
+  }, [addDroppedFiles, dropHandlersRef, onFolderDropped, onNonImageFilesDropped]);
+
   return (
-    <div data-skip-approval-enter={undefined} className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]">
+    <div className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]">
       <button
         aria-hidden={!showScrollButton}
         aria-label="Scroll to bottom"
@@ -1089,7 +1199,12 @@ export function ExistingSessionComposer({
         {isBashMode ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-r7 shadow-[inset_0_0_0_1px_var(--extended-purple)]" /> : null}
         <span className="sr-only" role="status">{isBashMode ? "Bash mode. Press Escape to return to chat." : "Chat mode"}</span>
         <div aria-hidden="true" className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}><div className="min-h-0 overflow-hidden" /></div>
-        <OfficialComposerStagedImages images={stagedImages} onRemove={removeStagedImage} />
+        <OfficialComposerStagedImages
+          fileAttachments={stagedFiles}
+          images={stagedImages}
+          onRemove={removeStagedImage}
+          onRemoveFile={removeStagedFile}
+        />
         <div className="relative flex w-full">
           {isBashMode ? <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
           {/*
@@ -1157,8 +1272,9 @@ export function ExistingSessionComposer({
         plusMenuItems={plusMenuItems}
         session={session}
         sessionRef={sessionRef}
-        onAddFiles={addImageFiles}
+        onAddFiles={addDroppedFiles}
         onInsertSlashCommand={insertSlashCommand}
+        supportsFileAttachments
       />
       <EpitaxyPermissionModeModal
         mode={permissionModeConfirm.confirming}

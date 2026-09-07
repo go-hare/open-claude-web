@@ -747,10 +747,28 @@ export function OfficialSessionHeader({
   );
 }
 
-export function OfficialChatTileShell({ children }: { children: ReactNode }) {
+export function OfficialChatTileShell({
+  children,
+  onActivate,
+}: {
+  children: ReactNode;
+  /**
+   * Official iE (c11959232): `M=()=>p(l)` on onFocusCapture / onPointerDownCapture
+   * where p = setFocusedTile. Product maps to paneStore.setFocusedIndex.
+   */
+  onActivate?: () => void;
+}) {
   return (
-    <div className="h-full w-full min-w-0 relative isolate rounded-r6">
-      <div aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated opacity-0 transition-opacity duration-200 [.tiles-dragging_&]:opacity-100" />
+    <div
+      className="h-full w-full min-w-0 relative isolate rounded-r6"
+      onFocusCapture={onActivate}
+      onPointerDownCapture={onActivate}
+    >
+      <div
+        aria-hidden="true"
+        data-surface="sidebar"
+        className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated opacity-0 transition-opacity duration-200 [.tiles-dragging_&]:opacity-100"
+      />
       {children}
     </div>
   );

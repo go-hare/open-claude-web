@@ -49,9 +49,21 @@ export function DesktopFrame({ children, currentRoute, onNavigate }: DesktopFram
     "--df-sidebar-width": `${frame.sidebarWidth}px`,
   } as CSSProperties;
 
+  // Official Vrs (index-BELzQL5P): inner
+  //   `flex min-h-0 min-w-0 w-full overflow-x-clip relative overflow-y-clip`
+  // when B4() (always true). Outer also `epitaxy-root bg-bg-100` when Prs
+  // (`/code` | `/epitaxy`) so `.epitaxy-root .dframe-content-inner` zeros
+  // --df-content-gutter (cbc59a8af). Session epitaxy-root is a descendant
+  // of dframe-content-inner and cannot match that selector.
+  const codeShell = currentRoute.kind === "code" || currentRoute.kind === "epitaxy";
+
   return (
     <div
-      className="h-full"
+      className={
+        codeShell
+          ? "epitaxy-root bg-bg-100 flex h-full min-h-0 min-w-0 w-full overflow-x-clip overflow-y-clip relative"
+          : "flex h-full min-h-0 min-w-0 w-full overflow-x-clip overflow-y-clip relative"
+      }
       data-color-version="v2"
       data-theme="claude"
       data-mode={colorMode}
@@ -61,7 +73,7 @@ export function DesktopFrame({ children, currentRoute, onNavigate }: DesktopFram
         data-collapsed={frame.sidebarCollapsed || undefined}
         data-frame-mode={frame.mode}
         data-hovering={(frame.sidebarCollapsed && frame.sidebarHovering) || undefined}
-        data-peeked={frame.sidebarCollapsed || undefined}
+        data-peeked={(frame.sidebarCollapsed && frame.sidebarHovering) || undefined}
         data-resizing={frame.sidebarResizing || undefined}
         data-system-font={frame.systemFont || undefined}
         data-darker-code={frame.darkerCode || undefined}
