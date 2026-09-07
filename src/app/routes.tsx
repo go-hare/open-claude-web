@@ -454,7 +454,6 @@ export const routes: AppRoute[] = [
     title: "自定义",
     navKey: "customize",
     kind: "customize",
-    frame: "standalone",
     sourceChunk: "c63a78ed4-M1yh4U9h.js",
     Component: CustomizePage,
     match: (pathname) => startsWithPath(pathname, "/customize"),

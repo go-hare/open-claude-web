@@ -265,8 +265,9 @@ export function App() {
 
   if (route.frame === "standalone") {
     // Official $8t is globally mounted in the signed-in shell (index-BELzQL5P.js
-    // a.jsx($8t,{})). Customize/settings are product-standalone (E7t unframed)
-    // but still open HT DirectoryModal from el/o7t/qCt.
+    // a.jsx($8t,{})). Official /customize is jos under gos `_withSidebar` → Urs
+    // DesktopFrame (Brs B4). Settings stays product-standalone; still open HT
+    // DirectoryModal from el/o7t/qCt.
     return (
       <>
         <route.Component route={route} onNavigate={navigate} />

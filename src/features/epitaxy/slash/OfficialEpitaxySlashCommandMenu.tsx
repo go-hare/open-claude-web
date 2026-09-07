@@ -60,16 +60,15 @@ export const OfficialEpitaxySlashCommandMenu = memo(function OfficialEpitaxySlas
 
   const items = useMemo(() => {
     const isLocalSession = sessionRef?.type === "local";
-    const base = isLocalSession ? commands.filter((command) => command.name !== "clear" && command.name !== "schedule") : commands;
+    // Official aRe filters scope==="cowork" for Cowork; Code LocalSessions must not
+    // surface RT skills (schedule / setup-cowork / consolidate-memory).
+    const fromHost = isLocalSession
+      ? commands.filter((command) => command.scope !== "cowork" && command.name !== "clear" && command.name !== "schedule")
+      : commands;
+    const base = fromHost;
     const names = new Set(base.map((command) => command.name));
     const extra: SlashCommand[] = [];
 
-    if (isLocalSession && !names.has("schedule")) {
-      extra.push({
-        name: "schedule",
-        description: "Create a scheduled task that can be run on demand or automatically on an interval.",
-      });
-    }
     if (isLocalSession && !names.has("btw")) {
       extra.push({ name: "btw", description: "Ask a quick side question without adding to the conversation" });
     }

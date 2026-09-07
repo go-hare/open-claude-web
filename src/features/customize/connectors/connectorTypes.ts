@@ -21,6 +21,8 @@ export type ConnectorListItem = {
   needsAuth?: boolean;
   /** Direct MCP tool names (status bag tools). */
   tools?: Array<{ name: string; description?: string; displayName?: string }>;
+  /** Official Ot: isConnected && !toolsLoaded. */
+  toolsLoaded?: boolean;
   error?: string;
   /** Server name used for authorize/disconnect (residual cQe map value). */
   serverName?: string;

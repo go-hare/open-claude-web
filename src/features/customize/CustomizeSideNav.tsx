@@ -11,8 +11,6 @@ import { SkillDocumentIcon } from "./skills/SkillDocumentIcon";
 
 type CustomizeSideNavProps = {
   activePath: string;
-  /** Official H6t back target: cowork → /task/new, code → /code. */
-  backHref: string;
   onBrowsePlugins: () => void;
   onCreateWithClaude?: () => void;
   onNavigate: (path: string) => void;
@@ -20,12 +18,11 @@ type CustomizeSideNavProps = {
 };
 
 /**
- * Official E7t unframed customize sidebar (index-BELzQL5P ~269274):
- * nav w-[256px], back/title, KK folder pill, Skills(QZ)+Vv, Connectors+Ky, o7t plugins.
+ * Official E7t (index-BELzQL5P): nav w-[256px], KK folder pill, Skills+Connectors+o7t.
+ * Back/自定义 header is `!framed && !B4()` — this ion-dist B4() is always true.
  */
 export function CustomizeSideNav({
   activePath,
-  backHref,
   onBrowsePlugins,
   onCreateWithClaude,
   onNavigate,
@@ -50,20 +47,10 @@ export function CustomizeSideNav({
 
   return (
     <nav className="flex flex-col h-full shrink-0 overflow-hidden border-r border-border-300 bg-bg-100 w-[256px]">
-      <div className="flex items-center gap-2 py-3 px-4">
-        <button
-          type="button"
-          aria-label={text.back}
-          onClick={() => onNavigate(backHref)}
-          className="cds-reset inline-flex size-8 items-center justify-center rounded-lg text-text-300 hover:bg-bg-300 hover:text-text-100 focus-visible:shadow-focus"
-        >
-          <Icon name="arrowLeft" />
-        </button>
-        <span className="font-large-bold">{text.customize}</span>
-      </div>
+      {/* Official E7t: Back/自定义 header is `!framed && !B4()`. This ion-dist B4() is always true. */}
 
       {isCodeMode ? (
-        <div className="pb-2 px-3">
+        <div className="pb-2 px-3 pt-3">
           {selectedFolder ? (
             <FolderPill folderPath={selectedFolder} onClick={() => void browseFolder()} className="w-full" />
           ) : (

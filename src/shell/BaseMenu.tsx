@@ -81,10 +81,10 @@ export function BaseContextMenuPopup({ align, children, className, side, sideOff
   );
 }
 
-export function BaseMenuItem({ children, checked, checkedRole = "checkbox", className, description, icon, keepOpen, lang, onClick, trailing }: { children: ReactNode; checked?: boolean; checkedRole?: "checkbox" | "radio"; className?: string; /** Official SIe `description` — second line under the item label. */ description?: string; /** Official residual accepts string icon-font name or ReactNode SVG glyph (`icon:a.jsx(Lv,{})`). */ icon?: string | ReactNode; keepOpen?: boolean; lang?: string; onClick?: () => void; trailing?: ReactNode }) {
+export function BaseMenuItem({ children, checked, checkedRole = "checkbox", className, danger, description, disabled, icon, keepOpen, lang, onClick, trailing }: { children: ReactNode; checked?: boolean; checkedRole?: "checkbox" | "radio"; className?: string; /** Official A `danger` — Uninstall / destructive. */ danger?: boolean; /** Official SIe `description` — second line under the item label. */ description?: string; disabled?: boolean; /** Official residual accepts string icon-font name or ReactNode SVG glyph (`icon:a.jsx(Lv,{})`). */ icon?: string | ReactNode; keepOpen?: boolean; lang?: string; onClick?: () => void; trailing?: ReactNode }) {
   const checkedProps = checked === undefined ? {} : { "aria-checked": checked, role: checkedRole === "radio" ? "menuitemradio" : "menuitemcheckbox" };
   return (
-    <Menu.Item {...checkedProps} className={`${itemClassName} ${className ?? ""}`} closeOnClick={keepOpen ? false : undefined} lang={lang} onClick={onClick}>
+    <Menu.Item {...checkedProps} className={`${itemClassName} ${danger ? "text-danger-000" : ""} ${className ?? ""}`} closeOnClick={keepOpen ? false : undefined} disabled={disabled} lang={lang} onClick={onClick}>
       {icon ? (
         <span className="flex size-icon shrink-0 items-center justify-center">
           {typeof icon === "string" ? <Icon name={icon} /> : icon}

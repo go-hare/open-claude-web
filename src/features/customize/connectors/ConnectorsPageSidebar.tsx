@@ -20,8 +20,12 @@ export function ConnectorsPageSidebar({
 }) {
   return (
     <div className={`border-r border-border-300 flex flex-col h-full overflow-hidden ${SIDEBAR_WIDTH}`}>
-      <div className="flex items-center justify-between px-6 py-3 min-h-14">
-        <h2 className="font-large-bold truncate">{title}</h2>
+      <div className="flex items-center justify-between gap-2 px-6 py-3 min-h-14">
+        {typeof title === "string" ? (
+          <h2 className="font-large-bold truncate">{title}</h2>
+        ) : (
+          <div className="flex-1 min-w-0">{title}</div>
+        )}
         {headerAction}
       </div>
       <div className={`flex-1 overflow-y-auto px-4 ${contentClassName ?? ""}`}>{children}</div>

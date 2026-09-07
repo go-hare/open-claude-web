@@ -67,6 +67,11 @@ export type SessionSummary = {
   createdAtMs?: number;
   updatedAt: string;
   updatedAtMs: number;
+  /**
+   * Official host lastActivityAt as-is (D1e cZe cache key, strict !==).
+   * Do not substitute updatedAtMs — conversion would false-miss every hydrate.
+   */
+  lastActivityAt?: unknown;
   kind: "epitaxy" | "code";
   sessionKind: SessionKind;
   cwd?: string;
@@ -837,6 +842,37 @@ export type CoworkSessionsBridge = {
   onDirectMcpServerStatusesChanged?: (
     listener: (statuses: DirectMcpServerStatus[]) => void,
   ) => () => void;
+  /**
+   * Official nFt / PLe / HLe / BLe / KLe (index-BELzQL5P):
+   * LocalAgentModeSessions listLocalSkills / saveLocalSkill / setLocalSkillEnabled /
+   * deleteLocalSkill / getLocalSkillFiles / revealLocalSkill / syncSkills.
+   */
+  listLocalSkills?: () => Promise<LocalSkillRecord[]>;
+  saveLocalSkill?: (
+    name: string,
+    description: string,
+    skillMd: string,
+    overwrite: boolean,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  setLocalSkillEnabled?: (
+    skillId: string,
+    enabled: boolean,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  deleteLocalSkill?: (skillId: string) => Promise<{ ok: boolean; error?: string }>;
+  getLocalSkillFiles?: (
+    skillId: string,
+  ) => Promise<Array<{ content?: string; path: string }>>;
+  revealLocalSkill?: (skillId: string) => Promise<void>;
+  syncSkills?: () => Promise<void>;
+};
+
+/** Official nFt listLocalSkills row (DLe maps name → skillName). */
+export type LocalSkillRecord = {
+  description?: string;
+  enabled?: boolean;
+  name: string;
+  skillId: string;
+  updatedAt?: string;
 };
 
 /** Residual Direct MCP status bag entry (mQe / getDirectMcpServerStatuses). */

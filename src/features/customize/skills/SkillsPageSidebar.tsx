@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../../../shell/icons";
+import { OfficialTextInput } from "../../shared/OfficialTextInput";
 import { ConnectorsPageSidebar } from "../connectors/ConnectorsPageSidebar";
 import { AddSkillDropdown } from "./AddSkillDropdown";
 import { SkillDocumentIcon, SkillIconTile } from "./SkillDocumentIcon";
@@ -14,21 +15,28 @@ export function SkillsPageSidebar({
   userSkills,
   builtInSkills,
   selectedBuiltInName,
+  selectedUserSkillId,
   onBuiltInSelect,
+  onUserSelect,
   onBrowseSkills,
   onCreateWithClaude,
   onWriteInstructions,
   onUpload,
+  onAddSkill,
   wiggleEnabled,
 }: {
   userSkills: UserSkill[];
   builtInSkills: BuiltInSkill[];
   selectedBuiltInName: string | null;
+  selectedUserSkillId?: string | null;
   onBuiltInSelect: (name: string) => void;
+  onUserSelect?: (skillId: string) => void;
   onBrowseSkills: () => void;
   onCreateWithClaude?: () => void;
   onWriteInstructions?: () => void;
   onUpload?: () => void;
+  /** Official ql onAddSkill — empty list Add skill opens Ol (re), not Directory. */
+  onAddSkill?: () => void;
   wiggleEnabled: boolean;
 }) {
   const [isSearchOpen, setSearchOpen] = useState(false);
@@ -47,32 +55,37 @@ export function SkillsPageSidebar({
   const isSearching = searchQuery.trim().length > 0;
   const query = searchQuery.trim().toLowerCase();
 
+  // Official Rl: filteredSkills = skillName includes query, then group (your/shared/admin).
+  const filteredUserSkills = useMemo(
+    () => (query ? userSkills.filter((skill) => skill.skillName.toLowerCase().includes(query)) : userSkills),
+    [query, userSkills],
+  );
   const filteredBuiltIns = useMemo(
     () => (query ? builtInSkills.filter((skill) => skill.name.toLowerCase().includes(query)) : builtInSkills),
     [builtInSkills, query],
   );
 
-  // User skill partitions (official Bl) — local shell typically empty until list-skills API.
+  // Official Bl Personal skills includes disabled (`isEnabled={skill.enabled}` dims the row).
   const personalSkills = useMemo(
     () =>
-      userSkills.filter((skill) => {
+      filteredUserSkills.filter((skill) => {
         if (skill.partitionBy === "organization") return false;
         if (skill.creatorType === "anthropic" && skill.isPublicProvisioned === false) return false;
         if (skill.isShared || skill.hasOutgoingShares) return false;
-        return skill.enabled;
+        return true;
       }),
-    [userSkills],
+    [filteredUserSkills],
   );
   const sharedSkills = useMemo(
-    () => userSkills.filter((skill) => skill.isShared || skill.hasOutgoingShares),
-    [userSkills],
+    () => filteredUserSkills.filter((skill) => skill.isShared || skill.hasOutgoingShares),
+    [filteredUserSkills],
   );
   const orgSkills = useMemo(
     () =>
-      userSkills.filter(
+      filteredUserSkills.filter(
         (skill) => skill.partitionBy === "organization" || (skill.creatorType === "anthropic" && skill.isPublicProvisioned === false),
       ),
-    [userSkills],
+    [filteredUserSkills],
   );
 
   const hasUserGroups = personalSkills.length > 0 || sharedSkills.length > 0 || orgSkills.length > 0;
@@ -80,15 +93,17 @@ export function SkillsPageSidebar({
   const isEmpty = userSkills.length === 0 && builtInSkills.length === 0;
 
   const title: ReactNode = isSearchOpen ? (
-    <input
-      ref={searchInputRef}
-      value={searchQuery}
-      onChange={(event) => setSearchQuery(event.target.value)}
+    <OfficialTextInput
+      className="flex-1"
       onKeyDown={(event) => {
         if (event.key === "Escape") closeSearch();
       }}
+      onValueChange={setSearchQuery}
       placeholder="搜索"
-      className="flex-1 h-8 min-w-0 rounded-md border border-border-300 bg-bg-100 px-2 text-sm outline-none focus:shadow-focus"
+      prepend={<Icon className="text-text-300" customSize={16} name="Search" />}
+      ref={searchInputRef}
+      size="sm"
+      value={searchQuery}
     />
   ) : (
     "Skills"
@@ -127,7 +142,7 @@ export function SkillsPageSidebar({
   return (
     <ConnectorsPageSidebar title={title} headerAction={headerAction}>
       {isEmpty ? (
-        <SkillsListEmptyState wiggleEnabled={wiggleEnabled} onAddSkill={onBrowseSkills} />
+        <SkillsListEmptyState wiggleEnabled={wiggleEnabled} onAddSkill={onAddSkill ?? onBrowseSkills} />
       ) : (
         <div className="flex flex-col gap-px">
           {personalSkills.length > 0 ? (
@@ -143,8 +158,8 @@ export function SkillsPageSidebar({
                         <SkillDocumentIcon size={16} />
                       </SkillIconTile>
                     }
-                    isSelected={false}
-                    onSelect={() => undefined}
+                    isSelected={selectedUserSkillId === skill.skillId}
+                    onSelect={onUserSelect ?? (() => undefined)}
                     isEnabled={skill.enabled}
                   />
                 ))}
@@ -167,8 +182,8 @@ export function SkillsPageSidebar({
                           <SkillDocumentIcon size={16} />
                         </SkillIconTile>
                       }
-                      isSelected={false}
-                      onSelect={() => undefined}
+                      isSelected={selectedUserSkillId === skill.skillId}
+                      onSelect={onUserSelect ?? (() => undefined)}
                       isEnabled={skill.enabled}
                     />
                   ))}
@@ -192,8 +207,8 @@ export function SkillsPageSidebar({
                           <SkillDocumentIcon size={16} />
                         </SkillIconTile>
                       }
-                      isSelected={false}
-                      onSelect={() => undefined}
+                      isSelected={selectedUserSkillId === skill.skillId}
+                      onSelect={onUserSelect ?? (() => undefined)}
                       isEnabled={skill.enabled}
                     />
                   ))}

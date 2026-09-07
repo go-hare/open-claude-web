@@ -1,6 +1,9 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../../../shell/icons";
+import { OfficialButton } from "../../shared/OfficialButton";
+import { OfficialTextInput } from "../../shared/OfficialTextInput";
 import type { ConnectorListItem } from "./connectorTypes";
+import { AddConnectorMenu } from "./AddConnectorMenu";
 import { ConnectorsPageSidebar } from "./ConnectorsPageSidebar";
 import { ConnectorsEmptyState } from "./ConnectorsEmptyState";
 
@@ -55,19 +58,21 @@ export function ConnectorsListSidebar({
   const searching = query.trim().length > 0;
 
   const title = searchOpen ? (
-    <input
-      ref={inputRef}
-      value={query}
-      onChange={(event) => setQuery(event.target.value)}
+    <OfficialTextInput
+      autoFocus
+      className="flex-1"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           setSearchOpen(false);
           setQuery("");
         }
       }}
+      onValueChange={setQuery}
       placeholder="搜索"
-      className="flex-1 h-8 min-w-0 rounded-md border border-border-300 bg-bg-100 px-2 text-sm outline-none focus:shadow-focus"
-      autoFocus
+      prepend={<Icon className="text-text-300" customSize={16} name="Search" />}
+      ref={inputRef}
+      size="sm"
+      value={query}
     />
   ) : (
     "Connectors"
@@ -95,14 +100,7 @@ export function ConnectorsListSidebar({
       >
         <Icon name="Search" />
       </button>
-      <button
-        type="button"
-        aria-label="Add connector"
-        onClick={onBrowseConnectors}
-        className="cds-reset inline-flex size-8 items-center justify-center rounded-lg text-text-300 hover:bg-bg-200"
-      >
-        <Icon name="Add" />
-      </button>
+      <AddConnectorMenu onAddCustom={onAddCustomConnector} onBrowse={onBrowseConnectors} />
     </div>
   );
 
@@ -136,12 +134,12 @@ export function ConnectorsListSidebar({
         <div className="flex flex-col items-center gap-4 px-6 py-8">
           <p className="text-sm text-text-300 text-center">No connectors found</p>
           <div className="flex flex-col gap-2 items-center">
-            <button type="button" onClick={onBrowseConnectors} className="inline-flex h-8 items-center rounded-lg bg-text-000 px-3 text-sm text-bg-000">
+            <OfficialButton onClick={onBrowseConnectors} size="sm" variant="primary">
               Browse connectors
-            </button>
-            <button type="button" onClick={onAddCustomConnector} className="inline-flex h-8 items-center rounded-lg border border-border-300 px-3 text-sm text-text-100">
+            </OfficialButton>
+            <OfficialButton onClick={onAddCustomConnector} size="sm" variant="secondary">
               Add custom connector
-            </button>
+            </OfficialButton>
           </div>
         </div>
       ) : (
@@ -178,17 +176,18 @@ function ConnectorRow({
       aria-current={selected ? "true" : undefined}
       onClick={() => onSelect(item.id)}
       className={[
-        "rounded-lg text-sm transition-colors w-full flex items-center gap-3 px-3 py-2 text-left",
-        selected ? "bg-bg-300 font-semibold text-text-100" : "hover:bg-bg-200 text-text-100",
-        item.isConnected ? "" : "text-text-100",
+        "rounded-lg text-sm transition-colors w-full flex items-center gap-3 px-3 py-1.5 text-left cursor-pointer",
+        selected ? "bg-bg-300" : "hover:bg-bg-200",
+        item.isConnected ? "text-text-100" : "text-text-500",
       ].join(" ")}
     >
-      <span className="flex-shrink-0 flex items-center justify-center size-6 text-text-300">
+      <span
+        className={`flex-shrink-0 flex items-center justify-center size-6 text-text-300${item.isConnected ? "" : " opacity-50"}`}
+      >
         <Icon name="connectors" />
       </span>
       <div className="flex flex-col flex-1 min-w-0">
         <span className={`truncate ${selected ? "font-semibold" : ""}`}>{item.name}</span>
-        {item.description ? <span className="font-small text-text-400 truncate">{item.description}</span> : null}
       </div>
     </button>
   );

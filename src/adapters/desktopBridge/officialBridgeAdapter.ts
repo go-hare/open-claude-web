@@ -141,6 +141,18 @@ type RawLocalSessionsBridge = {
   disconnectDirectMcpServer?: (name: string) => Promise<unknown>;
   onDirectMcpServerStatusesChanged?: RawEventSubscription;
   onOnDirectMcpServerStatusesChanged?: RawEventSubscription;
+  listLocalSkills?: () => Promise<unknown>;
+  saveLocalSkill?: (
+    name: string,
+    description: string,
+    skillMd: string,
+    overwrite: boolean,
+  ) => Promise<unknown>;
+  setLocalSkillEnabled?: (skillId: string, enabled: boolean) => Promise<unknown>;
+  deleteLocalSkill?: (skillId: string) => Promise<unknown>;
+  getLocalSkillFiles?: (skillId: string) => Promise<unknown>;
+  revealLocalSkill?: (skillId: string) => Promise<unknown>;
+  syncSkills?: () => Promise<unknown>;
 };
 
 type CoworkQueryBridge = Pick<CoworkSessionsBridge,
@@ -1208,6 +1220,7 @@ function createCoworkSessionsBridge(raw: RawLocalSessionsBridge | undefined): Co
     ...createCoworkMutationBridge(raw),
     ...createCoworkLifecycleBridge(raw),
     ...createCoworkDirectMcpBridge(raw),
+    ...createCoworkLocalSkillsBridge(raw),
     getSession: rawAccess.getRawSession,
     ...rawAccess,
   };
@@ -1250,6 +1263,92 @@ function createCoworkDirectMcpBridge(raw: RawLocalSessionsBridge | undefined): P
       });
     },
   };
+}
+
+/**
+ * Official nFt skill IPC (index-BELzQL5P PLe/HLe/BLe/KLe).
+ * Host writes userData/local-skills — not ~/.claude/skills (Code CLI source).
+ */
+function createCoworkLocalSkillsBridge(raw: RawLocalSessionsBridge | undefined): Pick<
+  CoworkSessionsBridge,
+  | "listLocalSkills"
+  | "saveLocalSkill"
+  | "setLocalSkillEnabled"
+  | "deleteLocalSkill"
+  | "getLocalSkillFiles"
+  | "revealLocalSkill"
+  | "syncSkills"
+> {
+  return {
+    listLocalSkills: async () => {
+      if (!raw?.listLocalSkills) return [];
+      const listed = await raw.listLocalSkills().catch(() => []);
+      if (!Array.isArray(listed)) return [];
+      const out: Array<{
+        description?: string;
+        enabled?: boolean;
+        name: string;
+        skillId: string;
+        updatedAt?: string;
+      }> = [];
+      for (const entry of listed) {
+        const bag = asRecord(entry);
+        const skillId =
+          stringValue(bag.skillId) ?? stringValue(bag.name) ?? stringValue(bag.key);
+        const name = stringValue(bag.name) ?? skillId;
+        if (!skillId || !name) continue;
+        out.push({
+          skillId,
+          name,
+          ...(stringValue(bag.description) ? { description: stringValue(bag.description) } : {}),
+          enabled: bag.enabled !== false,
+          ...(stringValue(bag.updatedAt) ? { updatedAt: stringValue(bag.updatedAt) } : {}),
+        });
+      }
+      return out;
+    },
+    saveLocalSkill: async (name, description, skillMd, overwrite) => {
+      if (!raw?.saveLocalSkill) return { ok: false, error: "Desktop bridge not available" };
+      return normalizeSkillMutation(await raw.saveLocalSkill(name, description, skillMd, overwrite));
+    },
+    setLocalSkillEnabled: async (skillId, enabled) => {
+      if (!raw?.setLocalSkillEnabled) return { ok: false, error: "Desktop bridge not available" };
+      return normalizeSkillMutation(await raw.setLocalSkillEnabled(skillId, enabled));
+    },
+    deleteLocalSkill: async (skillId) => {
+      if (!raw?.deleteLocalSkill) return { ok: false, error: "Desktop bridge not available" };
+      return normalizeSkillMutation(await raw.deleteLocalSkill(skillId));
+    },
+    getLocalSkillFiles: async (skillId) => {
+      if (!raw?.getLocalSkillFiles) return [];
+      const files = await raw.getLocalSkillFiles(skillId).catch(() => []);
+      if (!Array.isArray(files)) return [];
+      return files
+        .map((file) => {
+          const bag = asRecord(file);
+          const path = stringValue(bag.path) ?? stringValue(bag.relativePath);
+          if (!path) return null;
+          return {
+            path,
+            ...(typeof bag.content === "string" ? { content: bag.content } : {}),
+          };
+        })
+        .filter((file): file is { content?: string; path: string } => file !== null);
+    },
+    revealLocalSkill: async (skillId) => {
+      await raw?.revealLocalSkill?.(skillId);
+    },
+    syncSkills: async () => {
+      await raw?.syncSkills?.();
+    },
+  };
+}
+
+function normalizeSkillMutation(value: unknown): { ok: boolean; error?: string } {
+  const bag = asRecord(value);
+  if (bag.ok === true) return { ok: true };
+  const error = stringValue(bag.error);
+  return error ? { ok: false, error } : { ok: false, error: "Failed to save skill" };
 }
 
 function normalizeDirectMcpStatusList(value: unknown): DirectMcpServerStatus[] {
@@ -1819,6 +1918,7 @@ function normalizeSession(
     ?? timestampValue(raw.createdAt)
     ?? Date.now();
   const createdAtMs = timestampValue(raw.createdAt) ?? timestampValue(original.createdAt) ?? updatedAtMs;
+  const lastActivityAt = raw.lastActivityAt ?? original.lastActivityAt;
   const kind = targetKind === "code" || raw.kind === "code" ? "code" : "epitaxy";
   // Official residual: host title wins; empty → worktreeName → "General coding session".
   // Do NOT invent firstMessageText as title (prompt "1" was product invent).
@@ -1840,6 +1940,7 @@ function normalizeSession(
     createdAtMs,
     updatedAt: relativeLabel(updatedAtMs),
     updatedAtMs,
+    ...(lastActivityAt !== undefined && lastActivityAt !== null ? { lastActivityAt } : {}),
     kind,
     sessionKind: kind === "code" ? "code" : "cowork",
     cwd,

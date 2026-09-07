@@ -1,67 +1,30 @@
 /**
- * Connectors store — local custom entries + residual Direct MCP status bag (mQe).
+ * Connectors store — residual Direct MCP status bag (mQe).
  *
  * Residual ion (index-BELzQL5P.js):
  *   cQe = uuid→name, dQe = name→uuid; mQe(statuses) upserts remoteServers;
  *   hQe(uuid) → authorizeDirectMcpServer(name); disconnect by name.
  *
- * Product: keep localStorage custom list for add-dialog UX, and merge live
- * Direct MCP statuses from LocalAgentModeSessions. Config bag write uses
- * claude.settings.MCP.setMcpServerConfigs (URL remotes for connectFromConfigBag).
+ * Source of truth is claude.settings.MCP bag + getDirectMcpServerStatuses.
+ * Not localStorage.
  */
 import type { DirectMcpServerStatus } from "../../../adapters/desktopBridge/types";
 import { desktopBridge } from "../../../adapters/desktopBridge";
 import { mcpSettingsBridge } from "../../settings/settingsDesktopBridge";
 import type { ConnectorListItem } from "./connectorTypes";
 
-const STORAGE_KEY = "open-claude.customize.custom-connectors.v1";
-
-type CustomStored = {
+/** In-memory until Direct MCP statuses catch the bag write (not persisted). */
+type PendingCustom = {
   id: string;
   name: string;
   url: string;
 };
 
-function readStoredCustoms(): CustomStored[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((item) => {
-        if (!item || typeof item !== "object") return null;
-        const bag = item as Record<string, unknown>;
-        const id = typeof bag.id === "string" ? bag.id : "";
-        const name = typeof bag.name === "string" ? bag.name : "";
-        const url =
-          typeof bag.url === "string"
-            ? bag.url
-            : typeof bag.description === "string" && /^https?:\/\//i.test(bag.description)
-              ? bag.description
-              : "";
-        if (!id || !url) return null;
-        return { id, name: name || url, url };
-      })
-      .filter((item): item is CustomStored => item !== null);
-  } catch {
-    return [];
-  }
-}
-
-function writeStoredCustoms(items: CustomStored[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  } catch {
-    // ignore quota / private mode
-  }
-}
-
 /** Residual cQe / dQe: uuid ↔ Direct MCP server name. */
 const uuidByName = new Map<string, string>();
 const nameByUuid = new Map<string, string>();
 
-let customEntries: CustomStored[] = readStoredCustoms();
+let pendingCustoms: PendingCustom[] = [];
 let directStatuses: DirectMcpServerStatus[] = [];
 let items: ConnectorListItem[] = [];
 let hydrated = false;
@@ -104,6 +67,7 @@ function rebuildItems(): void {
         description: tool.description,
         displayName: tool.title || tool.annotations?.title || tool.name,
       })),
+      toolsLoaded: true,
       error: status.error,
     });
   }
@@ -116,11 +80,10 @@ function rebuildItems(): void {
     }
   }
 
-  // Local custom entries not yet represented in live Direct MCP bag.
-  for (const custom of customEntries) {
-    if (seenNames.has(custom.name)) continue;
-    // Also match by URL if host renamed or bag key differs.
-    if (directStatuses.some((s) => s.url === custom.url)) continue;
+  pendingCustoms = pendingCustoms.filter(
+    (custom) => !seenNames.has(custom.name) && !directStatuses.some((status) => status.url === custom.url),
+  );
+  for (const custom of pendingCustoms) {
     next.push({
       id: custom.id,
       name: custom.name,
@@ -172,7 +135,6 @@ export function ensureDirectMcpHydrated(): Promise<void> {
       const statuses = (await bridge.getDirectMcpServerStatuses?.()) ?? [];
       applyDirectMcpStatuses(statuses);
     } catch {
-      // Keep customs; host may be unavailable in browser fake.
       rebuildItems();
     } finally {
       hydrated = true;
@@ -195,7 +157,11 @@ function bagKeyForCustom(name: string, url: string): string {
  * Persist URL remote into desktop MCP bag so connectFromConfigBag can park/connect.
  * stdio-only BV honesty: URL remotes are passthrough bag entries (type/url), not invent BV stdio.
  */
-async function upsertUrlRemoteInMcpBag(name: string, url: string): Promise<void> {
+async function upsertUrlRemoteInMcpBag(
+  name: string,
+  url: string,
+  oauth?: { clientId?: string; clientSecret?: string },
+): Promise<void> {
   const mcp = mcpSettingsBridge();
   if (!mcp?.getMcpServersConfig || !mcp.setMcpServerConfigs) return;
   try {
@@ -212,6 +178,14 @@ async function upsertUrlRemoteInMcpBag(name: string, url: string): Promise<void>
     ) {
       return;
     }
+    const clientId = oauth?.clientId?.trim() ?? "";
+    const clientSecret = oauth?.clientSecret?.trim() ?? "";
+    const oauthBag = clientId
+      ? {
+          clientId,
+          ...(clientSecret ? { clientSecret } : {}),
+        }
+      : undefined;
     const next = {
       ...current,
       [key]: {
@@ -221,6 +195,7 @@ async function upsertUrlRemoteInMcpBag(name: string, url: string): Promise<void>
         type: "http",
         url,
         name: name || key,
+        ...(oauthBag ? { oauth: oauthBag } : {}),
       },
     };
     await mcp.setMcpServerConfigs(next);
@@ -264,34 +239,40 @@ async function removeUrlRemoteFromMcpBag(name: string, url?: string): Promise<vo
   }
 }
 
-export function addCustomConnector(input: { name: string; url: string }): ConnectorListItem {
+export function addCustomConnector(input: {
+  clientId?: string;
+  clientSecret?: string;
+  name: string;
+  url: string;
+}): ConnectorListItem {
   const name = input.name.trim() || input.url.trim();
   const url = input.url.trim();
-  const existing = customEntries.find((c) => c.url === url || c.name === name);
-  const entry: CustomStored = existing ?? {
-    id: `custom-${crypto.randomUUID()}`,
-    name,
-    url,
-  };
-  if (!existing) {
-    customEntries = [...customEntries, entry];
-  } else {
-    customEntries = customEntries.map((c) =>
-      c.id === entry.id ? { ...c, name, url } : c,
-    );
+  const existing =
+    items.find((item) => item.url === url || item.name === name) ??
+    pendingCustoms.find((entry) => entry.url === url || entry.name === name);
+  const entry: PendingCustom = existing
+    ? { id: existing.id, name, url }
+    : {
+        id: `custom-${crypto.randomUUID()}`,
+        name,
+        url,
+      };
+  if (!pendingCustoms.some((item) => item.id === entry.id)) {
+    pendingCustoms = [...pendingCustoms, entry];
   }
-  writeStoredCustoms(customEntries);
   rebuildItems();
 
-  // Fire-and-forget bag write + rehydrate statuses (connectFromConfigBag parks oauth).
   void (async () => {
-    await upsertUrlRemoteInMcpBag(name, url);
+    await upsertUrlRemoteInMcpBag(name, url, {
+      clientId: input.clientId,
+      clientSecret: input.clientSecret,
+    });
     try {
       const statuses =
         (await desktopBridge.LocalAgentModeSessions.getDirectMcpServerStatuses?.()) ?? [];
       applyDirectMcpStatuses(statuses);
     } catch {
-      /* keep local entry */
+      rebuildItems();
     }
   })();
 
@@ -313,8 +294,7 @@ export function addCustomConnector(input: { name: string; url: string }): Connec
 export async function removeConnector(id: string): Promise<void> {
   const item = items.find((entry) => entry.id === id);
   const serverName = item?.serverName ?? nameByUuid.get(id);
-  customEntries = customEntries.filter((entry) => entry.id !== id);
-  writeStoredCustoms(customEntries);
+  pendingCustoms = pendingCustoms.filter((entry) => entry.id !== id);
 
   if (serverName) {
     try {
@@ -374,5 +354,4 @@ export async function disconnectConnector(id: string): Promise<boolean> {
   return ok;
 }
 
-// Initial merge of customs (before hydrate).
 rebuildItems();

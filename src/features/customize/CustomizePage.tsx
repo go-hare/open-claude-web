@@ -1,5 +1,4 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { desktopBridge } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
 import { Icon } from "../../shell/icons";
 import { readPersistedFrameMode } from "../../stores/frameStoreHelpers";
@@ -15,9 +14,6 @@ import { SkillsRoute } from "./skills/SkillsRoute";
 
 export function CustomizePage({ onNavigate }: RouteViewProps) {
   const pathname = window.location.pathname;
-  const needsTrafficLightPadding = useCustomizeTrafficLightPadding();
-  // Official H6t: mode-aware back target (cowork → /task/new, code → /code).
-  const backHref = useMemo(() => (readPersistedFrameMode() === "cowork" ? "/task/new" : "/code"), []);
   const [pluginWarningDismissed, setPluginWarningDismissed] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   // Residual: empty pluginSeed selects official R8t (BrowsePluginsContent) over P8t org list.
@@ -76,8 +72,6 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
                   ),
               );
             }}
-            onWriteInstructions={openDirectory}
-            onUpload={openDirectory}
             onTryInCowork={(skillName) => {
               onNavigate("/task/new?q=" + encodeURIComponent(`/${skillName}`));
             }}
@@ -100,15 +94,14 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
 
   const showPluginWarning = pathname.startsWith("/customize/plugins") && !SKILLS_ENABLED && !pluginWarningDismissed;
 
-  // c63a78ed4:905-907: layout 为 flex h-full w-full flex-col / flex-1 min-h-0，
-  // route 内容容器为 flex-1 overflow-y-auto bg-bg-100；_Component22 为 standalone 左侧 nav。
+  // Official Xt (c63a78ed4): flex h-full w-full flex-col; qWt Mac spacer;
+  // E7t nav + flex-1 overflow-y-auto bg-bg-100. Mounted under gos `_withSidebar`
+  // → Urs DesktopFrame (index-BELzQL5P jos), not a standalone shell.
   return (
     <div className="flex h-full w-full flex-col">
-      {needsTrafficLightPadding ? <div aria-hidden="true" className="h-10 shrink-0" data-testid="customize-traffic-light-spacer" /> : null}
       <div className="flex flex-1 min-h-0">
         <CustomizeSideNav
           activePath={pathname}
-          backHref={backHref}
           onNavigate={onNavigate}
           onBrowsePlugins={openDirectory}
           onUploadPlugin={() => setUploadOpen(true)}
@@ -138,32 +131,6 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
       />
     </div>
   );
-}
-
-function useCustomizeTrafficLightPadding() {
-  const isMacDesktop = useMemo(() => {
-    if (typeof navigator === "undefined") return false;
-    const isMac = /\bMacintosh\b|\bMac OS\b/.test(navigator.userAgent);
-    const isDesktop = Boolean(window["claude.web"]) || /\bElectron\//.test(navigator.userAgent);
-    return isMac && isDesktop && !/\bWindows\b/.test(navigator.userAgent);
-  }, []);
-  const [isFullscreen, setFullscreen] = useState(false);
-  useEffect(() => {
-    if (!isMacDesktop) return;
-    let disposed = false;
-    const apply = (value: boolean) => {
-      if (!disposed) setFullscreen(value === true);
-    };
-    void desktopBridge.Window.getFullscreen()
-      .then(apply)
-      .catch(() => apply(false));
-    const unsubscribe = desktopBridge.Window.onFullscreenChanged?.(apply);
-    return () => {
-      disposed = true;
-      unsubscribe?.();
-    };
-  }, [isMacDesktop]);
-  return isMacDesktop && !isFullscreen;
 }
 
 function CustomizeIndex({ onNavigate, onBrowsePlugins }: { onNavigate: (path: string) => void; onBrowsePlugins: () => void }) {

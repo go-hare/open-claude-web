@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { officialDirectoryStore } from "../directory/officialDirectoryStore";
 import { AddCustomConnectorDialog } from "./AddCustomConnectorDialog";
+import { ConnectorDetailPanel } from "./ConnectorDetailPanel";
 import { ConnectorsEmptyState, ConnectorsLoadErrorState } from "./ConnectorsEmptyState";
 import { ConnectorsListSidebar } from "./ConnectorsListSidebar";
-import type { ConnectorListItem } from "./connectorTypes";
 import {
   addCustomConnector,
   authorizeConnector,
@@ -11,7 +11,6 @@ import {
   ensureDirectMcpHydrated,
   getConnectorItems,
   isDirectMcpHydrated,
-  removeConnector,
   subscribeConnectorItems,
 } from "./connectorsStore";
 
@@ -23,7 +22,8 @@ import {
  * non-empty → Rt list + detail pane
  *
  * Residual Direct MCP (ion Rrs/mQe/hQe): hydrate statuses + authorize/disconnect by name.
- * Directory browse uses official HT.open("connectors") → $8t ($T remaps to plugins).
+ * Rt header Bt: Browse + Add custom. Browse → pe("connectors") → $T plugins.
+ * Detail is Ot, not a homemade URL/Remove card.
  */
 export function ConnectorsRoute() {
   const items = useSyncExternalStore(subscribeConnectorItems, getConnectorItems, getConnectorItems);
@@ -137,10 +137,10 @@ export function ConnectorsRoute() {
         />
         <div className="flex-1 overflow-y-auto bg-bg-100 flex flex-col">
           {selected ? (
-            <ConnectorDetail
-              item={selected}
-              actionError={actionError}
+            <ConnectorDetailPanel
               actionBusy={actionBusy}
+              actionError={actionError}
+              item={selected}
               onAuthorize={async () => {
                 setActionError(null);
                 setActionBusy(true);
@@ -163,19 +163,6 @@ export function ConnectorsRoute() {
                   setActionBusy(false);
                 }
               }}
-              onRemove={
-                selected.source === "local-custom" || selected.source === "direct-mcp"
-                  ? async () => {
-                      setActionError(null);
-                      setActionBusy(true);
-                      try {
-                        await removeConnector(selected.id);
-                      } finally {
-                        setActionBusy(false);
-                      }
-                    }
-                  : undefined
-              }
             />
           ) : (
             <div className="flex items-center justify-center h-full text-text-400">Select a connector to view details</div>
@@ -193,104 +180,6 @@ export function ConnectorsRoute() {
         />
       ) : null}
     </>
-  );
-}
-
-function ConnectorDetail({
-  item,
-  actionError,
-  actionBusy,
-  onAuthorize,
-  onDisconnect,
-  onRemove,
-}: {
-  item: ConnectorListItem;
-  actionError: string | null;
-  actionBusy: boolean;
-  onAuthorize: () => void;
-  onDisconnect: () => void;
-  onRemove?: () => void;
-}) {
-  // Residual-aligned detail: status + authorize (hQe) + disconnect + tools list.
-  const statusLabel = item.isConnected
-    ? "Connected"
-    : item.needsAuth
-      ? "Authorization required"
-      : item.error
-        ? "Error"
-        : "Not connected";
-
-  return (
-    <div className="flex flex-col gap-4 p-8 max-w-2xl">
-      <div className="flex flex-col gap-1">
-        <h2 className="font-heading text-xl text-text-000">{item.name}</h2>
-        {item.description ? <p className="text-sm text-text-300">{item.description}</p> : null}
-        <p className="text-xs text-text-500">{statusLabel}</p>
-      </div>
-      {item.url ? (
-        <div className="rounded-xl border border-border-300 bg-bg-000 p-4">
-          <div className="text-xs text-text-500 mb-1">Server URL</div>
-          <div className="text-sm text-text-100 break-all">{item.url}</div>
-        </div>
-      ) : null}
-      {item.error ? (
-        <div className="rounded-xl border border-border-300 bg-bg-000 p-4 text-sm text-text-300">
-          {item.error}
-        </div>
-      ) : null}
-      {actionError ? (
-        <div className="rounded-xl border border-border-300 bg-bg-000 p-4 text-sm text-text-300">
-          {actionError}
-        </div>
-      ) : null}
-      <div className="flex flex-wrap gap-2">
-        {item.needsAuth ? (
-          <button
-            type="button"
-            disabled={actionBusy}
-            onClick={onAuthorize}
-            className="inline-flex h-9 items-center rounded-lg bg-text-000 px-3 text-sm text-bg-000 disabled:opacity-50"
-          >
-            {actionBusy ? "Authorizing…" : "Authorize"}
-          </button>
-        ) : null}
-        {item.isConnected ? (
-          <button
-            type="button"
-            disabled={actionBusy}
-            onClick={onDisconnect}
-            className="inline-flex h-9 items-center rounded-lg border border-border-300 px-3 text-sm text-text-100 hover:bg-bg-100 disabled:opacity-50"
-          >
-            Disconnect
-          </button>
-        ) : null}
-        {onRemove ? (
-          <button
-            type="button"
-            disabled={actionBusy}
-            onClick={onRemove}
-            className="inline-flex h-9 items-center rounded-lg border border-border-300 px-3 text-sm text-text-100 hover:bg-bg-100 disabled:opacity-50"
-          >
-            Remove
-          </button>
-        ) : null}
-      </div>
-      {item.tools && item.tools.length > 0 ? (
-        <div className="rounded-xl border border-border-300 bg-bg-000 p-4">
-          <div className="text-xs text-text-500 mb-2">Tools</div>
-          <ul className="flex flex-col gap-2">
-            {item.tools.map((tool) => (
-              <li key={tool.name} className="text-sm text-text-100">
-                <div className="font-medium">{tool.displayName || tool.name}</div>
-                {tool.description ? (
-                  <div className="text-xs text-text-400">{tool.description}</div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </div>
   );
 }
 

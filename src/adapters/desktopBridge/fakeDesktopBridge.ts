@@ -919,6 +919,13 @@ function createCoworkSessionBridge(): CoworkSessionsBridge {
     }),
     disconnectDirectMcpServer: async () => false,
     onDirectMcpServerStatusesChanged: () => () => {},
+    listLocalSkills: async () => [],
+    saveLocalSkill: async () => ({ ok: false, error: "Desktop bridge not available" }),
+    setLocalSkillEnabled: async () => ({ ok: false, error: "Desktop bridge not available" }),
+    deleteLocalSkill: async () => ({ ok: false, error: "Desktop bridge not available" }),
+    getLocalSkillFiles: async () => [],
+    revealLocalSkill: async () => undefined,
+    syncSkills: async () => undefined,
   };
 }
 
