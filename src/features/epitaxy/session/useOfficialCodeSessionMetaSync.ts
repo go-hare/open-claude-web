@@ -1,17 +1,18 @@
 /**
- * Global LocalSessions session_updated → durable bucket isRunning/meta.
- * Tile onEvent only runs while the session route is mounted; without this,
- * leaving a running session freezes isRunning and re-entry paints idle chrome
- * until the next stream tick (static spark + Send for ~2s).
+ * Global LocalSessions session_updated / completed / stopped → durable bucket meta.
  *
- * Official residual: host formatSessionForEvent isRunning is shared meta —
- * list/getSession/session_updated all carry it. Patch existing buckets only
- * (do not invent openSession for every id).
+ * Official he binds events on bucket.sub (De + pendingClose). This listener is only
+ * for buckets that never got openSessionTransport (Recents attachSession meta-only).
+ * Do not invent openSession for every id.
+ *
+ * completed/stopped often ship sessionId only — still patch isRunning=false so Recents
+ * chrome is not frozen. session_updated with an active sub is hostApply's job.
  */
 import { useEffect } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
 import type { SessionSummary } from "../../../adapters/desktopBridge/types";
 import { officialCodeSessionStore } from "./officialCodeSessionStore";
+import "./officialCodeSessionHostApply";
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
@@ -37,9 +38,10 @@ export function useOfficialCodeSessionMetaSync() {
       if (!sessionId) return;
       const existing = officialCodeSessionStore.getState().buckets[sessionId];
       if (!existing?.session) return;
+      // De / pendingClose already owns session_updated via bucket.sub.
+      if (type === "session_updated" && existing.sub) return;
       // Host completed/stopped often ship sessionId only (no session body). Still must
-      // patch isRunning=false so leftover pendingTurn settles while tile unsubscribed.
-      // session_updated carries full meta; merge as before.
+      // patch isRunning=false on Recents-only buckets (no sub).
       if (type === "completed" || type === "stopped") {
         officialCodeSessionStore.getState().patchSession(sessionId, {
           ...existing.session,

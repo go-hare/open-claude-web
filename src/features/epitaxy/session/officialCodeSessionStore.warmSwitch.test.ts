@@ -27,6 +27,8 @@ function residualIsLoading(input: {
 
 function hasWarmTranscript(sessionId: string) {
   const existing = officialCodeSessionStore.getState().buckets[sessionId];
+  // Official Ae local: s?.sub && s.messages.length>0. These store tests seed
+  // messages without De transport; keep the pre-sub paint check here.
   return Boolean(
     existing
     && existing.messages.length > 0

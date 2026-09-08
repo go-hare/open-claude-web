@@ -1,10 +1,13 @@
 /**
- * Official-shaped code session bucket store (c11959232 `he` / `tm` / `rm`).
+ * Official-shaped code session bucket store (index-BELzQL5P `he` / `Wke`).
+ *
+ * Official De: mount `openSession(id, transport)` / unmount `releaseSession(id)`.
+ * Recents / home still seed meta via attachSession (product name: openSession).
  *
  * Official flow:
- *   openSession(id, meta) | seedTranscript(id, messages)
+ *   openSession(id, transport) | attachSession(id, meta) | seedTranscript(id, messages)
  *   beginPendingTurn(id)
- *   message/stream events mutate bucket
+ *   bucket.sub events mutate bucket (survives pendingClose)
  *   isTranscriptPending / isMetaPending drive Ja loading (with 20ms delay in UI)
  *
  * This is the durable cross-panel cache — Recents + chat tile share the same buckets.
@@ -20,8 +23,21 @@ import {
   foldOfficialStatusPermissionMode,
   type OfficialLiveMeta,
 } from "./officialLiveMeta";
-import { officialUserMessageIsInterrupt } from "./officialTranscriptParse";
-import { officialClearTurnStarted, officialMarkTurnStarted } from "./officialStreamSessionStore";
+import {
+  officialClearTurnStarted,
+  officialMarkTurnStarted,
+  officialStreamDrop,
+} from "./officialStreamSessionStore";
+import { clearOfficialEkeCache, officialUserMessageIsInterrupt } from "./officialTranscriptParse";
+import type { OfficialCodeSessionSub, OfficialCodeSessionTransport } from "./officialCodeSessionTransport";
+
+type OfficialCodeSessionHostApply = (sessionId: string, event: unknown) => void;
+let officialCodeSessionHostApply: OfficialCodeSessionHostApply | null = null;
+
+/** Bound by officialCodeSessionHostApply (breaks store ↔ desktopBridge cycle in tests). */
+export function bindOfficialCodeSessionHostApply(apply: OfficialCodeSessionHostApply) {
+  officialCodeSessionHostApply = apply;
+}
 
 export type StreamActivityMode = "idle" | "requesting" | "thinking" | "responding" | "tool-use";
 
@@ -29,6 +45,9 @@ export const idleStreamActivityMode: StreamActivityMode = "idle";
 
 /** Official index-BELzQL5P `Hke` — stable empty array for queuedMessages. */
 export const EMPTY_QUEUED_MESSAGES: ChatMessage[] = [];
+
+/** Official he.releaseSession pendingClose delay (`36e4`). Idle evicts immediately. */
+export const OFFICIAL_CODE_SESSION_PENDING_CLOSE_MS = 36e4;
 
 export type OfficialCodeSessionBucket = {
   error: Error | null;
@@ -73,6 +92,17 @@ export type OfficialCodeSessionBucket = {
   streamSnapshot: OfficialStreamSnapshot;
   /** Monotonic load generation for stale response discard. */
   loadGeneration: number;
+  /**
+   * Official Wke `sub` — U.subscribe handle bound by he.openSession(id, transport).
+   * Survives De unmount while pendingClose (360s evict).
+   */
+  sub: OfficialCodeSessionSub | null;
+  /** Official Wke pendingClose — last release while pendingTurn still set. */
+  pendingClose: boolean;
+  /** Official Wke evictTimer — 36e4 ms then evict when pendingTurn still live. */
+  evictTimer: ReturnType<typeof setTimeout> | null;
+  /** Official Wke refCount — De mount/unmount. */
+  refCount: number;
 };
 
 export type OfficialCodeSessionState = {
@@ -98,6 +128,10 @@ function emptyBucket(pending: boolean): OfficialCodeSessionBucket {
     streamingMessageId: null,
     streamSnapshot: null,
     loadGeneration: 0,
+    sub: null,
+    pendingClose: false,
+    evictTimer: null,
+    refCount: 0,
   };
 }
 
@@ -222,8 +256,26 @@ function hasRenderableContent(bucket: OfficialCodeSessionBucket) {
 type OfficialCodeSessionActions = {
   /** Official seedTranscript — replace/seed message list without wiping meta. */
   seedTranscript: (sessionId: string, messages: ChatMessage[]) => void;
-  /** Official openSession — attach session meta (and optional messages). */
+  /**
+   * Recents / home meta attach (not official he.openSession(id, transport)).
+   * Official Recents does not call he.openSession — product seeds Mode/title before route paint.
+   */
   openSession: (sessionId: string, session: SessionSummary | null, messages?: ChatMessage[]) => void;
+  /**
+   * Official he.openSession(id, transport) — De mount.
+   * If bucket.sub already exists: refCount++, cancel pendingClose, reclaim?.
+   * Else subscribe and bind bucket.sub.
+   */
+  openSessionTransport: (sessionId: string, transport: OfficialCodeSessionTransport) => void;
+  /**
+   * Official he.releaseSession(id) — De unmount.
+   * refCount>0 keep; ==0 && pendingTurn → pendingClose + 360s evict; else evict now.
+   */
+  releaseSession: (sessionId: string) => void;
+  /**
+   * Official mergeMessage `cleared` — Wke overlay keeping sub/liveMeta/pendingClose/evictTimer/refCount.
+   */
+  resetOnCleared: (sessionId: string) => void;
   /** Official beginPendingTurn — pendingTurn + promptSuggestion:null only. */
   beginPendingTurn: (sessionId: string) => void;
   /**
@@ -463,14 +515,38 @@ function withQueueDefaults(bucket: OfficialCodeSessionBucket): OfficialCodeSessi
   const hasQueue = Array.isArray(bucket.queuedMessages) && typeof bucket.pendingQueuedSends === "number";
   const hasCompaction = "compactionStatus" in bucket;
   const hasEndTurnSeen = "pendingTurnEndTurnSeen" in bucket;
-  if (hasQueue && hasCompaction && hasEndTurnSeen) return bucket;
+  const hasLifecycle = "refCount" in bucket && "sub" in bucket;
+  if (hasQueue && hasCompaction && hasEndTurnSeen && hasLifecycle) return bucket;
   return {
     ...bucket,
     queuedMessages: Array.isArray(bucket.queuedMessages) ? bucket.queuedMessages : EMPTY_QUEUED_MESSAGES,
     pendingQueuedSends: typeof bucket.pendingQueuedSends === "number" ? bucket.pendingQueuedSends : 0,
     pendingTurnEndTurnSeen: hasEndTurnSeen ? Boolean(bucket.pendingTurnEndTurnSeen) : false,
     compactionStatus: hasCompaction ? bucket.compactionStatus : null,
+    sub: bucket.sub ?? null,
+    pendingClose: Boolean(bucket.pendingClose),
+    evictTimer: bucket.evictTimer ?? null,
+    refCount: typeof bucket.refCount === "number" ? bucket.refCount : 0,
   };
+}
+
+function evictOfficialCodeSessionBucketFrom(
+  get: () => OfficialCodeSessionStore,
+  set: (partial: OfficialCodeSessionState | ((state: OfficialCodeSessionStore) => OfficialCodeSessionState)) => void,
+  sessionId: string,
+) {
+  const raw = get().buckets[sessionId];
+  if (!raw) return;
+  if (raw.evictTimer) clearTimeout(raw.evictTimer);
+  raw.sub?.unsubscribe();
+  officialStreamDrop(sessionId);
+  clearOfficialEkeCache(sessionId);
+  officialClearTurnStarted(sessionId);
+  set((state) => {
+    if (!state.buckets[sessionId]) return state;
+    const { [sessionId]: _removed, ...remaining } = state.buckets;
+    return { buckets: remaining };
+  });
 }
 
 /**
@@ -629,6 +705,139 @@ function createOfficialCodeSessionStore() {
             messages: messagesToKeep,
             // Load path: host mode + status recovery (not full Uke init overwrite).
             session: sessionForLoad(baseSession, messagesToKeep, liveMeta),
+          },
+        },
+      };
+    });
+  },
+
+  openSessionTransport: (sessionId, transport) => {
+    // Official he.openSession(s, n): if (a?.sub) refCount++ / cancel pendingClose / reclaim.
+    const existing = get().buckets[sessionId];
+    if (existing?.sub) {
+      if (existing.evictTimer) clearTimeout(existing.evictTimer);
+      set((state) => {
+        const prev = state.buckets[sessionId];
+        if (!prev) return state;
+        return {
+          buckets: {
+            ...state.buckets,
+            [sessionId]: {
+              ...prev,
+              refCount: prev.refCount + 1,
+              pendingClose: false,
+              evictTimer: null,
+              error: null,
+              errorCategory: null,
+            },
+          },
+        };
+      });
+      if (existing.pendingClose || existing.evictTimer) existing.sub.reclaim?.();
+      return;
+    }
+    set((state) => {
+      const prev = state.buckets[sessionId] ?? emptyBucket(false);
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: {
+            ...prev,
+            refCount: prev.refCount + 1,
+          },
+        },
+      };
+    });
+    const sub = transport.subscribe(sessionId, (event) => {
+      // Bound by officialCodeSessionHostApply module load (transport / App MetaSync).
+      officialCodeSessionHostApply?.(sessionId, event);
+    });
+    set((state) => {
+      const prev = state.buckets[sessionId] ?? emptyBucket(false);
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: {
+            ...prev,
+            sub,
+          },
+        },
+      };
+    });
+  },
+
+  releaseSession: (sessionId) => {
+    const raw = get().buckets[sessionId];
+    if (!raw) return;
+    const nextCount = Math.max(0, raw.refCount - 1);
+    if (nextCount > 0) {
+      set((state) => {
+        const prev = state.buckets[sessionId];
+        if (!prev) return state;
+        return {
+          buckets: {
+            ...state.buckets,
+            [sessionId]: { ...prev, refCount: nextCount },
+          },
+        };
+      });
+      return;
+    }
+    // Official: pendingTurn !== null → pendingClose + 36e4 then evict. Else evict now.
+    if (raw.pendingTurnStartedAt !== null) {
+      if (raw.evictTimer) clearTimeout(raw.evictTimer);
+      const timer = setTimeout(() => {
+        evictOfficialCodeSessionBucketFrom(get, set, sessionId);
+      }, OFFICIAL_CODE_SESSION_PENDING_CLOSE_MS);
+      set((state) => {
+        const prev = state.buckets[sessionId];
+        if (!prev) return state;
+        return {
+          buckets: {
+            ...state.buckets,
+            [sessionId]: {
+              ...prev,
+              refCount: nextCount,
+              pendingClose: true,
+              evictTimer: timer,
+            },
+          },
+        };
+      });
+      return;
+    }
+    set((state) => {
+      const prev = state.buckets[sessionId];
+      if (!prev) return state;
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: { ...prev, refCount: nextCount },
+        },
+      };
+    });
+    evictOfficialCodeSessionBucketFrom(get, set, sessionId);
+  },
+
+  resetOnCleared: (sessionId) => {
+    set((state) => {
+      const prev = state.buckets[sessionId];
+      if (!prev) return state;
+      const next = emptyBucket(false);
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: {
+            ...next,
+            // Official Wke overlay: keep sub / liveMeta / pendingClose / evictTimer / refCount.
+            // Product `session` is host meta (Mode/title) — same role as liveMeta, not transcript.
+            sub: prev.sub,
+            liveMeta: prev.liveMeta,
+            session: prev.session,
+            pendingClose: prev.pendingClose,
+            evictTimer: prev.evictTimer,
+            refCount: prev.refCount,
+            loadGeneration: prev.loadGeneration,
           },
         },
       };
@@ -1495,11 +1704,8 @@ function createOfficialCodeSessionStore() {
 
   removeSession: (sessionId) => {
     if (!sessionId) return;
-    set((state) => {
-      if (!state.buckets[sessionId]) return state;
-      const { [sessionId]: _removed, ...remaining } = state.buckets;
-      return { buckets: remaining };
-    });
+    // Official closeSession / Kke `s(id)`: unsubscribe + drop Pe/eke + remove bucket.
+    evictOfficialCodeSessionBucketFrom(get, set, sessionId);
   },
 }));
 }
@@ -1530,7 +1736,7 @@ function migrateBucketsWithQueueDefaults(
  * Bump when queue pipeline action bodies change so HMR rebinds implementations
  * without wiping transcript buckets (zustand keeps old closures otherwise).
  */
-const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 12;
+const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 13;
 const OFFICIAL_CODE_SESSION_STORE_REV_KEY = "__hareOfficialCodeSessionStoreQueueRev__";
 
 function resolveOfficialCodeSessionStore() {
@@ -1547,7 +1753,9 @@ function resolveOfficialCodeSessionStore() {
     const hasQueueActions = typeof state.noteQueuedSend === "function"
       && typeof state.removeSession === "function"
       && typeof (state as { markInterrupting?: unknown }).markInterrupting === "function"
-      && typeof (state as { clearPendingTurn?: unknown }).clearPendingTurn === "function";
+      && typeof (state as { clearPendingTurn?: unknown }).clearPendingTurn === "function"
+      && typeof (state as { openSessionTransport?: unknown }).openSessionTransport === "function"
+      && typeof (state as { releaseSession?: unknown }).releaseSession === "function";
     if (hasQueueActions && prevRev === OFFICIAL_CODE_SESSION_STORE_QUEUE_REV) {
       return existing;
     }

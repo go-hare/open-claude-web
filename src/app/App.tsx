@@ -66,7 +66,7 @@ export function App() {
   useDesktopQuickEntrySubmit();
   // Residual Rrs: Direct MCP status subscribe + initial getDirectMcpServerStatuses.
   useDirectMcpStatusHydrate();
-  // Keep durable code-session isRunning/meta fresh while the tile is unmounted.
+  // Recents-only buckets (no De sub): keep isRunning/meta from session_updated / stopped.
   useOfficialCodeSessionMetaSync();
   // Setup Apply → close small window → main SPA apply countdown → process relaunch.
   const { overlay: applyRelaunchOverlay } = useApplyRelaunchFromSetup();

@@ -28,4 +28,9 @@ describe("OfficialSidebarStatusGlyph ije residual (belz ije / lje / oje)", () =>
       /const live = state === "awaiting" \|\| state === "running" \|\| state === "ready"/,
     );
   });
+
+  it("Code idle is official vje pje ring, not gje uje hs", () => {
+    expect(glyphSource).toContain("block size-[6px] border border-text-400 opacity-50 rounded-full");
+    expect(glyphSource).not.toContain('name="hs"');
+  });
 });

@@ -121,8 +121,8 @@ export function OfficialSidebarStatusGlyph({ className = "", session }: { classN
   } else if (session.isArchived) {
     inner = <Icon name="Archive" size="sm" className={["text-text-500 opacity-80", className].filter(Boolean).join(" ")} />;
   } else {
-    // Official pje({ square: false }) — index-BELzQL5P:
-    // className:"block size-[6px] border border-text-400 opacity-50 "+(e?"rounded-[2px]":"rounded-full")
+    // Official Code vje idle (index-BELzQL5P): `"idle"===b?ije(...,pje({}))`.
+    // gje's idle fallback is uje (hs size 14); CodeStatusGlyph idle is pje ring, not uje.
     inner = (
       <span
         aria-hidden="true"
