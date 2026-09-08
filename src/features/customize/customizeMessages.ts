@@ -71,6 +71,89 @@ export const CUSTOMIZE_MESSAGES = {
     defaultMessage: "Plugins that you add or create will appear here.",
     id: "yiIJPIdfA8",
   },
+  /** Official l7t (3WKlYlcDGA). */
+  organizationPlugins: { defaultMessage: "Organization plugins", id: "3WKlYlcDGA" },
+  /** Official c7t project-scope tooltip (gF+3w4kIBa). */
+  projectPluginsTooltip: {
+    defaultMessage: "Plugins scoped to this project. Shared with anyone who works in this folder.",
+    id: "gF+3w4kIBa",
+  },
+  /** Official c7t project-scope info aria (BydydidwTp). */
+  projectPluginsInfo: {
+    defaultMessage: "More information about project plugins",
+    id: "BydydidwTp",
+  },
+  /** Official Fl Marketplace ({link}) (OXVoeW3jTN). */
+  marketplaceSource: { defaultMessage: "Marketplace ({link})", id: "OXVoeW3jTN" },
+  /** Official i7t Disabled badge (tthToSLF5Z). */
+  disabled: { defaultMessage: "Disabled", id: "tthToSLF5Z" },
+  /** Official i7t / Ml Agents (GBnvl1JpeB). */
+  agents: { defaultMessage: "Agents", id: "GBnvl1JpeB" },
+  /** Official i7t / St Hooks (7OaBnbpdtS). */
+  hooks: { defaultMessage: "Hooks", id: "7OaBnbpdtS" },
+  /** Official Pl Uninstall (a8npXIgle+). */
+  uninstall: { defaultMessage: "Uninstall", id: "a8npXIgle+" },
+  /** Official zl confirm title (uTsZJJdfTj). */
+  uninstallPluginQuestion: { defaultMessage: "Uninstall plugin?", id: "uTsZJJdfTj" },
+  /** Official zl local-upload uninstall copy (JDJoIZ0VZp). */
+  uninstallCannotBeUndone: { defaultMessage: "This action cannot be undone.", id: "JDJoIZ0VZp" },
+  /** Official zl marketplace uninstall copy (N9i1wC/ey0). */
+  uninstallPluginDeletesSkills: {
+    defaultMessage:
+      "Removing this plugin will delete all of its commands and skills. You can reinstall it from the marketplace later.",
+    id: "N9i1wC/ey0",
+  },
+  /** Official Fl Source (aH4De2Y20k). */
+  source: { defaultMessage: "Source", id: "aH4De2Y20k" },
+  /** Official Fl Uploaded from file (83a24xd13u). */
+  uploadedFromFile: { defaultMessage: "Uploaded from file", id: "83a24xd13u" },
+  /** Official Fl Version (I3b4hnFnDd). */
+  version: { defaultMessage: "Version", id: "I3b4hnFnDd" },
+  /** Official Fl / Pe Description (Q8Qw5BZ1VA). */
+  description: { defaultMessage: "Description", id: "Q8Qw5BZ1VA" },
+  /** Official zl switch (Ftw1T1s2Vd). */
+  enablePlugin: { defaultMessage: "Enable plugin", id: "Ftw1T1s2Vd" },
+  /** Official zl tooltip (FEEJsdW3QE). */
+  disablePlugin: { defaultMessage: "Disable plugin", id: "FEEJsdW3QE" },
+  /** Official zl uninstall success (Z/VxqN6R34). */
+  pluginUninstalledShort: { defaultMessage: "Plugin uninstalled.", id: "Z/VxqN6R34" },
+  /** Official zl toggle error (rZb1d+ckYN). */
+  failedToUpdatePluginState: { defaultMessage: "Failed to update plugin state.", id: "rZb1d+ckYN" },
+  /** Official skills empty (0CXe0vnrMD). */
+  pluginHasNoSkills: { defaultMessage: "This plugin has no skills.", id: "0CXe0vnrMD" },
+  /** Official agents empty (fnCk+wS59g). */
+  pluginHasNoAgents: { defaultMessage: "This plugin has no agents.", id: "fnCk+wS59g" },
+  /** Official hooks empty (pg4z2lo8bt). */
+  pluginHasNoHooks: { defaultMessage: "This plugin has no hooks.", id: "pg4z2lo8bt" },
+  /** Official connectors empty (pbsMDTNwyt). */
+  pluginHasNoConnectors: { defaultMessage: "This plugin has no required connectors.", id: "pbsMDTNwyt" },
+  /** Official Ml empty (IGDqoJPF/w). */
+  pluginHasNoSkillsOrAgents: {
+    defaultMessage: "This plugin doesn't have any skills or agents.",
+    id: "IGDqoJPF/w",
+  },
+  /** Official skills select (ccYDCQ+TEE). */
+  selectSkillToView: { defaultMessage: "Select a skill to view details", id: "ccYDCQ+TEE" },
+  /** Official agents select (Ma5X2p/+i7). */
+  selectAgentToView: { defaultMessage: "Select an agent to view details", id: "Ma5X2p/+i7" },
+  /** Official hooks select (t3rpQG3FXs). */
+  selectHookToView: { defaultMessage: "Select a hook to view details", id: "t3rpQG3FXs" },
+  /** Official Pl overflow aria (rKQPgfPvWS). */
+  moreOptionsFor: { defaultMessage: "More options for {label}", id: "rKQPgfPvWS" },
+  /** Official Ml skills blurb (FnzXgaeTqP). */
+  pluginSkillsBlurb: {
+    defaultMessage: "Invoke by typing / in chat, or let Claude use them automatically for relevant tasks.",
+    id: "FnzXgaeTqP",
+  },
+  /** Official Ml agents blurb (c6hB0gqEvO). */
+  pluginAgentsBlurb: {
+    defaultMessage: "Specialized AI assistants that can be invoked to handle specific types of tasks.",
+    id: "c6hB0gqEvO",
+  },
+  /** Official Ml See all (078WAre0KU). */
+  seeAll: { defaultMessage: "See all", id: "078WAre0KU" },
+  /** Official desktop Show in Folder (qJzHPN7NHs). */
+  showInFolder: { defaultMessage: "Show in Folder", id: "qJzHPN7NHs" },
 
   /** Official B8t Tm ariaLabel + title (RDwKyyO7Lq). */
   directory: { defaultMessage: "Directory", id: "RDwKyyO7Lq" },

@@ -21,7 +21,7 @@ export function PluginUploadModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (result?: { pluginId?: string }) => void;
 }) {
   const text = useCustomizeText();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -99,7 +99,9 @@ export function PluginUploadModal({
         }
         if (result.success === true || result.pluginId) {
           setFile(null);
-          onSuccess?.();
+          onSuccess?.({
+            pluginId: typeof result.pluginId === "string" ? result.pluginId : undefined,
+          });
           onClose();
         }
       } finally {

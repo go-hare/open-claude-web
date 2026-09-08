@@ -9,6 +9,8 @@ import { officialDirectoryStore } from "./directory/officialDirectoryStore";
 import { BROWSE_PLUGINS_CARD_VISIBLE, SKILLS_ENABLED } from "./customizeGates";
 import { CustomizeIndexPictogram } from "./CustomizeIndexPictogram";
 import { CustomizeSideNav } from "./CustomizeSideNav";
+import { PluginRoute } from "./plugins/PluginRoute";
+import { invalidateLocalPlugins } from "./plugins/localPluginsQuery";
 import { SkillDocumentIcon } from "./skills/SkillDocumentIcon";
 import { SkillsRoute } from "./skills/SkillsRoute";
 
@@ -46,11 +48,7 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
       });
     }
 
-    // c63a78ed4:2905-2928 / 2931-3276: pluginId 数据缺失时 redirect(/customize)。
-    // 当前本地壳子还没有真实 plugin 数据源，所以不伪造 detail/subroute。
-    if (/^\/customize\/plugins\/[^/]+/.test(pathname) && pathname !== "/customize/plugins/new") {
-      replaceCustomize();
-    }
+    // Official c63a: pluginId missing after Ss() load redirects inside PluginRoute.
   }, [pathname]);
 
   const route = useMemo(() => getCustomizeRoute(pathname), [pathname]);
@@ -81,7 +79,27 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
       case "pluginConnectors":
       case "pluginHooks":
       case "pluginSkills":
-      case "pluginDetail":
+      case "pluginDetail": {
+        const selected = new URLSearchParams(window.location.search).get("selected");
+        const subroute =
+          route.kind === "pluginSkills"
+            ? "skills"
+            : route.kind === "pluginAgents"
+              ? "agents"
+              : route.kind === "pluginHooks"
+                ? "hooks"
+                : route.kind === "pluginConnectors"
+                  ? "connectors"
+                  : undefined;
+        return (
+          <PluginRoute
+            onNavigate={onNavigate}
+            pluginId={decodeURIComponent(route.pluginId)}
+            selectedName={selected}
+            subroute={subroute}
+          />
+        );
+      }
       case "pluginNew":
         return null;
       case "plugins":
@@ -121,12 +139,14 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
       </div>
       <PluginUploadModal
         isOpen={uploadOpen}
-        onClose={() => {
+        onClose={() => setUploadOpen(false)}
+        onSuccess={(result) => {
+          invalidateLocalPlugins();
           setUploadOpen(false);
-          officialDirectoryStore.getState().open("plugins", { pluginSeed: {} });
-        }}
-        onSuccess={() => {
-          officialDirectoryStore.getState().open("plugins", { pluginSeed: {} });
+          // Official S7t / uX: navigate to /customize/plugins/:pluginId after upload.
+          if (result?.pluginId) {
+            onNavigate(`/customize/plugins/${encodeURIComponent(result.pluginId)}`);
+          }
         }}
       />
     </div>

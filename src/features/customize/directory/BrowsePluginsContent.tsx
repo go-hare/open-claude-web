@@ -32,6 +32,7 @@ import {
   type MarketplacePluginRecord,
   type MarketplaceRecord,
 } from "./pluginMarketplace";
+import { invalidateLocalPlugins } from "../plugins/localPluginsQuery";
 
 type BrowseTab = "default" | "personal";
 
@@ -233,6 +234,7 @@ export function BrowsePluginsContentInner({
             formatI18n(text.pluginInstalledReady, { pluginName: titleCasePluginName(plugin.name) }),
             { uniqueKey: `plugin-install-${plugin.id}` },
           );
+          invalidateLocalPlugins();
           void invalidate();
         })
         .catch((caught: unknown) => {
@@ -547,9 +549,19 @@ export function BrowsePluginsContentInner({
       <PluginUploadModal
         isOpen={uploadOpen}
         onClose={() => setUploadOpen(false)}
-        onSuccess={() => {
+        onSuccess={(result) => {
+          invalidateLocalPlugins();
           void invalidate();
           refetchAll();
+          if (result?.pluginId) {
+            onClose();
+            window.history.pushState(
+              {},
+              "",
+              `/customize/plugins/${encodeURIComponent(result.pluginId)}`,
+            );
+            window.dispatchEvent(new Event("app:navigation"));
+          }
         }}
       />
     </>

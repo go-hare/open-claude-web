@@ -3,7 +3,7 @@ import { desktopBridge } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
 import { readPersistedFrameMode } from "../../stores/frameStoreHelpers";
 import { useCustomizeText } from "./customizeMessages";
-import { LOCAL_PLUGINS_VISIBLE, PLUGINS_SECTION_ENABLED, SKILLS_ENABLED } from "./customizeGates";
+import { PLUGINS_SECTION_ENABLED, SKILLS_ENABLED } from "./customizeGates";
 import { FolderPill } from "./FolderPill";
 import { PluginsSidebarSection } from "./plugins/PluginsSidebarSection";
 import { getSelectedFolder, setSelectedFolder, subscribeSelectedFolder } from "./selectedFolderStore";
@@ -87,10 +87,11 @@ export function CustomizeSideNav({
 
         {PLUGINS_SECTION_ENABLED ? (
           <PluginsSidebarSection
-            localPluginsVisible={LOCAL_PLUGINS_VISIBLE}
             onBrowsePlugins={onBrowsePlugins}
             onCreateWithClaude={onCreateWithClaude}
+            onNavigate={onNavigate}
             onUploadPlugin={onUploadPlugin}
+            pathname={activePath}
           />
         ) : null}
       </div>

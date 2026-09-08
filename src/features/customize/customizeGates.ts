@@ -17,11 +17,10 @@ export const SKILLS_ENABLED = true;
 export const BROWSE_PLUGINS_CARD_VISIBLE = true;
 
 /**
- * Official JZ/localPluginsVisible — Create plugin submenu (Upload / Create with Claude).
- * Official desktop Code customize shows Create plugin when host plugin APIs + flag allow.
- * Local shell enables the c7t menu surface (handlers wired via CustomizePage callbacks).
+ * Official JZ/localPluginsVisible — Create plugin submenu (Upload / Create with Claude)
+ * when host kT.getPlugins/uploadPlugin/deletePlugin/setPluginEnabled exist.
+ * Product: isLocalPluginsHostVisible() in PluginsSidebarSection (not a hardcoded true).
  */
-export const LOCAL_PLUGINS_VISIBLE = true;
 
 /**
  * Official o7t empty personal plugins:

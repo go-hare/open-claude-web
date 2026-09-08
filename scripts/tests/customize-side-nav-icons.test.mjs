@@ -20,24 +20,26 @@ test("SkillDocumentIcon contains official Vv path data", () => {
   assert.match(src, /viewBox="0 0 20 20"/);
 });
 
-test("PluginsSidebarSection exposes Create plugin when localPluginsVisible", () => {
+test("PluginsSidebarSection exposes Create plugin when host JZ APIs exist", () => {
   const src = readFileSync(join(root, "src/features/customize/plugins/PluginsSidebarSection.tsx"), "utf8");
-  assert.match(src, /Create plugin/);
+  assert.match(src, /localPluginsHostVisible/);
   assert.match(src, /localPluginsVisible/);
-  const gates = readFileSync(join(root, "src/features/customize/customizeGates.ts"), "utf8");
-  assert.match(gates, /LOCAL_PLUGINS_VISIBLE = true/);
+  assert.match(src, /createPlugin/);
+  const query = readFileSync(join(root, "src/features/customize/plugins/localPluginsQuery.ts"), "utf8");
+  assert.match(query, /fetchLocalPlugins/);
+  assert.match(query, /getLocalPlugins\(\)\?\.getPlugins/);
 });
 
-test("CustomizeSideNav Code mode shows FolderPill / 选择文件夹", () => {
+test("CustomizeSideNav Code mode shows FolderPill / selectFolder", () => {
   const src = readFileSync(join(root, "src/features/customize/CustomizeSideNav.tsx"), "utf8");
   assert.match(src, /FolderPill/);
-  assert.match(src, /选择文件夹/);
+  assert.match(src, /text\.selectFolder/);
   assert.match(src, /isCodeMode/);
 });
 
 test("index Create new skills card uses SkillDocumentIcon not spark string", () => {
   const src = readFileSync(join(root, "src/features/customize/CustomizePage.tsx"), "utf8");
-  assert.match(src, /Create new skills[\s\S]{0,200}SkillDocumentIcon|SkillDocumentIcon[\s\S]{0,200}Create new skills/);
+  assert.match(src, /SkillDocumentIcon[\s\S]{0,400}text\.createNewSkills|text\.createNewSkills[\s\S]{0,400}SkillDocumentIcon/);
   // no CustomizeOptionCard icon="spark"
   assert.doesNotMatch(src, /CustomizeOptionCard[\s\S]{0,80}icon=["']spark["']/);
 });
