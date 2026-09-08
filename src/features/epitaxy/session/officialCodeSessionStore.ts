@@ -294,11 +294,6 @@ type OfficialCodeSessionActions = {
    */
   markInterrupting: (sessionId: string) => void;
   /**
-   * Official `g` for success parent results (not mergeMessage'd).
-   * Promote queuedMessages after the result, new pendingTurn, keep isRunning.
-   */
-  promoteQueueAndContinue: (sessionId: string) => boolean;
-  /**
    * Local stream settle / stop.
    * Official `g` remints pendingTurn in mergeMessage then Pke.clear (Va only) —
    * do not call this for g. `h` / done / error call with markSessionSettled.
@@ -1353,43 +1348,6 @@ function createOfficialCodeSessionStore() {
     });
   },
 
-  promoteQueueAndContinue: (sessionId) => {
-    let continued = false;
-    set((state) => {
-      const raw = state.buckets[sessionId];
-      if (!raw) return state;
-      const prev = withQueueDefaults(raw);
-      if (prev.queuedMessages.length === 0 && prev.pendingQueuedSends === 0) return state;
-      continued = true;
-      let messages = prev.messages;
-      for (const queued of prev.queuedMessages) {
-        messages = upsertMessage(messages, queued);
-      }
-      const at = Date.now();
-      officialClearTurnStarted(sessionId);
-      officialMarkTurnStarted(sessionId, at);
-      return {
-        buckets: {
-          ...state.buckets,
-          [sessionId]: {
-            ...prev,
-            messages,
-            queuedMessages: EMPTY_QUEUED_MESSAGES,
-            pendingQueuedSends: 0,
-            pendingTurnStartedAt: at,
-            pendingTurnEndTurnSeen: false,
-            compactionStatus: null,
-            streamActivityMode: idleStreamActivityMode,
-            streamingMessageId: null,
-            streamSnapshot: null,
-            session: prev.session ? { ...prev.session, messages, isRunning: true } : prev.session,
-          },
-        },
-      };
-    });
-    return continued;
-  },
-
   markInterrupting: (sessionId) => {
     // Official Wr onMutate: Pke.flush + mCe.reset only. Do not clearPendingTurn,
     // queuedMessages, or isRunning — interrupt then continues the queue.
@@ -1572,7 +1530,7 @@ function migrateBucketsWithQueueDefaults(
  * Bump when queue pipeline action bodies change so HMR rebinds implementations
  * without wiping transcript buckets (zustand keeps old closures otherwise).
  */
-const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 11;
+const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 12;
 const OFFICIAL_CODE_SESSION_STORE_REV_KEY = "__hareOfficialCodeSessionStoreQueueRev__";
 
 function resolveOfficialCodeSessionStore() {

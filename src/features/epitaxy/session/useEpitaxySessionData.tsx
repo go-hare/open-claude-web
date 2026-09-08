@@ -552,9 +552,8 @@ export function useEpitaxySessionData(sessionId?: string) {
         }
         const eventType = stringValue(asRecord(event).type);
         // Official mergeMessage (index-BELzQL5P): no case close/stopped.
-        // Those only update list-store Ive metadata. Host stop() emits stopped then
-        // session_updated — do NOT discardQueued / clear pendingTurn (Esc+queue
-        // interrupt timeout still keeps web queue until result g/h).
+        // Those only update list-store Ive metadata. interrupt fail: close then LSM
+        // stopped; LocalSessions.stop: stopped if query. Do NOT discardQueued / clear pendingTurn.
         if (eventType === "stopped" || eventType === "close") {
           const nextSession = asRecord(event).session ?? asRecord(asRecord(event).payload).session;
           if (nextSession) {

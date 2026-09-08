@@ -178,29 +178,6 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(entries.some((entry) => entry.items.some((item) => item.kind === "turn_error"))).toBe(false);
   });
 
-  it("promoteQueueAndContinue promotes after success result and keeps running", () => {
-    officialCodeSessionStore.getState().openSession("s1", {
-      id: "s1",
-      kind: "code",
-      title: "S",
-      updatedAtMs: 1,
-      isRunning: true,
-    } as never, [interruptUser()]);
-    officialCodeSessionStore.getState().setStreamActivity("s1", {
-      pendingTurnStartedAt: Date.now(),
-      isRunning: true,
-    });
-    officialCodeSessionStore.getState().enqueueQueuedMessage("s1", queuedUser("q1", "222"));
-
-    expect(officialCodeSessionStore.getState().promoteQueueAndContinue("s1")).toBe(true);
-
-    const bucket = officialCodeSessionStore.getState().buckets.s1;
-    expect(bucket?.queuedMessages).toEqual([]);
-    expect(bucket?.messages.some((message) => message.id === "q1")).toBe(true);
-    expect(bucket?.session?.isRunning).toBe(true);
-    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
-  });
-
   it("empty-queue interrupt result clears pendingTurn (official !g)", () => {
     officialCodeSessionStore.getState().openSession("s1", {
       id: "s1",

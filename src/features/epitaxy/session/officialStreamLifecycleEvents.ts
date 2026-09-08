@@ -3,8 +3,8 @@
  *
  * mergeMessage handles: transcript / connection / reconnected / cleared / done / error.
  * close / stopped are Ive list-store metadata only — they must NOT dump queuedMessages
- * or clear pendingTurn. Host interrupt timeout still stopSession+stopped; web queue
- * stays until result g/h.
+ * or clear pendingTurn. Host interrupt timeout: close then LSM stopSession→stopped;
+ * LocalSessions.stop: stopped if query. Web queue stays until result g/h.
  */
 
 function stringValue(value: unknown): string | undefined {
