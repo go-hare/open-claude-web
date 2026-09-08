@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
+import { after, beforeEach, test } from "node:test";
 import { createServer } from "vite";
 
 const vite = await createServer({
@@ -21,9 +21,24 @@ const { applyCoworkRateLimitToStore, coworkRateLimitStore, createCoworkRateLimit
   await vite.ssrLoadModule(
     "/src/features/cowork/session/rateLimit/coworkRateLimitStore.ts",
   );
+const {
+  coworkTranscriptCacheSizeForTests,
+  lookupCoworkTranscriptCache,
+  resetCoworkTranscriptCacheForTests,
+  writeCoworkTranscriptCache,
+} = await vite.ssrLoadModule("/src/features/cowork/session/coworkTranscriptCache.ts");
+const {
+  resetCoworkRecentsSnapshotForTests,
+  setCoworkRecentsSnapshot,
+} = await vite.ssrLoadModule("/src/features/cowork/sidebar/coworkRecentsSnapshot.ts");
 
 after(async () => {
   await vite.close();
+});
+
+beforeEach(() => {
+  resetCoworkTranscriptCacheForTests();
+  resetCoworkRecentsSnapshotForTests();
 });
 
 function deferred() {
@@ -42,7 +57,7 @@ function message(uuid, role = "assistant") {
   };
 }
 
-function session() {
+function session(overrides = {}) {
   return {
     id: "session-1",
     isRunning: true,
@@ -51,6 +66,25 @@ function session() {
     title: "Task",
     updatedAt: "now",
     updatedAtMs: 1,
+    ...overrides,
+  };
+}
+
+function idleSession(overrides = {}) {
+  return session({ isRunning: false, lastActivityAt: "t1", ...overrides });
+}
+
+function recentsRow(overrides = {}) {
+  return {
+    id: "session-1",
+    isRunning: false,
+    kind: "epitaxy",
+    lastActivityAt: "t1",
+    sessionKind: "cowork",
+    title: "Task",
+    updatedAt: "now",
+    updatedAtMs: 1,
+    ...overrides,
   };
 }
 
@@ -657,5 +691,148 @@ test("plugins_search reverse-RPC responds empty catalog when no org (honest resi
   assert.equal(responses[0].requestId, "pl-1");
   const parsed = JSON.parse(responses[0].resultsJson);
   assert.deepEqual(parsed.results, []);
+  runtime.dispose();
+});
+
+test("idle miss fetches transcript then writes cZe; remount hits without getTranscript", async () => {
+  setCoworkRecentsSnapshot([recentsRow()]);
+  let transcriptReads = 0;
+  const transcript = [message("idle-1")];
+  const bridge = {
+    getRawSession: async () => idleSession(),
+    getRawTranscript: async () => {
+      transcriptReads += 1;
+      return transcript;
+    },
+    onEvent: () => () => {},
+  };
+  const store = { setState: () => {} };
+  const first = createCoworkSessionRuntime({
+    bridge,
+    messageStore: createCoworkMessagePathStore(),
+    sessionId: "session-1",
+    store,
+  });
+  first.start();
+  await first.reload();
+  assert.equal(transcriptReads, 1);
+  assert.equal(coworkTranscriptCacheSizeForTests(), 1);
+  first.dispose();
+
+  const second = createCoworkSessionRuntime({
+    bridge,
+    messageStore: createCoworkMessagePathStore(),
+    sessionId: "session-1",
+    store,
+  });
+  second.start();
+  await second.reload();
+  assert.equal(transcriptReads, 1);
+  second.dispose();
+});
+
+test("running recents row never hits cZe (official isRunning miss)", async () => {
+  setCoworkRecentsSnapshot([recentsRow({ isRunning: true })]);
+  writeCoworkTranscriptCache("session-1", [message("cached")], "t1");
+  let transcriptReads = 0;
+  const bridge = {
+    getRawSession: async () => session({ lastActivityAt: "t1" }),
+    getRawTranscript: async () => {
+      transcriptReads += 1;
+      return [message("live")];
+    },
+    onEvent: () => () => {},
+  };
+  const runtime = createCoworkSessionRuntime({
+    bridge,
+    messageStore: createCoworkMessagePathStore(),
+    sessionId: "session-1",
+    store: { setState: () => {} },
+  });
+  runtime.start();
+  await runtime.reload();
+  assert.equal(transcriptReads, 1);
+  runtime.dispose();
+});
+
+test("stale lastActivityAt after cache hit mZe-refetches transcript", async () => {
+  setCoworkRecentsSnapshot([recentsRow({ lastActivityAt: "t1" })]);
+  writeCoworkTranscriptCache("session-1", [message("stale")], "t1");
+  let transcriptReads = 0;
+  const bridge = {
+    getRawSession: async () => idleSession({ lastActivityAt: "t2" }),
+    getRawTranscript: async () => {
+      transcriptReads += 1;
+      return [message("fresh")];
+    },
+    onEvent: () => () => {},
+  };
+  let context;
+  const runtime = createCoworkSessionRuntime({
+    bridge,
+    messageStore: createCoworkMessagePathStore(),
+    sessionId: "session-1",
+    store: { setState: (next) => { context = next.sessionContext; } },
+  });
+  runtime.start();
+  await runtime.reload();
+  assert.equal(transcriptReads, 1);
+  assert.deepEqual(context.messages.map((item) => item.id), ["fresh"]);
+  runtime.dispose();
+});
+
+test("submitMessage invalidates cZe before send (official mZe)", async () => {
+  setCoworkRecentsSnapshot([recentsRow()]);
+  writeCoworkTranscriptCache("session-1", [message("cached")], "t1");
+  const bridge = {
+    getRawSession: async () => idleSession(),
+    getRawTranscript: async () => [message("cached")],
+    onEvent: () => () => {},
+    sendMessage: async () => null,
+  };
+  const runtime = createCoworkSessionRuntime({
+    bridge,
+    messageStore: createCoworkMessagePathStore(),
+    sessionId: "session-1",
+    store: { setState: () => {} },
+  });
+  runtime.start();
+  await runtime.reload();
+  await runtime.submitMessage("hi", { messageUuid: "u1" });
+  assert.equal(lookupCoworkTranscriptCache("session-1", "t1", false), null);
+  runtime.dispose();
+});
+
+test("error / close / session_updated invalidate cZe", async () => {
+  setCoworkRecentsSnapshot([recentsRow()]);
+  writeCoworkTranscriptCache("session-1", [message("cached")], "t1");
+  let emit;
+  const bridge = {
+    getRawSession: async () => idleSession(),
+    getRawTranscript: async () => [message("cached")],
+    onEvent: (listener) => {
+      emit = listener;
+      return () => {};
+    },
+  };
+  const runtime = createCoworkSessionRuntime({
+    bridge,
+    messageStore: createCoworkMessagePathStore(),
+    sessionId: "session-1",
+    store: { setState: () => {} },
+  });
+  runtime.start();
+  await runtime.reload();
+  emit({ error: "boom", sessionId: "session-1", type: "error" });
+  assert.equal(lookupCoworkTranscriptCache("session-1", "t1", false), null);
+
+  writeCoworkTranscriptCache("session-1", [message("cached")], "t1");
+  emit({ sessionId: "session-1", type: "close" });
+  assert.equal(lookupCoworkTranscriptCache("session-1", "t1", false), null);
+
+  writeCoworkTranscriptCache("session-1", [message("cached")], "t1");
+  emit({ sessionId: "session-1", type: "session_updated" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(lookupCoworkTranscriptCache("session-1", "t1", false), null);
   runtime.dispose();
 });

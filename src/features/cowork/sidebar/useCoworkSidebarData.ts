@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type SetStateAction } from "react";
 import { desktopBridge, type CoworkSpaceSummary, type ScheduledTaskSummary, type SessionSummary } from "../../../adapters/desktopBridge";
 import {
   applyOfficialCoworkRecentsListEvent,
   toCoworkListRow,
 } from "./officialCoworkRecentsList";
+import { setCoworkRecentsSnapshot } from "./coworkRecentsSnapshot";
 
 type CoworkSidebarData = {
   scheduledTasks: ScheduledTaskSummary[];
@@ -16,11 +17,13 @@ const emptyData: CoworkSidebarData = { scheduledTasks: [], sessions: [], spaces:
 export function useCoworkSidebarData() {
   const [data, setData] = useState<CoworkSidebarData>(emptyData);
 
-  const setSessions = useCallback((updater: React.SetStateAction<SessionSummary[]>) => {
-    setData((current) => ({
-      ...current,
-      sessions: typeof updater === "function" ? updater(current.sessions) : updater,
-    }));
+  const setSessions = useCallback((updater: SetStateAction<SessionSummary[]>) => {
+    setData((current) => {
+      const sessions = typeof updater === "function" ? updater(current.sessions) : updater;
+      // Official Q5: list mutations are module-visible to D1e hydrate (lastActivityAt / isRunning).
+      setCoworkRecentsSnapshot(sessions);
+      return { ...current, sessions };
+    });
   }, []);
 
   /**
@@ -30,6 +33,7 @@ export function useCoworkSidebarData() {
   const reloadSessions = useCallback(async () => {
     const sessions = await desktopBridge.LocalAgentModeSessions.list().catch(() => null);
     if (sessions) {
+      setCoworkRecentsSnapshot(sessions);
       setData((current) => ({ ...current, sessions }));
     }
   }, []);

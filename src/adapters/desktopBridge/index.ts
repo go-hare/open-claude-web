@@ -8,6 +8,15 @@ declare global {
     "claude.web"?: RawClaudeWebBridge;
     "claude.settings"?: RawClaudeSettingsBridge;
     "claude.officeAddin"?: RawClaudeOfficeAddinBridge;
+    /**
+     * Official mainView preload (`claudeAppSettings.filePickers.getPathForFile`).
+     * Qj `io` / index `r2` — Electron `webUtils.getPathForFile`.
+     */
+    claudeAppSettings?: {
+      filePickers?: {
+        getPathForFile?: (file: File) => string;
+      };
+    };
     process?: {
       versions?: Record<string, string | undefined>;
     };

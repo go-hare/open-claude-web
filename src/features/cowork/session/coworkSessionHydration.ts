@@ -1,29 +1,48 @@
-import type { CoworkDetectedFile, CoworkSessionSnapshot } from "../../../adapters/desktopBridge/types";
+import type { CoworkDetectedFile, CoworkSessionSnapshot, SessionSummary } from "../../../adapters/desktopBridge/types";
 import type { CoworkPermissionRequest } from "./coworkPermissionTypes";
 import { chatMessageFromCoworkEvent } from "./coworkSessionEvents";
 import type { CoworkInitializationStatus, CoworkRawMessage, CoworkSessionDataState } from "./types";
 
-export function createInitialCoworkSessionState(sessionId: string): CoworkSessionDataState {
+/**
+ * Official Lte / O3t (~51337, ~304899): seed per-session store from Q5 sidebar
+ * row before D1e hydrate. isLoading is !row. Do not invent title ("新任务").
+ */
+export function createInitialCoworkSessionState(
+  sessionId: string,
+  seed?: SessionSummary,
+): CoworkSessionDataState {
+  const pendingTurn = seed?.isRunning === true
+    ? { endTurnSeen: false, startTime: Date.now() }
+    : null;
   return {
     agentActivity: null,
-    connectionState: "connecting",
-    error: null,
+    // Official Lte: sidebar row → connecting; no row → disconnected until D1e.
+    connectionState: seed ? "connecting" : "disconnected",
+    error: seed?.error ? new Error(seed.error) : null,
     errorCategory: null,
     fsDetectedFiles: new Map(),
     initializationStatus: null,
-    isLoading: true,
+    isLoading: !seed,
     isSessionNotFound: false,
     messages: [],
     pendingMessages: [],
-    pendingTurn: null,
-    promptSuggestion: null,
+    pendingTurn,
+    promptSuggestion: seed?.promptSuggestion ?? null,
     sdkMcpStatuses: undefined,
-    session: null,
+    session: seed ? recentsRowAsSession(seed) : null,
     sessionId,
     streamActivity: "idle",
     streamingMessageId: null,
     streamSnapshot: null,
     toolPermissionRequests: [],
+  };
+}
+
+function recentsRowAsSession(seed: SessionSummary): CoworkSessionSnapshot {
+  return {
+    ...seed,
+    bufferedMessages: undefined,
+    messages: undefined,
   };
 }
 

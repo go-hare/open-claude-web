@@ -3,6 +3,7 @@ import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { SendMessageInput } from "../../../adapters/desktopBridge/types";
 import type { CoworkPermissionRequest } from "./coworkPermissionTypes";
+import { getCoworkRecentsRow } from "../sidebar/coworkRecentsSnapshot";
 import { createInitialCoworkSessionState } from "./coworkSessionHydration";
 import type { CoworkSessionDataState } from "./types";
 
@@ -50,9 +51,11 @@ export function useCoworkSessionContext() {
 }
 
 function initialContext(sessionId: string): CoworkSessionContextValue {
+  // Official O3t / Lte: seed per-session store from Q5 recents before D1e hydrate.
+  const data = createInitialCoworkSessionState(sessionId, getCoworkRecentsRow(sessionId));
   return {
-    ...createInitialCoworkSessionState(sessionId),
-    isResponding: false,
+    ...data,
+    isResponding: data.pendingTurn !== null && !data.pendingTurn.endTurnSeen,
     messageUuids: [],
     reload: asyncNoop,
     setPermissionRequests: noop,

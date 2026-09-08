@@ -107,6 +107,28 @@ test("removes hydrated optimistic messages and settles a stopped session", () =>
   assert.equal(hydrated.streamSnapshot, null);
 });
 
+test("Lte seeds sidebar row without inventing title and isLoading=!row", () => {
+  const empty = createInitialCoworkSessionState("session-1");
+  assert.equal(empty.isLoading, true);
+  assert.equal(empty.session, null);
+  assert.equal(empty.connectionState, "disconnected");
+  assert.equal(empty.pendingTurn, null);
+
+  const seeded = createInitialCoworkSessionState("session-1", {
+    id: "session-1",
+    isRunning: true,
+    kind: "epitaxy",
+    sessionKind: "cowork",
+    title: "From recents",
+    updatedAt: "now",
+    updatedAtMs: 1,
+  });
+  assert.equal(seeded.isLoading, false);
+  assert.equal(seeded.session?.title, "From recents");
+  assert.equal(seeded.connectionState, "connecting");
+  assert.equal(seeded.pendingTurn?.endTurnSeen, false);
+});
+
 test("seeds official pendingTurn when hydrating a running session", () => {
   const state = createInitialCoworkSessionState("session-1");
   const hydrated = hydrateCoworkSessionState(state, session({ isRunning: true }), []);

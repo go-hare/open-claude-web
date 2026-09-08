@@ -8,6 +8,7 @@ import { useState, type ReactNode } from "react";
 import { micromark } from "micromark";
 import { Icon } from "../../../../shell/icons";
 import { applyCoworkRewindPrompt } from "../../composer/coworkSessionComposerActions";
+import { invalidateCoworkTranscriptCache } from "../coworkTranscriptCache";
 import { CoworkRetryGlyph } from "../../ui/CoworkOfficialGlyphs";
 import { useCoworkTranscriptActions } from "./CoworkTranscriptActions";
 
@@ -46,6 +47,8 @@ export function CoworkMessageActions({
   };
   const rewind = async () => {
     if (!actions?.bridge.rewind) return;
+    // Official D1e rewind (~140556): mZe before host rewind mutates transcript.
+    invalidateCoworkTranscriptCache(actions.sessionId);
     const prompt = await actions.bridge.rewind(actions.sessionId, messageUuid);
     if (!prompt) return;
     await applyCoworkRewindPrompt(actions.sessionId, prompt, "send");

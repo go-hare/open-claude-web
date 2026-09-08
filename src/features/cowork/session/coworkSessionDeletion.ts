@@ -17,6 +17,7 @@ import {
   officialStreamDrop,
 } from "../../epitaxy/session/officialStreamSessionStore";
 import { coworkSessionsBridge } from "./coworkSessionBridge";
+import { invalidateCoworkTranscriptCache } from "./coworkTranscriptCache";
 import { coworkMessagePathStore } from "./transcript/coworkMessagePathStore";
 
 export const COWORK_SESSION_DELETED_EVENT = "epitaxy:cowork-session-deleted";
@@ -55,6 +56,8 @@ export function replaceAppNavigation(path: string) {
  * Exported so n6 onEvent can clear without going through delete/archive commands.
  */
 export function clearCoworkSessionCaches(sessionId: string) {
+  // Official mZe: drop cZe transcript cache so remounts cannot hit stale JSONL.
+  invalidateCoworkTranscriptCache(sessionId);
   // Runtime uses official stream store for Cowork stream snapshots.
   officialStreamClear(sessionId);
   officialStreamDrop(sessionId);

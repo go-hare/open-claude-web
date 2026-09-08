@@ -6,12 +6,14 @@ const {
   streamClearMock,
   streamDropMock,
   setMessagesMock,
+  invalidateCacheMock,
 } = vi.hoisted(() => ({
   deleteMock: vi.fn(),
   archiveMock: vi.fn(),
   streamClearMock: vi.fn(),
   streamDropMock: vi.fn(),
   setMessagesMock: vi.fn(),
+  invalidateCacheMock: vi.fn(),
 }));
 
 // Minimal window for node test env (no jsdom dependency).
@@ -46,6 +48,10 @@ vi.mock("./transcript/coworkMessagePathStore", () => ({
       setMessages: (...args: unknown[]) => setMessagesMock(...args),
     }),
   },
+}));
+
+vi.mock("./coworkTranscriptCache", () => ({
+  invalidateCoworkTranscriptCache: (...args: unknown[]) => invalidateCacheMock(...args),
 }));
 
 import {
@@ -91,6 +97,7 @@ describe("deleteCoworkSession", () => {
     streamClearMock.mockReset();
     streamDropMock.mockReset();
     setMessagesMock.mockReset();
+    invalidateCacheMock.mockReset();
   });
 
   it("clears caches and emits only on bridge success", async () => {
@@ -107,6 +114,7 @@ describe("deleteCoworkSession", () => {
     expect(deleteMock).toHaveBeenCalledWith("s1");
     expect(streamClearMock).toHaveBeenCalledWith("s1");
     expect(streamDropMock).toHaveBeenCalledWith("s1");
+    expect(invalidateCacheMock).toHaveBeenCalledWith("s1");
     expect(setMessagesMock).toHaveBeenCalledWith("s1", []);
     expect(events).toEqual(["s1"]);
   });
@@ -150,6 +158,7 @@ describe("archiveCoworkSession", () => {
     streamClearMock.mockReset();
     streamDropMock.mockReset();
     setMessagesMock.mockReset();
+    invalidateCacheMock.mockReset();
   });
 
   it("clears caches and emits archived only on bridge success", async () => {
@@ -167,6 +176,7 @@ describe("archiveCoworkSession", () => {
     expect(deleteMock).not.toHaveBeenCalled();
     expect(streamClearMock).toHaveBeenCalledWith("s1");
     expect(streamDropMock).toHaveBeenCalledWith("s1");
+    expect(invalidateCacheMock).toHaveBeenCalledWith("s1");
     expect(events).toEqual(["s1"]);
   });
 

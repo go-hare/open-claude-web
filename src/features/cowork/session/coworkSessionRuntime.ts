@@ -45,6 +45,15 @@ import {
   isCoworkSessionEvent,
 } from "./coworkSessionEvents";
 import {
+  getCoworkRecentsRow,
+} from "../sidebar/coworkRecentsSnapshot";
+import {
+  coalesceCoworkTranscriptFetch,
+  invalidateCoworkTranscriptCache,
+  lookupCoworkTranscriptCache,
+  maybeWriteCoworkTranscriptCache,
+} from "./coworkTranscriptCache";
+import {
   createInitialCoworkSessionState,
   messageIdentity,
 } from "./coworkSessionHydration";
@@ -61,7 +70,7 @@ import type { CoworkRawMessage } from "./types";
 type RuntimeOptions = { bridge: CoworkSessionsBridge; messageStore?: CoworkMessagePathStore; sessionId: string; store: CoworkSessionStore };
 
 export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessagePathStore, sessionId, store }: RuntimeOptions) {
-  let data = createInitialCoworkSessionState(sessionId);
+  let data = createInitialCoworkSessionState(sessionId, getCoworkRecentsRow(sessionId));
   let disposed = false;
   let hydrating = true;
   let reloadPromise: Promise<void> | null = null;
@@ -126,14 +135,39 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
     hydrating = true;
     dispatch({ type: "hydration-started" });
     try {
-      const transcriptPromise = bridge.getRawTranscript(sessionId).catch(() => []);
+      // Official D1e (~140152): Q5 sidebar lastActivityAt + isRunning before getTranscript.
+      const sidebarRow = getCoworkRecentsRow(sessionId);
+      const sidebarLastActivityAt = sidebarRow?.lastActivityAt;
+      const sidebarRunning = sidebarRow?.isRunning ?? false;
+      const cached = lookupCoworkTranscriptCache(sessionId, sidebarLastActivityAt, sidebarRunning);
+      let fromCache = cached !== null;
+      const transcriptPromise = fromCache
+        ? Promise.resolve(cached as unknown[])
+        : coalesceCoworkTranscriptFetch(sessionId, () => bridge.getRawTranscript(sessionId).catch(() => []));
       const sessionPromise = bridge.getRawSession(sessionId);
-      const [transcript, session] = await Promise.all([transcriptPromise, sessionPromise]);
+      let [transcript, session] = await Promise.all([transcriptPromise, sessionPromise]);
       if (disposed) return;
-      dispatch({ session, transcript, type: "hydration-succeeded" });
+      // Official stale: cache hit then getSession.lastActivityAt !== sidebar lastActivityAt → mZe + refetch.
+      if (fromCache && session && session.lastActivityAt !== sidebarLastActivityAt) {
+        invalidateCoworkTranscriptCache(sessionId);
+        fromCache = false;
+        transcript = await bridge.getRawTranscript(sessionId).catch(() => []);
+      }
+      const applied = Array.isArray(transcript) ? transcript : [];
+      // Official pZe only after a successful getSession (idle miss + nonempty).
+      if (session) {
+        maybeWriteCoworkTranscriptCache(
+          sessionId,
+          applied,
+          session.lastActivityAt,
+          session.isRunning === true,
+          fromCache,
+        );
+      }
+      dispatch({ session, transcript: applied, type: "hydration-succeeded" });
       resetSeenMessages(data.messages);
       // Official seedTranscript / Tke.scanTranscript (~71625).
-      applyScannedTranscriptRateLimit(transcript);
+      applyScannedTranscriptRateLimit(applied);
     } catch (caught) {
       dispatch({ error: caught instanceof Error ? caught : new Error(String(caught)), type: "hydration-failed" });
     } finally {
@@ -143,6 +177,8 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
 
   async function submitMessage(text: string, input?: SendMessageInput) {
     if (!bridge.sendMessage) throw new Error("Cowork session bridge cannot send messages");
+    // Official D1e send (~140432): mZe before sendMessage.
+    invalidateCoworkTranscriptCache(sessionId);
     const messageUuid = input?.messageUuid ?? createMessageUuid();
     const pending = createPendingCoworkUserMessage(sessionId, messageUuid, text);
     dispatch({ message: pending, startedAt: Date.now(), type: "pending-message-added" });
@@ -182,18 +218,37 @@ export function createCoworkSessionRuntime({ bridge, messageStore = coworkMessag
     const raw = asRecord(event);
     const type = stringValue(raw.type);
     if (type === "cleared") {
+      // Official mZe on destructive transcript reset.
+      invalidateCoworkTranscriptCache(sessionId);
       officialStreamClear(sessionId);
       void reload();
       return;
     }
     if (type === "message") applyMessageEvent(event);
-    else if (type === "error") applyErrorEvent(raw);
+    else if (type === "error") {
+      // Official D1e ~139590: mZe on error.
+      invalidateCoworkTranscriptCache(sessionId);
+      applyErrorEvent(raw);
+    }
     // Official LocalAgentModeSessions settle on close/result/error — not synthetic "completed".
-    else if (type === "close" || type === "stopped") settleSession(raw);
-    else if (type === "pty_close") void refreshTranscript();
-    else if (type === "session_updated" || type === "permission_mode_changed") void refreshSessionMetadata();
+    else if (type === "close" || type === "stopped") {
+      // Official D1e ~139603: mZe on close.
+      invalidateCoworkTranscriptCache(sessionId);
+      settleSession(raw);
+    }
+    else if (type === "pty_close") {
+      // Official D1e ~139614: mZe then reseed transcript.
+      invalidateCoworkTranscriptCache(sessionId);
+      void refreshTranscript();
+    }
+    else if (type === "session_updated" || type === "permission_mode_changed") {
+      // Official D1e ~139637: mZe on session_updated only.
+      if (type === "session_updated") invalidateCoworkTranscriptCache(sessionId);
+      void refreshSessionMetadata();
+    }
     // Official D1e / list stores: archived marks isArchived (not full hydrate).
     else if (type === "archived") {
+      invalidateCoworkTranscriptCache(sessionId);
       officialStreamClear(sessionId);
       dispatch({ type: "session-archived" });
     }
