@@ -87,4 +87,34 @@ describe("Customize personal plugins hydrate (o7t / OX / i7t)", () => {
     expect(pluginListContext(true, null)).toEqual({ mode: "ccd" });
     expect(pluginListContext(false, "D:/proj")).toEqual({ mode: "cowork" });
   });
+
+  it("plugin skills subpage calls listSkillFiles (official ga/Wnt)", () => {
+    const panel = readSrc("PluginSubroutePanel.tsx");
+    expect(panel).toContain("fetchPluginSkillFiles");
+    expect(panel).toContain("pluginSkillFilesQueryKey");
+    expect(panel).toContain("legacy-commands");
+    expect(panel).toContain("decodeSkillName");
+    expect(panel).not.toContain("displayToken(row.name) === displayToken(selected");
+    const query = readSrc("localPluginsQuery.ts");
+    expect(query).toContain("listSkillFiles");
+  });
+
+  it("plugin skills files use ozt/ct tree and cdce filesError", () => {
+    const panel = readSrc("PluginSubroutePanel.tsx");
+    expect(panel).toContain("buildSkillFileTree");
+    expect(panel).toContain("PluginSkillFileTree");
+    expect(panel).toContain("couldNotLoadSkillFiles");
+    expect(panel).toContain("noFilesFoundInSkill");
+    expect(panel).not.toContain("files.map((file) =>");
+  });
+
+  it("plugin skills detail is official c9/cdce shell not a title-only panel", () => {
+    const panel = readSrc("PluginSubroutePanel.tsx");
+    expect(panel).toContain("ConnectorsPageSidebar");
+    expect(panel).toContain("CustomizeDetailPanel");
+    expect(panel).toContain("PluginSkillOverflow");
+    expect(panel).toContain("PluginSkillEditButton");
+    expect(panel).toContain("skillPreviouslyAuthoredAsCommand");
+    expect(panel).not.toContain('className="w-[256px] shrink-0 overflow-y-auto border-r');
+  });
 });

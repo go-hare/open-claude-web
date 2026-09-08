@@ -32,6 +32,56 @@ export function localPluginsQueryKey(context: PluginListContext) {
   return [...LOCAL_PLUGINS_QUERY_KEY, context] as const;
 }
 
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value ? value : undefined;
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+/** Official Wnt queryKey [ET, "skillFiles", pluginId, skillName, oX]. */
+export function pluginSkillFilesQueryKey(
+  pluginId: string,
+  skillName: string,
+  context: PluginListContext,
+) {
+  return ["localPlugins", "skillFiles", pluginId, skillName, context] as const;
+}
+
+export type PluginSkillFile = {
+  content?: string;
+  path: string;
+};
+
+/** Official Wnt / ga → kT.listSkillFiles(pluginId, skillName, oX). */
+export async function fetchPluginSkillFiles(
+  pluginId: string,
+  skillName: string,
+  context?: PluginListContext,
+): Promise<{ error: string | null; files: PluginSkillFile[]; success: boolean }> {
+  const listSkillFiles = getLocalPlugins()?.listSkillFiles;
+  if (!listSkillFiles) {
+    return { error: "Not available", files: [], success: false };
+  }
+  const raw = await listSkillFiles(pluginId, skillName, context);
+  const result = asRecord(raw);
+  if (result.success === false) {
+    return {
+      error: asString(result.error) ?? "Failed to load skill files",
+      files: [],
+      success: false,
+    };
+  }
+  const files = asArray(result.files).flatMap((entry) => {
+    const item = asRecord(entry);
+    const path = asString(item.path);
+    if (!path) return [];
+    return [{ path, content: asString(item.content) }];
+  });
+  return { error: null, files, success: true };
+}
+
 export type PluginSkill = {
   argumentHint?: string;
   content?: string;
@@ -93,14 +143,6 @@ export type InstalledPlugin = {
   updatedAt?: string;
   version?: string;
 };
-
-function asString(value: unknown): string | undefined {
-  return typeof value === "string" && value ? value : undefined;
-}
-
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
 
 /** Official nQ — split name@marketplace. */
 export function splitPluginId(id: string): { marketplace?: string; name: string } {

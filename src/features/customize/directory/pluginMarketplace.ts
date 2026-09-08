@@ -64,6 +64,11 @@ type CustomPluginsBridge = {
 type LocalPluginsBridge = {
   deletePlugin?: (...args: unknown[]) => Promise<unknown>;
   getPlugins?: (...args: unknown[]) => Promise<unknown>;
+  listSkillFiles?: (
+    pluginId: string,
+    skillName: string,
+    context?: unknown,
+  ) => Promise<unknown>;
   setPluginEnabled?: (...args: unknown[]) => Promise<unknown>;
   uploadPlugin?: (...args: unknown[]) => Promise<unknown>;
 };

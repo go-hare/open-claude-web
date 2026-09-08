@@ -134,6 +134,12 @@ export const CUSTOMIZE_MESSAGES = {
   },
   /** Official skills select (ccYDCQ+TEE). */
   selectSkillToView: { defaultMessage: "Select a skill to view details", id: "ccYDCQ+TEE" },
+  /** Official cdce PluginSkillDetailView (6/j3TwB/fF). */
+  couldNotLoadSkillFiles: { defaultMessage: "Could not load skill files", id: "6/j3TwB/fF" },
+  /** Official cdce PluginSkillDetailView (Z/t/0ptA3p). */
+  noFilesFoundInSkill: { defaultMessage: "No files found in this skill", id: "Z/t/0ptA3p" },
+  /** Official c410 FileTree folder aria (/e5nr3MIv3). */
+  skillFolderAria: { defaultMessage: "{name}, folder", id: "/e5nr3MIv3" },
   /** Official agents select (Ma5X2p/+i7). */
   selectAgentToView: { defaultMessage: "Select an agent to view details", id: "Ma5X2p/+i7" },
   /** Official hooks select (t3rpQG3FXs). */
@@ -154,6 +160,71 @@ export const CUSTOMIZE_MESSAGES = {
   seeAll: { defaultMessage: "See all", id: "078WAre0KU" },
   /** Official desktop Show in Folder (qJzHPN7NHs). */
   showInFolder: { defaultMessage: "Show in Folder", id: "qJzHPN7NHs" },
+  /** Official c9 metadata (mGXoWbZIBO). */
+  addedBy: { defaultMessage: "Added by", id: "mGXoWbZIBO" },
+  /** Official c9 AddedByLabel (kJ5W29okWR). */
+  addedByYou: { defaultMessage: "You", id: "kJ5W29okWR" },
+  /** Official c9 AddedByLabel (AHXAjK1m4h). */
+  addedByAdmin: { defaultMessage: "Your admin", id: "AHXAjK1m4h" },
+  /** Official c9 AddedByLabel (LftgYRq5hB). */
+  addedByAnthropic: { defaultMessage: "Anthropic", id: "LftgYRq5hB" },
+  /** Official c9 AddedByLabel (7fx3MwRt4t). */
+  addedByShared: { defaultMessage: "Shared with you", id: "7fx3MwRt4t" },
+  /** Official c9 metadata (0ICwq5Kcsu). */
+  lastUpdated: { defaultMessage: "Last updated", id: "0ICwq5Kcsu" },
+  /** Official c9 metadata (B3Q5mz5Qnl). */
+  trigger: { defaultMessage: "Trigger", id: "B3Q5mz5Qnl" },
+  /** Official c9 trigger (NXI/XLSYwc). */
+  triggerAuto: { defaultMessage: "Auto", id: "NXI/XLSYwc" },
+  /** Official c9 trigger (BSG7BDwEdL). */
+  triggerSlashAndAuto: { defaultMessage: "Slash command + auto", id: "BSG7BDwEdL" },
+  /** Official c9 trigger tooltip (TE9B6ZPGgR). */
+  triggerAutoTooltip: {
+    defaultMessage: "Claude runs this skill automatically when it's relevant to your request.",
+    id: "TE9B6ZPGgR",
+  },
+  /** Official c9 trigger tooltip (eFWPHBACre). */
+  triggerSlashTooltip: {
+    defaultMessage: "Appears in the / menu. Claude can also run it automatically when relevant.",
+    id: "eFWPHBACre",
+  },
+  /** Official c9 DescriptionRow tooltip (g08yMBD/54). */
+  skillDescriptionTooltip: {
+    defaultMessage: "Claude uses these descriptions when deciding which skills to use in chat.",
+    id: "g08yMBD/54",
+  },
+  /** Official cdce D Copy skill (fI1xMQJE9a). */
+  copySkill: { defaultMessage: "Copy skill", id: "fI1xMQJE9a" },
+  /** Official cdce D Copied (p556q3uvbn). */
+  copied: { defaultMessage: "Copied", id: "p556q3uvbn" },
+  /** Official cdce D Try in chat (41t0vyqBot). */
+  tryInChat: { defaultMessage: "Try in chat", id: "41t0vyqBot" },
+  /** Official cdce D More options (IzCVhGdYVc). */
+  moreOptions: { defaultMessage: "More options", id: "IzCVhGdYVc" },
+  /** Official cdce O Edit (wEQDC6Wv3/). */
+  edit: { defaultMessage: "Edit", id: "wEQDC6Wv3/" },
+  /** Official cdce O Customize with Claude (PU9O9SSQJ4). */
+  customizeWithClaude: { defaultMessage: "Customize with Claude", id: "PU9O9SSQJ4" },
+  /** Official cdce org edit tooltip (TtglYaSoEc). */
+  pluginManagedByOrganization: {
+    defaultMessage: "This plugin is managed by your organization.",
+    id: "TtglYaSoEc",
+  },
+  /** Official cdce skills-disabled edit tooltip (bFzSkUWsx6). */
+  skillsMustBeEnabledToCustomize: {
+    defaultMessage: "Skills must be enabled to customize them with Claude.",
+    id: "bFzSkUWsx6",
+  },
+  /** Official cdce try-in-chat disabled (rlXzveEJ7h). */
+  skillsDisabledByOrganization: {
+    defaultMessage: "Skills are disabled by your organization",
+    id: "rlXzveEJ7h",
+  },
+  /** Official cdce legacy-commands banner (FB8WZg880C). */
+  skillPreviouslyAuthoredAsCommand: {
+    defaultMessage: "This skill was previously authored as a command. It should work identically.",
+    id: "FB8WZg880C",
+  },
 
   /** Official B8t Tm ariaLabel + title (RDwKyyO7Lq). */
   directory: { defaultMessage: "Directory", id: "RDwKyyO7Lq" },

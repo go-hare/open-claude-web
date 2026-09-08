@@ -55,7 +55,14 @@ export function PluginRoute({
   }
   if (!plugin) return null;
   if (subroute) {
-    return <PluginSubroutePanel plugin={plugin} selectedName={selectedName} subroute={subroute} />;
+    return (
+      <PluginSubroutePanel
+        onNavigate={onNavigate}
+        plugin={plugin}
+        selectedName={selectedName}
+        subroute={subroute}
+      />
+    );
   }
   return <PluginDetailPanel onNavigate={onNavigate} plugin={plugin} />;
 }
