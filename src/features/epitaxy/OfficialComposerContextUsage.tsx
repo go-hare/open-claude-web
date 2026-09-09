@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ContextUsage } from "../../adapters/desktopBridge";
+import { Icon } from "../../shell/icons";
 
 const composerUsageCircleSize = 12;
 export const composerUsageCircumference = 2 * Math.PI * 5;
@@ -31,7 +32,13 @@ export function OfficialContextWindowSummary({
       >
         <span className="text-footnote text-t6">Context window</span>
         <span className="text-footnote text-t6 tabular-nums ml-auto">{summary}</span>
-        {canToggle ? <span className="text-t6 group-hover:text-t8 shrink-0">{expanded ? "⌄" : "›"}</span> : null}
+        {canToggle ? (
+          <Icon
+            className="text-t6 group-hover:text-t8 shrink-0"
+            name={expanded ? "ChevronDownSmall" : "ChevronRightSmall"}
+            size="s"
+          />
+        ) : null}
       </button>
       <div className="px-p8 pb-p2">
         {contextUsage ? <OfficialContextWindowUsage usage={contextUsage} defaultExpanded={expanded} compact className="" /> : <OfficialContextProgressBar contextPct={contextPct} />}
@@ -77,7 +84,7 @@ export function OfficialContextWindowUsage({ className = "p-[12px] rounded-r6 bg
         <button type="button" className="flex items-center gap-g4 min-w-0 text-left outline-none hide-focus-ring ring-focus rounded-r3" onClick={() => setExpanded((value) => !value)} aria-expanded={actualExpanded}>
           <span className="text-body text-t9 shrink-0">Context window</span>
           <span className="text-footnote text-t6 truncate flex-1 text-right">{`${formatUsageTokenCount(model.totalTokens)} / ${formatUsageTokenCount(model.rawMaxTokens)} (${model.percentage}%)`}</span>
-          <span className="text-t6 shrink-0">{actualExpanded ? "⌄" : "›"}</span>
+          <Icon className="text-t6 shrink-0" name={actualExpanded ? "ChevronDownSmall" : "ChevronRightSmall"} size="s" />
         </button>
       ) : null}
       <div className={`flex shrink-0 rounded-r2 overflow-hidden bg-t2 ${compact ? "h-[4px]" : "h-[8px]"}`} role="img" aria-label={`${model.percentage}% of context window used`}>
@@ -118,7 +125,9 @@ function OfficialContextUsageRows({ label, rows }: { label: string; rows: Array<
   return (
     <div className="flex flex-col gap-g1 mt-[var(--p2)]">
       <button type="button" className="flex items-center gap-g3 text-footnote text-left" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
-        <span className="size-[8px] shrink-0 flex items-center justify-center">{expanded ? "⌄" : "›"}</span>
+        <span className="size-[8px] shrink-0 flex items-center justify-center">
+          <Icon name={expanded ? "ChevronDownSmall" : "ChevronRightSmall"} size="s" />
+        </span>
         <span className="text-t7 flex-1">{label}</span>
         <span className="text-t6 shrink-0 tabular-nums">{formatUsageTokenCount(total)}</span>
         <span className="text-t6 shrink-0 tabular-nums w-[44px] text-right">{rows.length}</span>
