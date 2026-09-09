@@ -14,9 +14,8 @@
  */
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
-import type { ChatMessage, SessionSummary } from "../../../adapters/desktopBridge/types";
+import type { ChatMessage, ContextUsage, SessionSummary } from "../../../adapters/desktopBridge/types";
 import { emitResponseCompletion } from "../../settings/responseCompletionNotify";
-import type { OfficialStreamSnapshot } from "../officialStreamSmoother";
 import {
   extractOfficialLiveMeta,
   foldOfficialLiveMeta,
@@ -28,7 +27,11 @@ import {
   officialMarkTurnStarted,
   officialStreamDrop,
 } from "./officialStreamSessionStore";
-import { clearOfficialEkeCache, officialUserMessageIsInterrupt } from "./officialTranscriptParse";
+import {
+  clearOfficialEkeCache,
+  officialUserMessageIsInterrupt,
+  parseOfficialContextUsageMarkdown,
+} from "./officialTranscriptParse";
 import type { OfficialCodeSessionSub, OfficialCodeSessionTransport } from "./officialCodeSessionTransport";
 
 type OfficialCodeSessionHostApply = (sessionId: string, event: unknown) => void;
@@ -48,6 +51,14 @@ export const EMPTY_QUEUED_MESSAGES: ChatMessage[] = [];
 
 /** Official he.releaseSession pendingClose delay (`36e4`). Idle evicts immediately. */
 export const OFFICIAL_CODE_SESSION_PENDING_CLOSE_MS = 36e4;
+
+/** Official Wke `connection` (U.subscribe kind:connection). */
+export type OfficialCodeSessionConnection =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "disconnected";
 
 export type OfficialCodeSessionBucket = {
   error: Error | null;
@@ -89,7 +100,16 @@ export type OfficialCodeSessionBucket = {
   session: SessionSummary | null;
   streamActivityMode: StreamActivityMode;
   streamingMessageId: string | null;
-  streamSnapshot: OfficialStreamSnapshot;
+  /** Official Wke connection — local U.subscribe stamps "connected" immediately. */
+  connection: OfficialCodeSessionConnection;
+  /** Official Wke promptSuggestion — Qj `_e` ghost text. Cleared on beginPendingTurn. */
+  promptSuggestion: string | null;
+  /** Official Wke seenUuids — outer CLI uuid identity. */
+  seenUuids: Set<string>;
+  /** Official Wke contextTokens — Bke last root assistant usage. */
+  contextTokens: number | null;
+  /** Official Wke contextUsage — $ke / dCe markdown from assistant text. */
+  contextUsage: ContextUsage | null;
   /** Monotonic load generation for stale response discard. */
   loadGeneration: number;
   /**
@@ -126,7 +146,11 @@ function emptyBucket(pending: boolean): OfficialCodeSessionBucket {
     session: null,
     streamActivityMode: idleStreamActivityMode,
     streamingMessageId: null,
-    streamSnapshot: null,
+    connection: "idle",
+    promptSuggestion: null,
+    seenUuids: new Set(),
+    contextTokens: null,
+    contextUsage: null,
     loadGeneration: 0,
     sub: null,
     pendingClose: false,
@@ -246,7 +270,7 @@ function liveMetaPreferCurrent(
  * getTranscript lands (official: Ja = sessionId && Ya.length===0 && (B||J)).
  */
 function hasTranscriptContent(bucket: OfficialCodeSessionBucket) {
-  return bucket.messages.length > 0 || bucket.streamSnapshot !== null;
+  return bucket.messages.length > 0;
 }
 
 function hasRenderableContent(bucket: OfficialCodeSessionBucket) {
@@ -330,7 +354,14 @@ type OfficialCodeSessionActions = {
     options?: { mirrorPermissionMode?: boolean },
   ) => void;
   mergeMessage: (sessionId: string, message: ChatMessage) => void;
-  setStreamSnapshot: (sessionId: string, streamSnapshot: OfficialStreamSnapshot) => void;
+  /** Official merge kind:connection. */
+  setConnection: (sessionId: string, connection: OfficialCodeSessionConnection) => void;
+  /** Official merge kind:prompt_suggestion. */
+  setPromptSuggestion: (sessionId: string, suggestion: string | null) => void;
+  /**
+   * Official seedPromptSuggestion — only when promptSuggestion and pendingTurn are both null.
+   */
+  seedPromptSuggestion: (sessionId: string, suggestion: string) => void;
   setStreamActivity: (
     sessionId: string,
     patch: {
@@ -367,6 +398,91 @@ export type OfficialCodeSessionStore = OfficialCodeSessionState & OfficialCodeSe
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function messageRawType(message: ChatMessage): string | undefined {
+  const raw = asRecord(message.raw);
+  if (typeof raw.type === "string" && raw.type.length > 0) return raw.type;
+  return message.role === "assistant" || message.role === "user" || message.role === "system"
+    ? message.role
+    : undefined;
+}
+
+/**
+ * Official Bke: last root assistant `usage` input+cache tokens.
+ * Skips parent_tool_use_id (subagent) rows.
+ */
+function officialBke(message: ChatMessage): number | null {
+  const raw = asRecord(message.raw);
+  if (messageRawType(message) !== "assistant") return null;
+  if (raw.parent_tool_use_id) return null;
+  const nested = asRecord(raw.message);
+  const usage = nested.usage;
+  if (!usage || typeof usage !== "object") return null;
+  const record = asRecord(usage);
+  const tokens =
+    numberValue(record.input_tokens)
+    + numberValue(record.cache_read_input_tokens)
+    + numberValue(record.cache_creation_input_tokens);
+  return tokens > 0 ? tokens : null;
+}
+
+/**
+ * Official $ke: dCe `## Context Usage` markdown from root assistant text blocks.
+ */
+function officialDollarKe(message: ChatMessage): ContextUsage | null {
+  const raw = asRecord(message.raw);
+  if (messageRawType(message) !== "assistant") return null;
+  if (raw.parent_tool_use_id) return null;
+  const nested = asRecord(raw.message);
+  const content = nested.content;
+  if (!Array.isArray(content)) return null;
+  for (const block of content) {
+    const record = asRecord(block);
+    if (record.type !== "text") continue;
+    const text = typeof record.text === "string" ? record.text : "";
+    if (!text) continue;
+    const usage = parseOfficialContextUsageMarkdown(text);
+    if (usage) return usage;
+  }
+  return null;
+}
+
+/** Official Vke: scan messages from the end until both tokens and usage are found. */
+function officialVke(messages: ChatMessage[]): {
+  contextTokens: number | null;
+  contextUsage: ContextUsage | null;
+} {
+  let contextTokens: number | null = null;
+  let contextUsage: ContextUsage | null = null;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (contextTokens === null) contextTokens = officialBke(message);
+    if (contextUsage === null) contextUsage = officialDollarKe(message);
+    if (contextTokens !== null && contextUsage !== null) break;
+  }
+  return { contextTokens, contextUsage };
+}
+
+/**
+ * Official zke = e.uuid. No uuid → not in seenUuids (skip has / skip add).
+ */
+function officialZke(message: ChatMessage): string | undefined {
+  const raw = asRecord(message.raw);
+  return typeof raw.uuid === "string" && raw.uuid.length > 0 ? raw.uuid : undefined;
+}
+
+function seenUuidsFromMessages(messages: ChatMessage[], prev?: Set<string>): Set<string> {
+  const next = new Set(prev ?? []);
+  for (const message of messages) {
+    const uuid = officialZke(message);
+    if (uuid) next.add(uuid);
+  }
+  return next;
 }
 
 /**
@@ -516,13 +632,24 @@ function withQueueDefaults(bucket: OfficialCodeSessionBucket): OfficialCodeSessi
   const hasCompaction = "compactionStatus" in bucket;
   const hasEndTurnSeen = "pendingTurnEndTurnSeen" in bucket;
   const hasLifecycle = "refCount" in bucket && "sub" in bucket;
-  if (hasQueue && hasCompaction && hasEndTurnSeen && hasLifecycle) return bucket;
+  const hasWkeFields =
+    "connection" in bucket
+    && "promptSuggestion" in bucket
+    && bucket.seenUuids instanceof Set
+    && "contextTokens" in bucket
+    && "contextUsage" in bucket;
+  if (hasQueue && hasCompaction && hasEndTurnSeen && hasLifecycle && hasWkeFields) return bucket;
   return {
     ...bucket,
     queuedMessages: Array.isArray(bucket.queuedMessages) ? bucket.queuedMessages : EMPTY_QUEUED_MESSAGES,
     pendingQueuedSends: typeof bucket.pendingQueuedSends === "number" ? bucket.pendingQueuedSends : 0,
     pendingTurnEndTurnSeen: hasEndTurnSeen ? Boolean(bucket.pendingTurnEndTurnSeen) : false,
     compactionStatus: hasCompaction ? bucket.compactionStatus : null,
+    connection: bucket.connection ?? "idle",
+    promptSuggestion: bucket.promptSuggestion ?? null,
+    seenUuids: bucket.seenUuids instanceof Set ? bucket.seenUuids : seenUuidsFromMessages(bucket.messages ?? []),
+    contextTokens: typeof bucket.contextTokens === "number" ? bucket.contextTokens : null,
+    contextUsage: bucket.contextUsage ?? null,
     sub: bucket.sub ?? null,
     pendingClose: Boolean(bucket.pendingClose),
     evictTimer: bucket.evictTimer ?? null,
@@ -692,6 +819,7 @@ function createOfficialCodeSessionStore() {
       const baseSession = prev.session
         ? { ...prev.session, messages: nextMessages.length ? nextMessages : prev.session.messages }
         : prev.session;
+      const usage = officialVke(messagesToKeep);
       return {
         buckets: {
           ...state.buckets,
@@ -703,6 +831,9 @@ function createOfficialCodeSessionStore() {
             isSessionNotFound: false,
             liveMeta,
             messages: messagesToKeep,
+            seenUuids: seenUuidsFromMessages(messagesToKeep),
+            contextTokens: prev.contextTokens ?? usage.contextTokens,
+            contextUsage: prev.contextUsage ?? usage.contextUsage,
             // Load path: host mode + status recovery (not full Uke init overwrite).
             session: sessionForLoad(baseSession, messagesToKeep, liveMeta),
           },
@@ -829,9 +960,10 @@ function createOfficialCodeSessionStore() {
           ...state.buckets,
           [sessionId]: {
             ...next,
-            // Official Wke overlay: keep sub / liveMeta / pendingClose / evictTimer / refCount.
+            // Official Wke overlay: keep sub / connection / liveMeta / pendingClose / evictTimer / refCount.
             // Product `session` is host meta (Mode/title) — same role as liveMeta, not transcript.
             sub: prev.sub,
+            connection: prev.connection,
             liveMeta: prev.liveMeta,
             session: prev.session,
             pendingClose: prev.pendingClose,
@@ -865,6 +997,7 @@ function createOfficialCodeSessionStore() {
       const nextSession = sessionForLoad(baseSession, nextMessages, liveMeta);
       // Host isRunning on Recents/open path → seed Qke immediately (coexist with Ja until Ya).
       const pendingSeed = seedPendingTurnIfHostRunning(prev, nextSession ?? baseSession, sessionId);
+      const usage = officialVke(nextMessages);
       return {
         buckets: {
           ...state.buckets,
@@ -877,6 +1010,9 @@ function createOfficialCodeSessionStore() {
             isSessionNotFound: session === null && nextMessages.length === 0,
             liveMeta,
             messages: nextMessages,
+            seenUuids: seenUuidsFromMessages(nextMessages),
+            contextTokens: prev.contextTokens ?? usage.contextTokens,
+            contextUsage: prev.contextUsage ?? usage.contextUsage,
             // Host session.permissionMode + system/status recovery (official be(n.permissionMode)).
             session: nextSession,
             pendingTurnStartedAt: pendingSeed.pendingTurnStartedAt,
@@ -906,6 +1042,7 @@ function createOfficialCodeSessionStore() {
             ...prev,
             pendingTurnStartedAt: at,
             pendingTurnEndTurnSeen: false,
+            promptSuggestion: null,
           },
         },
       };
@@ -1002,7 +1139,6 @@ function createOfficialCodeSessionStore() {
             pendingTurnEndTurnSeen: false,
             streamActivityMode: idleStreamActivityMode,
             streamingMessageId: null,
-            streamSnapshot: null,
             session: prev.session ? { ...prev.session, isRunning: false } : prev.session,
           },
         },
@@ -1040,8 +1176,12 @@ function createOfficialCodeSessionStore() {
       }
       // Product local seed for Hb isQueued chrome. Official only lands durable user
       // echoes into queuedMessages and decrements pendingQueuedSends on that path (d).
+      // Official d also stamps zke into seenUuids so the next same-uuid event promotes.
       // Do NOT consume pending here — early consume let host pre-echo (different uuid)
       // fall through to main messages while optimistic stayed in queue → double stack.
+      const seenUuids = new Set(prev.seenUuids);
+      const zke = officialZke(message);
+      if (zke) seenUuids.add(zke);
       return {
         buckets: {
           ...state.buckets,
@@ -1051,6 +1191,7 @@ function createOfficialCodeSessionStore() {
             errorCategory: null,
             isTranscriptPending: false,
             isMetaPending: false,
+            seenUuids,
             queuedMessages: [...prev.queuedMessages, message],
           },
         },
@@ -1127,7 +1268,6 @@ function createOfficialCodeSessionStore() {
           },
         };
       }
-      // Stream snapshot now lives in Pe/local Va — protect live turns via session flags.
       // Official BELz applyLoad/transcript: merge messages only — does NOT clear
       // pendingTurn / queue (g is result-gated). Silent getTranscript must not
       // invent-settle mid-turn or while deferred queue still owns continue.
@@ -1135,7 +1275,6 @@ function createOfficialCodeSessionStore() {
         prev.pendingQueuedSends > 0
         || prev.queuedMessages.length > 0;
       const liveStreaming = options?.preserveLiveStream
-        || prev.streamSnapshot !== null
         || prev.streamingMessageId !== null
         || prev.streamActivityMode !== idleStreamActivityMode
         || prev.session?.isRunning === true
@@ -1162,6 +1301,7 @@ function createOfficialCodeSessionStore() {
         // pendingTurn. Host idle must not invent-settle Qke; result g/h / done / error
         // / clearPendingTurn own that. Seed only when host isRunning and pendingTurn missing.
         const pendingSeed = seedPendingTurnIfHostRunning(prev, nextSession, sessionId);
+        const usage = officialVke(messages);
         return {
           buckets: {
             ...state.buckets,
@@ -1174,6 +1314,9 @@ function createOfficialCodeSessionStore() {
               isSessionNotFound: false,
               liveMeta,
               messages,
+              seenUuids: seenUuidsFromMessages(messages),
+              contextTokens: prev.contextTokens ?? usage.contextTokens,
+              contextUsage: prev.contextUsage ?? usage.contextUsage,
               session: nextSession,
               pendingTurnStartedAt: pendingSeed.pendingTurnStartedAt,
               pendingTurnEndTurnSeen: pendingSeed.pendingTurnEndTurnSeen,
@@ -1188,8 +1331,7 @@ function createOfficialCodeSessionStore() {
       // Qke (Esc+queue: late markNotRunning then result needs pendingTurn for `g`).
       const hostIdle = payload.session ? payload.session.isRunning !== true : true;
       const hasLiveStream = Boolean(
-        prev.streamSnapshot !== null
-        || prev.streamingMessageId !== null
+        prev.streamingMessageId !== null
         || prev.streamActivityMode !== idleStreamActivityMode,
       );
       // Clear Va ownership only when host idle AND no live Pe/Va — never invent-clear mid-typewriter
@@ -1200,6 +1342,7 @@ function createOfficialCodeSessionStore() {
         ? sessionForLoad({ ...payload.session, messages }, messages, liveMeta)
         : null;
       const pendingSeed = seedPendingTurnIfHostRunning(prev, nextSession ?? payload.session, sessionId);
+      const usage = officialVke(messages);
       return {
         buckets: {
           ...state.buckets,
@@ -1212,12 +1355,14 @@ function createOfficialCodeSessionStore() {
             isSessionNotFound: false,
             liveMeta,
             messages,
+            seenUuids: seenUuidsFromMessages(messages),
+            contextTokens: prev.contextTokens ?? usage.contextTokens,
+            contextUsage: prev.contextUsage ?? usage.contextUsage,
             session: nextSession,
             pendingTurnStartedAt: pendingSeed.pendingTurnStartedAt,
             pendingTurnEndTurnSeen: pendingSeed.pendingTurnEndTurnSeen,
             streamActivityMode: clearStreamOwnership ? idleStreamActivityMode : prev.streamActivityMode,
             streamingMessageId: clearStreamOwnership ? null : prev.streamingMessageId,
-            streamSnapshot: clearStreamOwnership ? null : prev.streamSnapshot,
           },
         },
       };
@@ -1359,32 +1504,55 @@ function createOfficialCodeSessionStore() {
       const raw = message.raw ?? message;
       const rawRecord = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
       const identity = messageIdentity(message);
+      const zke = officialZke(message);
       const isUser = message.role === "user" || rawRecord.type === "user";
+      const isAssistant = !isUser && (rawRecord.type === "assistant" || message.role === "assistant");
       const isSynthetic = rawRecord.isSynthetic === true || rawRecord.isMeta === true;
       const hasParentTool = Boolean(rawRecord.parent_tool_use_id);
-      // Official same-uuid (seenUuids + queuedIndex): promote queued object `n`.
-      // Do not in-place replace, do not --pendingQueuedSends, no turnStillActive gate.
-      const queuedIndex = prev.queuedMessages.findIndex((item) => messageIdentity(item) === identity);
-      if (queuedIndex >= 0) {
-        const n = prev.queuedMessages[queuedIndex]!;
-        const nextQueued = [
-          ...prev.queuedMessages.slice(0, queuedIndex),
-          ...prev.queuedMessages.slice(queuedIndex + 1),
-        ];
-        const messages = filterStreamEvents([...prev.messages, n]);
-        return {
-          buckets: {
-            ...state.buckets,
-            [sessionId]: {
-              ...prev,
-              isTranscriptPending: false,
-              messages,
-              queuedMessages: nextQueued.length > 0 ? nextQueued : EMPTY_QUEUED_MESSAGES,
-              session: prev.session ? { ...prev.session, messages } : prev.session,
+      // Official: if (o && seenUuids.has(o)) assistant replace | queue promote | drop.
+      if (zke && prev.seenUuids.has(zke)) {
+        if (isAssistant) {
+          const existingIndex = prev.messages.findIndex((item) => officialZke(item) === zke);
+          if (existingIndex >= 0) {
+            const messages = prev.messages.slice();
+            messages[existingIndex] = message;
+            return {
+              buckets: {
+                ...state.buckets,
+                [sessionId]: {
+                  ...prev,
+                  messages,
+                  session: prev.session ? { ...prev.session, messages } : prev.session,
+                },
+              },
+            };
+          }
+        }
+        const queuedIndex = prev.queuedMessages.findIndex((item) => officialZke(item) === zke);
+        if (queuedIndex >= 0) {
+          const n = prev.queuedMessages[queuedIndex]!;
+          const nextQueued = [
+            ...prev.queuedMessages.slice(0, queuedIndex),
+            ...prev.queuedMessages.slice(queuedIndex + 1),
+          ];
+          const messages = filterStreamEvents([...prev.messages, n]);
+          return {
+            buckets: {
+              ...state.buckets,
+              [sessionId]: {
+                ...prev,
+                isTranscriptPending: false,
+                messages,
+                queuedMessages: nextQueued.length > 0 ? nextQueued : EMPTY_QUEUED_MESSAGES,
+                session: prev.session ? { ...prev.session, messages } : prev.session,
+              },
             },
-          },
-        };
+          };
+        }
+        return state;
       }
+      const seenUuids = new Set(prev.seenUuids);
+      if (zke) seenUuids.add(zke);
       // Official d: mid-turn durable user echo while pendingQueuedSends > 0 → queue, not transcript.
       // Official _ke interrupt marker is a current-turn user row, never a queued follow-up.
       // Product: also absorb host pre-echo that matches an optimistic queued row by text
@@ -1429,6 +1597,7 @@ function createOfficialCodeSessionStore() {
             [sessionId]: {
               ...prev,
               isTranscriptPending: false,
+              seenUuids,
               queuedMessages,
               pendingQueuedSends,
             },
@@ -1505,12 +1674,21 @@ function createOfficialCodeSessionStore() {
       const compactionUnchanged = compactionStatus === prev.compactionStatus;
       const pendingUnchanged = nextPendingTurn === prev.pendingTurnStartedAt
         && nextEndTurnSeen === prev.pendingTurnEndTurnSeen;
+      const fromMessageTokens = officialBke(message);
+      const fromMessageUsage = officialDollarKe(message);
+      const nextContextTokens = fromMessageTokens ?? prev.contextTokens;
+      const nextContextUsage = fromMessageUsage ?? prev.contextUsage;
+      const usageUnchanged =
+        nextContextTokens === prev.contextTokens
+        && nextContextUsage === prev.contextUsage;
       if (
         messagesUnchanged
         && liveUnchanged
         && queueUnchanged
         && compactionUnchanged
         && pendingUnchanged
+        && usageUnchanged
+        && !zke
       ) {
         return state;
       }
@@ -1529,6 +1707,9 @@ function createOfficialCodeSessionStore() {
             isTranscriptPending: false,
             liveMeta,
             messages,
+            seenUuids,
+            contextTokens: nextContextTokens,
+            contextUsage: nextContextUsage,
             compactionStatus,
             pendingTurnStartedAt: nextPendingTurn,
             pendingTurnEndTurnSeen: nextPendingTurn === null ? false : nextEndTurnSeen,
@@ -1539,7 +1720,6 @@ function createOfficialCodeSessionStore() {
                   // Official u&&Pke.clear — result settles Va ownership with h.
                   streamActivityMode: idleStreamActivityMode,
                   streamingMessageId: null,
-                  streamSnapshot: null,
                 }
               : {}),
             session: sessionWithLiveMeta(
@@ -1566,7 +1746,6 @@ function createOfficialCodeSessionStore() {
       if (
         prev.streamActivityMode === idleStreamActivityMode
         && prev.streamingMessageId === null
-        && prev.streamSnapshot === null
       ) {
         return state;
       }
@@ -1577,22 +1756,51 @@ function createOfficialCodeSessionStore() {
             ...prev,
             streamActivityMode: idleStreamActivityMode,
             streamingMessageId: null,
-            streamSnapshot: null,
           },
         },
       };
     });
   },
 
-  setStreamSnapshot: (sessionId, streamSnapshot) => {
+  setConnection: (sessionId, connection) => {
     set((state) => {
-      const prev = state.buckets[sessionId] ?? emptyBucket(false);
-      // Skip no-op emits (same message, same revealed char budget) to reduce stream jank.
-      if (streamSnapshotsEquivalent(prev.streamSnapshot, streamSnapshot)) return state;
+      const prev = state.buckets[sessionId];
+      if (!prev || prev.connection === connection) return state;
       return {
         buckets: {
           ...state.buckets,
-          [sessionId]: { ...prev, streamSnapshot },
+          [sessionId]: { ...prev, connection },
+        },
+      };
+    });
+  },
+
+  setPromptSuggestion: (sessionId, suggestion) => {
+    set((state) => {
+      const prev = state.buckets[sessionId];
+      if (!prev) return state;
+      const next = suggestion && suggestion.length > 0 ? suggestion : null;
+      if (prev.promptSuggestion === next) return state;
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: { ...prev, promptSuggestion: next },
+        },
+      };
+    });
+  },
+
+  seedPromptSuggestion: (sessionId, suggestion) => {
+    // Official seedPromptSuggestion: only when promptSuggestion and pendingTurn are both null.
+    set((state) => {
+      const prev = state.buckets[sessionId];
+      if (!prev) return state;
+      if (prev.promptSuggestion !== null || prev.pendingTurnStartedAt !== null) return state;
+      if (!suggestion) return state;
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: { ...prev, promptSuggestion: suggestion },
         },
       };
     });
@@ -1687,7 +1895,6 @@ function createOfficialCodeSessionStore() {
             pendingTurnEndTurnSeen: false,
             streamActivityMode: idleStreamActivityMode,
             streamingMessageId: null,
-            streamSnapshot: null,
             session: markSessionSettled && prev.session
               ? { ...prev.session, isRunning: false, messages }
               : prev.session
@@ -1736,7 +1943,7 @@ function migrateBucketsWithQueueDefaults(
  * Bump when queue pipeline action bodies change so HMR rebinds implementations
  * without wiping transcript buckets (zustand keeps old closures otherwise).
  */
-const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 13;
+const OFFICIAL_CODE_SESSION_STORE_QUEUE_REV = 15;
 const OFFICIAL_CODE_SESSION_STORE_REV_KEY = "__hareOfficialCodeSessionStoreQueueRev__";
 
 function resolveOfficialCodeSessionStore() {
@@ -1776,24 +1983,6 @@ function resolveOfficialCodeSessionStore() {
 
 export const officialCodeSessionStore = resolveOfficialCodeSessionStore();
 
-function streamSnapshotsEquivalent(
-  left: OfficialStreamSnapshot,
-  right: OfficialStreamSnapshot,
-) {
-  if (left === right) return true;
-  if (!left || !right) return left === right;
-  if (left.messageId !== right.messageId || left.blocks.length !== right.blocks.length) return false;
-  for (let index = 0; index < left.blocks.length; index += 1) {
-    const a = left.blocks[index];
-    const b = right.blocks[index];
-    if (a.kind !== b.kind) return false;
-    if (a.kind === "text" && b.kind === "text" && a.text !== b.text) return false;
-    if (a.kind === "thinking" && b.kind === "thinking" && a.text !== b.text) return false;
-    if (a.kind === "tool" && b.kind === "tool" && (a.id !== b.id || a.name !== b.name || a.partialJson !== b.partialJson)) return false;
-  }
-  return true;
-}
-
 // Stable fallbacks — React useSyncExternalStore requires getSnapshot to return
 // cached references. Returning `emptyBucket(true)` every call caused:
 // "The result of getSnapshot should be cached to avoid an infinite loop"
@@ -1823,6 +2012,17 @@ export function useOfficialCodeSessionCompactionStatus(sessionId?: string) {
   return useStore(officialCodeSessionStore, (state) => {
     if (!sessionId) return null;
     return state.buckets[sessionId]?.compactionStatus ?? null;
+  });
+}
+
+/**
+ * Official o_e / c119 `Sa` — Wke contextTokens only.
+ * fC chip + tk ring `h = s ?? n?.totalTokens ?? 0`.
+ */
+export function useOfficialCodeSessionContextTokens(sessionId?: string | null) {
+  return useStore(officialCodeSessionStore, (state) => {
+    if (!sessionId) return null;
+    return state.buckets[sessionId]?.contextTokens ?? null;
   });
 }
 

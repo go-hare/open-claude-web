@@ -296,6 +296,7 @@ function EpitaxyChatPanel({
     isSessionNotFound,
     isUltrareviewTagged,
     messages,
+    promptSuggestion,
     reload,
     reviewProgress,
     rollbackLocalUserTurn,
@@ -916,6 +917,7 @@ function EpitaxyChatPanel({
             disabled={qjDisabled}
             isPanelActive={isPanelActive}
             isResponding={busy}
+            promptSuggestion={promptSuggestion}
             onOpenDiff={openDiff}
             onOpenPlan={openPlan}
             onPermissionModeChange={async (mode) => {

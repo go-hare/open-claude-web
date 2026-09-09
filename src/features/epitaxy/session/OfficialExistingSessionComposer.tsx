@@ -114,6 +114,7 @@ export function ExistingSessionComposer({
   onScrollToBottom,
   onStop,
   onSubmit,
+  promptSuggestion = null,
   reload,
   session,
   sessionRef,
@@ -145,6 +146,8 @@ export function ExistingSessionComposer({
   onScrollToBottom: () => void;
   onStop?: () => void | Promise<void>;
   onSubmit: (text: string, input?: SendMessageInput) => Promise<void>;
+  /** Official Qj `C` from tm i_e — bucket.promptSuggestion. */
+  promptSuggestion?: string | null;
   reload: (options?: { silent?: boolean }) => Promise<void>;
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef | null;
@@ -308,6 +311,18 @@ export function ExistingSessionComposer({
     (text.trim().length > 0 || readyImageCount > 0 || stagedFiles.length > 0)
     && !disabled
     && !submitDisabled;
+  // Official Qj `_e=!(!C||he||W||m)` — C=promptSuggestion he=hasText W=bash m=attachments.
+  const hasPromptText = text.trim().length > 0;
+  const hasComposerAttachments = readyImageCount > 0 || stagedFiles.length > 0;
+  const showPromptSuggestion = Boolean(
+    promptSuggestion
+    && !hasPromptText
+    && !isBashMode
+    && !hasComposerAttachments,
+  );
+  // Official Qj `K.current=_e?C:void 0`.
+  const acceptSuggestionRef = useRef<string | undefined>(undefined);
+  acceptSuggestionRef.current = showPromptSuggestion ? (promptSuggestion ?? undefined) : undefined;
 
   /**
    * Official c119 Qj Escape residual (editor path):
@@ -375,6 +390,23 @@ export function ExistingSessionComposer({
       },
       // Official Qj / vTt: no handleDrop — Files bubble to Ek DropZone (c119 Ek).
       handleKeyDown: (_view, event) => {
+        // Official Qj: Tab / ArrowRight on empty accepts K.current (promptSuggestion).
+        const suggestion = acceptSuggestionRef.current;
+        const ed = tiptapEditorRef.current;
+        if (
+          (event.key === "Tab" || event.key === "ArrowRight")
+          && !event.shiftKey
+          && !event.metaKey
+          && !event.ctrlKey
+          && !event.altKey
+          && suggestion
+          && ed?.isEmpty
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          ed.chain().setContent(tiptapDocFromPlainText(suggestion), { emitUpdate: true }).focus("end").run();
+          return true;
+        }
         // Enter submit is handled in onKeyDownCapture (official wTt residual).
         // ProseMirror skips handleKeyDown while view.composing / keyCode 229.
         if (event.key === "Escape") {
@@ -1210,11 +1242,12 @@ export function ExistingSessionComposer({
           {/*
             Official c119 Qj wa EditorContent className (exact residual):
               epitaxy-prompt-input … [&_.tiptap_p]:m-0
-              + (_e ? suppress : "") — product has no promptSuggestion.
+              + (_e ? "[&_.is-editor-empty]:before:!content-['']" : "")
+              _e = !(!C||he||W||m).
               float-left/height:0 from residual base CSS, not Qj class invent.
           */}
           <EditorContent
-            className="epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0"
+            className={`epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0${showPromptSuggestion ? " [&_.is-editor-empty]:before:!content-['']" : ""}`}
             editor={editor}
             onKeyDownCapture={(event) => {
               const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
@@ -1240,6 +1273,14 @@ export function ExistingSessionComposer({
               void submitRef.current();
             }}
           />
+          {showPromptSuggestion ? (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5"
+            >
+              {promptSuggestion}
+            </span>
+          ) : null}
           <div className="flex self-end p-p7 pl-p3">
             {/* Official Qj (c119): yd icon Stop | ReturnArrowCornerDownLeft; aria Stop | Send. */}
             <OfficialButton

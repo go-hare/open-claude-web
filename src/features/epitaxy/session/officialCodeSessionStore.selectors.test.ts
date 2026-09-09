@@ -13,6 +13,10 @@ function permissionSuppressedOf(sessionId: string) {
   return (officialCodeSessionStore.getState().buckets[sessionId]?.session?.pendingToolPermissions?.length ?? 0) > 0;
 }
 
+function contextTokensOf(sessionId: string) {
+  return officialCodeSessionStore.getState().buckets[sessionId]?.contextTokens ?? null;
+}
+
 describe("official Code Gv residual selectors", () => {
   beforeEach(() => {
     officialCodeSessionStore.setState({ buckets: {} });
@@ -90,5 +94,24 @@ describe("official Code Gv residual selectors", () => {
       },
     }));
     expect(permissionSuppressedOf("s2")).toBe(false);
+  });
+
+  it("o_e contextTokens is Wke field only", () => {
+    officialCodeSessionStore.getState().markLoading("s3", true);
+    expect(contextTokensOf("s3")).toBeNull();
+    officialCodeSessionStore.getState().mergeMessage("s3", {
+      id: "a1",
+      role: "assistant",
+      text: "hi",
+      createdAt: "0",
+      raw: {
+        type: "assistant",
+        uuid: "a1",
+        message: {
+          usage: { input_tokens: 12, cache_read_input_tokens: 3, cache_creation_input_tokens: 0 },
+        },
+      },
+    } as never);
+    expect(contextTokensOf("s3")).toBe(15);
   });
 });

@@ -4,7 +4,10 @@ import type { ContextUsage, SessionSummary } from "../../adapters/desktopBridge"
 import type { LocalSessionsBridge } from "../../adapters/desktopBridge/types";
 import { OfficialButton, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
 import { OfficialContextProgressBar, OfficialContextWindowSummary, OfficialUsageCircle, composerUsageCircumference, formatUsageTokenCount, officialClampPercent } from "./OfficialComposerContextUsage";
-import { useOfficialCodeSessionBucket } from "./session/officialCodeSessionStore";
+import {
+  useOfficialCodeSessionBucket,
+  useOfficialCodeSessionContextTokens,
+} from "./session/officialCodeSessionStore";
 
 const officialContextUsageCache = new Map<string, ContextUsage>();
 
@@ -113,7 +116,9 @@ export function OfficialComposerUsageIndicator({ bridge, session, sessionRef }: 
 
   const isLocalContext = sessionRef?.type === "local";
   const usage = bridgeUsage;
-  const usedTokens = usage?.totalTokens ?? 0;
+  // Official tk: h = Sa(id) ?? Af.data.totalTokens ?? 0
+  const contextTokens = useOfficialCodeSessionContextTokens(sessionId);
+  const usedTokens = contextTokens ?? usage?.totalTokens ?? 0;
   const maxTokens = usage?.rawMaxTokens ?? null;
   const usagePercent = typeof maxTokens === "number" && maxTokens > 0 ? officialClampPercent(usedTokens / maxTokens * 100) : null;
   const contextSummary = typeof maxTokens === "number" && maxTokens > 0 ? `${formatUsageTokenCount(usedTokens)} / ${formatUsageTokenCount(maxTokens)} (${usagePercent}%)` : formatUsageTokenCount(usedTokens);

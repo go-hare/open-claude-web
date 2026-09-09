@@ -83,6 +83,10 @@ type OfficialPromptEditorProps = {
    * stays enabled for image-only submits.
    */
   hasAttachments?: boolean;
+  /**
+   * Official Qj `C` promptSuggestion — `_e` ghost text when editor empty.
+   */
+  promptSuggestion?: string | null;
 };
 
 /**
@@ -90,7 +94,7 @@ type OfficialPromptEditorProps = {
  * - c11959232 Qj: EpitaxyComposer Prompt shell + wa EditorContent classes
  * - index vTt: tipTapEditorState + RNt Placeholder; onUpdate → text + hasText
  * - index aYt CodeTipTapEditor: setEditable(!disabled); setText imperative
- * - Qj `_e` absolute span is **only** promptSuggestion — product has none
+ * - Qj `_e` absolute span is promptSuggestion (C) when empty / not bash / no attachments
  * - setEditable(!disabled) only; busy = Stop chrome; submitDisabled blocks Te
  *
  * Host packaged app:// only: handleEmptyDocBeforeInput (empty trailingBreak).
@@ -115,6 +119,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   onRemoveStagedImage,
   onRemoveStagedFile,
   hasAttachments = false,
+  promptSuggestion = null,
 }, ref) {
   const editorRef = useRef<Editor | null>(null);
   const submitRef = useRef(onSubmit);
@@ -149,6 +154,11 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   const isBashMode = value.trimStart().startsWith("!");
   // Official Te = (he||m) && !disabled && !submitDisabled — busy does NOT block send.
   const canSubmit = (hasText || hasAttachments) && !disabled && !submitDisabled;
+  // Official Qj `_e=!(!C||he||W||m)` — C=promptSuggestion he=hasText W=bash m=attachments.
+  const showPromptSuggestion = Boolean(promptSuggestion && !hasText && !isBashMode && !hasAttachments);
+  // Official Qj `K.current=_e?C:void 0`.
+  const acceptSuggestionRef = useRef<string | undefined>(undefined);
+  acceptSuggestionRef.current = showPromptSuggestion ? (promptSuggestion ?? undefined) : undefined;
 
   submitRef.current = onSubmit;
   onStopRef.current = onStop;
@@ -172,6 +182,36 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
    * Official Qj editor Escape (c119 Ae): slash/mention skip; busy&&!q → prevent+stop+onStop;
    * still-busy after q → swallow; bash clear; else blur.
    */
+  const handleQjKeyDown = (event: {
+    altKey?: boolean;
+    ctrlKey?: boolean;
+    defaultPrevented: boolean;
+    key: string;
+    metaKey?: boolean;
+    preventDefault: () => void;
+    shiftKey?: boolean;
+    stopPropagation: () => void;
+  }) => {
+    const suggestion = acceptSuggestionRef.current;
+    const ed = editorRef.current;
+    // Official Qj: Tab / ArrowRight on empty accepts K.current (`_e ? C`).
+    if (
+      (event.key === "Tab" || event.key === "ArrowRight")
+      && !event.shiftKey
+      && !event.metaKey
+      && !event.ctrlKey
+      && !event.altKey
+      && suggestion
+      && ed?.isEmpty
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      ed.chain().setContent(tiptapDocFromPlainText(suggestion), { emitUpdate: true }).focus("end").run();
+      return true;
+    }
+    return handleQjEscape(event);
+  };
+
   const handleQjEscape = (event: {
     defaultPrevented: boolean;
     key: string;
@@ -268,7 +308,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         return true;
       },
       // Official Qj / vTt: no handleDrop — Files bubble to Ek DropZone (c119 Ek).
-      handleKeyDown: (_view, event) => handleQjEscape(event),
+      handleKeyDown: (_view, event) => handleQjKeyDown(event),
     },
     extensions: [
       StarterKit.configure({
@@ -478,15 +518,15 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
             epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9
             [&_.tiptap]:min-h-[var(--h8)] … [&_.tiptap_p]:m-0
             + (_e ? "[&_.is-editor-empty]:before:!content-['']" : "")
-          _e = promptSuggestion only — product has none → no suppress class.
+          _e = !(!C||he||W||m) — C=promptSuggestion.
           float-left / pointer-events-none live in residual base CSS
           (.ProseMirror p.is-editor-empty:first-child:before), NOT on Qj wa.
         */}
         <EditorContent
-          className="epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0"
+          className={`epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0${showPromptSuggestion ? " [&_.is-editor-empty]:before:!content-['']" : ""}`}
           editor={editor}
           onKeyDownCapture={(event) => {
-            if (handleQjEscape(event)) return;
+            if (handleQjKeyDown(event)) return;
             const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
             const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
             // Official Qj: Enter + !shift + !alt + !nativeEvent.isComposing (no keyCode 229 invent).
@@ -504,7 +544,14 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
             if (!submitBlockedRef.current) submitRef.current();
           }}
         />
-        {/* Official Qj: absolute placeholder span ONLY when _e (promptSuggestion). No default value span. */}
+        {showPromptSuggestion ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5"
+          >
+            {promptSuggestion}
+          </span>
+        ) : null}
         <div className="flex self-end p-p7 pl-p3">
           <OfficialButton
             ariaLabel={busy ? "Stop" : "Send"}

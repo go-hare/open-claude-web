@@ -275,6 +275,28 @@ function shouldHandleLifecycleEvent(event: unknown) {
  */
 export function applyOfficialCodeSessionHostEvent(sessionId: string, event: unknown) {
   const store = officialCodeSessionStore;
+  const outer = asRecord(event);
+  const outerType = stringValue(outer.type) ?? stringValue(outer.kind);
+  // Official merge kind:"connection" → bucket.connection = n.state.
+  if (outerType === "connection") {
+    const state = stringValue(outer.state);
+    if (
+      state === "idle"
+      || state === "connecting"
+      || state === "connected"
+      || state === "reconnecting"
+      || state === "disconnected"
+    ) {
+      store.getState().setConnection(sessionId, state);
+    }
+    return;
+  }
+  // Official merge kind:"prompt_suggestion" → promptSuggestion: n.suggestion||null.
+  if (outerType === "prompt_suggestion") {
+    const suggestion = stringValue(outer.suggestion) ?? stringValue(outer.data) ?? "";
+    store.getState().setPromptSuggestion(sessionId, suggestion);
+    return;
+  }
   const streamMessage = streamEventMessageFromBridgeEvent(event);
   if (streamMessage) {
     const parentToolUseId = Object.prototype.hasOwnProperty.call(streamMessage, "parent_tool_use_id")

@@ -14,6 +14,7 @@ function fakeTransport() {
   const unsubscribes: string[] = [];
   let subscribeCount = 0;
   const transport: OfficialCodeSessionTransport = {
+    fetchTranscript: async () => [],
     subscribe(sessionId, _onEvent) {
       subscribeCount += 1;
       return {
@@ -160,6 +161,7 @@ describe("official he.openSession / releaseSession (De)", () => {
     });
     let emit: ((event: unknown) => void) | undefined;
     const transport: OfficialCodeSessionTransport = {
+      fetchTranscript: async () => [],
       subscribe(_sessionId, onEvent) {
         emit = onEvent;
         return { unsubscribe: () => undefined, wake: () => undefined };
@@ -186,5 +188,114 @@ describe("official he.openSession / releaseSession (De)", () => {
     officialCodeSessionStore.getState().openSessionTransport("s1", transport);
     const warm = officialCodeSessionStore.getState().buckets.s1!;
     expect(Boolean(warm.sub && warm.messages.length > 0)).toBe(true);
+  });
+
+  it("empty Wke has connection/promptSuggestion/seenUuids/contextTokens/contextUsage, not streamSnapshot", () => {
+    const { transport } = fakeTransport();
+    officialCodeSessionStore.getState().openSessionTransport("s1", transport);
+    const bucket = officialCodeSessionStore.getState().buckets.s1!;
+    expect(bucket.connection).toBe("idle");
+    expect(bucket.promptSuggestion).toBeNull();
+    expect(bucket.seenUuids).toBeInstanceOf(Set);
+    expect(bucket.contextTokens).toBeNull();
+    expect(bucket.contextUsage).toBeNull();
+    expect("streamSnapshot" in bucket).toBe(false);
+  });
+
+  it("setConnection and prompt_suggestion write Wke fields; beginPendingTurn clears suggestion", () => {
+    const { transport } = fakeTransport();
+    officialCodeSessionStore.getState().openSessionTransport("s1", transport);
+    officialCodeSessionStore.getState().setConnection("s1", "connected");
+    officialCodeSessionStore.getState().setPromptSuggestion("s1", "try this");
+    expect(officialCodeSessionStore.getState().buckets.s1!.connection).toBe("connected");
+    expect(officialCodeSessionStore.getState().buckets.s1!.promptSuggestion).toBe("try this");
+    officialCodeSessionStore.getState().beginPendingTurn("s1");
+    expect(officialCodeSessionStore.getState().buckets.s1!.promptSuggestion).toBeNull();
+    expect(officialCodeSessionStore.getState().buckets.s1!.pendingTurnStartedAt).not.toBeNull();
+  });
+
+  it("seedPromptSuggestion only when idle and suggestion empty", () => {
+    const { transport } = fakeTransport();
+    officialCodeSessionStore.getState().openSessionTransport("s1", transport);
+    officialCodeSessionStore.getState().seedPromptSuggestion("s1", "from meta");
+    expect(officialCodeSessionStore.getState().buckets.s1!.promptSuggestion).toBe("from meta");
+    officialCodeSessionStore.getState().seedPromptSuggestion("s1", "ignored");
+    expect(officialCodeSessionStore.getState().buckets.s1!.promptSuggestion).toBe("from meta");
+    officialCodeSessionStore.getState().beginPendingTurn("s1");
+    officialCodeSessionStore.getState().seedPromptSuggestion("s1", "still ignored");
+    expect(officialCodeSessionStore.getState().buckets.s1!.promptSuggestion).toBeNull();
+  });
+
+  it("mergeMessage stamps seenUuids and Bke contextTokens from root assistant usage", () => {
+    const { transport } = fakeTransport();
+    officialCodeSessionStore.getState().openSessionTransport("s1", transport);
+    officialCodeSessionStore.getState().mergeMessage("s1", {
+      id: "a1",
+      role: "assistant",
+      text: "hi",
+      createdAt: "0",
+      raw: {
+        type: "assistant",
+        uuid: "a1",
+        message: {
+          usage: { input_tokens: 10, cache_read_input_tokens: 5, cache_creation_input_tokens: 1 },
+        },
+      },
+    } as never);
+    const bucket = officialCodeSessionStore.getState().buckets.s1!;
+    expect(bucket.seenUuids.has("a1")).toBe(true);
+    expect(bucket.contextTokens).toBe(16);
+  });
+
+  it("seenUuids.has same assistant uuid replaces in place", () => {
+    const { transport } = fakeTransport();
+    officialCodeSessionStore.getState().openSessionTransport("s1", transport);
+    officialCodeSessionStore.getState().mergeMessage("s1", {
+      id: "a1",
+      role: "assistant",
+      text: "first",
+      createdAt: "0",
+      raw: { type: "assistant", uuid: "a1" },
+    } as never);
+    officialCodeSessionStore.getState().mergeMessage("s1", {
+      id: "a1",
+      role: "assistant",
+      text: "second",
+      createdAt: "1",
+      raw: { type: "assistant", uuid: "a1" },
+    } as never);
+    const messages = officialCodeSessionStore.getState().buckets.s1!.messages;
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.text).toBe("second");
+  });
+
+  it("seenUuids.has unknown uuid drops the event", () => {
+    const { transport } = fakeTransport();
+    officialCodeSessionStore.getState().openSessionTransport("s1", transport);
+    officialCodeSessionStore.getState().mergeMessage("s1", {
+      id: "u1",
+      role: "user",
+      text: "hi",
+      createdAt: "0",
+      raw: { type: "user", uuid: "u1" },
+    } as never);
+    officialCodeSessionStore.getState().buckets.s1!.seenUuids.add("ghost");
+    officialCodeSessionStore.getState().mergeMessage("s1", {
+      id: "ghost",
+      role: "user",
+      text: "replay",
+      createdAt: "1",
+      raw: { type: "user", uuid: "ghost" },
+    } as never);
+    expect(officialCodeSessionStore.getState().buckets.s1!.messages).toHaveLength(1);
+    expect(officialCodeSessionStore.getState().buckets.s1!.messages[0]?.text).toBe("hi");
+  });
+
+  it("cleared overlay keeps connection", () => {
+    const { transport } = fakeTransport();
+    officialCodeSessionStore.getState().openSessionTransport("s1", transport);
+    officialCodeSessionStore.getState().setConnection("s1", "connected");
+    officialCodeSessionStore.getState().resetOnCleared("s1");
+    expect(officialCodeSessionStore.getState().buckets.s1!.connection).toBe("connected");
   });
 });

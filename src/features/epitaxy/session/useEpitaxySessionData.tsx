@@ -18,7 +18,7 @@ import {
   officialCodeSessionStore,
   useOfficialCodeSessionBucket,
 } from "./officialCodeSessionStore";
-import { createOfficialCodeLocalTransport } from "./officialCodeSessionTransport";
+import { officialCodeLocalTransport } from "./officialCodeSessionTransport";
 import {
   clearOfficialEkeCache,
   mergeOfficialStreamSnapshot,
@@ -164,8 +164,7 @@ export function useEpitaxySessionData(sessionId?: string) {
    */
   useLayoutEffect(() => {
     if (!sessionId) return undefined;
-    const transport = createOfficialCodeLocalTransport();
-    store.getState().openSessionTransport(sessionId, transport);
+    store.getState().openSessionTransport(sessionId, officialCodeLocalTransport);
     return () => {
       store.getState().releaseSession(sessionId);
     };
@@ -350,7 +349,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     if (hasWarmTranscript) {
       return () => { alive = false; };
     }
-    const silent = Boolean(existing && (existing.messages.length > 0 || existing.streamSnapshot !== null));
+    const silent = Boolean(existing && existing.messages.length > 0);
     void reload({ silent }).finally(() => {
       if (!alive) return;
     });
@@ -398,6 +397,13 @@ export function useEpitaxySessionData(sessionId?: string) {
     sessionId,
     store,
   ]);
+
+  // Official tm: s?.promptSuggestion → he.seedPromptSuggestion when idle.
+  useEffect(() => {
+    if (!sessionId) return;
+    const suggestion = bucket.session?.promptSuggestion;
+    if (suggestion) store.getState().seedPromptSuggestion(sessionId, suggestion);
+  }, [bucket.session?.promptSuggestion, sessionId, store]);
 
   // Official rwe: seed Mfe.approvedPlans from transcript when last ExitPlanMode already has tool_result.
   // Also acknowledge settled ExitPlanMode ids so jfe skips re-showing Wk after reload/reconnect.
@@ -527,6 +533,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     isSessionNotFound: bucket.isSessionNotFound,
     isUltrareviewTagged,
     messages: bucket.messages,
+    promptSuggestion: bucket.promptSuggestion,
     reload,
     reviewProgress,
     rollbackLocalUserTurn,
@@ -600,9 +607,10 @@ async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMe
   const bridge = desktopBridge.LocalSessions;
   const session = await bridge.getSession(sessionId).catch(() => null);
   if (!session) return null;
-  const transcript = await bridge.getTranscript?.(sessionId).catch(() => undefined);
+  // Official Ae cold: transport.fetchTranscript (U = getTranscript only). Keep getSession for meta.
+  const transcript = await officialCodeLocalTransport.fetchTranscript(sessionId).catch(() => [] as ChatMessage[]);
   const sessionMessages = session.messages ?? [];
-  const transcriptMessages = transcript?.length ? transcript : [];
+  const transcriptMessages = transcript.length ? transcript : [];
   const outerUuidOf = (message: ChatMessage) => {
     const raw = asRecord(message.raw);
     return stringValue(raw.uuid) ?? stringValue(raw.id) ?? message.id;
