@@ -13,7 +13,6 @@ import { Popover } from "@base-ui-components/react/popover";
 import { AnimatePresence, motion } from "motion/react";
 import { desktopBridge, type DesktopPreferences } from "../../adapters/desktopBridge";
 import { OfficialTooltip, OfficialTooltipWrap } from "../shared/OfficialTooltip";
-import { BaseMenuItem, BaseMenuPopup, Menu } from "../../shell/BaseMenu";
 import { Icon } from "../../shell/icons";
 import {
   CHAT_FONT_CSS_VAR,
@@ -275,17 +274,26 @@ type GhostSelectItem = {
 };
 
 /**
- * Official c43c5949a $a Combobox residual (General work_function c0db37792):
- * mode="select" variant="ghost" fullWidth=false align="end" searchable=false.
+ * Official c43c5949a $a Combobox residual:
+ *   oa + ia[variant] + sa[mode] + pr-sm + (fullWidth ? w-full)
+ *   defaults: mode="select" variant="outline" fullWidth=true align="start"
+ * General work_function: variant="ghost" fullWidth=false align="end"
+ * ClaudeCode Worktree: default outline + fullWidth, align="end"
  *
- * Trigger shell = oa + ia.ghost + sa.select + pr-sm
  * Portal = le (cds-root + data-mode/density/platform) so shadow-panel ring tokens resolve
  * Popup = pa (rounded-card + popover surface) / ha / ma / ga + check indicator
  * Positioner: side bottom, sideOffset 6, positionMethod fixed, z-popover,
  * w-[var(--anchor-width)] min-w-[12rem]; anchor is the outer shell (official ye).
  */
-const ghostSelectTriggerShell =
-  "cds-reset group/cbx inline-flex min-w-0 items-center gap-1.5 h-control rounded text-body text-primary outline-none transition duration-fast data-[disabled]:opacity-50 data-[disabled]:pointer-events-none bg-transparent hover:bg-fill-ghost-hover pl-0 has-[:focus-visible]:shadow-focus data-[disabled]:cursor-default pr-sm";
+const ghostSelectTriggerBase =
+  "cds-reset group/cbx inline-flex min-w-0 items-center gap-1.5 h-control rounded text-body text-primary outline-none transition duration-fast data-[disabled]:opacity-50 data-[disabled]:pointer-events-none";
+const ghostSelectVariantClass = {
+  outline:
+    "bg-fill-field focus-visible:bg-surface-popover has-[:focus-visible]:bg-surface-popover backdrop-blur-sm shadow-field-ring data-[invalid]:shadow-field-invalid [&:hover:not(:focus-within):not([data-invalid])]:shadow-field-hover",
+  ghost: "bg-transparent hover:bg-fill-ghost-hover",
+} as const;
+const ghostSelectModeSelectClass =
+  "pl-0 has-[:focus-visible]:shadow-focus data-[disabled]:cursor-default pr-sm";
 
 /**
  * Official pa = flex flex-col max-h… + ra("popover") + cds-reset…
@@ -346,6 +354,7 @@ export function GhostSelect({
   placeholder,
   searchable,
   value,
+  variant = "ghost",
   onChange,
 }: {
   align?: "start" | "center" | "end";
@@ -355,6 +364,8 @@ export function GhostSelect({
   /** Official default: true when items.length > 5. Work-function passes false. */
   searchable?: boolean;
   value: string;
+  /** Official $a ia — Worktree uses outline (default); General work_function uses ghost. */
+  variant?: "ghost" | "outline";
   onChange: (value: string) => void;
 }) {
   const shellRef = useRef<HTMLDivElement>(null);
@@ -425,17 +436,18 @@ export function GhostSelect({
       }
       itemToStringValue={(item) => item?.value ?? ""}
     >
-      {/* Official ye shell: oa + ia[variant] + sa[mode] + pr-sm + optional w-full */}
+      {/* Official ye shell: oa + ia[variant] + sa.select + pr-sm + optional w-full */}
       <div
         ref={shellRef}
-        className={`${ghostSelectTriggerShell}${fullWidth ? " w-full" : ""}`}
-        data-official-source="c43c5949a:$a ghost select"
+        className={`${ghostSelectTriggerBase} ${ghostSelectVariantClass[variant]} ${ghostSelectModeSelectClass}${fullWidth ? " w-full" : ""}`}
+        data-official-source="c43c5949a:$a select"
       >
         <Combobox.Trigger
           className="cds-reset flex min-w-0 flex-1 items-center gap-1.5 self-stretch pl-sm text-left border-0 bg-transparent p-0 outline-none"
           type="button"
         >
           <span className="min-w-0 flex-1 truncate">{triggerLabel}</span>
+          {/* Official select-mode Ce: CaretDown on Trigger — not Unicode ▾, not Se size-icon wrap. */}
           <Icon
             name="CaretDown"
             size="sm"
@@ -818,29 +830,43 @@ export function InstructionsPreferencesField({
   return field;
 }
 
+/** Official cc989143e yt — Worktree location $a items. */
+const WORKTREE_SELECT_ITEMS = [
+  { value: "default", label: "Inside project (.claude/worktrees)" },
+  { value: "custom", label: "Custom..." },
+];
+
 export function WorktreeSelect({ onChange, value = "default" }: { onChange: (value: DesktopPreferences["chillingSlothLocation"]) => void; value?: DesktopPreferences["chillingSlothLocation"] }) {
-  const isCustom = typeof value === "object";
-  const label = isCustom ? "Custom..." : "Inside project (.claude/worktrees)";
+  // Official h = typeof x === "object" && "customPath" in x
+  const isCustom = typeof value === "object" && value !== null && "customPath" in value;
   const customPath = isCustom ? value.customPath : "";
-  const chooseCustom = async () => {
-    const paths = await desktopBridge.Preferences.getDirectoryPath?.(false);
-    onChange(paths?.[0] ? { customPath: paths[0] } : { customPath: customPath || "" });
-  };
+  const selectValue = isCustom ? "custom" : "default";
   return (
     <div className="w-[220px] flex gap-2 flex-col justify-center">
-      <Menu.Root>
-        <Menu.Trigger className="cds-reset group/cbx inline-flex min-w-0 items-center gap-1.5 h-control rounded text-body text-primary outline-none transition duration-fast bg-fill-field focus-visible:bg-surface-popover backdrop-blur-sm shadow-field-ring hover:shadow-field-hover pl-0 pr-sm w-full" type="button">
-          <span className="cds-reset flex min-w-0 flex-1 items-center gap-1.5 self-stretch pl-sm text-left border-0 bg-transparent p-0 outline-none">
-            <span className="min-w-0 flex-1 truncate">{label}</span>
-            <span aria-hidden="true">▾</span>
-          </span>
-        </Menu.Trigger>
-        <BaseMenuPopup align="end" className="min-w-[220px]" side="bottom" sideOffset={4}>
-          <BaseMenuItem checked={!isCustom} checkedRole="radio" onClick={() => onChange("default")}>Inside project (.claude/worktrees)</BaseMenuItem>
-          <BaseMenuItem checked={isCustom} checkedRole="radio" onClick={chooseCustom}>Custom...</BaseMenuItem>
-        </BaseMenuPopup>
-      </Menu.Root>
-      {customPath ? <div className="text-sm text-text-300 truncate" title={customPath}>{customPath}</div> : null}
+      <GhostSelect
+        align="end"
+        fullWidth
+        options={WORKTREE_SELECT_ITEMS}
+        searchable={false}
+        value={selectValue}
+        variant="outline"
+        onChange={(next) => {
+          void (async () => {
+            // Official f: custom → getDirectoryPath; only write when length>0. Else default.
+            if (next === "custom") {
+              const paths = await desktopBridge.Preferences.getDirectoryPath?.(false);
+              if (paths && paths.length > 0) onChange({ customPath: paths[0] });
+              return;
+            }
+            onChange("default");
+          })();
+        }}
+      />
+      {isCustom ? (
+        <div className="text-sm text-text-300 truncate" title={customPath}>
+          {customPath}
+        </div>
+      ) : null}
     </div>
   );
 }
