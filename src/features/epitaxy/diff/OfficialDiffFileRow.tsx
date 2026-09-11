@@ -1,7 +1,19 @@
-import { processFile, type FileDiffMetadata } from "@pierre/diffs";
+import { processFile, type FileDiffMetadata, type SelectedLineRange } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalSessionsBridge } from "../../../adapters/desktopBridge/types";
+import { OfficialDiffAnnotationCard } from "./OfficialDiffAnnotationCard";
+import {
+  officialDiffAnnotationCardKey,
+  officialDiffAnnotationsApi,
+  officialDiffAnnotationsStore,
+  useOfficialDiffFileActiveKey,
+  useOfficialDiffFileAnnotations,
+  useOfficialDiffFileDrafts,
+  useOfficialDiffLineAnnotations,
+  type OfficialDiffAnnotationSide,
+  type OfficialDiffLineAnnotation,
+} from "./officialDiffAnnotationsStore";
 import {
   OfficialDiffGutterUtility,
   type OfficialDiffHoveredLine,
@@ -69,6 +81,10 @@ export function OfficialDiffFileRow({
   const filePath = file.filePath;
   const rawFile = file.rawFile;
   const [dirPrefix, baseName] = useMemo(() => splitDisplayPath(filePath), [filePath]);
+  const savedAnnotations = useOfficialDiffFileAnnotations(sessionId, filePath);
+  const drafts = useOfficialDiffFileDrafts(sessionId, filePath);
+  const activeKey = useOfficialDiffFileActiveKey(sessionId, filePath);
+  const lineAnnotations = useOfficialDiffLineAnnotations(sessionId, filePath);
 
   // Official: fetchFileLines only when status is not added/removed.
   const canFetchFullLines = file.status !== "added" && file.status !== "removed";
@@ -134,13 +150,60 @@ export function OfficialDiffFileRow({
     [file.contentHash, fileLines.newText, fileLines.oldText, rawFile],
   );
 
-  // Official Fc `$` / onAdd from gutter: stages draft annotation when line selection idle.
-  // Annotation store (sc/$c/Bc) not ported yet — keep click path wired for DOM/class parity.
-  const onGutterAdd = useCallback((_lineNumber: number, _side: OfficialDiffHoveredLine["side"]) => {
-    // no-op until PR/draft annotation store is ported
+  // Official Fc: unmount clears active if this file owns it.
+  useEffect(() => () => {
+    const active = officialDiffAnnotationsStore.getState().activeBySession[sessionId];
+    if (active?.filePath === filePath) officialDiffAnnotationsApi.setActive(sessionId, null);
+  }, [filePath, sessionId]);
+
+  const selectingRef = useRef(false);
+  const lastGutterLineRef = useRef<number | null>(null);
+
+  const stageDraft = useCallback((start: number, end: number, side: OfficialDiffAnnotationSide | undefined) => {
+    const nextSide = side ?? "additions";
+    const startLine = Math.min(start, end);
+    const endLine = Math.max(start, end);
+    const key = officialDiffAnnotationCardKey(nextSide, endLine);
+    const existing = officialDiffAnnotationsStore
+      .getState()
+      .annotationsBySession[sessionId]
+      ?.[filePath]
+      ?.find((item) => officialDiffAnnotationCardKey(item.side, item.endLine) === key && item.source !== "pr");
+    if (existing) {
+      officialDiffAnnotationsApi.setActive(sessionId, { filePath, key });
+      return;
+    }
+    officialDiffAnnotationsApi.setDraft(sessionId, {
+      body: "",
+      endLine,
+      filePath,
+      side: nextSide,
+      startLine,
+    });
+  }, [filePath, sessionId]);
+
+  const onLineSelectionStart = useCallback(() => {
+    selectingRef.current = true;
+    lastGutterLineRef.current = null;
   }, []);
 
-  // Package FileDiff: renderGutterUtility + enableGutterUtility (InteractionManager slot).
+  const onLineSelectionEnd = useCallback((range: SelectedLineRange | null) => {
+    selectingRef.current = false;
+    if (!range || range.start === range.end) return;
+    const side = range.endSide ?? range.side ?? "additions";
+    lastGutterLineRef.current = range.end;
+    stageDraft(range.start, range.end, side);
+  }, [stageDraft]);
+
+  // Official `$`: gutter click — if same line as last selection end, ignore; else single-line draft.
+  const onGutterAdd = useCallback((lineNumber: number, side: OfficialDiffHoveredLine["side"]) => {
+    if (lastGutterLineRef.current === lineNumber) {
+      lastGutterLineRef.current = null;
+      return;
+    }
+    stageDraft(lineNumber, lineNumber, side);
+  }, [stageDraft]);
+
   const renderGutterUtility = useCallback(
     (getHoveredLine: () => OfficialDiffHoveredLine | undefined) => (
       <OfficialDiffGutterUtility getHoveredLine={getHoveredLine} onAdd={onGutterAdd} />
@@ -148,8 +211,46 @@ export function OfficialDiffFileRow({
     [onGutterAdd],
   );
 
-  // Package FileDiffOptions (API names from `@pierre/diffs`, not ion aliases).
-  // onPostRender: package hydrate marks highlighted before worker tokens land.
+  const renderAnnotation = useCallback((row: { metadata: OfficialDiffLineAnnotation["metadata"] }) => {
+    const metadata = row.metadata;
+    if (metadata.kind === "pr") return null;
+    if (metadata.kind === "draft") {
+      return (
+        <OfficialDiffAnnotationCard
+          cardKey={metadata.key}
+          draft={metadata.draft}
+          filePath={filePath}
+          isActive={metadata.isActive}
+          sessionId={sessionId}
+        />
+      );
+    }
+    return (
+      <div className="group/card">
+        <OfficialDiffAnnotationCard
+          annotation={metadata.annotation}
+          cardKey={metadata.key}
+          filePath={filePath}
+          isActive={metadata.isActive}
+          sessionId={sessionId}
+        />
+      </div>
+    );
+  }, [filePath, sessionId]);
+
+  const selectedLines = useMemo(() => {
+    if (selectingRef.current || !activeKey) return null;
+    const asRange = (start: number, end: number, side: OfficialDiffAnnotationSide) => (
+      start === end ? null : { start, end, side }
+    );
+    const draft = drafts[activeKey];
+    if (draft) return asRange(draft.startLine, draft.endLine, draft.side);
+    const saved = savedAnnotations.find(
+      (item) => officialDiffAnnotationCardKey(item.side, item.endLine) === activeKey && item.source !== "pr",
+    );
+    return saved ? asRange(saved.startLine, saved.endLine, saved.side) : null;
+  }, [activeKey, drafts, savedAnnotations]);
+
   const options = useMemo(
     () => ({
       theme,
@@ -159,11 +260,14 @@ export function OfficialDiffFileRow({
       disableFileHeader: true,
       enableLineSelection: true,
       enableGutterUtility: true,
+      enableHoverUtility: true,
       lineDiffType: "word-alt" as const,
       unsafeCSS: OFFICIAL_FC_UNSAFE_CSS,
       onPostRender: pierreTokenPaintOnPostRender,
+      onLineSelectionStart,
+      onLineSelectionEnd,
     }),
-    [theme],
+    [onLineSelectionEnd, onLineSelectionStart, theme],
   );
 
   const expanded = !collapsed && fileDiff !== null;
@@ -210,9 +314,12 @@ export function OfficialDiffFileRow({
           <FileDiff
             key={`${file.contentHash}:${fileDiff.isPartial ? "partial" : "full"}:pool`}
             fileDiff={fileDiff}
+            lineAnnotations={lineAnnotations}
             metrics={OFFICIAL_DIFF_METRICS}
             options={options}
+            renderAnnotation={renderAnnotation}
             renderGutterUtility={renderGutterUtility}
+            selectedLines={selectedLines}
           />
         </div>
       ) : null}

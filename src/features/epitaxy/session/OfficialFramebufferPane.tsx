@@ -252,7 +252,9 @@ function OfficialFramebufferPreviewPane({ cwd, sessionName }: { cwd: string; ses
     );
   }
 
-  // Official SN FramebufferCanvas — frame stream needs requestFramePort worker; show official shell + dimensions.
+  // Official SN FramebufferCanvas — frames arrive via requestFramePort MessagePort.
+  // Host attach throws / requestFramePort returns false until a real RFB session exists
+  // (official ixt empty residual). Do not invent desktopCapturer frames.
   return (
     <div className="relative h-full w-full flex items-center justify-center bg-bg-100">
       <canvas

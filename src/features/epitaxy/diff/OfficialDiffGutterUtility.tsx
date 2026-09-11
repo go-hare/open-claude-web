@@ -36,7 +36,7 @@ export type OfficialDiffHoveredLine = {
 
 /**
  * Official `xc` — gutter “Add a comment on this line” control.
- * onAdd is the Fc `$` staging hook; callers may pass a no-op until annotation store is ported.
+ * onAdd is the Fc `$` staging hook (`setDraft` / `setActive`).
  */
 export const OfficialDiffGutterUtility = memo(function OfficialDiffGutterUtility({
   getHoveredLine,
