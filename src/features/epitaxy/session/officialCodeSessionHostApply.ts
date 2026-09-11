@@ -21,11 +21,13 @@ import {
 } from "./officialStreamSessionStore";
 import { clearOfficialEkeCache, rawMessageContent } from "./officialTranscriptParse";
 import {
+  isOfficialParentResultEvent,
   shouldClearOfficialStreamForEvent,
   shouldDiscardQueuedMessagesForLifecycleEvent,
   shouldFlushOfficialStreamAfterMergedResult,
   shouldKeepPendingTurnOnOfficialPkeClear,
 } from "./officialStreamLifecycleEvents";
+import { officialMarkSessionUnread } from "./officialEpitaxyUnreadStore";
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -359,6 +361,11 @@ export function applyOfficialCodeSessionHostEvent(sessionId: string, event: unkn
     if (!shouldFlushOfficialStreamAfterMergedResult(event)) {
       return;
     }
+  }
+
+  // Official c3d5: t(e)&&n(s.sessionId) — P_e parent result → z_e markUnread.
+  if (isOfficialParentResultEvent(event)) {
+    officialMarkSessionUnread(sessionId);
   }
 
   if (shouldHandleLifecycleEvent(event)) {

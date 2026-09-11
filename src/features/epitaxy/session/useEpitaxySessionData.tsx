@@ -49,6 +49,10 @@ import {
 import {
   residualExtractUltrareviewProgress,
 } from "./residualUltrareviewProgress";
+import {
+  officialGetFocusedUnreadSession,
+  officialSetFocusedUnreadSession,
+} from "./officialEpitaxyUnreadStore";
 import type { EpitaxySessionType } from "./epitaxyTranscriptActionContext";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
 
@@ -163,10 +167,21 @@ export function useEpitaxySessionData(sessionId?: string) {
    * phase and earlier than the load layout effect so Ae warm skip (`sub && messages`) sees it.
    */
   useLayoutEffect(() => {
-    if (!sessionId) return undefined;
+    if (!sessionId) {
+      // Official No(o??null) — leave /code/:id.
+      officialSetFocusedUnreadSession(null);
+      return undefined;
+    }
     store.getState().openSessionTransport(sessionId, officialCodeLocalTransport);
+    // Official U_e — stamp O_e + markRead.
+    officialSetFocusedUnreadSession(sessionId);
     return () => {
       store.getState().releaseSession(sessionId);
+      // Official No(null) when leaving the session frame. Skip if another tile
+      // already stamped a different O_e (A→B: B's layout effect runs after).
+      if (officialGetFocusedUnreadSession() === sessionId) {
+        officialSetFocusedUnreadSession(null);
+      }
     };
   }, [sessionId, store]);
 

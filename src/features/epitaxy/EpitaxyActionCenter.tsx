@@ -4,7 +4,7 @@
  * allClear → null here (home shows CodeStats via $x branch).
  * else Sessions list (+ optional Show more); PR section only when activePrEntries non-empty
  * (product PR list empty until gh residual — no invent).
- * Mark all read only when hasClearableUnreads (product false without clear store).
+ * Mark all read only when hasClearableUnreads (xn.clearAll).
  *
  * Prefer shared Pw state from parent (`state` prop) so home Tw + _w share one list fetch.
  */
@@ -22,6 +22,7 @@ import {
   type EpitaxyActionCenterState,
 } from "./epitaxyActionCenterState";
 import { officialCodeSessionStore } from "./session/officialCodeSessionStore";
+import { officialEpitaxyUnreadStore } from "./session/officialEpitaxyUnreadStore";
 
 type EpitaxyActionCenterProps = {
   onNavigate: (path: string) => void;
@@ -73,7 +74,7 @@ export function EpitaxyActionCenter({ onNavigate, state: stateProp }: EpitaxyAct
               {hasClearableUnreads ? (
                 <OfficialButton
                   onClick={() => {
-                    // Official xn clearAll — product has no unread-clear store yet.
+                    officialEpitaxyUnreadStore.getState().clearAll();
                   }}
                   size="small"
                   variant="muted"
