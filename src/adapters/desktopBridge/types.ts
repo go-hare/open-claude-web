@@ -595,6 +595,39 @@ export type LocalSessionsBridge = {
    */
   summarizeSession?: (id: string) => Promise<boolean>;
   /**
+   * Official LSM startSideChat(sessionId) — Query fork of parent. Void.
+   * Events: side_chat_ready | side_chat_assistant | side_chat_turn_end | side_chat_error | side_chat_closed.
+   */
+  startSideChat?: (id: string) => Promise<void>;
+  /** Official sendSideChatMessage(sessionId, text) — enqueue on parent fork. Void. */
+  sendSideChatMessage?: (id: string, text: string) => Promise<void>;
+  /** Official stopSideChat(sessionId) → boolean. */
+  stopSideChat?: (id: string) => Promise<boolean>;
+  /**
+   * Official fe.getPrReviewComments(cwd, prNumber, repo?) → { success, comments }.
+   * Diff pane prCommentSync (c119 rN).
+   */
+  getPrReviewComments?: (
+    cwd: string,
+    prNumber: number,
+    repo?: string,
+  ) => Promise<{
+    success: boolean;
+    comments?: Array<{
+      author?: string;
+      authorAssociation?: string;
+      body?: string;
+      dedupId?: string;
+      id?: string | number;
+      line?: number;
+      path?: string;
+      resolved?: boolean;
+      url?: string;
+      userType?: string;
+    }>;
+    error?: string;
+  }>;
+  /**
    * Residual summarizeTranscript(sessionId, transcriptText) → boolean (non-local dump path).
    */
   summarizeTranscript?: (id: string, transcript: string) => Promise<boolean>;

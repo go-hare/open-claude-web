@@ -233,6 +233,11 @@ export function officialClearTurnStarted(sessionId: string) {
   streamCharBudgetBySession.delete(sessionId);
 }
 
+/** Official `mCe.reset` — char budget only. Does not clear je / pendingTurn. */
+export function officialResetStreamCharBudget(sessionId: string) {
+  streamCharBudgetBySession.delete(sessionId);
+}
+
 export function officialSetStreamCharBudget(sessionId: string, chars: number) {
   streamCharBudgetBySession.set(sessionId, chars);
 }

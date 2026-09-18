@@ -71,6 +71,10 @@ type RawLocalSessionsBridge = {
   checkGhAvailable?: (idOrCwd?: string) => Promise<unknown>;
   installGh?: () => Promise<unknown>;
   summarizeSession?: (id: string) => Promise<unknown>;
+  startSideChat?: (id: string) => Promise<unknown>;
+  sendSideChatMessage?: (id: string, text: string) => Promise<unknown>;
+  stopSideChat?: (id: string) => Promise<unknown>;
+  getPrReviewComments?: (cwd: string, prNumber: number, repo?: string) => Promise<unknown>;
   summarizeTranscript?: (id: string, transcript: string) => Promise<unknown>;
   stopSessionSummary?: (id: string) => Promise<unknown>;
   refreshSessionTitle?: (id: string) => Promise<unknown>;
@@ -644,19 +648,17 @@ function createFramebufferPreviewBridge(
   if (!raw) return undefined;
   return {
     attach: async (cwd, sessionName) => {
-      const result = await raw.attach?.(cwd, sessionName).catch(() => null);
+      // Official ixt: throw "FramebufferPreview not available in this window".
+      // Do not swallow — AN pane catch → "Couldn't connect to the screen share."
+      const result = await raw.attach?.(cwd, sessionName);
       const item = asRecord(result);
-      if (!item) return null;
-      const source = asRecord(item.source);
-      const sessionId = stringValue(item.sessionId)
-        ?? stringValue(source.id)
-        ?? (booleanValue(item.attached) ? `${cwd}::${sessionName ?? ""}` : undefined);
+      const sessionId = stringValue(item.sessionId);
       if (!sessionId) return null;
       return {
         sessionId,
-        name: stringValue(item.name) ?? stringValue(source.name),
-        width: numberOrUndefined(item.width ?? source.width) ?? 0,
-        height: numberOrUndefined(item.height ?? source.height) ?? 0,
+        name: stringValue(item.name),
+        width: numberOrUndefined(item.width) ?? 0,
+        height: numberOrUndefined(item.height) ?? 0,
       };
     },
     detach: async (sessionId) => raw.detach?.(sessionId),
@@ -1019,6 +1021,47 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     },
     // Residual summarizeSession → boolean (Df.start); results via onEvent.
     summarizeSession: async (id) => Boolean(await raw?.summarizeSession?.(id).catch(() => false)),
+    startSideChat: async (id) => {
+      await raw?.startSideChat?.(id);
+    },
+    sendSideChatMessage: async (id, text) => {
+      await raw?.sendSideChatMessage?.(id, text);
+    },
+    stopSideChat: async (id) => Boolean(await raw?.stopSideChat?.(id).catch(() => false)),
+    getPrReviewComments: async (cwd, prNumber, repo) => {
+      const result = await raw?.getPrReviewComments?.(cwd, prNumber, repo).catch(() => null);
+      const asRecord = (value: unknown): Record<string, unknown> =>
+        value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+      const mapComment = (item: unknown) => {
+        const c = asRecord(item);
+        const user = asRecord(c.user);
+        return {
+          author: typeof c.author === "string" ? c.author : typeof user.login === "string" ? user.login : undefined,
+          authorAssociation: typeof c.authorAssociation === "string" ? c.authorAssociation : undefined,
+          body: typeof c.body === "string" ? c.body : undefined,
+          dedupId: typeof c.dedupId === "string" ? c.dedupId : undefined,
+          id: typeof c.id === "string" || typeof c.id === "number" ? c.id : undefined,
+          line: typeof c.line === "number" ? c.line : undefined,
+          path: typeof c.path === "string" ? c.path : undefined,
+          resolved: c.resolved === true,
+          url: typeof c.html_url === "string" ? c.html_url : typeof c.url === "string" ? c.url : undefined,
+          userType: typeof c.userType === "string" ? c.userType : undefined,
+        };
+      };
+      if (result && typeof result === "object" && !Array.isArray(result) && "success" in result) {
+        const bag = result as { success?: unknown; comments?: unknown; error?: unknown };
+        const comments = Array.isArray(bag.comments) ? bag.comments.map(mapComment) : [];
+        return {
+          success: bag.success === true,
+          comments,
+          error: typeof bag.error === "string" ? bag.error : undefined,
+        };
+      }
+      if (Array.isArray(result)) {
+        return { success: true, comments: result.map(mapComment) };
+      }
+      return { success: false, comments: [] };
+    },
     summarizeTranscript: async (id, transcript) =>
       Boolean(await raw?.summarizeTranscript?.(id, transcript).catch(() => false)),
     stopSessionSummary: async (id) => Boolean(await raw?.stopSessionSummary?.(id).catch(() => false)),

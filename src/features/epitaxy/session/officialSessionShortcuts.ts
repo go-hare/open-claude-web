@@ -3,7 +3,7 @@
  * Footer reuses the same table for openMode/Model/Effort labels; session-level
  * dispatch (panes / cycleTranscriptMode / closePane) lives in useEpitaxyViewShortcuts.
  *
- * Honest wall: toggleSideChat (cmd+;) is matched but never dispatched — no Side chat product path.
+ * toggleSideChat (cmd+;) dispatched when onToggleSideChat is provided (official lk).
  */
 export type OfficialSessionShortcutCommand =
   | "togglePreview"

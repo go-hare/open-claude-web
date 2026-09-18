@@ -164,7 +164,6 @@ export function useEpitaxyViewShortcuts({
           onClosePane();
           return;
         case "toggleSideChat":
-          // Honest wall: no product Side chat unless caller wires onToggleSideChat.
           if (!onToggleSideChat) return;
           event.preventDefault();
           onToggleSideChat();

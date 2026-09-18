@@ -9,6 +9,8 @@ import {
   mapOfficialComparisonToFileEntries,
   OFFICIAL_DIFF_FILE_ATTR,
 } from "./diff/diffFileTypes";
+import { officialDiffAnnotationsApi, type OfficialDiffPrComment } from "./diff/officialDiffAnnotationsStore";
+import { mapOfficialPrReviewComment } from "./diff/officialDiffPrCommentResidual";
 
 export type OfficialDiffCompareMeta = {
   base: string;
@@ -120,6 +122,43 @@ export function OfficialDiffPane({
       alive = false;
     };
   }, [bridge, onCompareMetaChange, session?.repo?.branch, sessionRef.id]);
+
+  // Official rN prCommentSync: fe.getPrReviewComments when PR number + cwd/repo.
+  useEffect(() => {
+    const fetchComments = bridge.getPrReviewComments;
+    if (!fetchComments) return undefined;
+    const cwd = session?.cwd;
+    const repo = session?.repo?.name;
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+
+    const load = async () => {
+      const prState = await bridge.getPrStateForBranch?.(sessionRef.id).catch(() => null);
+      const number =
+        (typeof prState?.number === "number" ? prState.number : undefined)
+        ?? session?.prs?.find((item) => typeof item.number === "number")?.number;
+      if (cancelled || number == null || (!cwd && !repo)) return;
+      const result = await fetchComments(cwd ?? "", number, cwd ? undefined : repo).catch(() => null);
+      if (cancelled || !result?.success || !Array.isArray(result.comments)) return;
+      const mapped: OfficialDiffPrComment[] = [];
+      for (const raw of result.comments) {
+        const comment = mapOfficialPrReviewComment(raw);
+        if (!comment || !comment.filePath) continue;
+        mapped.push(comment);
+      }
+      officialDiffAnnotationsApi.setPrComments(sessionRef.id, mapped);
+    };
+
+    void load();
+    timer = setInterval(() => void load(), 30_000);
+    const onFocus = () => void load();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [bridge, session?.cwd, session?.prs, session?.repo?.name, sessionRef.id]);
 
   // Official ng: b = Yd(comparison) = tc(comparison).
   const files = useMemo(

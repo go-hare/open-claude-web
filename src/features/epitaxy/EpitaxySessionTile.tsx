@@ -20,6 +20,7 @@ import {
   officialCodeSessionStore,
   useOfficialCodeSessionBucket,
 } from "./session/officialCodeSessionStore";
+import { officialSideChatStore } from "./session/officialSideChatStore";
 import { setDraftPermissionMode } from "./codeDraftComposerStore";
 import type { PermissionMode } from "../../adapters/desktopBridge";
 import {
@@ -443,6 +444,14 @@ function EpitaxyChatPanel({
   const setComposerText = useCallback((text: string) => {
     composerApiRef.current?.setComposerText(text);
   }, []);
+  /** Official rN `j` → requestComposerAction(submit?"submit":"focus"). */
+  const requestComposerAction = useCallback((action: "focus" | "submit") => {
+    if (action === "submit") {
+      composerApiRef.current?.submit();
+      return;
+    }
+    composerApiRef.current?.focus();
+  }, []);
   // Official mc submitToChat — Preview Set up / start-failed residual (c11959232).
   const submitToChat = useCallback(
     async (text: string) => {
@@ -491,6 +500,7 @@ function EpitaxyChatPanel({
     openTasks,
     onNavigate,
     reload,
+    requestComposerAction,
     sessionId: initialSessionId,
     sessionRef: effectiveSessionRef,
     setComposerText,
@@ -510,6 +520,7 @@ function EpitaxyChatPanel({
     openSubagent,
     openTasks,
     reload,
+    requestComposerAction,
     setComposerText,
     submitToChat,
   ]);
@@ -613,7 +624,18 @@ function EpitaxyChatPanel({
     onCycleTranscriptMode: cycleTranscriptMode,
     onRewind: canOpenRewindPicker ? openRewindPicker : undefined,
     onTogglePane: selectView,
-    // toggleSideChat omitted — honest wall (no Side chat product path).
+    // Official dE: onToggleSideChat: a ? C : void 0 — primary local only.
+    onToggleSideChat: isPanelActive
+      ? () => {
+          if (!effectiveSessionRef || effectiveSessionRef.type !== "local") {
+            errors?.addError("Side chat is local-only — not available for remote sessions.", {
+              messageForLogging: "epitaxy-side-chat-remote",
+            });
+            return;
+          }
+          officialSideChatStore.getState().toggle(effectiveSessionRef.id);
+        }
+      : undefined,
   });
 
   /**

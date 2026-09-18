@@ -96,7 +96,7 @@ function chatMessageFromRawTranscriptEvent(rawEvent: Record<string, unknown>): C
       ? "assistant"
       : rawAuthor === "system"
         ? "system"
-        : rawType === "assistant"
+        : rawType === "assistant" || rawType === "result"
           ? "assistant"
           : rawType === "system"
             ? "system"

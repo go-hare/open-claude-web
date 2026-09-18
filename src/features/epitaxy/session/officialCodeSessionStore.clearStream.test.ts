@@ -108,8 +108,9 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(bucket?.queuedMessages.map((message) => message.id)).toEqual(["q1", "q2"]);
     expect(bucket?.pendingTurnStartedAt).not.toBeNull();
     expect(bucket?.session?.isRunning).toBe(true);
-    expect(bucket?.streamActivityMode).toBe("idle");
-    expect(bucket?.streamingMessageId).toBeNull();
+    // Official Wr does not write the bucket — Va / streamingMessageId stay until result `u`.
+    expect(bucket?.streamActivityMode).toBe("responding");
+    expect(bucket?.streamingMessageId).toBe("live");
   });
 
   it("interrupt user stays in messages while queued follow-ups wait (jke)", () => {
@@ -200,6 +201,45 @@ describe("officialCodeSessionStore interrupt-then-continue", () => {
     expect(bucket?.pendingQueuedSends).toBe(0);
     // Official g/h does not write isRunning — host session_updated is authoritative.
     expect(bucket?.session?.isRunning).toBe(true);
+  });
+
+  it("parent result is official u, not d — even with pendingQueuedSends and ChatMessage.role user", () => {
+    // Product mapper historically defaulted type:"result" → role user. Official d is
+    // `"user"===n.message.type` only; result must settle pendingTurn (h) not enter the queue.
+    officialCodeSessionStore.getState().openSession("s1", {
+      id: "s1",
+      kind: "code",
+      title: "S",
+      updatedAtMs: 1,
+      isRunning: true,
+    } as never, []);
+    officialCodeSessionStore.getState().setStreamActivity("s1", {
+      pendingTurnStartedAt: Date.now(),
+      isRunning: true,
+    });
+    officialCodeSessionStore.getState().noteQueuedSend("s1");
+    expect(officialCodeSessionStore.getState().buckets.s1?.pendingQueuedSends).toBe(1);
+
+    officialCodeSessionStore.getState().mergeMessage("s1", {
+      id: "r1",
+      role: "user",
+      text: "error",
+      createdAt: "2026-08-13T00:00:02.000Z",
+      raw: {
+        type: "result",
+        uuid: "r1",
+        is_error: true,
+        subtype: "error_during_execution",
+        errors: ["error"],
+      },
+    });
+
+    const bucket = officialCodeSessionStore.getState().buckets.s1;
+    expect(bucket?.messages.map((message) => message.id)).toEqual(["r1"]);
+    expect(bucket?.queuedMessages).toEqual([]);
+    expect(bucket?.pendingQueuedSends).toBe(0);
+    // Official g: leftover pendingQueuedSends is a queue → remint pendingTurn.
+    expect(bucket?.pendingTurnStartedAt).not.toBeNull();
   });
 
   it("done clears stream; completed is not an official settle type", () => {

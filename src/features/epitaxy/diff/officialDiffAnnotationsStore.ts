@@ -331,6 +331,18 @@ export const officialDiffAnnotationsApi = {
   updateAnnotation: officialDiffAnnotationsStore.getState().updateAnnotation,
 };
 
+/** Official submit `Hn` — staged PR comments across files (source==="pr"). */
+export function getOfficialStagedPrComments(sessionId: string): OfficialDiffAnnotation[] {
+  const files = officialDiffAnnotationsStore.getState().annotationsBySession[sessionId] ?? {};
+  const out: OfficialDiffAnnotation[] = [];
+  for (const list of Object.values(files)) {
+    for (const item of list) {
+      if (item.source === "pr") out.push(item);
+    }
+  }
+  return out;
+}
+
 export function useOfficialDiffFileAnnotations(sessionId: string, filePath: string) {
   return useStore(
     officialDiffAnnotationsStore,

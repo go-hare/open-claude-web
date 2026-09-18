@@ -3,6 +3,7 @@
  * Effort chip is OfficialComposerFooter → OfficialEffortControl (not Models extraSections list).
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useStore } from "zustand";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
@@ -61,6 +62,14 @@ import {
 import { resolveDraftPermissionMode, setDraftPermissionMode } from "../codeDraftComposerStore";
 import type { PermissionMode } from "../../../adapters/desktopBridge";
 import { residualQjSubmitDisabled } from "./officialQjComposerGate";
+import { OfficialSideChatOverlay } from "./OfficialSideChatOverlay";
+import { officialSideChatStore } from "./officialSideChatStore";
+import {
+  getOfficialStagedPrComments,
+  officialDiffAnnotationsApi,
+  officialDiffAnnotationsStore,
+} from "../diff/officialDiffAnnotationsStore";
+import { prependOfficialStagedPrComments } from "../diff/officialDiffPrCommentResidual";
 import {
   filterCoworkImageFiles,
   imageFilesFromClipboardData,
@@ -98,6 +107,8 @@ export type OfficialComposerSurfaceApi = {
   focus: () => void;
   getText: () => string;
   setComposerText: (text: string) => void;
+  /** Official requestComposerAction("submit") — `_c` Enter+mod. */
+  submit: () => void;
 };
 
 export function ExistingSessionComposer({
@@ -304,11 +315,25 @@ export function ExistingSessionComposer({
     isRemoteUploading: false,
     gitRequiredBlocksSubmit: false,
   });
+  const stagedPrCount = useStore(
+    officialDiffAnnotationsStore,
+    (state) => {
+      if (!sessionRef?.id) return 0;
+      let count = 0;
+      for (const list of Object.values(state.annotationsBySession[sessionRef.id] ?? {})) {
+        for (const item of list) {
+          if (item.source === "pr") count += 1;
+        }
+      }
+      return count;
+    },
+  );
   // Official Qj Te: has text/attachments && !disabled && !submitDisabled — busy does NOT block submit.
   // Mid-turn Enter/send → Gr noteQueuedSend + enqueue (pendingQueuedSends); button click while busy = Stop.
   // isSubmitting is only ultrareview/in-flight double-click guard (not residual disabled matrix).
+  // Staged PR comments (`Hn`) also enable send — ic() prepends them on submit.
   const canSubmit =
-    (text.trim().length > 0 || readyImageCount > 0 || stagedFiles.length > 0)
+    (text.trim().length > 0 || readyImageCount > 0 || stagedFiles.length > 0 || stagedPrCount > 0)
     && !disabled
     && !submitDisabled;
   // Official Qj `_e=!(!C||he||W||m)` — C=promptSuggestion he=hasText W=bash m=attachments.
@@ -915,6 +940,13 @@ export function ExistingSessionComposer({
   const submit = useCallback(async () => {
     if (!canSubmit || isSubmitting) return;
     const trimmed = text.trim();
+    // Official /btw: openWith(id, arg) and do NOT sendMessage. Before /ultrareview.
+    const btwMatch = trimmed.match(/^\/btw\b\s*(.*)$/is);
+    if (btwMatch && sessionRef?.type === "local") {
+      officialSideChatStore.getState().openWith(sessionRef.id, btwMatch[1]?.trim() || undefined);
+      clearComposer();
+      return;
+    }
     // Official Ms: /^\/ultrareview\b/ → fe.launchUltrareview, bs chrome while in flight.
     const ultraMatch = trimmed.match(/^\/ultrareview\b\s*(.*)$/is);
     if (ultraMatch && sessionRef?.type === "local" && bridge.launchUltrareview) {
@@ -960,7 +992,9 @@ export function ExistingSessionComposer({
       ).join("\n\n");
       const fileMentionPrefix = officialComposerFileMentionPrefix(stagedFilesRef.current);
       const textWithNotes = notes ? `${notes}\n\n${trimmed}` : trimmed;
-      const textWithFiles = `${fileMentionPrefix}${textWithNotes}`;
+      const stagedPr = sessionRef?.id ? getOfficialStagedPrComments(sessionRef.id) : [];
+      const textWithPr = prependOfficialStagedPrComments(stagedPr, textWithNotes);
+      const textWithFiles = `${fileMentionPrefix}${textWithPr}`;
       // Official allows image-only send; still require non-empty combined payload.
       if (!textWithFiles.trim() && ready.length === 0) return;
       const images =
@@ -976,6 +1010,12 @@ export function ExistingSessionComposer({
         ...(images ? { images } : {}),
         permissionMode,
       });
+      if (sessionRef?.id && stagedPr.length > 0) {
+        officialDiffAnnotationsApi.markPrCommentsSent(sessionRef.id, stagedPr);
+        for (const comment of stagedPr) {
+          officialDiffAnnotationsApi.removeAnnotation(sessionRef.id, comment.filePath, comment.id);
+        }
+      }
       clearComposer();
     } finally {
       setSubmitting(false);
@@ -1002,6 +1042,9 @@ export function ExistingSessionComposer({
       focus: focusComposer,
       getText: getComposerText,
       setComposerText,
+      submit: () => {
+        void submitRef.current();
+      },
     };
     composerApiRef.current = api;
     return () => {
@@ -1207,6 +1250,9 @@ export function ExistingSessionComposer({
 
   return (
     <div className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]">
+      <div className="relative h-0 -mb-[var(--g5)]">
+        <OfficialSideChatOverlay bridge={bridge} sessionRef={sessionRef} />
+      </div>
       <button
         aria-hidden={!showScrollButton}
         aria-label="Scroll to bottom"

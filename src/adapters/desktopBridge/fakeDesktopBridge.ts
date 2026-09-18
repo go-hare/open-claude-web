@@ -557,6 +557,25 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     });
     return true;
   },
+  startSideChat: async (id) => {
+    const surface = targetKind === "epitaxy" ? "epitaxy" : "code";
+    queueMicrotask(() => {
+      emitFakeLocalSessionEvent({ type: "side_chat_ready", sessionId: id }, surface);
+    });
+  },
+  sendSideChatMessage: async (id, text) => {
+    const surface = targetKind === "epitaxy" ? "epitaxy" : "code";
+    queueMicrotask(() => {
+      emitFakeLocalSessionEvent({ type: "side_chat_assistant", sessionId: id, data: `Fake side chat: ${text}` }, surface);
+      emitFakeLocalSessionEvent({ type: "side_chat_turn_end", sessionId: id }, surface);
+    });
+  },
+  stopSideChat: async (id) => {
+    const surface = targetKind === "epitaxy" ? "epitaxy" : "code";
+    emitFakeLocalSessionEvent({ type: "side_chat_closed", sessionId: id }, surface);
+    return true;
+  },
+  getPrReviewComments: async () => ({ success: true, comments: [] }),
   summarizeTranscript: async (id, transcript) => {
     const surface = targetKind === "epitaxy" ? "epitaxy" : "code";
     if (!transcript.trim()) {

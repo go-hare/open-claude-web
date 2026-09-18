@@ -516,14 +516,10 @@ export function useEpitaxySessionData(sessionId?: string) {
     );
 
   const stopLiveTurn = useCallback(async () => {
-    // Official Wr onMutate = markInterrupting (Pke.flush + mCe.reset).
-    // Esc is interrupt-then-continue: keep queuedMessages + pendingTurn + isRunning.
+    // Official Wr onMutate = markInterrupting (Pke.flush + mCe.reset) only.
+    // Do not Pke.clear / lift Va / clear streamingMessageId — that unsuppresses the
+    // durable assistant (footer) while H is still true (spark). Va lifts on result `u`.
     if (!sessionId) return;
-    officialStreamClear(sessionId);
-    clearOfficialEkeCache(sessionId);
-    setStreamSnapshot(null);
-    setStreamingMessageId(null);
-    streamMessageIdRef.current = null;
     store.getState().markInterrupting(sessionId);
   }, [sessionId, store]);
 

@@ -58,6 +58,11 @@ export type EpitaxyTranscriptActionContextValue = {
   sessionRef?: EpitaxySessionRef | null;
   sessionId?: string;
   /**
+   * Official rN `requestComposerAction` — `_c` onSaved `{submit}` → focus | submit.
+   * Diff Ec Send to Claude is `kc` only; this is the draft-card save path.
+   */
+  requestComposerAction?: (action: "focus" | "submit") => void;
+  /**
    * Official $a / xt: set composer plain text + focus after rewind (prefill prompt).
    */
   setComposerText?: (text: string) => void;

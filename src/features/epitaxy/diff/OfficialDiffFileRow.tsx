@@ -1,8 +1,10 @@
-import { processFile, type FileDiffMetadata, type SelectedLineRange } from "@pierre/diffs";
+import { processFile, type DiffLineAnnotation, type FileDiffMetadata, type SelectedLineRange } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalSessionsBridge } from "../../../adapters/desktopBridge/types";
-import { OfficialDiffAnnotationCard } from "./OfficialDiffAnnotationCard";
+import { EpitaxyTranscriptActionContext } from "../session/epitaxyTranscriptActionContext";
+import { OfficialDiffAnnotationCard, OfficialDiffPrCommentCard } from "./OfficialDiffAnnotationCard";
+import { extractOfficialDiffSnippet } from "./officialDiffPrCommentResidual";
 import {
   officialDiffAnnotationCardKey,
   officialDiffAnnotationsApi,
@@ -158,6 +160,12 @@ export function OfficialDiffFileRow({
 
   const selectingRef = useRef(false);
   const lastGutterLineRef = useRef<number | null>(null);
+  const fileDiffRef = useRef(fileDiff);
+  fileDiffRef.current = fileDiff;
+  const transcriptActions = useContext(EpitaxyTranscriptActionContext);
+  const onAnnotationSaved = useCallback((payload: { submit: boolean }) => {
+    transcriptActions?.requestComposerAction?.(payload.submit ? "submit" : "focus");
+  }, [transcriptActions]);
 
   const stageDraft = useCallback((start: number, end: number, side: OfficialDiffAnnotationSide | undefined) => {
     const nextSide = side ?? "additions";
@@ -173,11 +181,17 @@ export function OfficialDiffFileRow({
       officialDiffAnnotationsApi.setActive(sessionId, { filePath, key });
       return;
     }
+    const current = fileDiffRef.current;
+    const snippet = current
+      ? extractOfficialDiffSnippet(current, nextSide, startLine, endLine)
+      : undefined;
     officialDiffAnnotationsApi.setDraft(sessionId, {
       body: "",
       endLine,
       filePath,
+      lang: current?.lang,
       side: nextSide,
+      snippet,
       startLine,
     });
   }, [filePath, sessionId]);
@@ -213,7 +227,27 @@ export function OfficialDiffFileRow({
 
   const renderAnnotation = useCallback((row: { metadata: OfficialDiffLineAnnotation["metadata"] }) => {
     const metadata = row.metadata;
-    if (metadata.kind === "pr") return null;
+    if (metadata.kind === "pr") {
+      const current = fileDiffRef.current;
+      const original = current
+        ? extractOfficialDiffSnippet(
+            current,
+            metadata.comment.side,
+            metadata.comment.startLine,
+            metadata.comment.endLine,
+          )
+        : undefined;
+      return (
+        <OfficialDiffPrCommentCard
+          comment={metadata.comment}
+          filePath={filePath}
+          isSent={metadata.isSent}
+          isStaged={metadata.isStaged}
+          original={original}
+          sessionId={sessionId}
+        />
+      );
+    }
     if (metadata.kind === "draft") {
       return (
         <OfficialDiffAnnotationCard
@@ -221,6 +255,7 @@ export function OfficialDiffFileRow({
           draft={metadata.draft}
           filePath={filePath}
           isActive={metadata.isActive}
+          onSaved={onAnnotationSaved}
           sessionId={sessionId}
         />
       );
@@ -232,11 +267,12 @@ export function OfficialDiffFileRow({
           cardKey={metadata.key}
           filePath={filePath}
           isActive={metadata.isActive}
+          onSaved={onAnnotationSaved}
           sessionId={sessionId}
         />
       </div>
     );
-  }, [filePath, sessionId]);
+  }, [filePath, onAnnotationSaved, sessionId, fileDiff]);
 
   const selectedLines = useMemo(() => {
     if (selectingRef.current || !activeKey) return null;
@@ -314,7 +350,7 @@ export function OfficialDiffFileRow({
           <FileDiff
             key={`${file.contentHash}:${fileDiff.isPartial ? "partial" : "full"}:pool`}
             fileDiff={fileDiff}
-            lineAnnotations={lineAnnotations}
+            lineAnnotations={lineAnnotations as DiffLineAnnotation<OfficialDiffLineAnnotation["metadata"]>[]}
             metrics={OFFICIAL_DIFF_METRICS}
             options={options}
             renderAnnotation={renderAnnotation}

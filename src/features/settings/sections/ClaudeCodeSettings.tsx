@@ -20,9 +20,8 @@ import { useSettingsBootstrap } from "../useSettingsBootstrap";
  * Autofix: ccr_autofix_ui === true → account ccr_autofix_on_pr_create
  *   Product: seeds session.autoFixEnabled on createLocalPr success (engine consumer).
  * Auto-archive: ccr_velvet_broom === true → prefs ccAutoArchiveOnPrClose
- * Auto-create PR on push: official remote-only; product has no CCR remote push
- *   auto-PR consumer → hide (do not invent store-only toggle). Nested draft stays
- *   controllable via PR menu + account/localStorage residual.
+ * Auto-create PR on push: official _t always mounts. Copy is remote-only.
+ *   Do not invent local git-push → createLocalPr. Nested draft stays on PR menu.
  * Classify: claudeai_session_state === true only → account ccr_session_state_buckets
  * (Official Qp: missing flag hides. 3p turns flags on via custom3p FEATURE_FLAGS.)
  */
@@ -62,9 +61,9 @@ export function ClaudeCodeSettings() {
   // Official St: c("claudeai_session_state"); if (!t) return null — missing → hide.
   const showClassifyRow =
     readBootstrapFeatureFlag(payload, "claudeai_session_state") === true;
-  // Official _t auto-create: remote sessions only. Product has no remote CCR
-  // push → PR pipeline; hide rather than store-only fake (same honesty family).
-  const showAutoCreatePrRow = false;
+  // Official _t always mounts. Copy: "Applies to remote sessions only."
+  // Do not invent local git-push → createLocalPr. Nested draft stays on PR menu.
+  const showAutoCreatePrRow = true;
 
   const setAccountFlag = (
     key:

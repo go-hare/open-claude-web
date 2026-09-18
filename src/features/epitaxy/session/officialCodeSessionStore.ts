@@ -25,7 +25,9 @@ import {
 import {
   officialClearTurnStarted,
   officialMarkTurnStarted,
+  officialResetStreamCharBudget,
   officialStreamDrop,
+  officialStreamFlush,
 } from "./officialStreamSessionStore";
 import {
   clearOfficialEkeCache,
@@ -373,7 +375,7 @@ type OfficialCodeSessionActions = {
   ) => void;
   /**
    * Official markInterrupting (Wr onMutate / Pke.flush + mCe.reset).
-   * Flush Va / stream flags only. Keep pendingTurn, queuedMessages, isRunning.
+   * Does not write the bucket — keep pendingTurn, queuedMessages, isRunning, Va.
    */
   markInterrupting: (sessionId: string) => void;
   /**
@@ -1505,7 +1507,9 @@ function createOfficialCodeSessionStore() {
       const rawRecord = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
       const identity = messageIdentity(message);
       const zke = officialZke(message);
-      const isUser = message.role === "user" || rawRecord.type === "user";
+      // Official: `"user"===n.message.type` only. Result rows must not count as user
+      // (product ChatMessage mapper historically defaulted type:"result" → role user).
+      const isUser = rawRecord.type === "user";
       const isAssistant = !isUser && (rawRecord.type === "assistant" || message.role === "assistant");
       const isSynthetic = rawRecord.isSynthetic === true || rawRecord.isMeta === true;
       const hasParentTool = Boolean(rawRecord.parent_tool_use_id);
@@ -1739,27 +1743,9 @@ function createOfficialCodeSessionStore() {
 
   markInterrupting: (sessionId) => {
     // Official Wr onMutate: Pke.flush + mCe.reset only. Do not clearPendingTurn,
-    // queuedMessages, or isRunning — interrupt then continues the queue.
-    set((state) => {
-      const prev = state.buckets[sessionId];
-      if (!prev) return state;
-      if (
-        prev.streamActivityMode === idleStreamActivityMode
-        && prev.streamingMessageId === null
-      ) {
-        return state;
-      }
-      return {
-        buckets: {
-          ...state.buckets,
-          [sessionId]: {
-            ...prev,
-            streamActivityMode: idleStreamActivityMode,
-            streamingMessageId: null,
-          },
-        },
-      };
-    });
+    // queuedMessages, isRunning, Va, or streamingMessageId — interrupt then continues.
+    officialStreamFlush(sessionId);
+    officialResetStreamCharBudget(sessionId);
   },
 
   setConnection: (sessionId, connection) => {

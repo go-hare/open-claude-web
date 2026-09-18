@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
+import { featureStatus, useDesktopSupportedFeatures } from "../../settings/useDesktopPreferences";
 import type { EpitaxySessionRef } from "./epitaxyTranscriptActionContext";
 import type { SessionSummary } from "../../../adapters/desktopBridge";
 
@@ -24,44 +25,26 @@ function getFramebufferBridge() {
 
 /**
  * Official T (c11959232 YR):
- *   T = capabilities.framebufferPreview.status === "supported"
- * Product: open-claude-desktop FramebufferPreview is a residual shell only
- * (desktopCapturer listSources + attach metadata; RFB MessagePort not wired).
- * Do NOT treat "bridge methods exist" as supported — that made Screen always
- * appear via desktop window/screen sources, unlike official YR gating.
- * Until real simulator/device framebuffer is implemented, T is false.
+ *   T = cr()?.framebufferPreview?.status === "supported"
+ * Host: AppFeatures.getSupportedFeatures. Packaged → unavailable.
+ * Unpackaged + flag 1928275548 → supported. Main-window ixt still empty
+ * (listSources [], attach throws, requestFramePort false). Do not invent RFB.
  */
-export function canUseOfficialFramebufferPreview(): boolean {
-  const bridge = getFramebufferBridge() as
-    | {
-        attach?: unknown;
-        listSources?: unknown;
-        /** Optional product residual: explicit supported flag when real RFB lands. */
-        isSupported?: () => boolean | Promise<boolean>;
-        getStatus?: () => { status?: string } | Promise<{ status?: string }>;
-      }
-    | undefined;
-  if (!bridge) return false;
-  // Explicit host capability only — never invent support from method presence.
-  try {
-    if (typeof bridge.isSupported === "function") {
-      const value = bridge.isSupported();
-      if (value === true) return true;
-    }
-  } catch {
-    // ignore
-  }
-  return false;
+export function canUseOfficialFramebufferPreview(
+  features: ReturnType<typeof useDesktopSupportedFeatures>,
+): boolean {
+  return featureStatus(features, "framebufferPreview") === "supported";
 }
 
 /**
  * Official YR Screen item: T && (A || already open).
- * A = listSources(cwd).length > 0 (polled) — only meaningful when T is true.
- * When T is false, Screen stays hidden even if pane was somehow open in state.
+ * A = listSources(cwd).length > 0 (polled, name+origin identity).
+ * Main-window listSources is [] so Screen stays hidden unless already open.
  */
 export function useOfficialFramebufferMenuGate(cwd: string | undefined | null, paneOpen: boolean): boolean {
   const [hasSources, setHasSources] = useState(false);
-  const supported = canUseOfficialFramebufferPreview();
+  const features = useDesktopSupportedFeatures();
+  const supported = canUseOfficialFramebufferPreview(features);
 
   useEffect(() => {
     if (!supported) {
@@ -78,21 +61,8 @@ export function useOfficialFramebufferMenuGate(cwd: string | undefined | null, p
         const bridge = getFramebufferBridge();
         const sources = await bridge?.listSources?.(cwd) ?? [];
         if (!alive) return;
-        // Official framebuffer sources are simulator/device streams, not desktopCapturer
-        // screen/window thumbnails. Prefer sources that declare a device-ish origin.
-        const real = (Array.isArray(sources) ? sources : []).filter((row) => {
-          if (!row || typeof row !== "object") return false;
-          const item = row as Record<string, unknown>;
-          const origin = typeof item.origin === "string" ? item.origin : "";
-          const kind = typeof item.kind === "string" ? item.kind : typeof item.type === "string" ? item.type : "";
-          // Reject Electron desktopCapturer ids (screen:… / window:…).
-          const id = typeof item.id === "string" ? item.id : "";
-          if (id.startsWith("screen:") || id.startsWith("window:")) return false;
-          if (kind === "screen" || kind === "window") return false;
-          if (origin.startsWith("screen:") || origin.startsWith("window:")) return false;
-          return Boolean(item.name || id);
-        });
-        setHasSources(real.length > 0);
+        const list = Array.isArray(sources) ? sources : [];
+        setHasSources(list.length > 0);
       } catch {
         if (alive) setHasSources(false);
       }
@@ -148,7 +118,7 @@ function OfficialFramebufferPreviewPane({ cwd, sessionName }: { cwd: string; ses
     void (async () => {
       try {
         if (!bridge?.attach) {
-          if (alive) setState({ status: "error", error: new Error("FramebufferPreview bridge is unavailable") });
+          if (alive) setState({ status: "error", error: new Error("FramebufferPreview not available in this window") });
           return;
         }
         const result = await bridge.attach(cwd, sessionName);
@@ -159,32 +129,20 @@ function OfficialFramebufferPreviewPane({ cwd, sessionName }: { cwd: string; ses
           if (sid) void bridge.detach?.(sid);
           return;
         }
-        if (!result) {
-          setState({ status: "error", error: new Error("FramebufferPreview bridge is unavailable") });
+        if (!result?.sessionId) {
+          setState({
+            status: "error",
+            error: new Error("FramebufferPreview not available in this window"),
+          });
           return;
         }
-        const payload = result as {
-          sessionId?: string;
-          name?: string;
-          width?: number;
-          height?: number;
-          attached?: boolean;
-          source?: { id?: string; width?: number; height?: number; name?: string };
-        };
-        // Official shape {sessionId,name,width,height}; desktop stub may return {attached,source}.
-        const sessionId = payload.sessionId
-          ?? (payload.source?.id ? String(payload.source.id) : payload.attached ? `${cwd}::${sessionName}` : "");
-        if (!sessionId) {
-          setState({ status: "error", error: new Error("FramebufferPreview bridge is unavailable") });
-          return;
-        }
-        attachedSessionId = sessionId;
+        attachedSessionId = result.sessionId;
         setState({
           status: "ready",
-          sessionId,
-          name: payload.name ?? payload.source?.name,
-          width: Number(payload.width ?? payload.source?.width ?? 0) || 0,
-          height: Number(payload.height ?? payload.source?.height ?? 0) || 0,
+          sessionId: result.sessionId,
+          name: result.name,
+          width: Number(result.width ?? 0) || 0,
+          height: Number(result.height ?? 0) || 0,
         });
       } catch (error) {
         if (!alive) return;
