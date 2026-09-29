@@ -3,7 +3,7 @@ import { desktopBridge, type SessionSummary } from "../adapters/desktopBridge";
 import { useShellText } from "../i18n/shellMessages";
 import type { FrameStore } from "../stores/frameStore";
 import { BaseMenuPopup, Menu } from "./BaseMenu";
-import { Icon } from "./icons";
+import { OfficialDotsVerticalGlyph } from "./officialLucideGlyphs";
 import { isPinnedSession, pinSession, sessionPinKey, unpinSession } from "./sessionPinning";
 import { SessionRowMenuContent, type RowAction } from "./SessionRowMenus";
 
@@ -55,7 +55,7 @@ export function SessionRowActions({ frame, onAction, onCreateGroup, onOpenSplit,
           tabIndex={-1}
           type="button"
         >
-          <Icon name="DotsHorizontal" customSize={16} />
+          <OfficialDotsVerticalGlyph className="size-[var(--df-icon-size)]" />
         </Menu.Trigger>
         <BaseMenuPopup align="end" className="min-w-[180px]" side="right" sideOffset={4}>
           <SessionRowMenuContent frame={frame} onAction={onAction} onCreateGroup={onCreateGroup} onOpenSplit={onOpenSplit} session={session} />

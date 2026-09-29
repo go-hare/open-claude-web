@@ -2,7 +2,7 @@ import { type ShellText, useShellText } from "../i18n/shellMessages";
 import type { PaneSlot } from "../stores/paneStore";
 import { PANE_SLOTS } from "../stores/paneStore";
 import { BaseMenuItem, BaseMenuPopup, BaseMenuSeparator, Menu } from "./BaseMenu";
-import { Icon } from "./icons";
+import { OfficialChevronDownGlyph } from "./officialLucideGlyphs";
 
 type ExtraPaneMenuProps = {
   currentSlot: PaneSlot;
@@ -20,7 +20,7 @@ const triggerClassName = "draggable-none size-6 flex items-center justify-center
 export function PaneMenuTrigger({ label }: { label: string }) {
   return (
     <Menu.Trigger aria-label={label} className={triggerClassName} type="button">
-      <Icon name="DotsHorizontal" customSize={14} />
+      <OfficialChevronDownGlyph size={14} />
     </Menu.Trigger>
   );
 }

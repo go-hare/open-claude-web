@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { desktopBridge } from "../../../adapters/desktopBridge";
 import type { CoworkImagePayload, CoworkToolState, SendMessageInput, SessionSummary } from "../../../adapters/desktopBridge/types";
 import { createCoworkAddMenuItems } from "../newTask/CoworkAddMenuItems";
+import { useCoworkChromeText } from "./coworkChromeMessages";
 import { mergeCoworkUploadedFiles, type CoworkUploadedFile } from "../newTask/coworkUploadedFiles";
 import { coworkSessionsBridge } from "../session/coworkSessionBridge";
 import { stopCoworkSession } from "../session/coworkSessionStop";
@@ -120,8 +121,21 @@ export function CoworkSessionComposer(props: CoworkSessionComposerProps) {
 }
 
 function useCoworkComposerController(props: CoworkSessionComposerProps) {
+  const chromeText = useCoworkChromeText();
   const ask = useCoworkAskUserQuestion();
   const modelOptions = useCoworkModelOptions();
+  const addMenuLabels = useMemo(
+    () => ({
+      addFilesOrPhotos: chromeText.addFilesOrPhotos,
+      addFolder: chromeText.addFolder,
+      addConnectors: chromeText.addConnectors,
+      addPlugins: chromeText.addPlugins,
+      plugins: chromeText.plugins,
+      skills: chromeText.skills,
+      connectors: chromeText.connectors,
+    }),
+    [chromeText],
+  );
   // Official rt=V7 / it=Zte(conversationUuid): model-context tool_states → sendMessage arg6.
   const modelContextToolStates = useCoworkModelContextToolStates(props.sessionId);
   const toolStates = props.toolStates ?? modelContextToolStates;
@@ -234,10 +248,17 @@ function useCoworkComposerController(props: CoworkSessionComposerProps) {
     onSelect: () => void actions.applyModel(option.value),
   }));
   // Official local_session / agent path: dqe || isAgentNewRoute → hide project/Drive/GitHub + modes.
-  const plusMenuItems = createCoworkAddMenuItems({ isAgentRoute: true, includeAddFolder: true, onAddFiles: () => void actions.addFiles(), onAddFolder: () => void actions.addFolder(), onNavigate: props.onNavigate });
+  const plusMenuItems = createCoworkAddMenuItems({
+    isAgentRoute: true,
+    includeAddFolder: true,
+    labels: addMenuLabels,
+    onAddFiles: () => void actions.addFiles(),
+    onAddFolder: () => void actions.addFolder(),
+    onNavigate: props.onNavigate,
+  });
   const minimizeQuestion = () => {
     setQuestionMinimized(true);
-    if (!text.trim()) restore("Continue without answering");
+    if (!text.trim()) restore(chromeText.continueWithoutAnswering);
     else editor?.commands.focus("end");
   };
   const questionBanner = ask.data && !questionMinimized ? <div className="mb-2"><CoworkAskUserQuestionBanner data={ask.data} onDismiss={minimizeQuestion} onSubmit={(answer) => { ask.submit?.(answer); ask.clear(); }} /></div> : null;
@@ -265,7 +286,7 @@ function useCoworkComposerController(props: CoworkSessionComposerProps) {
       reopenQuestion: () => setQuestionMinimized(false),
       text,
     }),
-    placeholder: ask.data ? "Or reply directly…" : "Write a message...",
+    placeholder: ask.data ? chromeText.orReplyDirectly : chromeText.writeMessage,
     plusMenuItems,
     questionBanner,
     removeFile: (path: string) => setSelectedFiles((current) => current.filter((file) => file.path !== path)),

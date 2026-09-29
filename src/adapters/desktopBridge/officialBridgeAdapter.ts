@@ -920,10 +920,10 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     getSession: async (id) => {
       const item = await raw?.getSession?.(id, { skipReplay: true });
       if (!item) return null;
-      const session = await enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw);
-      const transcript = await raw?.getTranscript?.(id).catch(() => undefined);
-      const transcriptMessages = normalizeMessages(transcript);
-      return transcriptMessages?.length ? { ...session, messages: transcriptMessages } : session;
+      // Official Ae cold: getSession is meta only. Transcript is U.fetchTranscript /
+      // LocalSessions.getTranscript. Re-reading jsonl here doubled a 500MB payload
+      // and hid the real load failure behind an empty session.messages fallback.
+      return enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw);
     },
     getSessionsForScheduledTask: async (taskId) => normalizeSessionList(await raw?.getSessionsForScheduledTask?.(taskId), targetKind),
     getTranscript: async (id) => normalizeMessages(await raw?.getTranscript?.(id).catch(() => [])) ?? [],
@@ -2146,7 +2146,7 @@ function normalizeCoworkSpaces(items: unknown): CoworkSpaceSummary[] {
     if (!id) continue;
     spaces.push({
       id,
-      name: stringValue(raw.name) ?? stringValue(raw.title) ?? "Untitled project",
+      name: stringValue(raw.name) ?? stringValue(raw.title) ?? "",
       description: stringValue(raw.description) ?? stringValue(raw.autoDescription) ?? null,
       instructions: stringValue(raw.instructions) ?? null,
       createdAtMs: timestampValue(raw.createdAt) ?? timestampValue(raw.created_at) ?? undefined,

@@ -17,14 +17,21 @@ import { Icon } from "../../../shell/icons";
 import { Switch as CdsSettingsSwitch } from "../../settings/SettingsShell";
 import { OfficialSwitch } from "../../shared/OfficialSwitch";
 import { OfficialTooltip } from "../../shared/OfficialTooltip";
+import { useI18nText, type MessageDescriptors } from "../../../i18n/footerMenuMessages";
+
+const KEEP_AWAKE_MESSAGES = {
+  label: { defaultMessage: "Keep awake", id: "LyhK7RvVf3" },
+  tooltip: {
+    defaultMessage: "When enabled, Claude will prevent your computer from going to sleep.",
+    id: "pkPdf3LvZO",
+  },
+} as const satisfies MessageDescriptors;
 
 const sizeChrome = {
   sm: { textClass: "font-small", iconSize: "sm" as const, switchSize: "sm" as const },
   // Official mYt.md.switchSize is void 0 → lge maps to "default"
   md: { textClass: "font-base", iconSize: "md" as const, switchSize: "default" as const },
 };
-
-const KEEP_AWAKE_TOOLTIP = "When enabled, Claude will prevent your computer from going to sleep.";
 
 /**
  * Official hYt (index-BELzQL5P):
@@ -46,6 +53,7 @@ export function KeepAwakeControl({
   "aria-describedby"?: string;
 }) {
   const { textClass, iconSize, switchSize } = sizeChrome[size];
+  const keepAwakeText = useI18nText(KEEP_AWAKE_MESSAGES);
   // Official hYt: g = preferences | undefined; render when g?.keepAwakeEnabled !== undefined
   const [prefsReady, setPrefsReady] = useState(false);
   const [enabled, setEnabled] = useState(false);
@@ -92,7 +100,7 @@ export function KeepAwakeControl({
     return (
       <span data-official-source="index-BELzQL5P.js:hYt/lge→iP">
         <CdsSettingsSwitch
-          aria-label={ariaLabelledby ? undefined : "Keep awake"}
+          aria-label={ariaLabelledby ? undefined : keepAwakeText.label}
           aria-labelledby={ariaLabelledby}
           aria-describedby={ariaDescribedby}
           checked={enabled}
@@ -105,7 +113,7 @@ export function KeepAwakeControl({
   // Official non-controlOnly (scheduled bridge): Zfe dsVariant dark inside bottom tooltip
   const switchEl = (
     <OfficialSwitch
-      aria-label={ariaLabelledby ? undefined : "Keep awake"}
+      aria-label={ariaLabelledby ? undefined : keepAwakeText.label}
       aria-labelledby={ariaLabelledby}
       aria-describedby={ariaDescribedby}
       checked={enabled}
@@ -117,7 +125,7 @@ export function KeepAwakeControl({
 
   // Official hYt: pge({ content, side: "bottom", children: <span className={fullWidth ? "block w-full" : undefined}>...</span> })
   return (
-    <OfficialTooltip side="bottom" tooltipContent={KEEP_AWAKE_TOOLTIP}>
+    <OfficialTooltip side="bottom" tooltipContent={keepAwakeText.tooltip}>
       <span
         className={fullWidth ? "block w-full" : undefined}
         data-official-source="index-BELzQL5P.js:hYt"
@@ -131,7 +139,7 @@ export function KeepAwakeControl({
             .join(" ")}
         >
           <Icon name="Sun" size={iconSize} />
-          <span className={`${textClass}${fullWidth ? " flex-1" : ""}`}>Keep awake</span>
+          <span className={`${textClass}${fullWidth ? " flex-1" : ""}`}>{keepAwakeText.label}</span>
           {switchEl}
         </span>
       </span>

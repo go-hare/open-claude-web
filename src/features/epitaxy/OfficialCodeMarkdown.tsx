@@ -30,6 +30,7 @@ import remarkMath from "remark-math";
 import { evaluateCoworkMarkdownFeature } from "../cowork/session/transcript/CoworkAssistantMarkdown";
 import {
   AlluviumMarkdown,
+  OfficialCodeMarkdownImage,
   type AlluviumFenceBlock,
 } from "../cowork/session/transcript/AlluviumMarkdown";
 import { Icon } from "../../shell/icons";
@@ -73,6 +74,7 @@ function renderOfficialCodeAlluviumFence(block: AlluviumFenceBlock) {
  * `createContext(false)`; kb wraps children in Jv.Provider value:isStreaming.
  */
 export const OfficialCodeMarkdownStreamingContext = createContext(false);
+const OfficialCodeMarkdownSessionContext = createContext<string | undefined>(undefined);
 
 export function useOfficialCodeMarkdownStreaming(): boolean {
   return useContext(OfficialCodeMarkdownStreamingContext);
@@ -105,7 +107,15 @@ const OFFICIAL_SEARCH_TREE_BLOCK_RE = /<search_tree>([\s\S]*?)<\/search_tree>/g;
  * Product: AlluviumMarkdown residual engine = official vd/ae (c93fb40ec) used by
  * c119 wb path; wrap with data-alluvium + contents to match c119 wb DOM.
  */
-export function OfficialCodeMarkdown({ isStreaming = false, text }: { isStreaming?: boolean; text: string }) {
+export function OfficialCodeMarkdown({
+  isStreaming = false,
+  sessionId,
+  text,
+}: {
+  isStreaming?: boolean;
+  sessionId?: string;
+  text: string;
+}) {
   const normalized = useMemo(() => preprocessOfficialCodeMarkdown(text), [text]);
   // Official el("claude_ai_alluvium_main") each render — missing/false → xd path.
   const alluviumEnabled = evaluateCoworkMarkdownFeature("claude_ai_alluvium_main") === true;
@@ -131,6 +141,7 @@ export function OfficialCodeMarkdown({ isStreaming = false, text }: { isStreamin
             dataAlluvium
             isStreaming={isStreaming}
             renderFence={renderOfficialCodeAlluviumFence}
+            sessionId={sessionId}
             text={normalized}
             variant="code"
           />
@@ -141,12 +152,14 @@ export function OfficialCodeMarkdown({ isStreaming = false, text }: { isStreamin
 
   return (
     <OfficialCodeMarkdownStreamingContext.Provider value={isStreaming}>
-      <div className="epitaxy-markdown" data-official-source="c11959232-h_zsw3wI.js:kb+xd">
-        {completedChunks.map((chunk, index) => (
-          <OfficialCodeMarkdownChunk chunk={chunk} key={`c${index}`} />
-        ))}
-        {frontier ? <OfficialCodeMarkdownChunk chunk={frontier} key={`s${completedChunks.length}`} /> : null}
-      </div>
+      <OfficialCodeMarkdownSessionContext.Provider value={sessionId}>
+        <div className="epitaxy-markdown" data-official-source="c11959232-h_zsw3wI.js:kb+xd">
+          {completedChunks.map((chunk, index) => (
+            <OfficialCodeMarkdownChunk chunk={chunk} key={`c${index}`} />
+          ))}
+          {frontier ? <OfficialCodeMarkdownChunk chunk={frontier} key={`s${completedChunks.length}`} /> : null}
+        </div>
+      </OfficialCodeMarkdownSessionContext.Provider>
     </OfficialCodeMarkdownStreamingContext.Provider>
   );
 }
@@ -452,16 +465,9 @@ function OfficialMarkdownAnchor({ href, children }: { href?: string; children?: 
 
 function OfficialMarkdownImage(props: ComponentPropsWithoutRef<"img">) {
   const src = typeof props.src === "string" ? props.src : undefined;
-  if (!src) return null;
-  // Official pb classes (c119): block max-w-full h-auto rounded-r4 border border-[var(--border-default)]
-  return (
-    <img
-      alt={props.alt ?? ""}
-      className="block max-w-full h-auto rounded-r4 border border-[var(--border-default)]"
-      data-official-source="c11959232-h_zsw3wI.js:pb"
-      src={src}
-    />
-  );
+  const sessionId = useContext(OfficialCodeMarkdownSessionContext);
+  // Official pb: relative src goes through cu() → readSessionImageAsDataUrl.
+  return <OfficialCodeMarkdownImage alt={props.alt ?? ""} sessionId={sessionId} src={src} />;
 }
 
 function OfficialMarkdownTable({ children }: { children?: ReactNode }) {

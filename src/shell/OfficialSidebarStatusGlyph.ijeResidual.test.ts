@@ -14,11 +14,11 @@ describe("OfficialSidebarStatusGlyph ije residual (belz ije / lje / oje)", () =>
   });
 
   it("lje / archived / oje labels match official catalog", () => {
-    expect(glyphSource).toMatch(/return "Awaiting input"/);
-    expect(glyphSource).toMatch(/return "Running"/);
-    expect(glyphSource).toMatch(/return "Ready"/);
-    expect(glyphSource).toMatch(/return "Idle"/);
-    expect(glyphSource).toMatch(/return "已归档"/);
+    expect(glyphSource).toMatch(/id: "tM90hqjWj0"/);
+    expect(glyphSource).toMatch(/id: "nDyaq\/M7Oj"/);
+    expect(glyphSource).toMatch(/id: "IZFEUgrg25"/);
+    expect(glyphSource).toMatch(/id: "sNY4nxDm3U"/);
+    expect(glyphSource).toMatch(/id: "0HT\+IbyW6O"/);
     expect(glyphSource).toMatch(/open: "Pull request open"/);
     expect(glyphSource).toMatch(/draft: "Draft pull request"/);
   });

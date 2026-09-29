@@ -19,6 +19,7 @@ import {
 import { CoworkDropdownButton } from "../ui/CoworkDropdownButton";
 import type { CoworkDropdownItem } from "../ui/CoworkMenuTypes";
 import { CoworkArrowDownGlyph } from "../ui/CoworkOfficialGlyphs";
+import { useCoworkChromeText } from "./coworkChromeMessages";
 import {
   splitDisclaimerFeedbackTemplate,
   useCoworkDisclaimerText,
@@ -217,12 +218,13 @@ function SelectedFiles({
 }
 
 function ComposerToolbar(props: CoworkSessionComposerSurfaceProps & { sendDisabled: boolean }) {
+  const chromeText = useCoworkChromeText();
   return (
     <div className="relative flex gap-2 w-full items-center">
       <div className="relative flex-1 flex items-center shrink min-w-0 gap-1">
-        <CoworkDropdownButton align="start" alignOffset={-10} ariaLabel="Add files, connectors, and more" className="!rounded-lg hover:!bg-bg-200 aria-expanded:!bg-bg-300 active:!scale-100 ml-[2px] h-8 w-8" disabled={props.disabled} icon={<CoworkComposerPlusIcon size={20} />} items={props.plusMenuItems} popupClassName="max-h-[min(var(--available-height),24rem)]" revealChevron="never" side="bottom" sideOffset={4} size="small" />
+        <CoworkDropdownButton align="start" alignOffset={-10} ariaLabel={chromeText.addFilesConnectorsMore} className="!rounded-lg hover:!bg-bg-200 aria-expanded:!bg-bg-300 active:!scale-100 ml-[2px] h-8 w-8" disabled={props.disabled} icon={<CoworkComposerPlusIcon size={20} />} items={props.plusMenuItems} popupClassName="max-h-[min(var(--available-height),24rem)]" revealChevron="never" side="bottom" sideOffset={4} size="small" />
       </div>
-      <CoworkDropdownButton ariaLabel="Model" disabled={props.disabled} header="Models" items={props.modelItems} label={props.modelLabel} mode="text" side="bottom" size="small" />
+      <CoworkDropdownButton ariaLabel={chromeText.model} disabled={props.disabled} header={chromeText.model} items={props.modelItems} label={props.modelLabel} mode="text" side="bottom" size="small" />
       <div className="shrink-0 flex items-center">
         <ComposerActions canStop={props.canStop} disabled={props.sendDisabled} isSubmitting={props.isSubmitting} onStop={props.onStop} onSubmit={props.onSubmit} />
       </div>
@@ -237,6 +239,7 @@ function ComposerActions({ canStop, disabled, isSubmitting, onStop, onSubmit }: 
   onStop: () => void;
   onSubmit: () => void;
 }) {
+  const chromeText = useCoworkChromeText();
   // Official Oyt: window Escape → onStop while sampling (not while isLoading/stopping).
   useEffect(() => {
     if (!canStop) return undefined;
@@ -251,12 +254,12 @@ function ComposerActions({ canStop, disabled, isSubmitting, onStop, onSubmit }: 
     <AnimatePresence initial={false} mode="popLayout">
       {canStop ? (
         <motion.div animate={{ opacity: 1, scale: 1 }} className="flex items-center gap-1" initial={{ opacity: 0, scale: 0.3 }} key="sampling">
-          <CoworkComposerButton ariaLabel="Stop response" className="!rounded-lg" onClick={onStop} size="icon-sm" variant="secondary"><Icon bold customSize={16} name="Stop" /></CoworkComposerButton>
-          <CoworkComposerButton ariaLabel="Queue message" className="!rounded-lg gap-1.5" disabled={disabled} onClick={onSubmit} size="sm" variant="claude"><Icon bold customSize={16} name="ArrowUp" />{isSubmitting ? <Icon className="animate-spin" customSize={14} name="Spinner" /> : <span>Queue</span>}</CoworkComposerButton>
+          <CoworkComposerButton ariaLabel={chromeText.stopResponse} className="!rounded-lg" onClick={onStop} size="icon-sm" variant="secondary"><Icon bold customSize={16} name="Stop" /></CoworkComposerButton>
+          <CoworkComposerButton ariaLabel={chromeText.queueMessage} className="!rounded-lg gap-1.5" disabled={disabled} onClick={onSubmit} size="sm" variant="claude"><Icon bold customSize={16} name="ArrowUp" />{isSubmitting ? <Icon className="animate-spin" customSize={14} name="Spinner" /> : <span>{chromeText.queue}</span>}</CoworkComposerButton>
         </motion.div>
       ) : (
         <motion.div animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.3 }} initial={{ opacity: 0, scale: 0.3 }} key="send" transition={{ delay: 0.15, opacity: { duration: 0.1 }, scale: { damping: 30, stiffness: 600, type: "spring" } }}>
-          <CoworkComposerButton ariaLabel="Send message" className="!rounded-lg !h-8 !w-8 disabled:cursor-default" disabled={disabled} onClick={onSubmit} size="icon-sm" variant="claude">{isSubmitting ? <Icon className="animate-spin" customSize={16} name="Spinner" /> : <Icon bold customSize={16} name="ArrowUp" />}</CoworkComposerButton>
+          <CoworkComposerButton ariaLabel={chromeText.sendMessage} className="!rounded-lg !h-8 !w-8 disabled:cursor-default" disabled={disabled} onClick={onSubmit} size="icon-sm" variant="claude">{isSubmitting ? <Icon className="animate-spin" customSize={16} name="Spinner" /> : <Icon bold customSize={16} name="ArrowUp" />}</CoworkComposerButton>
         </motion.div>
       )}
     </AnimatePresence>
@@ -279,10 +282,11 @@ function ScrollToBottomButton({
   onScroll: () => void;
   visible: boolean;
 }) {
+  const chromeText = useCoworkChromeText();
   return (
     <button
       aria-hidden={!visible}
-      aria-label="Scroll to bottom"
+      aria-label={chromeText.scrollToBottom}
       className={[
         "z-[1] size-9 inline-flex items-center justify-center",
         "absolute -top-8 left-1/2 -translate-x-1/2",

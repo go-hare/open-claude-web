@@ -2,7 +2,7 @@ import { useState, type DragEvent, type ReactNode } from "react";
 import type { SessionSummary } from "../adapters/desktopBridge";
 import { type ShellText, useShellText } from "../i18n/shellMessages";
 import type { FrameStore } from "../stores/frameStore";
-import { BaseMenuItem, BaseMenuPopup, BaseMenuSeparator, BaseSubmenu, Menu } from "./BaseMenu";
+import { BaseContextMenuItem, BaseContextMenuPopup, BaseMenuItem, BaseMenuSeparator, BaseSubmenu, ContextMenu } from "./BaseMenu";
 import { GroupNameDialog } from "./GroupNameDialog";
 import { Icon } from "./icons";
 import { buildRecentsGroups, type RecentsFilterState } from "./RecentsControls";
@@ -50,31 +50,30 @@ export function CustomGroupHeader({
 }) {
   const text = useShellText();
   const [renameOpen, setRenameOpen] = useState(false);
-  const menu = (
-    <Menu.Root>
-      <Menu.Trigger aria-label={`Group options for ${label}`} className="df-chrome-btn relative -my-1 opacity-0 transition-opacity group-hover/labelrow:opacity-100 focus:opacity-100" type="button">
-        <Icon name="DotsHorizontal" customSize={14} />
-      </Menu.Trigger>
-      <BaseMenuPopup align="end" side="right" sideOffset={4}>
-        <BaseMenuItem icon="Edit" onClick={() => setRenameOpen(true)}>{text.renameGroup}</BaseMenuItem>
-        <BaseMenuItem icon="Trash" onClick={() => frame.deleteCustomGroup(groupId)}>{text.deleteGroup}</BaseMenuItem>
-      </BaseMenuPopup>
-    </Menu.Root>
-  );
+  // Official ca0135 `ra`: ContextMenu wraps the whole xZt header (`Trigger className="contents"`).
+  // There is no DotsHorizontal chrome button on the group label row.
   return (
     <>
-      <div
-        draggable
-        onDragStart={(event) => writeCustomGroupDrag(event, groupId)}
-        onDragOver={(event) => allowCustomGroupDrop(event, groupId)}
-        onDrop={(event) => dropCustomGroup(frame, event, groupId)}
-      >
-      <SidebarSectionHeader
-        collapsed={frame.collapsedGroups.includes(`custom-${groupId}`)}
-        onToggle={() => frame.toggleGroupCollapsed(`custom-${groupId}`)}
-        trailing={trailing ? <div className="flex items-center gap-1">{trailing}{menu}</div> : menu}
-      >{label}</SidebarSectionHeader>
-      </div>
+      <ContextMenu.Root>
+        <ContextMenu.Trigger className="contents">
+          <div
+            draggable
+            onDragStart={(event) => writeCustomGroupDrag(event, groupId)}
+            onDragOver={(event) => allowCustomGroupDrop(event, groupId)}
+            onDrop={(event) => dropCustomGroup(frame, event, groupId)}
+          >
+            <SidebarSectionHeader
+              collapsed={frame.collapsedGroups.includes(`custom-${groupId}`)}
+              onToggle={() => frame.toggleGroupCollapsed(`custom-${groupId}`)}
+              trailing={trailing}
+            >{label}</SidebarSectionHeader>
+          </div>
+        </ContextMenu.Trigger>
+        <BaseContextMenuPopup align="start" side="bottom" sideOffset={4}>
+          <BaseContextMenuItem onClick={() => setRenameOpen(true)}>{text.renameGroup}</BaseContextMenuItem>
+          <BaseContextMenuItem className="text-danger-000" onClick={() => frame.deleteCustomGroup(groupId)}>{text.deleteGroup}</BaseContextMenuItem>
+        </BaseContextMenuPopup>
+      </ContextMenu.Root>
       <GroupNameDialog initialName={label} isOpen={renameOpen} onClose={() => setRenameOpen(false)} onSubmit={(name) => frame.renameCustomGroup(groupId, name)} placeholder={text.groupName} title={text.renameGroup} />
     </>
   );

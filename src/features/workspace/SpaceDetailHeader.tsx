@@ -23,7 +23,7 @@ export function SpaceDetailHeader({
   return (
     <div className="mt-4 flex flex-col gap-1" data-official-source="ce28369f9-C9QQvDN-.js:dn">
       <div className="flex items-center gap-2">
-        <h1 className="font-display min-w-0 line-clamp-2 text-2xl text-text-200">{space.name}</h1>
+        <h1 className="font-display min-w-0 line-clamp-2 text-2xl text-text-200">{space.name.trim() || text.untitledProject}</h1>
         <div className="ml-auto flex flex-shrink-0 items-center gap-1">
           <OfficialTooltip content={pinLabel}>
             <OfficialButton

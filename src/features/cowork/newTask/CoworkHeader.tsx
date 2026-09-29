@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { openCoworkAgentFeedback } from "../session/activity/openCoworkAgentFeedback";
 import {
   COWORK_SUPPORT_URL,
@@ -6,6 +7,19 @@ import {
   useCoworkNewTaskText,
   type CoworkHeaderVariant,
 } from "./coworkNewTaskMessages";
+
+/** Official e90tCrG7ls ICU: `{learnSafely} or {giveFeedback}.` */
+function renderCoworkSafetyOrFeedback(
+  template: string,
+  values: { learnSafely: ReactNode; giveFeedback: ReactNode },
+): ReactNode {
+  const parts = template.split(/(\{learnSafely\}|\{giveFeedback\})/g);
+  return parts.map((part, index) => {
+    if (part === "{learnSafely}") return <span key={index}>{values.learnSafely}</span>;
+    if (part === "{giveFeedback}") return <span key={index}>{values.giveFeedback}</span>;
+    return <span key={index}>{part}</span>;
+  });
+}
 
 function openCoworkFeedback() {
   openCoworkAgentFeedback({ source: "agent_new_page" });
@@ -35,15 +49,18 @@ export function CoworkHeader({
         <h1 className="font-claude-response-title text-text-100">{title}</h1>
       </div>
       <p className="font-small text-text-500 mt-2">
-        <a className="underline-offset-2 hover:underline" href={COWORK_SUPPORT_URL} rel="noreferrer" target="_blank">
-          {text.learnSafely}
-        </a>
-        {" "}
-        or{" "}
-        <button className="underline-offset-2 hover:underline" onClick={openCoworkFeedback} type="button">
-          {text.giveFeedback}
-        </button>
-        .
+        {renderCoworkSafetyOrFeedback(text.safetyOrFeedback, {
+          learnSafely: (
+            <a className="underline-offset-2 hover:underline" href={COWORK_SUPPORT_URL} rel="noreferrer" target="_blank">
+              {text.learnSafely}
+            </a>
+          ),
+          giveFeedback: (
+            <button className="underline-offset-2 hover:underline" onClick={openCoworkFeedback} type="button">
+              {text.giveFeedback}
+            </button>
+          ),
+        })}
       </p>
     </div>
   );

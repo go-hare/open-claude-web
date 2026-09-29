@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { SessionSummary } from "../adapters/desktopBridge";
 import { OfficialTooltip } from "../features/shared/OfficialTooltip";
+import { useI18nText, type MessageDescriptors } from "../i18n/footerMenuMessages";
 import { Icon } from "./icons";
 
 /**
@@ -81,18 +82,31 @@ const PR_STATE_LABEL: Record<Exclude<OfficialCodePrState, "none">, string> = {
 };
 
 /** Official lje catalog + archived 0HT+IbyW6O. */
-function officialGlyphIjeLabel(session: SidebarStatusSession, state: ReturnType<typeof officialCodeStatusState>): string {
+const SIDEBAR_STATUS_MESSAGES = {
+  awaiting: { defaultMessage: "Awaiting input", id: "tM90hqjWj0" },
+  running: { defaultMessage: "Running", id: "nDyaq/M7Oj" },
+  ready: { defaultMessage: "Ready", id: "IZFEUgrg25" },
+  idle: { defaultMessage: "Idle", id: "sNY4nxDm3U" },
+  archived: { defaultMessage: "已归档", id: "0HT+IbyW6O" },
+} satisfies MessageDescriptors;
+
+function officialGlyphIjeLabel(
+  session: SidebarStatusSession,
+  state: ReturnType<typeof officialCodeStatusState>,
+  text: Record<keyof typeof SIDEBAR_STATUS_MESSAGES, string>,
+): string {
   if (state === "pr" && session.prState && session.prState !== "none") return PR_STATE_LABEL[session.prState];
-  if (state === "awaiting") return "Awaiting input";
-  if (state === "running") return "Running";
-  if (state === "ready") return "Ready";
-  if (session.isArchived) return "已归档";
-  return "Idle";
+  if (state === "awaiting") return text.awaiting;
+  if (state === "running") return text.running;
+  if (state === "ready") return text.ready;
+  if (session.isArchived) return text.archived;
+  return text.idle;
 }
 
 export function OfficialSidebarStatusGlyph({ className = "", session }: { className?: string; session: SidebarStatusSession }) {
+  const statusText = useI18nText(SIDEBAR_STATUS_MESSAGES);
   const state = officialCodeStatusState(session);
-  const label = officialGlyphIjeLabel(session, state);
+  const label = officialGlyphIjeLabel(session, state, statusText);
   // Official ije live: awaiting/running/ready (gje live = e !== "idle"); pr + idle default false.
   const live = state === "awaiting" || state === "running" || state === "ready";
 

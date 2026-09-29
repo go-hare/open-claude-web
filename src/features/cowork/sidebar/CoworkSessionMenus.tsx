@@ -3,7 +3,7 @@ import { desktopBridge, type SessionSummary } from "../../../adapters/desktopBri
 import { useShellText } from "../../../i18n/shellMessages";
 import type { FrameStore } from "../../../stores/frameStore";
 import { BaseMenuItem, BaseMenuPopup, BaseMenuSeparator, Menu } from "../../../shell/BaseMenu";
-import { Icon } from "../../../shell/icons";
+import { OfficialDotsVerticalGlyph } from "../../../shell/officialLucideGlyphs";
 import {
   CoworkArchiveGlyph,
   CoworkEditGlyph,
@@ -54,7 +54,7 @@ export function CoworkSessionRowActions({ frame, onAction, session }: { frame: F
     <span className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
       <Menu.Root>
         <Menu.Trigger aria-label={moreOptionsLabel} className="draggable-none size-[calc(var(--df-row-h)-8px)] flex items-center justify-center rounded-md text-text-300 hover:text-text-100 hover:bg-[var(--df-hover)] aria-expanded:bg-bg-400 aria-expanded:text-text-100 transition-colors hide-focus-ring focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--accent-100)),0_0_6px_0_hsl(var(--accent-100)/0.2)]" data-row-action="" onClick={(event) => event.stopPropagation()} tabIndex={-1} type="button">
-          <Icon customSize={16} name="DotsHorizontal" />
+          <OfficialDotsVerticalGlyph className="size-[var(--df-icon-size)]" />
         </Menu.Trigger>
         <BaseMenuPopup align="end" className="min-w-[180px]" side="right" sideOffset={4}>
           <CoworkSessionRowMenu frame={frame} onAction={onAction} session={session} />

@@ -260,6 +260,7 @@ export function localizeNavItem(item: SidebarNavItem, text: ShellText): SidebarN
 function navLabel(item: SidebarNavItem, text: ShellText) {
   if (item.key === "new-session") return item.visibleIn.includes("code") && !item.visibleIn.includes("cowork") ? text.newChat : text.newTask;
   if (item.key === "projects") return text.projects;
+  if (item.key === "artifacts") return text.artifacts;
   if (item.key === "scheduled") return text.scheduledTasks;
   if (item.key === "customize") return text.customize;
   return item.label;

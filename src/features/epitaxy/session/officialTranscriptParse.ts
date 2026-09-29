@@ -260,6 +260,8 @@ export function parseOfficialTranscriptEntriesCached(
 export function parseOfficialTranscriptEntries(messages: ChatMessage[], streamingMessageId?: string | null): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
   const pendingTools = new Map<string, TranscriptToolUse>();
+  // Official eke `o`: task_ids whose task_started had skip_transcript — hide later notifications too.
+  const skipTranscriptTaskIds = new Set<string>();
   let lastTimestamp: string | undefined;
 
   // Official f(): merge consecutive assistant items onto the last assistant entry.
@@ -395,7 +397,7 @@ export function parseOfficialTranscriptEntries(messages: ChatMessage[], streamin
 
     // Official eke system task_* → absorb into trailing tools group when possible (Vwe rules).
     if (rawType === "system" && isOfficialTaskEvent(raw)) {
-      officialAbsorbOrPushTaskEvent(entries, raw, index, pushAuthorItems);
+      officialAbsorbOrPushTaskEvent(entries, raw, index, pushAuthorItems, skipTranscriptTaskIds);
       return;
     }
 
@@ -426,6 +428,13 @@ export function parseOfficialTranscriptEntries(messages: ChatMessage[], streamin
           ? stringValue(nestedMessage.role) as "assistant" | "user"
           : undefined);
     if (role !== "assistant" && role !== "user") return;
+
+    // Official eke/pg: user isMeta / isSynthetic never paints a Hb bubble.
+    // Dual-emit CLI task rows land as isMeta user text ("Background shell failed …").
+    // Tasks pane still parses them via parseOfficialTasks; the transcript must skip.
+    if (role === "user" && (raw.isMeta === true || raw.isSynthetic === true)) {
+      return;
+    }
 
     const content = Array.isArray(nestedMessage.content) || typeof nestedMessage.content === "string"
       ? nestedMessage.content
@@ -588,7 +597,26 @@ const OFFICIAL_NO_RESPONSE_REQUESTED = "No response requested.";
  */
 function officialMkeVisibleUserText(text: string): string {
   if (OFFICIAL_USER_INTERRUPT_TEXTS.has(text)) return "";
-  return officialCoworkMessageText(text);
+  const stripped = officialCoworkMessageText(text);
+  // Dual-emit CLI may land human-readable bookends without isMeta, often many
+  // lines in one user row ("Background shell started …\nBackground shell completed …").
+  // Official eke still hides them from Hb; Tasks pane is the only surface.
+  return stripOfficialBackgroundTaskSummaryLines(stripped);
+}
+
+const OFFICIAL_BACKGROUND_TASK_SUMMARY =
+  /^(Background (?:shell|agent|command|workflow)|Agent|Workflow|Monitor|Remote task) (failed|stopped|started|completed|com(?:pleted|p)…)/i;
+
+function isOfficialBackgroundTaskSummary(text: string): boolean {
+  return OFFICIAL_BACKGROUND_TASK_SUMMARY.test(text.trim());
+}
+
+function stripOfficialBackgroundTaskSummaryLines(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !isOfficialBackgroundTaskSummary(line))
+    .join("\n")
+    .trim();
 }
 
 /** Official _ke: user row whose content is exactly an interrupt marker. */
@@ -654,6 +682,10 @@ function officialTaskEventItemFromSystemRaw(raw: Record<string, unknown>, index:
   if (!taskId) return null;
   // Official eke: skip_transcript task_started never enters the transcript.
   if (raw.skip_transcript === true || raw.skipTranscript === true) return null;
+  // Host taskBookends / CLI bookends without the flag: local_bash / local_agent
+  // chips still belong in Tasks (Jp), not as standalone assistant Hb rows.
+  const taskType = stringValue(raw.task_type) ?? stringValue(raw.taskType);
+  if (taskType === "local_bash" || taskType === "local_agent") return null;
   let status: OfficialTaskStatus = "running";
   if (subtype === "task_notification") {
     const rawStatus = stringValue(raw.status);
@@ -691,9 +723,23 @@ function officialAbsorbOrPushTaskEvent(
     entryId: string,
     synthetic?: boolean,
   ) => void,
+  skipTranscriptTaskIds: Set<string>,
 ) {
+  const taskId = stringValue(raw.task_id) ?? stringValue(raw.taskId);
+  const subtype = stringValue(raw.subtype);
+  if (taskId && (raw.skip_transcript === true || raw.skipTranscript === true)) {
+    if (subtype === "task_started") skipTranscriptTaskIds.add(taskId);
+    return;
+  }
+  if (taskId && skipTranscriptTaskIds.has(taskId)) return;
   const taskEvent = officialTaskEventItemFromSystemRaw(raw, index);
-  if (!taskEvent) return;
+  if (!taskEvent) {
+    if (taskId && (stringValue(raw.task_type) === "local_bash" || stringValue(raw.taskType) === "local_bash"
+      || stringValue(raw.task_type) === "local_agent" || stringValue(raw.taskType) === "local_agent")) {
+      skipTranscriptTaskIds.add(taskId);
+    }
+    return;
+  }
 
   // Official: if this taskId already exists, mutate status/description/summary in place.
   const existing = findOfficialTaskEventRef(entries, taskEvent.taskId);

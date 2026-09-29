@@ -11,6 +11,8 @@ import { OfficialRNtPlaceholder } from "../shared/officialRNtPlaceholder";
 import { officialTiptapEditorAttributes } from "../shared/officialTiptapEditorAttributes";
 import { handleEmptyDocBeforeInput } from "../shared/tiptapEmptyDocBeforeInput";
 import { OfficialButton, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
+import { useI18nText } from "../../i18n/footerMenuMessages";
+import { COMPOSER_SEND_STOP_MESSAGES } from "./officialCodeChromeMessages";
 import {
   OfficialComposerStagedImages,
   type StagedComposerImage,
@@ -121,6 +123,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   hasAttachments = false,
   promptSuggestion = null,
 }, ref) {
+  const sendStopText = useI18nText(COMPOSER_SEND_STOP_MESSAGES);
   const editorRef = useRef<Editor | null>(null);
   const submitRef = useRef(onSubmit);
   const onStopRef = useRef(onStop);
@@ -554,7 +557,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         ) : null}
         <div className="flex self-end p-p7 pl-p3">
           <OfficialButton
-            ariaLabel={busy ? "Stop" : "Send"}
+            ariaLabel={busy ? sendStopText.stop : sendStopText.send}
             disabled={!busy && !canSubmit}
             icon={busy ? "Stop" : "ReturnArrowCornerDownLeft"}
             onClick={() => (busy ? onStop?.() : onSubmit())}

@@ -18,7 +18,13 @@ import { createMessageUuid } from "../../adapters/desktopBridge/messageUuid";
 import type { RouteViewProps } from "../../app/routes";
 import { useI18nText } from "../../i18n/footerMenuMessages";
 import { OfficialButton } from "../shared/OfficialButton";
-import { OfficialCoworkPromptBox } from "../epitaxy/OfficialCoworkComposer";
+import { CoworkPromptBox } from "../cowork/composer/CoworkPromptBox";
+import {
+  coworkUploadedFilePaths,
+  formatCoworkPromptWithUploadedFiles,
+  mergeCoworkUploadedFiles,
+  type CoworkUploadedFile,
+} from "../cowork/newTask/coworkUploadedFiles";
 import { coworkSessionsBasePath } from "../cowork/sessionPaths";
 import { SpaceDetailHeader } from "./SpaceDetailHeader";
 import { SpaceDetailSessions } from "./SpaceDetailSessions";
@@ -86,6 +92,8 @@ export function SpaceDetailPage({ onNavigate }: RouteViewProps) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>("default");
   const [model, setModel] = useState("default");
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<CoworkUploadedFile[]>([]);
+  const [composerWorkspace, setComposerWorkspace] = useState<WorkspaceContext | null>(null);
 
   const folderPaths = useMemo(
     () => (space?.folders ?? []).map((folder) => folder.path).filter(Boolean),
@@ -95,6 +103,11 @@ export function SpaceDetailPage({ onNavigate }: RouteViewProps) {
     () => workspaceFromFolders(folderPaths, space?.name),
     [folderPaths, space?.name],
   );
+  const promptWorkspace = composerWorkspace ?? workspace;
+
+  useEffect(() => {
+    setComposerWorkspace(workspace);
+  }, [workspace]);
 
   const reload = useCallback(async (id: string) => {
     const bridge = desktopBridge.CoworkSpaces;
@@ -172,9 +185,25 @@ export function SpaceDetailPage({ onNavigate }: RouteViewProps) {
     });
   }, [spaceId]);
 
+  const addFiles = useCallback(async () => {
+    const filePaths = await desktopBridge.FileSystem.browseFiles?.({
+      defaultPath: promptWorkspace.cwd,
+      title: "Add files or photos",
+    });
+    if (filePaths?.length) setSelectedFiles((current) => mergeCoworkUploadedFiles(current, filePaths));
+  }, [promptWorkspace.cwd]);
+
+  const removeFile = useCallback((filePath: string) => {
+    setSelectedFiles((current) => current.filter((item) => item.path !== filePath));
+  }, []);
+
   const submit = useCallback(async () => {
     const normalized = prompt.trim();
-    if (!normalized || busy || !spaceId) return;
+    const hasSelectedFiles = selectedFiles.length > 0;
+    if ((!normalized && !hasSelectedFiles) || busy || !spaceId) return;
+    const message = formatCoworkPromptWithUploadedFiles(normalized, selectedFiles);
+    const selectedFilePaths = coworkUploadedFilePaths(selectedFiles);
+    const sessionFolders = promptWorkspace.folders?.filter(Boolean) ?? folderPaths;
     setBusy(true);
     setPendingPrompt(normalized);
     try {
@@ -182,17 +211,19 @@ export function SpaceDetailPage({ onNavigate }: RouteViewProps) {
       const sessionId = createCoworkSessionId();
       const session = await desktopBridge.LocalAgentModeSessions.start({
         kind: "epitaxy",
-        message: normalized,
+        message,
         messageUuid,
         model: model === "default" ? undefined : model,
         permissionMode,
-        prompt: normalized,
+        prompt: message,
         sessionId,
         spaceId,
-        userSelectedFolders: folderPaths.length > 0 ? folderPaths : undefined,
-        workspace,
+        userSelectedFiles: selectedFilePaths.length > 0 ? selectedFilePaths : undefined,
+        userSelectedFolders: sessionFolders.length > 0 ? sessionFolders : undefined,
+        workspace: promptWorkspace,
       });
       setPrompt("");
+      setSelectedFiles([]);
       setPendingPrompt(null);
       onNavigate(`${coworkSessionsBasePath}/${encodeURIComponent(session.id)}`);
     } catch {
@@ -200,7 +231,7 @@ export function SpaceDetailPage({ onNavigate }: RouteViewProps) {
     } finally {
       setBusy(false);
     }
-  }, [busy, folderPaths, model, onNavigate, permissionMode, prompt, spaceId, workspace]);
+  }, [busy, folderPaths, model, onNavigate, permissionMode, prompt, promptWorkspace, selectedFiles, spaceId]);
 
   if (space === undefined) {
     return (
@@ -239,19 +270,22 @@ export function SpaceDetailPage({ onNavigate }: RouteViewProps) {
 
           <div data-official-source="ce28369f9-C9QQvDN-.js:Bs onpage">
             <div className="px-3 md:px-2">
-              <OfficialCoworkPromptBox
+              <CoworkPromptBox
                 busy={busy}
                 model={model}
+                onAddFiles={addFiles}
                 onModelChange={setModel}
                 onNavigate={onNavigate}
                 onPermissionModeChange={setPermissionMode}
+                onRemoveFile={removeFile}
                 onSubmit={() => void submit()}
-                onWorkspaceChange={() => undefined}
+                onWorkspaceChange={setComposerWorkspace}
                 permissionMode={permissionMode}
                 placeholder={text.composerPlaceholder}
                 prompt={prompt}
+                selectedFiles={selectedFiles}
                 setPrompt={setPrompt}
-                workspace={workspace}
+                workspace={promptWorkspace}
               />
             </div>
           </div>

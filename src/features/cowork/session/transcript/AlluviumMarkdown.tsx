@@ -9,11 +9,20 @@
 import {
   createElement,
   memo,
+  useEffect,
   useMemo,
   useRef,
+  useState,
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
+import { desktopBridge } from "../../../../adapters/desktopBridge";
+import {
+  BaseContextMenuItem,
+  BaseContextMenuPopup,
+  ContextMenu,
+} from "../../../../shell/BaseMenu";
 import {
   AlluviumIncrementalEngine,
   type AlluviumBlock,
@@ -48,6 +57,8 @@ export type AlluviumMarkdownProps = {
    * Cowork ye uses plain <pre class=language-*> when omitted.
    */
   renderFence?: (block: AlluviumFenceBlock) => ReactNode;
+  /** Official cu(): LocalSessions.readSessionImageAsDataUrl for relative markdown images. */
+  sessionId?: string;
   text: string;
 };
 
@@ -94,8 +105,213 @@ function sanitizeHref(url: string | null | undefined): string | undefined {
 type InlineHandlers = {
   onLinkClick?: AlluviumMarkdownProps["onLinkClick"];
   onLinkDetected?: AlluviumMarkdownProps["onLinkDetected"];
+  sessionId?: string;
   variant: "code" | "cowork";
 };
+
+const CODE_MD_IMG_DATA_OR_BLOB = /^(data:|blob:)/i;
+const CODE_MD_IMG_REMOTE = /^(?:[a-z][a-z0-9+.-]*:)?\/\//i;
+
+function imageExtensionFromMime(mime: string): string {
+  const type = mime.toLowerCase();
+  if (type.includes("png")) return "png";
+  if (type.includes("jpeg") || type.includes("jpg")) return "jpg";
+  if (type.includes("gif")) return "gif";
+  if (type.includes("webp")) return "webp";
+  if (type.includes("svg")) return "svg";
+  if (type.includes("avif")) return "avif";
+  return "png";
+}
+
+async function imageBlobFromSrc(src: string): Promise<Blob> {
+  const response = await fetch(src);
+  return response.blob();
+}
+
+async function copyMarkdownImage(src: string) {
+  const blob = await imageBlobFromSrc(src);
+  const png = blob.type === "image/png"
+    ? blob
+    : await new Promise<Blob>((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        canvas.getContext("2d")?.drawImage(image, 0, 0);
+        URL.revokeObjectURL(url);
+        canvas.toBlob((next) => next ? resolve(next) : reject(new Error("copy failed")), "image/png");
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("copy failed"));
+      };
+      image.src = url;
+    });
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+}
+
+async function saveMarkdownImage(src: string, fileName?: string) {
+  const blob = await imageBlobFromSrc(src);
+  const ext = imageExtensionFromMime(blob.type);
+  const base = fileName && fileName.length > 0 ? fileName : `image-${Date.now()}.${ext}`;
+  const name = /\.[a-z0-9]+$/i.test(base) ? base : `${base}.${ext}`;
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
+/**
+ * Official gx button + Rg lightbox + og context menu (c119).
+ * Left click opens the preview. Right click copies or saves.
+ */
+function OfficialCodeMarkdownImageFrame({ alt, src }: { alt: string; src: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <ContextMenu.Root>
+        <button
+          aria-label={alt || "View image"}
+          className="max-w-full cursor-zoom-in outline-none hide-focus-ring focus:ring-focus rounded-r3"
+          data-official-source="c11959232-h_zsw3wI.js:gx+og"
+          onClick={() => setOpen(true)}
+          type="button"
+        >
+          <ContextMenu.Trigger
+            className="max-w-full"
+            nativeButton={false}
+            onContextMenu={(event) => event.stopPropagation()}
+            render={<span className="contents" />}
+          >
+            <img
+              alt={alt}
+              className="max-w-full max-h-[360px] w-auto rounded-r4 border border-[var(--border-default)]"
+              onClick={() => setOpen(true)}
+              src={src}
+            />
+          </ContextMenu.Trigger>
+        </button>
+        <BaseContextMenuPopup>
+          <BaseContextMenuItem onClick={() => void copyMarkdownImage(src).catch(() => undefined)}>
+            Copy image
+          </BaseContextMenuItem>
+          <BaseContextMenuItem onClick={() => void saveMarkdownImage(src, alt).catch(() => undefined)}>
+            Save image
+          </BaseContextMenuItem>
+        </BaseContextMenuPopup>
+      </ContextMenu.Root>
+      {open
+        ? createPortal(
+        <div
+          aria-label="Image preview"
+          aria-modal="true"
+          className="epitaxy-lightbox fixed inset-0 z-50 bg-always-black/80 backdrop-blur-[40px] flex flex-col overflow-hidden outline-none"
+          data-official-source="c11959232-h_zsw3wI.js:Rg"
+          onClick={() => setOpen(false)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              setOpen(false);
+            }
+          }}
+          role="dialog"
+          tabIndex={-1}
+        >
+          <div className="relative flex items-center justify-end p-4 z-10">
+            <button
+              aria-label="Close"
+              className="size-8 rounded-full flex items-center justify-center text-always-white/70 hover:text-always-white hover:bg-always-white/10"
+              onClick={(event) => {
+                event.stopPropagation();
+                setOpen(false);
+              }}
+              type="button"
+            >
+              ×
+            </button>
+          </div>
+          <div className="flex-1 relative overflow-clip flex items-center justify-center">
+            <img
+              alt={alt}
+              className="max-h-[70vh] max-w-full object-contain rounded-2xl"
+              onClick={(event) => event.stopPropagation()}
+              src={src}
+            />
+          </div>
+        </div>,
+        document.body,
+        )
+        : null}
+    </>
+  );
+}
+
+/**
+ * Official pb (c119): data/blob and http(s) render as img.
+ * Relative paths call cu() → readSessionImageAsDataUrl. Null falls back to the alt/path text.
+ */
+export function OfficialCodeMarkdownImage({
+  alt,
+  sessionId,
+  src,
+}: {
+  alt: string;
+  sessionId?: string;
+  src?: string;
+}) {
+  const isData = Boolean(src && CODE_MD_IMG_DATA_OR_BLOB.test(src));
+  const isRemote = Boolean(src && !isData && CODE_MD_IMG_REMOTE.test(src));
+  const isLocal = Boolean(src && !isData && !isRemote);
+  const [resolved, setResolved] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!src || !isLocal) return undefined;
+    const read = desktopBridge.LocalSessions.readSessionImageAsDataUrl;
+    if (!sessionId || !read) {
+      setResolved(null);
+      return undefined;
+    }
+    let alive = true;
+    setResolved(undefined);
+    void read(sessionId, src)
+      .then((dataUrl) => {
+        if (alive) setResolved(dataUrl || null);
+      })
+      .catch(() => {
+        if (alive) setResolved(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isLocal, sessionId, src]);
+
+  if (!src) return null;
+  const shown = isRemote || isData ? src : resolved;
+  if (shown) {
+    // Official gx + og (c119): zoom button opens Rg lightbox; right-click is Copy/Save.
+    return (
+      <OfficialCodeMarkdownImageFrame alt={alt} src={shown} />
+    );
+  }
+  if (shown === null) {
+    return <span className="text-assistant-secondary">{alt || src}</span>;
+  }
+  return (
+    <span
+      aria-hidden
+      className="block h-[120px] w-full max-w-[320px] rounded-r4 bg-t1 animate-pulse"
+    />
+  );
+}
 
 function InlineNodes({
   handlers,
@@ -179,15 +395,13 @@ function InlineNode({
       return <code>{node.value}</code>;
     case "image":
       if (handlers.variant === "code") {
-        // Official Code xb → pb (real img), not markdown escape string.
-        const src = node.url || undefined;
-        if (!src) return null;
+        // Official Code xb → pb. data/http render immediately; relative paths
+        // resolve through LocalSessions.readSessionImageAsDataUrl (cu).
         return (
-          <img
+          <OfficialCodeMarkdownImage
             alt={node.alt ?? ""}
-            className={CODE_MD_IMG_CLASS}
-            data-official-source="c11959232-h_zsw3wI.js:pb"
-            src={src}
+            sessionId={handlers.sessionId}
+            src={node.url || undefined}
           />
         );
       }
@@ -485,14 +699,15 @@ export function AlluviumMarkdown({
   onLinkClick,
   onLinkDetected,
   renderFence,
+  sessionId,
   text,
   variant,
 }: AlluviumMarkdownProps) {
   const resolvedVariant = variant ?? (dataAlluvium ? "code" : "cowork");
   const snapshot = useAlluviumSnapshot(text, isStreaming);
   const handlers = useMemo<InlineHandlers>(
-    () => ({ onLinkClick, onLinkDetected, variant: resolvedVariant }),
-    [onLinkClick, onLinkDetected, resolvedVariant],
+    () => ({ onLinkClick, onLinkDetected, sessionId, variant: resolvedVariant }),
+    [onLinkClick, onLinkDetected, resolvedVariant, sessionId],
   );
 
   return (

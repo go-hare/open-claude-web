@@ -400,7 +400,7 @@ function projectGroupNewSessionTrailing(
     <span className="opacity-0 group-hover/section:opacity-60 has-[button:focus-visible]:opacity-100 hover:!opacity-100 transition-opacity duration-150">
       <button
         type="button"
-        aria-label={`New session in ${label}`}
+        aria-label={text.newSessionIn.replace("{label}", label)}
         className="inline-flex size-6 items-center justify-center rounded-md text-text-400 hover:bg-bg-200 hover:text-text-100"
         onClick={(event) => {
           event.preventDefault();

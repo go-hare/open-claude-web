@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { desktopBridge, type WorkspaceContext } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
 import { sessionPath } from "../../shell/sessionPaths";
+import { useI18nText } from "../../i18n/footerMenuMessages";
+import { COMPOSER_SEND_STOP_MESSAGES } from "./officialCodeChromeMessages";
 import { officialCodeSessionStore } from "./session/officialCodeSessionStore";
 import { kickOfficialAutoSessionTitle } from "./session/useOfficialAutoSessionTitle";
 
@@ -13,6 +15,7 @@ type EpitaxyComposerProps = {
 };
 
 export function EpitaxyComposer({ onNavigate, placeholder, workspace }: EpitaxyComposerProps) {
+  const sendText = useI18nText(COMPOSER_SEND_STOP_MESSAGES);
   const [prompt, setPrompt] = useState("");
   const [permissionMode, setPermissionMode] = useState<"default" | "bypass">("bypass");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -89,7 +92,7 @@ export function EpitaxyComposer({ onNavigate, placeholder, workspace }: EpitaxyC
             />
           </div>
           <div className="flex self-end p-p7 pl-p3">
-            <button className={composerIconButtonClass} disabled={!prompt.trim() || isSubmitting} onClick={() => void submit()} type="button" aria-label="Send">
+            <button className={composerIconButtonClass} disabled={!prompt.trim() || isSubmitting} onClick={() => void submit()} type="button" aria-label={isSubmitting ? sendText.stop : sendText.send}>
               <span aria-hidden="true" className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)] group-hover/btn:bg-[var(--fill-uncontained-hover)]" />
               <Icon name={isSubmitting ? "Stop" : "ArrowReturn"} customSize={16} />
             </button>

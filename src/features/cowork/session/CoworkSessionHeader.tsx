@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { SessionSummary } from "../../../adapters/desktopBridge";
 import { useShellText } from "../../../i18n/shellMessages";
+import { interpolateCoworkChrome, useCoworkChromeText } from "../composer/coworkChromeMessages";
 import { ConfirmDialog } from "../../../shell/ConfirmDialog";
 import { GroupNameDialog } from "../../../shell/GroupNameDialog";
 import {
@@ -103,6 +104,8 @@ function CoworkSessionTitleControl({
   title: string;
 }) {
   const text = useShellText();
+  const chromeText = useCoworkChromeText();
+  const untitled = chromeText.untitled;
   const [menuOpen, setMenuOpen] = useState(false);
   const [inlineRename, setInlineRename] = useState(false);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
@@ -226,7 +229,7 @@ function CoworkSessionTitleControl({
           className="bg-transparent border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent font-base-bold text-text-000 w-full overflow-x-auto"
           style={{ outline: "none", boxShadow: "none" }}
           data-testid="name-session"
-          aria-label="Session name"
+          aria-label={chromeText.sessionName}
           autoFocus
         />
       </div>
@@ -252,7 +255,7 @@ function CoworkSessionTitleControl({
     <>
       <div className="flex min-w-0 items-center group [&:hover>button]:!bg-bg-300 [&>button:hover]:!bg-bg-500">
         <OfficialButton
-          aria-label={`${displayTitle || "Untitled"}, rename session`}
+          aria-label={interpolateCoworkChrome(chromeText.renameSessionAria, { name: displayTitle || untitled })}
           className={titleClass}
           data-testid="session-title-button"
           onClick={(event) => {
@@ -265,14 +268,14 @@ function CoworkSessionTitleControl({
           variant="ghost"
         >
           <div className="min-w-0 flex-1">
-            <div className="truncate font-base-bold">{displayTitle || "Untitled"}</div>
+            <div className="truncate font-base-bold">{displayTitle || untitled}</div>
           </div>
         </OfficialButton>
         <div className="w-[1.5px] h-7" />
         {/* Official Ide: align end, unstyledTrigger, sideOffset 4; Content Cde+wde+p-1.5; Item kde/qde */}
         <LegacyDropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
           <LegacyDropdownMenu.Trigger
-            aria-label={displayTitle ? `More options for ${displayTitle}` : "More options"}
+            aria-label={displayTitle ? interpolateCoworkChrome(chromeText.moreOptionsFor, { label: displayTitle }) : chromeText.moreOptions}
             className={officialButtonClass({
               className: menuTriggerClass,
               size: "icon_sm",
@@ -293,7 +296,7 @@ function CoworkSessionTitleControl({
                 onSchedule();
               }}
             >
-              Schedule
+              {chromeText.schedule}
             </LegacyDropdownItem>
             <LegacyDropdownItem
               icon={<CoworkSkillGlyph size={20} />}
@@ -302,7 +305,7 @@ function CoworkSessionTitleControl({
                 onTurnIntoSkill();
               }}
             >
-              Turn into skill
+              {chromeText.turnIntoSkill}
             </LegacyDropdownItem>
             <LegacyDropdownSeparator />
             <LegacyDropdownItem
@@ -358,20 +361,20 @@ function CoworkSessionTitleControl({
         onSubmit={(name) => {
           void commitRename(name);
         }}
-        placeholder="Session name"
-        title="Rename session"
+        placeholder={chromeText.sessionName}
+        title={chromeText.renameSession}
       />
 
       {/* Official delete confirm residual (jm) */}
       <ConfirmDialog
         confirmText={text.delete}
         isOpen={deleteOpen}
-        message="This task will be permanently deleted from your computer and Anthropic's servers, and can't be undone."
+        message={chromeText.deleteTaskMessage}
         onClose={() => setDeleteOpen(false)}
         onConfirm={() => {
           void onDelete();
         }}
-        title="Delete task?"
+        title={chromeText.deleteTaskTitle}
         variant="danger"
       />
     </>

@@ -12,12 +12,15 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { desktopBridge, type SessionSummary } from "../../adapters/desktopBridge";
+import { OfficialThumbsDownGlyph, OfficialThumbsUpGlyph } from "../../shell/officialLucideGlyphs";
 import { Icon } from "../../shell/icons";
 import { selectedSessionIdFromPath, sessionHomePath } from "../../shell/sessionPaths";
 import { OfficialTooltip } from "../shared/OfficialTooltip";
 import { archiveCodeSession, deleteCodeSession, replaceAppNavigation } from "./session/codeSessionDeletion";
 import { officialCodeSessionStore } from "./session/officialCodeSessionStore";
 import { copyOfficialMessageRich } from "./session/officialMessageClipboard";
+import { useI18nText, type MessageDescriptors } from "../../i18n/footerMenuMessages";
+import { MESSAGE_ACTION_MESSAGES, VIEWS_MENU_MESSAGES } from "./officialCodeChromeMessages";
 
 export type OfficialSessionRef = {
   id: string;
@@ -849,7 +852,7 @@ export function OfficialMessageActions({
   onRewind,
   rateMessageUuid,
   rating,
-  rewindAriaLabel = "Rewind to here",
+  rewindAriaLabel,
   rewindIcon = "ArrowUndoUp",
   timestamp,
 }: {
@@ -867,6 +870,8 @@ export function OfficialMessageActions({
   rewindIcon?: string;
   timestamp?: string;
 }) {
+  const actionsText = useI18nText(MESSAGE_ACTION_MESSAGES);
+  const rewindLabel = rewindAriaLabel ?? actionsText.rewindToHere;
   const [copied, setCopied] = useState(false);
   const [localRating, setLocalRating] = useState<OfficialMessageRating | undefined>(rating);
   const currentRating = rating ?? localRating;
@@ -889,14 +894,14 @@ export function OfficialMessageActions({
   const shouldShowRating = Boolean(rateMessageUuid && onRateMessage);
   return (
     <div className={`flex gap-g2 pt-[4px] opacity-0 pointer-events-none group-hover/msg:opacity-100 group-hover/msg:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto ${className}`}>
-      {copyText !== undefined ? <OfficialButton ariaLabel={copied ? "Copied" : "Copy message"} icon={copied ? "CheckSelection" : "CopySquareBehind"} onClick={copyMessage} size="small" variant={buttonVariant} /> : null}
-      {onPinChapter ? <OfficialButton ariaLabel={isPinned ? "Unpin chapter" : "Pin as chapter"} icon={isPinned ? "Unpin" : "Pin"} onClick={onPinChapter} pressed={isPinned} size="small" variant={buttonVariant} /> : null}
-      {onRewind ? <OfficialButton ariaLabel={rewindAriaLabel} icon={rewindIcon} onClick={onRewind} size="small" variant={buttonVariant} /> : null}
-      {onFork ? <OfficialButton ariaLabel="Fork from here" icon="GitBranch" onClick={onFork} size="small" variant={buttonVariant} /> : null}
+      {copyText !== undefined ? <OfficialButton ariaLabel={copied ? actionsText.copied : actionsText.copyMessage} icon={copied ? "CheckSelection" : "CopySquareBehind"} onClick={copyMessage} size="small" variant={buttonVariant} /> : null}
+      {onPinChapter ? <OfficialButton ariaLabel={isPinned ? actionsText.unpinChapter : actionsText.pinAsChapter} icon={isPinned ? "Unpin" : "Pin"} onClick={onPinChapter} pressed={isPinned} size="small" variant={buttonVariant} /> : null}
+      {onRewind ? <OfficialButton ariaLabel={rewindLabel} icon={rewindIcon} onClick={onRewind} size="small" variant={buttonVariant} /> : null}
+      {onFork ? <OfficialButton ariaLabel={actionsText.forkFromHere} icon="GitBranch" onClick={onFork} size="small" variant={buttonVariant} /> : null}
       {shouldShowRating ? (
         <>
-          <OfficialButton ariaLabel="Good response" customIcon={<ThumbFeedbackIcon direction="up" />} onClick={() => rateMessage("positive")} pressed={currentRating === "positive"} size="small" variant={buttonVariant} />
-          <OfficialButton ariaLabel="Bad response" customIcon={<ThumbFeedbackIcon direction="down" />} onClick={() => rateMessage("negative")} pressed={currentRating === "negative"} size="small" variant={buttonVariant} />
+          <OfficialButton ariaLabel={actionsText.goodResponse} customIcon={<OfficialThumbsUpGlyph size={12} />} onClick={() => rateMessage("positive")} pressed={currentRating === "positive"} size="small" variant={buttonVariant} />
+          <OfficialButton ariaLabel={actionsText.badResponse} customIcon={<OfficialThumbsDownGlyph size={12} />} onClick={() => rateMessage("negative")} pressed={currentRating === "negative"} size="small" variant={buttonVariant} />
         </>
       ) : null}
       {timestamp ? <OfficialRelativeTimestamp timestamp={timestamp} /> : null}
@@ -924,10 +929,6 @@ function OfficialRelativeTimestamp({ timestamp }: { timestamp: string }) {
       {formatTranscriptTimestamp(timestamp)}
     </span>
   );
-}
-
-function ThumbFeedbackIcon({ direction }: { direction: "down" | "up" }) {
-  return <Icon name={direction === "up" ? "ThumbsUp" : "ThumbsDown"} customSize={12} />;
 }
 
 export function OfficialAssistantMessage({
@@ -1388,6 +1389,15 @@ function formatTranscriptTimestampTitle(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(new Date(time));
 }
 
+/** Official title chevron `vu` / `pe` residual (c11959232). */
+const SESSION_TITLE_MESSAGES = {
+  sessionActions: { defaultMessage: "Session actions", id: "eoNgAKwa5b" },
+  sessionName: { defaultMessage: "Session name", id: "mvdlXjfNEZ" },
+  rename: { defaultMessage: "Rename", id: "iXNbPfQDIZ" },
+  archive: { defaultMessage: "Archive", id: "hrgo+EleAn" },
+  delete: { defaultMessage: "Delete", id: "K3r6DQW7h+" },
+} satisfies MessageDescriptors;
+
 /**
  * Official c11959232 code session title (`Q` inline edit + chevron `vu` actions).
  * Click title → start rename; menu Rename → same; commit → LocalSessions.updateSession + store patch.
@@ -1497,17 +1507,18 @@ function OfficialSessionTitle({
     }
   }, [onSessionRemoved, sessionId]);
 
+  const sessionMenuText = useI18nText(SESSION_TITLE_MESSAGES);
   const actions: OfficialDropdownItem[] = [
-    { label: "Rename", onSelect: () => startRename() },
-    { label: "Archive", onSelect: () => { void archiveSession(); } },
-    { label: "Delete", onSelect: () => { void deleteSession(); } },
+    { label: sessionMenuText.rename, onSelect: () => startRename() },
+    { label: sessionMenuText.archive, onSelect: () => { void archiveSession(); } },
+    { label: sessionMenuText.delete, onSelect: () => { void deleteSession(); } },
   ];
 
   if (editing) {
     return (
       <div className="flex items-center min-w-[32px] flex-1" data-official-source="c11959232:inline-rename" data-pane-index={paneIndex}>
         <input
-          aria-label="Session name"
+          aria-label={sessionMenuText.sessionName}
           className="epitaxy-prompt-input h-small flex-1 min-w-0 text-body bg-transparent border-0"
           onBlur={commitRename}
           onChange={(event) => setDraft(event.target.value)}
@@ -1531,7 +1542,7 @@ function OfficialSessionTitle({
       </button>
       <Menu.Root>
         <Menu.Trigger
-          aria-label="Session actions"
+          aria-label={sessionMenuText.sessionActions}
           className="relative inline-flex h-small aspect-square shrink-0 items-center justify-center rounded-small text-[var(--text-uncontained-default)] hover:text-[var(--text-uncontained-hover)] hover:bg-[var(--fill-uncontained-hover)] aria-[expanded=true]:bg-[var(--fill-uncontained-selected)] aria-[expanded=true]:text-[var(--text-uncontained-selected)] outline-none hide-focus-ring ring-focus"
         >
           <Icon name="ChevronDownSmall" size="xs" />
@@ -1551,7 +1562,22 @@ function OfficialSessionTitle({
   );
 }
 
+/** Official qC residual (c11959232) — formatMessage ids for Transcript view menu. */
+const TRANSCRIPT_VIEW_MESSAGES = {
+  header: { defaultMessage: "Transcript view", id: "sFXw3+Ca5d" },
+  ariaLabel: { defaultMessage: "Transcript view mode", id: "IFemRIFDSs" },
+  normal: { defaultMessage: "Normal", id: "myq2ZLhZnI" },
+  thinking: { defaultMessage: "Thinking", id: "AHQWDTo4+e" },
+  verbose: { defaultMessage: "Verbose", id: "ti6aQl5Lr/" },
+  summary: { defaultMessage: "Summary", id: "RrCui3yt/J" },
+  textSize: { defaultMessage: "Text size", id: "VjynyQmk9u" },
+  smallText: { defaultMessage: "Small text", id: "GW6Zyo3cO4" },
+  mediumText: { defaultMessage: "Medium text", id: "bDNRyyPJKa" },
+  largeText: { defaultMessage: "Large text", id: "HhwYFtK23H" },
+} satisfies MessageDescriptors;
+
 function OfficialTranscriptViewButton({ hideSummary, mode, onModeChange }: { hideSummary: boolean; mode: OfficialTranscriptMode; onModeChange?: (mode: OfficialTranscriptMode) => void }) {
+  const text = useI18nText(TRANSCRIPT_VIEW_MESSAGES);
   const [textSize, setTextSize] = useState<"s" | "m" | "l">("m");
   useEffect(() => {
     document.documentElement.dataset.chatTextSize = textSize;
@@ -1562,19 +1588,20 @@ function OfficialTranscriptViewButton({ hideSummary, mode, onModeChange }: { hid
 
   const effectiveMode = hideSummary && mode === "summary" ? "normal" : mode;
   const selectMode = (nextMode: OfficialTranscriptMode) => onModeChange?.(nextMode);
+  const sizeLabel = { s: text.smallText, m: text.mediumText, l: text.largeText } as const;
   const items: OfficialDropdownItem[] = [
-    { label: "Normal", checked: effectiveMode === "normal", onSelect: () => selectMode("normal") },
-    { label: "Thinking", checked: effectiveMode === "thinking", onSelect: () => selectMode("thinking") },
-    { label: "Verbose", checked: effectiveMode === "verbose", onSelect: () => selectMode("verbose") },
-    ...(hideSummary ? [] : [{ label: "Summary", checked: effectiveMode === "summary", onSelect: () => selectMode("summary") } satisfies OfficialDropdownItem]),
+    { label: text.normal, checked: effectiveMode === "normal", onSelect: () => selectMode("normal") },
+    { label: text.thinking, checked: effectiveMode === "thinking", onSelect: () => selectMode("thinking") },
+    { label: text.verbose, checked: effectiveMode === "verbose", onSelect: () => selectMode("verbose") },
+    ...(hideSummary ? [] : [{ label: text.summary, checked: effectiveMode === "summary", onSelect: () => selectMode("summary") } satisfies OfficialDropdownItem]),
     {
       keepOpen: true,
       label: null,
       trailing: (
-        <div role="group" aria-label="Text size" className="flex items-stretch gap-g3 pt-p6 pb-p2 -ml-[2px] -mr-[2px]">
+        <div role="group" aria-label={text.textSize} className="flex items-stretch gap-g3 pt-p6 pb-p2 -ml-[2px] -mr-[2px]">
           {(["s", "m", "l"] as const).map((size) => (
             <OfficialButton
-              ariaLabel={size === "s" ? "Small text" : size === "m" ? "Medium text" : "Large text"}
+              ariaLabel={sizeLabel[size]}
               className="flex-1 aspect-auto"
               customIcon={<Icon name="TitleCaseFontSize" size={size === "s" ? "xs" : size === "m" ? "sm" : "md"} />}
               key={size}
@@ -1587,7 +1614,7 @@ function OfficialTranscriptViewButton({ hideSummary, mode, onModeChange }: { hid
       ),
     },
   ];
-  return <OfficialDropdownButton ariaLabel="Transcript view mode" header="Transcript view" icon="NoteSquareLines" items={items} revealChevron="never" />;
+  return <OfficialDropdownButton ariaLabel={text.ariaLabel} header={text.header} icon="NoteSquareLines" items={items} revealChevron="never" />;
 }
 
 function OfficialViewsButton({
@@ -1610,28 +1637,29 @@ function OfficialViewsButton({
   onViewSelect?: (view: OfficialViewPane) => void;
   openViews?: readonly OfficialViewPane[];
 }) {
+  const text = useI18nText(VIEWS_MENU_MESSAGES);
   // Official toggleSidePane membership via ir(tileLayout).has — multi-tile stack keeps tasks open under subagent.
   const isOpen = (view: OfficialViewPane) => openViews ? openViews.includes(view) : activeView === view;
   // Official YR item order: Preview?, Diff, Terminal?, Files?, Tasks, Plan, Runs?, Screen?
   const items: OfficialDropdownItem[] = [
-    { icon: "Play", label: "预览", checked: isOpen("preview"), shortcut: "⇧⌘P", onSelect: () => onViewSelect?.("preview") },
-    { icon: "ChangesDiffPlusMinusBox", label: "Diff", checked: isOpen("diff"), shortcut: "⇧⌘D", onSelect: () => onViewSelect?.("diff") },
-    { icon: "TerminalOpenCommandLine", label: "Terminal", checked: isOpen("terminal"), shortcut: "⌃`", onSelect: () => onViewSelect?.("terminal") },
+    { icon: "Play", label: text.preview, checked: isOpen("preview"), shortcut: "⇧⌘P", onSelect: () => onViewSelect?.("preview") },
+    { icon: "ChangesDiffPlusMinusBox", label: text.diff, checked: isOpen("diff"), shortcut: "⇧⌘D", onSelect: () => onViewSelect?.("diff") },
+    { icon: "TerminalOpenCommandLine", label: text.terminal, checked: isOpen("terminal"), shortcut: "⌃`", onSelect: () => onViewSelect?.("terminal") },
     ...(canOpenBrowser
       ? [{
           icon: "Folder1",
-          label: "Files",
+          label: text.files,
           checked: isOpen("browser"),
           shortcut: "⇧⌘F",
           onSelect: () => onViewSelect?.("browser"),
         } satisfies OfficialDropdownItem]
       : []),
-    { icon: "Blocks", label: "任务", checked: isOpen("tasks"), status: hasRunningTasks && !isOpen("tasks"), onSelect: () => onViewSelect?.("tasks") },
-    { icon: "CheckList", label: "Plan", checked: isOpen("plan"), onSelect: () => onViewSelect?.("plan") },
+    { icon: "Blocks", label: text.tasks, checked: isOpen("tasks"), status: hasRunningTasks && !isOpen("tasks"), onSelect: () => onViewSelect?.("tasks") },
+    { icon: "CheckList", label: text.plan, checked: isOpen("plan"), onSelect: () => onViewSelect?.("plan") },
     ...(canOpenRuns
       ? [{
           icon: "ClockTimeslot",
-          label: "Runs",
+          label: text.runs,
           checked: isOpen("runs"),
           onSelect: () => onViewSelect?.("runs"),
         } satisfies OfficialDropdownItem]
@@ -1639,13 +1667,13 @@ function OfficialViewsButton({
     ...(canOpenFramebuffer
       ? [{
           icon: "SystemComputerLaptopMacbook",
-          label: "Screen",
+          label: text.screen,
           checked: isOpen("framebuffer"),
           onSelect: () => onViewSelect?.("framebuffer"),
         } satisfies OfficialDropdownItem]
       : []),
   ];
-  return <OfficialDropdownButton ariaLabel="Views" icon="SidebarSimpleRightSquare" items={items} />;
+  return <OfficialDropdownButton ariaLabel={text.views} icon="SidebarSimpleRightSquare" items={items} />;
 }
 
 function OfficialMenuItems({ items }: { items: OfficialDropdownItem[] }) {

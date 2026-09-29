@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchBootstrapPayload } from "../../settings/accountSettingsApi";
+import { useCoworkChromeText } from "./coworkChromeMessages";
 
 export type CoworkModelOption = {
   /** Official model field — value sent to CLI / session start. */
@@ -264,6 +265,31 @@ export function codeModelSelectorItems(config: CoworkModelsConfig): CoworkModelS
   return coworkModelSelectorItems(config, { defaultLabel: "Default" });
 }
 
+/**
+ * Official tyt trigger (index-BELzQL5P B4t/Ubt/Fbt):
+ *   W = allModelOptions.find(H) || allModelOptions.find(L) ?? Zbt
+ * New-task chin shows Fee/Hee of that option, not scheduled-form `bV+YmcFCEb` "Default model".
+ */
+export function coworkTriggerModelLabel(
+  value: string,
+  config: CoworkModelsConfig,
+  items: CoworkModelSelectorItem[],
+  fallbackDefaultLabel: string,
+): string {
+  if (value && value !== "default") {
+    return items.find((item) => item.value === value)?.label ?? formatCoworkModelDisplayName(value);
+  }
+  const defaultId = config.defaultModel;
+  if (defaultId) {
+    const fromItems = items.find((item) => item.value === defaultId);
+    if (fromItems) return fromItems.label;
+    const fromBag = config.allModelOptions.find((item) => item.model === defaultId);
+    if (fromBag) return fromBag.label_override ?? fromBag.name;
+    return formatCoworkModelDisplayName(defaultId);
+  }
+  return fallbackDefaultLabel;
+}
+
 export function readStickyModelPreference(storageKey: string): string | null {
   try {
     return localStorage.getItem(storageKey);
@@ -374,10 +400,8 @@ function useBootstrapModelOptions(input: {
   }, [config.allModelOptions, sticky]);
 
   const labelFor = useCallback(
-    (value: string) =>
-      items.find((item) => item.value === value)?.label
-      ?? (value === "default" ? input.defaultLabel : formatCoworkModelDisplayName(value)),
-    [input.defaultLabel, items],
+    (value: string) => coworkTriggerModelLabel(value, config, items, input.defaultLabel),
+    [config, input.defaultLabel, items],
   );
 
   return {
@@ -399,15 +423,17 @@ const CODE_FEATURE_KEYS = ["ccr_model", "cowork_model", "3110209724", "173626416
  * Official Fte/ote residual for cowork model list + sticky preference.
  */
 export function useCoworkModelOptions() {
+  const chromeText = useCoworkChromeText();
   const featureKeys = useMemo(() => [...COWORK_FEATURE_KEYS], []);
+  const defaultLabel = chromeText.defaultModel;
   const itemsFromConfig = useCallback(
-    (config: CoworkModelsConfig) => coworkModelSelectorItems(config),
-    [],
+    (config: CoworkModelsConfig) => coworkModelSelectorItems(config, { defaultLabel }),
+    [defaultLabel],
   );
   return useBootstrapModelOptions({
     featureKeys,
     stickyKey: COWORK_STICKY_MODEL_KEY,
-    defaultLabel: "Default model",
+    defaultLabel,
     itemsFromConfig,
   });
 }

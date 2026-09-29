@@ -1,6 +1,7 @@
 import { Menu } from "@base-ui-components/react/menu";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
+import { useCoworkChromeText } from "./coworkChromeMessages";
 import type { CoworkSessionsBridge } from "../../../adapters/desktopBridge/types";
 import { Icon } from "../../../shell/icons";
 import { CoworkFolderTrustDialog, type CoworkFolderConfirmation } from "./CoworkFolderTrustDialog";
@@ -18,12 +19,14 @@ const iconStyle = { "--class-base-icon": "14px" } as CSSProperties;
 
 type CoworkFolderBridge = Pick<CoworkSessionsBridge, "addTrustedFolder" | "isFolderTrusted">;
 
-export function CoworkFolderPicker({ bridge, defaultTarget, disabled, onSelectedFoldersChange, placeholder = "在项目中工作", recentTargets, selectedFolders }: { bridge: CoworkFolderBridge; defaultTarget: CoworkFolderTarget | null; disabled?: boolean; onSelectedFoldersChange: (folders: string[]) => void; placeholder?: string; recentTargets: CoworkFolderTarget[]; selectedFolders: string[] }) {
+export function CoworkFolderPicker({ bridge, defaultTarget, disabled, onSelectedFoldersChange, placeholder, recentTargets, selectedFolders }: { bridge: CoworkFolderBridge; defaultTarget: CoworkFolderTarget | null; disabled?: boolean; onSelectedFoldersChange: (folders: string[]) => void; placeholder?: string; recentTargets: CoworkFolderTarget[]; selectedFolders: string[] }) {
+  const chromeText = useCoworkChromeText();
+  const resolvedPlaceholder = placeholder ?? chromeText.workInProject;
   const [open, setOpen] = useState(false);
   const [confirmations, setConfirmations] = useState<CoworkFolderConfirmation[]>([]);
   const [defaultFolderPath, setDefaultFolderPath] = useState<string | null>(defaultTarget?.path ?? null);
   const targetByPath = useMemo(() => folderTargetsByPath(defaultTarget, recentTargets), [defaultTarget, recentTargets]);
-  const selectedLabel = folderSelectionLabel(selectedFolders, targetByPath, placeholder);
+  const selectedLabel = folderSelectionLabel(selectedFolders, targetByPath, resolvedPlaceholder);
   const actions = useFolderActions({ bridge, confirmations, onSelectedFoldersChange, selectedFolders, setConfirmations, setOpen });
   useEffect(() => setDefaultFolderPath((current) => current ?? defaultTarget?.path ?? null), [defaultTarget?.path]);
   // Official Ikt: `S = open && pendingFolderConfirmation === null` — hide menu while trust dialog is up
@@ -44,10 +47,10 @@ export function CoworkFolderPicker({ bridge, defaultTarget, disabled, onSelected
         <Menu.Portal><Menu.Positioner align="start" className="epitaxy-root z-[60]" side="top" sideOffset={8}>
           <Menu.Popup className={popupClass} data-cds="Menu"><span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
             <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
-              {defaultTarget ? <><div className="px-p8 py-p2 text-footnote text-t6">Default</div><FolderTargetItem defaultFolderPath={defaultFolderPath} onSelect={actions.selectWithTrustCheck} onToggleDefault={setDefaultFolderPath} selectedFolders={selectedFolders} target={defaultTarget} /><MenuSeparator /></> : null}
+              {defaultTarget ? <><div className="px-p8 py-p2 text-footnote text-t6">{chromeText.folderDefault}</div><FolderTargetItem defaultFolderPath={defaultFolderPath} onSelect={actions.selectWithTrustCheck} onToggleDefault={setDefaultFolderPath} selectedFolders={selectedFolders} target={defaultTarget} /><MenuSeparator /></> : null}
               {recentTargets.map((target) => <FolderTargetItem defaultFolderPath={defaultFolderPath} key={target.path} onSelect={actions.selectWithTrustCheck} onToggleDefault={setDefaultFolderPath} selectedFolders={selectedFolders} target={target} />)}
               <MenuSeparator />
-              <Menu.Item className={`${itemClass} gap-g3`} onClick={actions.chooseDifferentFolder}><span className="flex size-[14px] items-center justify-center" style={iconStyle}><Icon name="Folder1" size="m" /></span><span className="flex-1 truncate pr-[16px]">Choose a different folder</span></Menu.Item>
+              <Menu.Item className={`${itemClass} gap-g3`} onClick={actions.chooseDifferentFolder}><span className="flex size-[14px] items-center justify-center" style={iconStyle}><Icon name="Folder1" size="m" /></span><span className="flex-1 truncate pr-[16px]">{chromeText.chooseDifferentFolder}</span></Menu.Item>
             </div>
           </Menu.Popup>
         </Menu.Positioner></Menu.Portal>

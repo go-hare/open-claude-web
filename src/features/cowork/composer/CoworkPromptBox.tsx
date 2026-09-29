@@ -7,6 +7,7 @@ import { coworkSessionsBridge } from "../session/coworkSessionBridge";
 import { CoworkAddMenuFolderAddIcon, CoworkComposerPlusIcon } from "../newTask/CoworkAddMenuIcons";
 import { createCoworkAddMenuItems, type CoworkAddMenuProject } from "../newTask/CoworkAddMenuItems";
 import { useCoworkNewTaskText } from "../newTask/coworkNewTaskMessages";
+import { useCoworkChromeText } from "./coworkChromeMessages";
 import { CoworkSelectedProjectIndicators } from "../newTask/CoworkProjectContext";
 import { CoworkSelectedFiles } from "../newTask/CoworkSelectedFiles";
 import type { CoworkUploadedFile } from "../newTask/coworkUploadedFiles";
@@ -43,6 +44,11 @@ export type CoworkPromptBoxProps = {
   onSubmit: () => void;
   onWorkspaceChange: (workspace: WorkspaceContext) => void;
   permissionMode: PermissionMode;
+  /**
+   * Official ce283 Bs space-page placeholder (`wLFo5icPEr`).
+   * When set, CAt uses a single static string (no yAt /skills carousel).
+   */
+  placeholder?: string;
   projectMenuItems?: CoworkAddMenuProject[];
   prompt: string;
   selectedFiles?: CoworkUploadedFile[];
@@ -76,6 +82,7 @@ export function CoworkPromptBox(props: CoworkPromptBoxProps) {
       <CoworkPromptSurface inputRef={inputRef} props={props} toolbarItems={state.addMenuItems} />
       <CoworkPromptChin
         busy={props.busy}
+        chromeText={state.chromeText}
         modelItems={state.modelItems}
         modelLabel={state.modelLabel}
         permissionAvailable={state.permissionAvailable}
@@ -91,6 +98,7 @@ export function CoworkPromptBox(props: CoworkPromptBoxProps) {
 }
 
 function useCoworkPromptBoxState(props: CoworkPromptBoxProps) {
+  const chromeText = useCoworkChromeText();
   const recentFolders = useCoworkRecentFolders();
   const selectedFolders = props.workspace.folders ?? [];
   // Official skt: isAvailable from OZe; modes from Ewt("cowork", {auto,bypass}).
@@ -119,20 +127,33 @@ function useCoworkPromptBoxState(props: CoworkPromptBoxProps) {
     if (paths?.length) updateFolders([...selectedFolders, ...paths]);
   }, [selectedFolders, updateFolders]);
   // Official cwt on /task/new: isAgentNewRoute && considerEnabledForNonUI → hide project/Drive/GitHub + modes.
+  const addMenuLabels = useMemo(
+    () => ({
+      addFilesOrPhotos: chromeText.addFilesOrPhotos,
+      addFolder: chromeText.addFolder,
+      addConnectors: chromeText.addConnectors,
+      addPlugins: chromeText.addPlugins,
+      plugins: chromeText.plugins,
+      skills: chromeText.skills,
+      connectors: chromeText.connectors,
+    }),
+    [chromeText],
+  );
   const addMenuItems = useMemo(
     () =>
       props.onAddFiles
         ? createCoworkAddMenuItems({
             isAgentRoute: true,
             includeAddFolder: true,
+            labels: addMenuLabels,
             onAddFiles: props.onAddFiles,
             onAddFolder: addFolder,
             onNavigate: props.onNavigate,
             onSelectProject: props.onProjectSelect,
             projects: props.projectMenuItems,
           })
-        : [{ icon: createElement(CoworkAddMenuFolderAddIcon, { size: 14 }), label: "Add folder", onSelect: addFolder }],
-    [addFolder, props],
+        : [{ icon: createElement(CoworkAddMenuFolderAddIcon, { size: 14 }), label: chromeText.addFolder, onSelect: addFolder }],
+    [addFolder, addMenuLabels, chromeText.addFolder, props],
   );
   const modelItems = modelOptions.items.map((item, index) => ({
     checked: item.value === props.model,
@@ -158,6 +179,7 @@ function useCoworkPromptBoxState(props: CoworkPromptBoxProps) {
   const permissionLabel = permissionOptions.find((item) => item.value === props.permissionMode)?.label ?? "Ask";
   return {
     addMenuItems,
+    chromeText,
     modelItems,
     modelLabel: modelOptions.labelFor(props.model),
     permissionAvailable: permissionAvailability.isAvailable,
@@ -179,11 +201,17 @@ function CoworkPromptSurface({
   toolbarItems: CoworkDropdownItem[];
 }) {
   // Official CAt: yYe static + yAt rotating He = [XLcM6WHfQR, jGTFVKPV2+]
+  // Official Bs (space page): single wLFo5icPEr, no carousel.
   const text = useCoworkNewTaskText();
+  const spacePlaceholder = props.placeholder?.trim();
   const rotatingPlaceholders = useMemo(
-    () => [text.composerPlaceholder, text.composerPlaceholderSkills],
-    [text.composerPlaceholder, text.composerPlaceholderSkills],
+    () =>
+      spacePlaceholder
+        ? [spacePlaceholder]
+        : [text.composerPlaceholder, text.composerPlaceholderSkills],
+    [spacePlaceholder, text.composerPlaceholder, text.composerPlaceholderSkills],
   );
+  const placeholder = spacePlaceholder || text.composerPlaceholder;
   return (
     <fieldset className="flex w-full min-w-0 flex-col">
       <input aria-hidden="true" className="absolute -z-10 h-0 w-0 opacity-0" data-testid="file-upload" tabIndex={-1} type="file" />
@@ -202,7 +230,7 @@ function CoworkPromptSurface({
                 disabled={props.busy}
                 onChange={props.setPrompt}
                 onSubmit={props.onSubmit}
-                placeholder={text.composerPlaceholder}
+                placeholder={placeholder}
                 ref={inputRef}
                 rotatingPlaceholders={rotatingPlaceholders}
                 slashCwd={props.workspace.cwd}
@@ -230,18 +258,19 @@ function CoworkPromptToolbar({
   onSubmit: () => void;
   prompt: string;
 }) {
-  // Official pwt: Xp tooltip "Add files, connectors, and more" + keyboardShortcut="/"
-  // Official send (agent new): Dc variant="claude" size="icon_sm" aria-label Start task
+  // Official pwt: Xp tooltip ITCmbu5TgN + keyboardShortcut="/"
+  // Official send (agent new): Dc variant="claude" size="icon_sm" aria-label 6Jb0AX1uQx
+  const chromeText = useCoworkChromeText();
   const canSubmit = !busy && Boolean(prompt.trim());
   return (
     <div className="relative flex gap-2 w-full items-center">
       <div className="relative flex-1 flex items-center min-w-0">
-        <OfficialTooltip delayDuration={0} keyboardShortcut="/" side="bottom" tooltipContent="Add files, connectors, and more">
+        <OfficialTooltip delayDuration={0} keyboardShortcut="/" side="bottom" tooltipContent={chromeText.addFilesConnectorsMore}>
           <span className="inline-flex">
             <CoworkDropdownButton
               align="start"
               alignOffset={-10}
-              ariaLabel="Add files, connectors, and more"
+              ariaLabel={chromeText.addFilesConnectorsMore}
               className="!rounded-lg hover:!bg-bg-200 aria-expanded:!bg-bg-300 ml-[2px] h-8 w-8"
               disabled={busy}
               icon={<CoworkComposerPlusIcon size={20} />}
@@ -255,9 +284,9 @@ function CoworkPromptToolbar({
           </span>
         </OfficialTooltip>
       </div>
-      <OfficialTooltip tooltipContent="Start task">
+      <OfficialTooltip tooltipContent={chromeText.startTask}>
         <OfficialButton
-          aria-label="Start task"
+          aria-label={chromeText.startTask}
           className="!rounded-lg !h-8 !w-8 disabled:cursor-default"
           disabled={!canSubmit}
           onClick={onSubmit}
@@ -273,6 +302,7 @@ function CoworkPromptToolbar({
 
 function CoworkPromptChin({
   busy,
+  chromeText,
   modelItems,
   modelLabel,
   permissionAvailable,
@@ -284,6 +314,7 @@ function CoworkPromptChin({
   workspace,
 }: {
   busy: boolean;
+  chromeText: ReturnType<typeof useCoworkChromeText>;
   modelItems: CoworkDropdownItem[];
   modelLabel: ReactNode;
   /** Official nkt isAvailable — when false, omit Ask/Act entirely. */
@@ -309,7 +340,7 @@ function CoworkPromptChin({
             defaultTarget={workspace.cwd ? { path: workspace.cwd, displayName: basename(workspace.cwd), type: "folder" } : null}
             disabled={busy}
             onSelectedFoldersChange={updateFolders}
-            placeholder="Work in a project"
+            placeholder={chromeText.workInProject}
             recentTargets={recentFolders}
             selectedFolders={selectedFolders}
           />

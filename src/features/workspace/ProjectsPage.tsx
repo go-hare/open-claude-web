@@ -42,10 +42,10 @@ const SORT_COMPARATORS: Record<
   alphabetical: (left, right) => left.name.localeCompare(right.name),
 };
 
-function spaceToItem(space: CoworkSpaceSummary): ProjectListItem {
+function spaceToItem(space: CoworkSpaceSummary, untitledProject: string): ProjectListItem {
   return {
     id: space.id,
-    name: space.name || "Untitled",
+    name: space.name.trim() || untitledProject,
     description: space.description ?? null,
     updatedAtMs: space.updatedAtMs || 0,
     createdAtMs: space.createdAtMs ?? space.updatedAtMs ?? 0,
@@ -89,7 +89,7 @@ export function ProjectsPage({ onNavigate }: RouteViewProps) {
 
   const items = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
-    let list = spaces.map(spaceToItem);
+    let list = spaces.map((space) => spaceToItem(space, text.untitledProject));
     if (trimmed) {
       list = list.filter(
         (item) =>
@@ -98,7 +98,7 @@ export function ProjectsPage({ onNavigate }: RouteViewProps) {
       );
     }
     return [...list].sort(SORT_COMPARATORS[sortBy]);
-  }, [spaces, query, sortBy]);
+  }, [spaces, query, sortBy, text.untitledProject]);
 
   const openOnboarding = useCallback(() => setOnboardingOpen(true), []);
   const closeOnboarding = useCallback(() => setOnboardingOpen(false), []);

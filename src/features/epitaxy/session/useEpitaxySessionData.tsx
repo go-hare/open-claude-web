@@ -32,6 +32,7 @@ import {
   officialSetStreamCharBudget,
   officialStreamActiveMessageId,
   officialStreamClear,
+  officialStreamGetSnapshot,
   officialStreamHasListeners,
   officialStreamSetVisibility,
   officialStreamSubscribe,
@@ -158,6 +159,19 @@ export function useEpitaxySessionData(sessionId?: string) {
   const [streamSnapshot, setStreamSnapshot] = useState<OfficialStreamSnapshot>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const streamMessageIdRef = useRef<string | null>(null);
+  const streamSessionIdRef = useRef<string | undefined>(sessionId);
+  // The panel is reused when the route session id changes, so React state still
+  // holds the previous session's typewriter. Drop it before paint — otherwise
+  // the open session shows the other session's live text until the next delta.
+  const [snapshotForSessionId, setSnapshotForSessionId] = useState(sessionId);
+  if (snapshotForSessionId !== sessionId) {
+    const owned = sessionId ? officialStreamGetSnapshot(sessionId) : null;
+    setSnapshotForSessionId(sessionId);
+    setStreamSnapshot(owned);
+    streamSessionIdRef.current = sessionId;
+    streamMessageIdRef.current = owned?.messageId ?? null;
+    setStreamingMessageId(owned?.messageId ?? null);
+  }
   // Residual Va visibility arg `n` (default true) — ref so setVisibility(() => r.current) tracks live.
   const transcriptVisibleRef = useRef(true);
 
@@ -187,7 +201,7 @@ export function useEpitaxySessionData(sessionId?: string) {
 
   // Keep Qa/eke suppress + char budget in lockstep with Va.
   useEffect(() => {
-    if (!sessionId) {
+    if (!sessionId || streamSessionIdRef.current !== sessionId) {
       setStreamingMessageId(null);
       streamMessageIdRef.current = null;
       return;
@@ -213,18 +227,26 @@ export function useEpitaxySessionData(sessionId?: string) {
   // Official Va (c119): useState(null) + useEffect(Pe.subscribe) + startTransition same-id.
   // Product bridge: useLayoutEffect so Pe.subscribe is live before paint (Electron/3p burst
   // otherwise lets result clear abort pending startTransition paints → dump-at-end).
-  // Still NO lastSnapshot hydrate (official starts null until next emit).
+  // Switch must not keep the previous session's Va. Hydrate this id's own tail only.
   useLayoutEffect(() => {
     // Official: if (!s || !t) return void i(null);
     if (!sessionId) {
+      streamSessionIdRef.current = undefined;
       setStreamSnapshot(null);
       streamMessageIdRef.current = null;
       setStreamingMessageId(null);
       return undefined;
     }
     officialCodeSessionStore.getState().ensureBucket(sessionId);
-    // Official does NOT clear useState here — keep prior until subscribe emit / null.
-    let lastMessageId: string | null = null;
+    // Session id changed under the same panel (A→B without remount). Official Va is
+    // per session component, so it starts empty. This panel is reused — drop A's
+    // snapshot immediately, then show B's own live tail if that turn is still painting.
+    streamSessionIdRef.current = sessionId;
+    const owned = officialStreamGetSnapshot(sessionId);
+    setStreamSnapshot(owned);
+    streamMessageIdRef.current = owned?.messageId ?? null;
+    setStreamingMessageId(owned?.messageId ?? null);
+    let lastMessageId: string | null = owned?.messageId ?? null;
     const unsubscribe = officialStreamSubscribe(sessionId, (snapshot) => {
       if (snapshot === null) {
         lastMessageId = null;

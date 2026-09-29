@@ -49,6 +49,7 @@ export const PROJECTS_MESSAGES = {
     defaultMessage: "No projects matching “{search}”",
     id: "bzYWNlBFMV",
   },
+  untitledProject: { defaultMessage: "Untitled project", id: "YuuESnYtfk" },
 
   // ── SpaceOnboardingModal ukt residual (index-BELzQL5P pkt/wkt/jkt) ──
   createNewProjectTitle: {

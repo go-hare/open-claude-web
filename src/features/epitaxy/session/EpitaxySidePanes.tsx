@@ -18,12 +18,17 @@ import {
 import { motion, useReducedMotion } from "motion/react";
 import { desktopBridge, type LocalSessionsBridge, type SessionSummary, type ChatMessage } from "../../../adapters/desktopBridge";
 import { Icon } from "../../../shell/icons";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
 import {
   OfficialButton,
   OfficialDropdownButton,
   type OfficialDropdownItem,
   type OfficialViewPane,
 } from "../OfficialEpitaxyComponents";
+import {
+  SIDE_PANE_CHROME_MESSAGES,
+  VIEWS_MENU_MESSAGES,
+} from "../officialCodeChromeMessages";
 import { OfficialDiffPane, type OfficialDiffCompareMeta } from "../OfficialDiffPane";
 import { OfficialFilePane, type OfficialFileViewTarget } from "./OfficialFilePane";
 import { OfficialFilesBrowserPane } from "./OfficialFilesBrowserPane";
@@ -577,20 +582,25 @@ function EpitaxySidePaneTile({
           />
           <div data-top-left={isTopLeft || undefined} className="relative flex items-center justify-between gap-g6 h-[32px] pl-[8px] pr-[4px] shrink-0">
             <div className="draggable absolute inset-0 -z-[1]" aria-hidden="true" />
-            {renderSidePaneTitle(activeView, session, sessionRef, {
-              activeTab: activeTerminalTab,
-              diffCanFitTree,
-              diffCompareMeta,
-              diffShowTree,
-              fileView,
-              onDiffShowTreeChange: setDiffShowTree,
-              onAddTab: addTerminalTab,
-              subagentView,
-              onCloseTab: closeTerminalTab,
-              onRenameTab: renameTerminalTab,
-              onSelectTab: selectTerminalTab,
-              tabs: terminalTabs.tabs,
-            })}
+            <OfficialSidePaneTitle
+              activeView={activeView}
+              session={session}
+              sessionRef={sessionRef}
+              terminalState={{
+                activeTab: activeTerminalTab,
+                diffCanFitTree,
+                diffCompareMeta,
+                diffShowTree,
+                fileView,
+                onDiffShowTreeChange: setDiffShowTree,
+                onAddTab: addTerminalTab,
+                subagentView,
+                onCloseTab: closeTerminalTab,
+                onRenameTab: renameTerminalTab,
+                onSelectTab: selectTerminalTab,
+                tabs: terminalTabs.tabs,
+              }}
+            />
             <div className="relative z-[1] flex items-center gap-g1 shrink-0 draggable-none">
               {activeView === "plan" ? (
                 <OfficialPlanHeaderActions
@@ -626,19 +636,21 @@ function EpitaxySidePaneTile({
   );
 }
 
-const viewPaneConfig: Record<OfficialViewPane, { icon: string; label: string }> = {
-  preview: { icon: "Play", label: "预览" },
-  diff: { icon: "ChangesDiffPlusMinusBox", label: "Diff" },
-  terminal: { icon: "TerminalOpenCommandLine", label: "Terminal" },
-  // Official YR: Files (browser / XC), Runs (QS), Screen (framebuffer / AN).
-  browser: { icon: "Folder1", label: "Files" },
-  tasks: { icon: "Blocks", label: "任务" },
-  plan: { icon: "CheckList", label: "Plan" },
-  file: { icon: "NoteSquareLines", label: "File" },
-  subagent: { icon: "Agent", label: "Agent" },
-  runs: { icon: "ClockTimeslot", label: "Runs" },
-  framebuffer: { icon: "SystemComputerLaptopMacbook", label: "Screen" },
-};
+function officialViewPaneLabel(
+  view: OfficialViewPane,
+  text: Record<keyof typeof VIEWS_MENU_MESSAGES, string>,
+) {
+  if (view === "preview") return text.preview;
+  if (view === "diff") return text.diff;
+  if (view === "terminal") return text.terminal;
+  if (view === "browser") return text.files;
+  if (view === "tasks") return text.tasks;
+  if (view === "plan") return text.plan;
+  if (view === "file") return text.file;
+  if (view === "subagent") return text.agent;
+  if (view === "runs") return text.runs;
+  return text.screen;
+}
 
 type TerminalTab = {
   id: string;
@@ -675,24 +687,37 @@ export function createDefaultTerminalTabs(): TerminalTabsState {
   return { activeId: defaultTerminalTabId, nextId: 1, tabs: [{ id: defaultTerminalTabId, ordinal: 1 }] };
 }
 
-function terminalTabLabel(tab: TerminalTab | undefined, forceOrdinal = false) {
-  if (!tab) return "Terminal";
-  return tab.name ?? (forceOrdinal || tab.ordinal > 1 ? `Terminal ${tab.ordinal}` : "Terminal");
+function terminalTabLabel(tab: TerminalTab | undefined, terminalWord: string, forceOrdinal = false) {
+  if (!tab) return terminalWord;
+  return tab.name ?? (forceOrdinal || tab.ordinal > 1 ? `${terminalWord} ${tab.ordinal}` : terminalWord);
 }
 
 export function terminalPtyKey(sessionId: string, tabId: string) {
   return tabId === defaultTerminalTabId ? sessionId : `${sessionId}::${tabId}`;
 }
 
-function renderSidePaneTitle(activeView: OfficialViewPane, session: SessionSummary | null, sessionRef: EpitaxySessionRef | null, terminalState?: TerminalTitleState) {
+function OfficialSidePaneTitle({
+  activeView,
+  session,
+  sessionRef,
+  terminalState,
+}: {
+  activeView: OfficialViewPane;
+  session: SessionSummary | null;
+  sessionRef: EpitaxySessionRef | null;
+  terminalState?: TerminalTitleState;
+}) {
+  const viewsText = useI18nText(VIEWS_MENU_MESSAGES);
+  const chromeText = useI18nText(SIDE_PANE_CHROME_MESSAGES);
+
   if (activeView === "preview" && sessionRef?.type === "local") {
     return (
       <div className="relative z-[1] flex items-center gap-g3 min-w-0 draggable-none">
         <OfficialDropdownButton
           align="start"
           className="-ml-[5px]"
-          header="Servers"
-          label="预览"
+          header={chromeText.servers}
+          label={viewsText.preview}
           mode="text"
           side="bottom"
         />
@@ -709,7 +734,7 @@ function renderSidePaneTitle(activeView: OfficialViewPane, session: SessionSumma
       <div className="relative z-[1] flex items-center gap-g3 min-w-0 draggable-none">
         {canFitTree ? (
           <OfficialButton
-            ariaLabel={terminalState?.diffShowTree ? "Hide files" : "Show files"}
+            ariaLabel={terminalState?.diffShowTree ? chromeText.hideFiles : chromeText.showFiles}
             className="-ml-[4px]"
             icon="FolderOpenFront"
             onClick={() => terminalState?.onDiffShowTreeChange?.(!terminalState.diffShowTree)}
@@ -732,22 +757,25 @@ function renderSidePaneTitle(activeView: OfficialViewPane, session: SessionSumma
   if (activeView === "file") {
     // Official rE title for file: VR(m,"file") → formatMessage "File" (not basename + icon).
     // Path lives in vN epitaxy-pane-subheader, not the 32px tile chrome.
-    return <span className="text-body text-t7 select-none truncate draggable-none pl-[1px] relative z-[1]">File</span>;
+    return <span className="text-body text-t7 select-none truncate draggable-none pl-[1px] relative z-[1]">{viewsText.file}</span>;
   }
 
   if (activeView === "subagent" && terminalState?.subagentView) {
     return <span className="text-body text-t7 select-none truncate draggable-none pl-[1px] relative z-[1]">{terminalState.subagentView.description}</span>;
   }
 
-  const label = activeView === "preview" && session?.title ? "预览" : viewPaneConfig[activeView].label;
+  const label = activeView === "preview" && session?.title ? viewsText.preview : officialViewPaneLabel(activeView, viewsText);
   return <span className="text-body text-t7 select-none truncate draggable-none pl-[1px] relative z-[1]">{label}</span>;
 }
 
 function OfficialTerminalTitle({ terminalState }: { terminalState?: TerminalTitleState }) {
+  const viewsText = useI18nText(VIEWS_MENU_MESSAGES);
+  const chromeText = useI18nText(SIDE_PANE_CHROME_MESSAGES);
   const activeTab = terminalState?.activeTab;
   const hasMultipleTabs = Boolean(terminalState && terminalState.tabs.length > 1);
   const [isRenaming, setIsRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
+  const tabWord = viewsText.terminal;
   const renameInputRef = useCallback((node: HTMLInputElement | null) => {
     if (!node) return;
     requestAnimationFrame(() => {
@@ -766,23 +794,23 @@ function OfficialTerminalTitle({ terminalState }: { terminalState?: TerminalTitl
 
   const tabItems: OfficialDropdownItem[] = terminalState?.tabs.map((tab) => ({
     checked: tab.id === activeTab?.id,
-    label: terminalTabLabel(tab, true),
+    label: terminalTabLabel(tab, tabWord, true),
     onSelect: () => terminalState.onSelectTab(tab.id),
     trailing: terminalState.tabs.length > 1 ? (
-      <TerminalTabDeleteButton ariaLabel={`Close ${terminalTabLabel(tab, true)}`} onDelete={() => terminalState.onCloseTab(tab.id)} />
+      <TerminalTabDeleteButton ariaLabel={chromeText.closeTerminal} onDelete={() => terminalState.onCloseTab(tab.id)} />
     ) : undefined,
   })) ?? [];
   const extraSections = terminalState ? [{
     items: [
-      { label: "New terminal", onSelect: terminalState.onAddTab },
-      { label: "Rename terminal", onSelect: openRename },
+      { label: chromeText.newTerminal, onSelect: terminalState.onAddTab },
+      { label: chromeText.renameTerminal, onSelect: openRename },
     ],
   }] : undefined;
 
   if (isRenaming) {
     return (
       <input
-        aria-label="Terminal name"
+        aria-label={chromeText.terminalName}
         className="h-small w-[200px] min-w-0 pl-p5 pr-p2 rounded-small bg-t1 text-footnote text-t8 outline-none ring-focus border-0"
         onBlur={closeRename}
         onChange={(event) => setDraftName(event.currentTarget.value)}
@@ -809,17 +837,17 @@ function OfficialTerminalTitle({ terminalState }: { terminalState?: TerminalTitl
           align="start"
           className="-ml-[5px]"
           extraSections={extraSections}
-          header="Terminals"
+          header={chromeText.terminals}
           items={tabItems}
-          label={terminalTabLabel(activeTab, true)}
+          label={terminalTabLabel(activeTab, tabWord, true)}
           mode="text"
           side="bottom"
         />
       ) : (
-        <span className="text-body text-uncontained-default select-none truncate max-w-[200px] pl-[1px]">{terminalTabLabel(activeTab)}</span>
+        <span className="text-body text-uncontained-default select-none truncate max-w-[200px] pl-[1px]">{terminalTabLabel(activeTab, tabWord)}</span>
       )}
       {hasMultipleTabs ? <span aria-hidden className="inline-block w-px h-[10px] rounded-full bg-t3 -ml-[2px] -mr-[2px]" /> : null}
-      <OfficialButton ariaLabel="New terminal" className="w-[20px]" icon="PlusSmall" onClick={terminalState?.onAddTab} />
+      <OfficialButton ariaLabel={chromeText.newTerminal} className="w-[20px]" icon="PlusSmall" onClick={terminalState?.onAddTab} />
     </div>
   );
 }

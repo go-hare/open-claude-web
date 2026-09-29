@@ -14,6 +14,7 @@ export const SPACE_DETAIL_MESSAGES = {
     id: "wuDmoQol2j",
   },
   openProjects: { defaultMessage: "Projects", id: "UxTJRaKagI" },
+  untitledProject: { defaultMessage: "Untitled project", id: "YuuESnYtfk" },
   pinProject: { defaultMessage: "Pin project", id: "3f65Bv1/3o" },
   unpinProject: { defaultMessage: "Unpin project", id: "HhPHH3kNpx" },
   starProject: { defaultMessage: "Star project", id: "IuZiap/Hqt" },

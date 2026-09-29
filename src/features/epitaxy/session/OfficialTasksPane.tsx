@@ -78,66 +78,70 @@ export function OfficialTasksPane({
         .sort((left, right) => (right.completedAt ?? -Infinity) - (left.completedAt ?? -Infinity) || right.index - left.index),
     [visibleTasks],
   );
+  const echoTaskStopped = useCallback((taskId: string) => {
+    // Official densable Xr onSuccess → echoPending(system/task_notification stopped).
+    const uuid =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `xr-stop-echo-${taskId}-${Date.now()}`;
+    const timestamp = new Date().toISOString();
+    officialCodeSessionStore.getState().mergeMessage(sessionRef.id, {
+      id: uuid,
+      role: "system",
+      text: "",
+      createdAt: timestamp,
+      raw: {
+        type: "system",
+        subtype: "task_notification",
+        task_id: taskId,
+        status: "stopped",
+        output_file: "",
+        summary: "",
+        uuid,
+        session_id: sessionRef.id,
+        timestamp,
+      },
+    });
+  }, [sessionRef.id]);
+
   const stopTask = useCallback(
     (taskId: string) => {
       if (!bridge.stopTask) return;
       void bridge.stopTask(sessionRef.id, taskId).then((result) => {
         const record = result && typeof result === "object" ? (result as Record<string, unknown>) : null;
         const status = typeof record?.status === "string" ? record.status : undefined;
+        const error = typeof record?.error === "string" ? record.error : undefined;
         // Desktop returns { ok, status }. Missing/undefined result is NOT success
         // (bridge stub / no LocalSessions.stopTask) — do not fake-stop the row.
-        // densable Xr treats resolved mutate as success; our Host always returns a body.
-        const explicitOk = record?.ok === true || status === "informed";
-        const explicitFail =
-          record?.ok === false
-          || status === "no_turn"
-          || status === "failed";
-        if (explicitOk && !explicitFail) {
-          // Official densable Xr onSuccess → echoPending(system/task_notification stopped).
-          // Host stopTask is control_request only (no host-stop transcript invent).
-          // Durable bookend: CLI dual-emit; Jp last status wins on same taskId.
-          const uuid =
-            typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-              ? crypto.randomUUID()
-              : `xr-stop-echo-${taskId}-${Date.now()}`;
-          const timestamp = new Date().toISOString();
-          officialCodeSessionStore.getState().mergeMessage(sessionRef.id, {
-            id: uuid,
-            role: "system",
-            text: "",
-            createdAt: timestamp,
-            raw: {
-              type: "system",
-              subtype: "task_notification",
-              task_id: taskId,
-              status: "stopped",
-              output_file: "",
-              summary: "",
-              uuid,
-              session_id: sessionRef.id,
-              timestamp,
-            },
-          });
+        // informed = CLI accepted stop. no_turn / "No task found" = registry already
+        // empty (stale 362h Running row) — same end-state as official Xr close.
+        const gone =
+          status === "no_turn"
+          || (typeof error === "string" && /no task found/i.test(error));
+        const explicitOk = record?.ok === true || status === "informed" || gone;
+        if (explicitOk) {
+          echoTaskStopped(taskId);
           return;
         }
-        const error = typeof record?.error === "string" ? record.error : undefined;
         const message =
-          status === "no_turn"
-            ? "Can't stop this task — the session turn is no longer active."
-            : error
-              ? `Couldn't stop task: ${error}`
-              : record == null
-                ? "Couldn't stop this task — stop is unavailable."
-                : "Couldn't stop this task.";
+          error
+            ? `Couldn't stop task: ${error}`
+            : record == null
+              ? "Couldn't stop this task — stop is unavailable."
+              : "Couldn't stop this task.";
         errors?.addError(message, { uniqueKey: `stop-task:${sessionRef.id}:${taskId}` });
       }).catch((err: unknown) => {
         const detail = err instanceof Error ? err.message : String(err ?? "unknown error");
+        if (/no task found/i.test(detail)) {
+          echoTaskStopped(taskId);
+          return;
+        }
         errors?.addError(`Couldn't stop task: ${detail}`, {
           uniqueKey: `stop-task:${sessionRef.id}:${taskId}`,
         });
       });
     },
-    [bridge, errors, sessionRef.id],
+    [bridge, echoTaskStopped, errors, sessionRef.id],
   );
   return (
     <div className="h-full overflow-y-auto">

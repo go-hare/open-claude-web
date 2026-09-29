@@ -1806,7 +1806,7 @@ function renderCodeAssistantEntryItem(
         text={item.text}
       >
         <div>
-          <OfficialCodeMarkdown isStreaming={options.isStreaming} text={item.text} />
+          <OfficialCodeMarkdown isStreaming={options.isStreaming} sessionId={options.sessionId} text={item.text} />
         </div>
       </OfficialTranscriptItemMenu>
     );

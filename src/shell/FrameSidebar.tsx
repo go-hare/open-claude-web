@@ -61,6 +61,7 @@ export function FrameSidebar({ currentRoute, frame, onNavigate, onSearch }: Fram
 }
 
 function SidebarCollapsedTrigger({ frame }: { frame: FrameStore }) {
+  const text = useShellText();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const isPeeked = frame.sidebarHovering;
 
@@ -84,7 +85,7 @@ function SidebarCollapsedTrigger({ frame }: { frame: FrameStore }) {
       onClick={frame.toggleSidebar}
       aria-expanded={isPeeked}
       aria-controls="frame-peek-popover"
-      aria-label="Open sidebar"
+      aria-label={text.openSidebar}
       className={[
         "draggable-none flex items-center justify-center size-7 rounded-[9px] transition-colors",
         isPeeked ? "bg-bg-300" : "",

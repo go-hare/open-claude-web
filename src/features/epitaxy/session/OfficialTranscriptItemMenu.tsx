@@ -19,6 +19,8 @@ import {
   copyOfficialMessagePlain,
   copyOfficialMessageRich,
 } from "./officialMessageClipboard";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { MESSAGE_ACTION_MESSAGES } from "../officialCodeChromeMessages";
 
 export function OfficialTranscriptItemMenu({
   children,
@@ -51,6 +53,8 @@ export function OfficialTranscriptItemMenu({
     },
     [childOnContextMenu],
   );
+
+  const actionsText = useI18nText(MESSAGE_ACTION_MESSAGES);
 
   if (!hasText && !onPinChapter && !onFork && !onRewind && !canAttach) return children;
 
@@ -91,20 +95,20 @@ export function OfficialTranscriptItemMenu({
     >
       <ContextMenu.Trigger render={trigger as ReactElement<Record<string, unknown>>} />
       <BaseContextMenuPopup>
-        {linkHref ? <BaseContextMenuItem onClick={copyLink}>Copy link</BaseContextMenuItem> : null}
-        {hasText ? <BaseContextMenuItem onClick={copyMessage}>Copy message</BaseContextMenuItem> : null}
-        {hasText ? <BaseContextMenuItem onClick={copyMarkdown}>Copy as Markdown</BaseContextMenuItem> : null}
+        {linkHref ? <BaseContextMenuItem onClick={copyLink}>{actionsText.copyLink}</BaseContextMenuItem> : null}
+        {hasText ? <BaseContextMenuItem onClick={copyMessage}>{actionsText.copyMessage}</BaseContextMenuItem> : null}
+        {hasText ? <BaseContextMenuItem onClick={copyMarkdown}>{actionsText.copyAsMarkdown}</BaseContextMenuItem> : null}
         {canAttach ? (
           <BaseContextMenuItem onClick={attachAsContext}>
-            {selectionIsPartial ? "Attach selection as context" : "Attach message as context"}
+            {selectionIsPartial ? actionsText.attachSelection : actionsText.attachMessage}
           </BaseContextMenuItem>
         ) : null}
         {onPinChapter ? (
-          <BaseContextMenuItem onClick={onPinChapter}>{isPinned ? "Unpin chapter" : "Pin as chapter"}</BaseContextMenuItem>
+          <BaseContextMenuItem onClick={onPinChapter}>{isPinned ? actionsText.unpinChapter : actionsText.pinAsChapter}</BaseContextMenuItem>
         ) : null}
         {(onRewind || onFork) && (hasText || onPinChapter || canAttach || Boolean(linkHref)) ? <BaseContextMenuSeparator /> : null}
-        {onRewind ? <BaseContextMenuItem onClick={onRewind}>Rewind to here</BaseContextMenuItem> : null}
-        {onFork ? <BaseContextMenuItem onClick={onFork}>Fork from here</BaseContextMenuItem> : null}
+        {onRewind ? <BaseContextMenuItem onClick={onRewind}>{actionsText.rewindToHere}</BaseContextMenuItem> : null}
+        {onFork ? <BaseContextMenuItem onClick={onFork}>{actionsText.forkFromHere}</BaseContextMenuItem> : null}
       </BaseContextMenuPopup>
     </ContextMenu.Root>
   );

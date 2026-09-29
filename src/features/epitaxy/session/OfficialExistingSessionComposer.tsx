@@ -15,6 +15,8 @@ import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInpu
 import { useOfficialTypeToComposer } from "../../shared/useOfficialTypeToComposer";
 import { Icon } from "../../../shell/icons";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { COMPOSER_SEND_STOP_MESSAGES } from "../officialCodeChromeMessages";
 import { OfficialComposerFooter } from "../OfficialComposerFooter";
 import { OfficialEpitaxyBranchRows } from "../OfficialEpitaxyBranchRows";
 import { EpitaxyPermissionModeModal } from "../composer/EpitaxyPermissionModeModal";
@@ -164,6 +166,7 @@ export function ExistingSessionComposer({
   sessionRef: EpitaxySessionRef | null;
   showScrollButton: boolean;
 }) {
+  const sendStopText = useI18nText(COMPOSER_SEND_STOP_MESSAGES);
   const codeModelOptions = useCodeModelOptions();
   const allowedModelValues = useMemo(
     () => codeModelOptions.items.map((item) => item.value),
@@ -1330,7 +1333,7 @@ export function ExistingSessionComposer({
           <div className="flex self-end p-p7 pl-p3">
             {/* Official Qj (c119): yd icon Stop | ReturnArrowCornerDownLeft; aria Stop | Send. */}
             <OfficialButton
-              ariaLabel={canStop ? "Stop" : "Send"}
+              ariaLabel={canStop ? sendStopText.stop : sendStopText.send}
               disabled={!canStop && !canSubmit}
               icon={canStop ? "Stop" : "ReturnArrowCornerDownLeft"}
               onClick={() => void (canStop ? stopResponse() : submit())}

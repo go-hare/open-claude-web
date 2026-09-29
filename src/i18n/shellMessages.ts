@@ -67,6 +67,12 @@ const SHELL_MESSAGES = {
   dragToResize: { defaultMessage: "Drag to resize", id: "__local.dragToResize", zhCN: "拖动调整大小" },
   environment: { defaultMessage: "Environment", id: "K7kuIZkkhY", zhCN: "环境" },
   expandSidebar: { defaultMessage: "Expand sidebar", id: "__local.expandSidebar", zhCN: "展开侧边栏" },
+  /** Official FrameSidebar collapsed peek (cbc59a8af). */
+  openSidebar: { defaultMessage: "Open sidebar", id: "+G35mRWa75", zhCN: "打开侧边栏" },
+  /** Official ca0135 fl trailing Add — interpolate `{label}`. */
+  newSessionIn: { defaultMessage: "New session in {label}", id: "__local.newSessionIn", zhCN: "在 {label} 中新建会话" },
+  artifacts: { defaultMessage: "Artifacts", id: "eW5eoWkxy3", zhCN: "制品" },
+  untitledProject: { defaultMessage: "Untitled project", id: "YuuESnYtfk", zhCN: "未命名项目" },
   filter: { defaultMessage: "Filter", id: "__local.filter", zhCN: "筛选" },
   filterActive: { defaultMessage: "Filter (active)", id: "__local.filterActive", zhCN: "筛选（已启用）" },
   group: { defaultMessage: "Group", id: "HpoDwkNFk+", zhCN: "分组" },

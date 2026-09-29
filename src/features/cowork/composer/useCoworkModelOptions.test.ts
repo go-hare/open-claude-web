@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   codeModelSelectorItems,
   coworkModelSelectorItems,
+  coworkTriggerModelLabel,
   formatCoworkModelDisplayName,
   normalizeSelectorModelValue,
   resolveCoworkModelsConfig,
@@ -58,6 +59,9 @@ describe("resolveCoworkModelsConfig (u2/ote residual)", () => {
     expect(items.find((item) => item.value === "deepseek-v4-pro")?.label).toBe("Deepseek 4 Pro");
     expect(items.find((item) => item.value === "deepseek-v4-pro[1m]")?.label).toBe("Deepseek 4 Pro 1M");
     expect(items.some((item) => item.value === "claude-opus-4")).toBe(false);
+    // Official tyt trigger: Fbt(W) of bag default, not "Default model".
+    expect(coworkTriggerModelLabel("default", config, items, "Default model")).toBe("Deepseek 4 Pro");
+    expect(coworkTriggerModelLabel("deepseek-v4-pro[1m]", config, items, "Default model")).toBe("Deepseek 4 Pro 1M");
   });
 
   it("does not invent Anthropic Sonnet/Opus when bootstrap empty", () => {

@@ -28,6 +28,16 @@ import {
   readPreviewFeatureUsesArtifacts,
 } from "../settings/artifactsPreference";
 import { primaryButtonClass, secondaryButtonClass } from "../shared/buttonClasses";
+import { useI18nText, type MessageDescriptors } from "../../i18n/footerMenuMessages";
+
+/** Official OGt residual (index-BELzQL5P). */
+const ARTIFACTS_LIBRARY_MESSAGES = {
+  title: { defaultMessage: "Live artifacts", id: "fo4LT2foY3" },
+  headerHint: {
+    defaultMessage: "Create dynamic artifacts that stay up-to-date using live data from your connectors.",
+    id: "jA6GVIoYuc",
+  },
+} as const satisfies MessageDescriptors;
 
 function useArtifactsPreference(): boolean {
   return useSyncExternalStore(
@@ -457,6 +467,7 @@ function useCoworkArtifactCanonicalPath(pathname: string) {
 }
 
 export function ArtifactsLibraryPage({ onNavigate }: RouteViewProps) {
+  const libraryText = useI18nText(ARTIFACTS_LIBRARY_MESSAGES);
   const showArtifacts = useArtifactsPreference();
   const { artifacts, isLoading, reload } = useCoworkArtifactsList(showArtifacts);
   const pathname = useSyncExternalStore(subscribeAppLocation, readPathname, () => "/");
@@ -526,9 +537,9 @@ export function ArtifactsLibraryPage({ onNavigate }: RouteViewProps) {
     >
       <div className="mb-6 flex items-end justify-between gap-4">
         <div>
-          <h1 className="font-heading text-2xl text-text-100">Live artifacts</h1>
+          <h1 className="font-heading text-2xl text-text-100">{libraryText.title}</h1>
           <p className="mt-1 text-sm text-text-400">
-            Create dynamic artifacts that stay up-to-date using live data from your connectors.
+            {libraryText.headerHint.replace(/<\/?link>/g, "")}
           </p>
         </div>
       </div>

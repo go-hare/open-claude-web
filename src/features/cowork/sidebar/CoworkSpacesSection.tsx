@@ -1,4 +1,5 @@
 import type { CoworkSpaceSummary } from "../../../adapters/desktopBridge";
+import { useShellText } from "../../../i18n/shellMessages";
 import { Icon } from "../../../shell/icons";
 
 /**
@@ -15,7 +16,9 @@ export function CoworkSpaceSessionRow({
   selected: boolean;
   space: CoworkSpaceSummary;
 }) {
+  const text = useShellText();
   const rowKey = `cowork-space:${space.id}`;
+  const name = space.name.trim() || text.untitledProject;
   return (
     <div className={rowWrapperClass} data-jump-hint-row="" data-row-key={rowKey} data-selected={selected ? "open" : undefined}>
       <button
@@ -28,7 +31,7 @@ export function CoworkSpaceSessionRow({
         type="button"
       >
         <span className="df-leading-slot text-text-400"><Icon name="Projects" size="sm" /></span>
-        <span className="min-w-0 flex-1 truncate">{space.name}</span>
+        <span className="min-w-0 flex-1 truncate">{name}</span>
       </button>
     </div>
   );

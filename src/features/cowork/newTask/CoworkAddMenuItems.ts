@@ -45,6 +45,18 @@ export type CreateCoworkAddMenuItemsOptions = {
   hasEnabledPlugins?: boolean;
   /** Connectors empty → "Add connectors" button; with items → Connectors submenu. */
   hasConnectors?: boolean;
+  /** Official cwt/awt/Qyt/Vvt/qCt labels from formatMessage. */
+  labels?: Partial<CoworkAddMenuLabels>;
+};
+
+export type CoworkAddMenuLabels = {
+  addFilesOrPhotos: string;
+  addFolder: string;
+  addConnectors: string;
+  addPlugins: string;
+  plugins: string;
+  skills: string;
+  connectors: string;
 };
 
 type CoworkAddMenuRoutes = {
@@ -57,6 +69,20 @@ type CoworkAddMenuRoutes = {
 
 const noop = () => undefined;
 const menuIconSize = 14;
+
+const DEFAULT_COWORK_ADD_MENU_LABELS: CoworkAddMenuLabels = {
+  addFilesOrPhotos: "Add files or photos",
+  addFolder: "Add folder",
+  addConnectors: "Add connectors",
+  addPlugins: "Add plugins...",
+  plugins: "Plugins",
+  skills: "Skills",
+  connectors: "Connectors",
+};
+
+function resolveCoworkAddMenuLabels(labels?: Partial<CoworkAddMenuLabels>): CoworkAddMenuLabels {
+  return { ...DEFAULT_COWORK_ADD_MENU_LABELS, ...labels };
+}
 
 function icon(node: ComponentType<{ size?: number }>): ReactElement {
   return createElement(node, { size: menuIconSize });
@@ -82,7 +108,9 @@ export function createCoworkAddMenuItems({
   webSearchEnabled = false,
   hasEnabledPlugins = false,
   hasConnectors = false,
+  labels,
 }: CreateCoworkAddMenuItemsOptions): CoworkDropdownItem[] {
+  const menuLabels = resolveCoworkAddMenuLabels(labels);
   const routes = createCoworkAddMenuRoutes(onNavigate);
   const fileItems = createCoworkFileItems({
     isAgentRoute,
@@ -93,12 +121,14 @@ export function createCoworkAddMenuItems({
     openConnectors: routes.openConnectors,
     openProjectCreate: routes.openProjectCreate,
     projects,
+    labels: menuLabels,
   });
   const toolItems = createCoworkToolItems({
     routes,
     skills,
     hasEnabledPlugins,
     hasConnectors,
+    labels: menuLabels,
   });
   // Official: a = e ? [] : modes… where e = dqe || (isAgentNewRoute && considerEnabledForNonUI)
   const modeItems = isAgentRoute
@@ -136,6 +166,7 @@ function createCoworkFileItems({
   openConnectors,
   openProjectCreate,
   projects,
+  labels,
 }: {
   isAgentRoute: boolean;
   includeAddFolder?: boolean;
@@ -145,12 +176,13 @@ function createCoworkFileItems({
   openConnectors: () => void;
   openProjectCreate: () => void;
   projects?: CoworkAddMenuProject[];
+  labels: CoworkAddMenuLabels;
 }): CoworkDropdownItem[] {
   const items: CoworkDropdownItem[] = [
     {
       // Official awt icon nwt = gy
       icon: icon(CoworkAddMenuPaperclipIcon),
-      label: "Add files or photos",
+      label: labels.addFilesOrPhotos,
       onSelect: onAddFiles,
     },
   ];
@@ -159,7 +191,7 @@ function createCoworkFileItems({
     items.push({
       // Official Qyt = cv
       icon: icon(CoworkAddMenuFolderAddIcon),
-      label: "Add folder",
+      label: labels.addFolder,
       onSelect: onAddFolder,
     });
   }
@@ -234,11 +266,13 @@ function createCoworkToolItems({
   skills,
   hasEnabledPlugins,
   hasConnectors,
+  labels,
 }: {
   routes: CoworkAddMenuRoutes;
   skills?: CoworkDropdownItem[];
   hasEnabledPlugins: boolean;
   hasConnectors: boolean;
+  labels: CoworkAddMenuLabels;
 }): CoworkDropdownItem[] {
   const items: CoworkDropdownItem[] = [];
 
@@ -247,7 +281,7 @@ function createCoworkToolItems({
     items.push({
       icon: icon(CoworkAddMenuSkillsIcon),
       items: skills,
-      label: "Skills",
+      label: labels.skills,
       type: "submenu",
     });
   }
@@ -256,7 +290,7 @@ function createCoworkToolItems({
   if (hasConnectors) {
     items.push({
       icon: icon(CoworkAddMenuConnectorsIcon),
-      label: "Connectors",
+      label: labels.connectors,
       type: "submenu",
       items: [
         {
@@ -269,7 +303,7 @@ function createCoworkToolItems({
   } else {
     items.push({
       icon: icon(CoworkAddMenuConnectorsIcon),
-      label: "Add connectors",
+      label: labels.addConnectors,
       onSelect: routes.openConnectors,
     });
   }
@@ -278,7 +312,7 @@ function createCoworkToolItems({
   if (hasEnabledPlugins) {
     items.push({
       icon: icon(CoworkAddMenuPluginsIcon),
-      label: "Plugins",
+      label: labels.plugins,
       type: "submenu",
       items: [
         {
@@ -296,7 +330,7 @@ function createCoworkToolItems({
   } else {
     items.push({
       icon: icon(CoworkAddMenuPluginsIcon),
-      label: "Add plugins...",
+      label: labels.addPlugins,
       onSelect: routes.openPlugins,
     });
   }
