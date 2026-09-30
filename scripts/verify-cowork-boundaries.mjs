@@ -11,7 +11,6 @@ const codeRoots = [
 ];
 const legacyCoworkRoots = [
   path.join(sourceRoot, "features/epitaxy/cowork"),
-  path.join(sourceRoot, "features/epitaxy/OfficialCoworkComposer.tsx"),
   path.join(sourceRoot, "features/epitaxy/CoworkNewTaskPage.tsx"),
 ];
 const sourceExtensions = new Set([".js", ".jsx", ".mjs", ".ts", ".tsx"]);

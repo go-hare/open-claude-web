@@ -15,28 +15,45 @@ const files = {
   fakeBridge: path.join(root, "src/adapters/desktopBridge/fakeDesktopBridge.ts"),
   routes: path.join(root, "src/app/routes.tsx"),
   desktopFrame: path.join(root, "src/shell/DesktopFrame.tsx"),
-  coworkActivityPanel: path.join(root, "src/features/epitaxy/cowork/CoworkSessionActivityPanel.tsx"),
-  coworkActivityShell: path.join(root, "src/features/epitaxy/cowork/CoworkActivityPanelShell.tsx"),
-  coworkOfficialComponents: path.join(root, "src/features/epitaxy/cowork/OfficialCoworkComponents.tsx"),
-  coworkAddMenu: path.join(root, "src/features/epitaxy/cowork/CoworkAddMenuItems.ts"),
-  coworkBrowserExtensionDetail: path.join(root, "src/features/epitaxy/cowork/CoworkBrowserExtensionDetailPanel.tsx"),
-  coworkBrowserPicker: path.join(root, "src/features/epitaxy/cowork/CoworkBrowserPickerButton.tsx"),
-  coworkActivityContent: path.join(root, "src/features/epitaxy/cowork/CoworkActivityContent.tsx"),
-  coworkActivitySection: path.join(root, "src/features/epitaxy/cowork/CoworkActivitySection.tsx"),
-  coworkConnectedOfficeFiles: path.join(root, "src/features/epitaxy/cowork/CoworkConnectedOfficeFilesSection.tsx"),
-  coworkContextProjects: path.join(root, "src/features/epitaxy/cowork/CoworkContextProjects.tsx"),
-  coworkFileExplorer: path.join(root, "src/features/epitaxy/cowork/CoworkFileExplorerModal.tsx"),
-  coworkInstructionEditor: path.join(root, "src/features/epitaxy/cowork/CoworkInstructionEditorModal.tsx"),
-  coworkProgress: path.join(root, "src/features/epitaxy/cowork/CoworkProgressSection.tsx"),
-  coworkResourceRows: path.join(root, "src/features/epitaxy/cowork/CoworkResourceRows.tsx"),
-  coworkWorkingFolderResources: path.join(root, "src/features/epitaxy/cowork/CoworkWorkingFolderResources.tsx"),
-  coworkResourceActivity: path.join(root, "src/features/epitaxy/cowork/coworkResourceActivity.ts"),
-  coworkResourceTypes: path.join(root, "src/features/epitaxy/cowork/coworkResourceTypes.ts"),
-  coworkHeader: path.join(root, "src/features/epitaxy/cowork/CoworkHeader.tsx"),
-  officialCoworkComposer: path.join(root, "src/features/epitaxy/OfficialCoworkComposer.tsx"),
-  coworkNewTask: path.join(root, "src/features/epitaxy/cowork/CoworkNewTaskPage.tsx"),
-  coworkProjectContext: path.join(root, "src/features/epitaxy/cowork/CoworkProjectContext.tsx"),
-  coworkUploadedFiles: path.join(root, "src/features/epitaxy/cowork/coworkUploadedFiles.ts"),
+  coworkActivityPanel: path.join(root, "src/features/cowork/session/activity/CoworkSessionActivityPanel.tsx"),
+  coworkActivityShell: path.join(root, "src/features/cowork/session/activity/CoworkActivityPanelShell.tsx"),
+  coworkOfficialComponents: [
+    path.join(root, "src/features/cowork/composer/CoworkSessionComposer.tsx"),
+    path.join(root, "src/features/cowork/composer/CoworkSessionComposerSurface.tsx"),
+    path.join(root, "src/features/cowork/composer/coworkChromeMessages.ts"),
+    path.join(root, "src/features/cowork/composer/CoworkPermissionApprovals.tsx"),
+    path.join(root, "src/features/cowork/composer/CoworkPermissionStandardApprovals.tsx"),
+    path.join(root, "src/features/cowork/session/CoworkSessionHeader.tsx"),
+    path.join(root, "src/features/cowork/session/transcript/CoworkHumanMessage.tsx"),
+    path.join(root, "src/features/cowork/session/transcript/CoworkThinkingCell.tsx"),
+    path.join(root, "src/features/cowork/session/transcript/coworkDirectoryTools.ts"),
+  ],
+  coworkAddMenu: path.join(root, "src/features/cowork/newTask/CoworkAddMenuItems.ts"),
+  coworkBrowserExtensionDetail: path.join(root, "src/features/cowork/session/activity/CoworkBrowserExtensionDetailPanel.tsx"),
+  coworkBrowserPicker: path.join(root, "src/features/cowork/session/activity/CoworkBrowserPickerButton.tsx"),
+  coworkActivityContent: path.join(root, "src/features/cowork/session/activity/CoworkActivityContent.tsx"),
+  coworkActivitySection: path.join(root, "src/features/cowork/session/activity/CoworkActivitySection.tsx"),
+  coworkConnectedOfficeFiles: path.join(root, "src/features/cowork/session/activity/CoworkConnectedOfficeFilesSection.tsx"),
+  coworkContextProjects: path.join(root, "src/features/cowork/session/activity/CoworkContextProjects.tsx"),
+  coworkFileExplorer: path.join(root, "src/features/cowork/session/activity/CoworkFileExplorerModal.tsx"),
+  coworkInstructionEditor: path.join(root, "src/features/cowork/session/activity/CoworkInstructionEditorModal.tsx"),
+  coworkProgress: path.join(root, "src/features/cowork/session/activity/CoworkProgressSection.tsx"),
+  coworkResourceRows: path.join(root, "src/features/cowork/session/activity/CoworkResourceRows.tsx"),
+  coworkWorkingFolderResources: path.join(root, "src/features/cowork/session/activity/CoworkWorkingFolderResources.tsx"),
+  coworkResourceActivity: path.join(root, "src/features/cowork/session/activity/coworkResourceActivity.ts"),
+  coworkResourceTypes: path.join(root, "src/features/cowork/session/activity/coworkResourceTypes.ts"),
+  coworkHeader: path.join(root, "src/features/cowork/newTask/CoworkHeader.tsx"),
+  coworkPromptBox: path.join(root, "src/features/cowork/composer/CoworkPromptBox.tsx"),
+  coworkDropdown: path.join(root, "src/features/cowork/ui/CoworkDropdownButton.tsx"),
+  coworkNewTask: path.join(root, "src/features/cowork/newTask/CoworkNewTaskPage.tsx"),
+  coworkProjectContext: path.join(root, "src/features/cowork/newTask/CoworkProjectContext.tsx"),
+  coworkUploadedFiles: path.join(root, "src/features/cowork/newTask/coworkUploadedFiles.ts"),
+  coworkSessionView: path.join(root, "src/features/cowork/session/CoworkSessionView.tsx"),
+  coworkFileViewer: path.join(root, "src/features/cowork/session/CoworkFileViewer.tsx"),
+  existingComposer: path.join(root, "src/features/epitaxy/session/OfficialExistingSessionComposer.tsx"),
+  composerFooter: path.join(root, "src/features/epitaxy/OfficialComposerFooter.tsx"),
+  codeHomeComposer: path.join(root, "src/features/epitaxy/composer/OfficialCodeComposer.tsx"),
+  coworkHeaderMessages: path.join(root, "src/features/cowork/newTask/coworkNewTaskMessages.ts"),
   publicAccessPages: path.join(root, "src/features/public/AccessPages.tsx"),
   scheduledPaths: path.join(root, "src/features/scheduled/scheduledPaths.ts"),
   scheduledTaskDetail: path.join(root, "src/features/scheduled/ScheduledTaskDetail.tsx"),
@@ -53,7 +70,8 @@ const files = {
 };
 
 function read(file) {
-  return fs.readFileSync(file, "utf8");
+  const targets = Array.isArray(file) ? file : [file];
+  return targets.map((target) => fs.readFileSync(target, "utf8")).join("\n");
 }
 
 const source = Object.fromEntries(Object.entries(files).map(([key, file]) => [key, read(file)]));
@@ -106,21 +124,23 @@ const checks = [
   {
     group: "底部输入框",
     name: "composer uses TipTap and supports send, stop, Enter submit, Shift+Enter newline, bash escape",
-    test: () => /function ExistingSessionComposer/.test(source.tile)
-      && /useEditor\(/.test(source.tile)
-      && /<EditorContent/.test(source.tile)
-      && /const canStop = isResponding/.test(source.tile)
-      && /Stop response/.test(source.tile)
-      && /event\.key === "Enter" && !event\.shiftKey/.test(source.tile)
-      && /event\.key === "Escape" && isBashMode/.test(source.tile),
+    test: () => /function ExistingSessionComposer/.test(source.existingComposer)
+      && /useEditor\(/.test(source.existingComposer)
+      && /<EditorContent/.test(source.existingComposer)
+      && /const canStop = isResponding/.test(source.existingComposer)
+      && /COMPOSER_SEND_STOP_MESSAGES/.test(source.existingComposer)
+      && /event\.key !== "Enter"/.test(source.existingComposer)
+      && /event\.key === "Escape"/.test(source.existingComposer)
+      && /isBashMode/.test(source.existingComposer),
   },
   {
     group: "底部输入框",
     name: "composer exposes mode/add/workspace/model controls",
-    test: () => /ariaLabel="Permission mode"/.test(source.tile)
-      && /ariaLabel="Add"/.test(source.tile)
-      && /ariaLabel="Workspace"/.test(source.tile)
-      && /ariaLabel="Model"/.test(source.tile),
+    test: () => /header="Mode"/.test(source.composerFooter)
+      && /ariaLabel="Add"/.test(source.composerFooter)
+      && /header="Models"/.test(source.composerFooter)
+      && /OfficialComposerFooter/.test(source.existingComposer)
+      && /OfficialWorkspaceControls/.test(source.codeHomeComposer),
   },
   {
     group: "协作路由",
@@ -169,9 +189,9 @@ const checks = [
       && /title="进度"/.test(source.coworkProgress)
       && /title="上下文"/.test(source.coworkActivityPanel)
       && /return "工作文件夹"/.test(source.coworkResourceActivity)
-      && /CoworkActivityPanelHeaderToggle/.test(source.tile)
-      && /hFt portals ZZt into dframe-header-actions-slot/.test(source.coworkOfficialComponents)
-      && /pt-0 flex flex-col/.test(source.coworkActivityShell),
+      && /CoworkActivityPanelHeaderToggle/.test(source.coworkSessionView)
+      && /id="dframe-header-actions-slot"/.test(source.coworkOfficialComponents)
+      && /flex flex-col pt-0/.test(source.coworkActivityShell),
   },
   {
     group: "协作活动面板",
@@ -280,8 +300,8 @@ const checks = [
       && /filePath: key === "browser_extension:\/\/all" \? key : resource\.filePath/.test(source.coworkActivityContent)
       && /onOpenFile\(\{ path: group\.filePath \}\)/.test(source.coworkActivityContent)
       && /aria-label="Show in Folder"/.test(source.coworkActivityContent)
-      && source.tile.includes('!isCoworkSurface || activeView === "file"')
-      && /desktopBridge\.FileSystem\.readLocalFile\?\.\(filePath\)/.test(source.tile)
+      && /readLocalFile/.test(source.coworkFileViewer)
+      && !/isCoworkSurface/.test(source.tile)
       && /scheduledTaskDisplayName/.test(source.coworkActivityContent)
       && /scheduledTaskDetailPath\(scheduledTaskId\)/.test(source.coworkActivityContent)
       && /scheduledTaskIndexPath = "\/scheduled-task"/.test(source.scheduledPaths)
@@ -364,13 +384,13 @@ const checks = [
     group: "协作输入框",
     name: "Cowork new task header follows official v6t/y6t safe-use and feedback copy",
     test: () => /index-BELzQL5P\.js:v6t\/y6t Cowork page header/.test(source.coworkHeader)
-      && /Let's knock something off your list/.test(source.coworkHeader)
-      && /support\.claude\.com\/en\/articles\/13364135-use-claude-cowork-safely/.test(source.coworkHeader)
-      && /Learn how to use Cowork safely/.test(source.coworkHeader)
-      && /anthropic\.qualtrics\.com\/jfe\/form\/SV_a4v19ZDkO7RaVNQ/.test(source.coworkHeader)
+      && /Let's knock something off your list/.test(source.coworkHeaderMessages)
+      && /support\.claude\.com\/en\/articles\/13364135-use-claude-cowork-safely/.test(source.coworkHeaderMessages)
+      && /Learn how to use Cowork safely/.test(source.coworkHeaderMessages)
+      && /anthropic\.qualtrics\.com\/jfe\/form\/SV_a4v19ZDkO7RaVNQ/.test(source.coworkHeaderMessages)
       && /source: "agent_new_page"/.test(source.coworkHeader)
-      && /give us feedback/.test(source.coworkHeader)
-      && !/来把待办清掉吧|了解如何安全使用协作/.test(source.coworkHeader)
+      && /give us feedback/.test(source.coworkHeaderMessages)
+      && !/来把待办清掉吧|了解如何安全使用协作/.test(source.coworkHeader + source.coworkHeaderMessages)
       && /Cowork new task header follows official safe-use copy/.test(source.runtimeVerifier)
       && /Cowork feedback link invokes official AgentModeFeedback payload/.test(source.runtimeVerifier),
   },
@@ -395,15 +415,15 @@ const checks = [
       && /Web search/.test(source.coworkAddMenu)
       && /Research/.test(source.coworkAddMenu)
       && /Use style/.test(source.coworkAddMenu)
-      && /Menu\.SubmenuRoot/.test(source.components)
-      && /function OfficialCoworkPromptBox/.test(source.officialCoworkComposer)
-      && /createCoworkAddMenuItems/.test(source.officialCoworkComposer)
-      && /CoworkSelectedFiles/.test(source.officialCoworkComposer)
-      && /CoworkSelectedProjectIndicators/.test(source.officialCoworkComposer)
-      && /placeholder="今天我可以帮助你做什么？"/.test(source.officialCoworkComposer)
-      && /alignOffset=\{-10\}/.test(source.coworkOfficialComponents)
-      && /side="bottom"/.test(source.coworkOfficialComponents)
-      && /sideOffset=\{4\}/.test(source.coworkOfficialComponents)
+      && /Menu\.SubmenuRoot/.test(source.coworkDropdown)
+      && /function CoworkPromptBox/.test(source.coworkPromptBox)
+      && /createCoworkAddMenuItems/.test(source.coworkPromptBox)
+      && /CoworkSelectedFiles/.test(source.coworkPromptBox)
+      && /CoworkSelectedProjectIndicators/.test(source.coworkPromptBox)
+      && /data-official-source="index-BELzQL5P\.js:w6t\/\$4t CAt onpage"/.test(source.coworkPromptBox)
+      && /alignOffset=\{-10\}/.test(source.coworkPromptBox)
+      && /side="bottom"/.test(source.coworkPromptBox)
+      && /sideOffset=\{4\}/.test(source.coworkPromptBox)
       && /index-BELzQL5P\.js:WCt\/HCt\/gwt\/xwt/.test(source.coworkProjectContext)
       && /agent_mode_project_warning_dismissed:/.test(source.coworkProjectContext)
       && /Add project context from/.test(source.coworkProjectContext)
@@ -426,26 +446,26 @@ const checks = [
     test: () => /createCoworkUploadedFile/.test(source.coworkUploadedFiles)
       && /fileUuid: createMessageUuid\(\)/.test(source.coworkUploadedFiles)
       && /<file_uuid>\$\{uploadedFile\.fileUuid\}<\/file_uuid>/.test(source.coworkUploadedFiles)
-      && /coworkUploadedFilePaths/.test(source.coworkNewTask)
-      && /coworkUploadedFilePaths/.test(source.tile),
+      && /coworkUploadedFilePaths/.test(source.coworkNewTask),
   },
   {
     group: "协作对话",
     name: "Cowork session surface is backed by official component wrappers",
-    test: () => /OfficialCoworkComposer/.test(source.coworkOfficialComponents)
-      && /index-BELzQL5P\.js:CAt Cowork composer/.test(source.coworkOfficialComponents)
-      && /OfficialCoworkQueueButton/.test(source.coworkOfficialComponents)
+    test: () => /function CoworkSessionComposer/.test(source.coworkOfficialComponents)
+      && /function CoworkPromptBox/.test(source.coworkPromptBox)
+      && /index-BELzQL5P\.js:w6t\/\$4t CAt onpage/.test(source.coworkPromptBox)
+      && /queueMessage/.test(source.coworkOfficialComponents)
       && /Queue message/.test(source.coworkOfficialComponents)
-      && /OfficialCoworkDirectoryApprovalCard/.test(source.coworkOfficialComponents)
-      && /index-BELzQL5P\.js:Yge CoworkDirectoryApproval/.test(source.coworkOfficialComponents)
-      && /OfficialCoworkSessionHeader/.test(source.coworkOfficialComponents)
-      && /OfficialCoworkUserMessage/.test(source.coworkOfficialComponents)
-      && /OfficialCoworkThinkingBlock/.test(source.coworkOfficialComponents)
-      && /OfficialCoworkComposer/.test(source.tile)
-      && /OfficialCoworkSessionHeader/.test(source.tile)
-      && /OfficialCoworkUserMessage/.test(source.tile)
-      && /OfficialCoworkDirectoryApprovalCard/.test(source.tile)
-      && /isCoworkDirectoryPermissionRequest/.test(source.tile)
+      && /function CoworkDirectoryApproval/.test(source.coworkOfficialComponents)
+      && /index-BELzQL5P:Yge/.test(source.coworkOfficialComponents)
+      && /function CoworkSessionHeader/.test(source.coworkOfficialComponents)
+      && /function CoworkHumanMessage/.test(source.coworkOfficialComponents)
+      && /function CoworkThinkingCell/.test(source.coworkOfficialComponents)
+      && /CoworkSessionComposer/.test(source.coworkSessionView)
+      && /CoworkSessionHeader/.test(source.coworkSessionView)
+      && /isCoworkDirectoryPermissionRequest/.test(source.coworkOfficialComponents)
+      && !/OfficialCoworkComposer/.test(source.coworkSessionView)
+      && !/OfficialCoworkComposer/.test(source.tile)
       && !/variant=\{isCoworkSurface/.test(source.tile)
       && !/variant\?: "code" \| "cowork"/.test(source.components),
   },

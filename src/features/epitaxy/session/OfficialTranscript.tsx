@@ -144,7 +144,10 @@ export type OfficialTranscriptScrollState = {
 
 /** Residual Gb scrollToBottom body (no 450ms hard-snap invent). */
 export function scrollElementToBottom(node: HTMLElement, behavior?: OfficialTranscriptScrollBehavior) {
-  node.scrollTo({ top: node.scrollHeight, behavior: (behavior ?? "instant") as ScrollBehavior });
+  node.scrollTo({
+    top: Math.max(0, node.scrollHeight - node.clientHeight),
+    behavior: (behavior ?? "instant") as ScrollBehavior,
+  });
 }
 
 let officialThinkingSparkAnimationCache: OfficialSparkAnimation | null = null;
@@ -355,7 +358,11 @@ const Transcript = memo(forwardRef<OfficialTranscriptHandle, TranscriptProps>(fu
       // Official R: setPinned(true); scrollTo({ top: scrollHeight, behavior ?? "instant" })
       officialVirtualizer.setPinned(true);
       const node = officialVirtualizer.scrollRef.current;
-      node?.scrollTo({ top: node.scrollHeight, behavior: (behavior ?? "instant") as ScrollBehavior });
+      if (!node) return;
+      node.scrollTo({
+        top: Math.max(0, node.scrollHeight - node.clientHeight),
+        behavior: (behavior ?? "instant") as ScrollBehavior,
+      });
     },
     scrollToEntry: (entryId) => {
       const index = rowsRef.current.findIndex((row) => (row.kind === "user" || row.kind === "assistant") && row.entry.id === entryId);
@@ -709,14 +716,16 @@ function useOfficialTranscriptVirtualizer<TItem>({
     }
 
     if (!pinnedRef.current || !node) return;
-    // Residual: if(N && e.scrollTop !== R.current) return
+    // Residual: if(N && e.scrollTop !== R.current) return — skip only user-driven mid-scroll.
+    // Programmatic pin (stream growth) keeps N true while scrollTop === R; still stick.
     if (isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
     const sizer = sizerRef.current;
-    if (sizer) {
-      const height = vz.scrollRect?.height ?? 0;
-      sizer.style.height = `${Math.max(liveTotal, height)}px`;
-    }
-    node.scrollTop = liveTotal;
+    const viewport = vz.scrollRect?.height ?? node.clientHeight;
+    if (sizer) sizer.style.height = `${Math.max(liveTotal, viewport)}px`;
+    // Max scrollTop is scrollHeight-clientHeight. Residual assigns e.scrollTop=n (totalSize);
+    // browsers clamp. Use the clamp explicitly so R matches the settled offset and the
+    // last row (streaming markdown) stays in view instead of sitting under the composer.
+    node.scrollTop = Math.max(0, liveTotal - viewport);
     lastProgrammaticScrollTopRef.current = node.scrollTop;
     lastObservedScrollTopRef.current = node.scrollTop;
     lastObservedTotalSizeRef.current = liveTotal;
@@ -829,9 +838,9 @@ function useOfficialTranscriptVirtualizer<TItem>({
       const nextTotal = vz.getTotalSize();
       // Residual RO: if(r === E.current) return
       if (nextTotal === lastObservedTotalSizeRef.current) return;
-      const height = vz.scrollRect?.height ?? 0;
+      const height = vz.scrollRect?.height ?? node.clientHeight;
       sizer.style.height = `${Math.max(nextTotal, height)}px`;
-      node.scrollTop = nextTotal;
+      node.scrollTop = Math.max(0, nextTotal - height);
       lastProgrammaticScrollTopRef.current = node.scrollTop;
       lastObservedScrollTopRef.current = node.scrollTop;
       lastObservedTotalSizeRef.current = nextTotal;
