@@ -289,6 +289,7 @@ function EpitaxyChatPanel({
     beginLocalUserTurn,
     cancelQueuedMessage,
     entries,
+    queuedEntries,
     error,
     errorCategory,
     isLoading,
@@ -932,6 +933,8 @@ function EpitaxyChatPanel({
             key={initialSessionId}
             attachRef={composerAttachRef}
             bridge={bridge}
+            queuedEntries={queuedEntries}
+            onCancelQueued={cancelQueuedMessage}
             composerApiRef={composerApiRef}
             dropHandlersRef={dropHandlersRef}
             // Residual Qj disabled via residualQjDisabled (Os/J/Ns/Ga/xn). See qjDisabled above.

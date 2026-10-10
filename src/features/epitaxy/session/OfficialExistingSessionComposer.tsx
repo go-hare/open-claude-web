@@ -49,6 +49,8 @@ import {
   type StagedComposerImage,
 } from "./OfficialComposerStagedImages";
 import type { OfficialEpitaxyDropHandlers } from "./OfficialEpitaxyDropZone";
+import type { TranscriptEntry } from "./officialTranscriptParse";
+import { CodeUserEntryMessage } from "./OfficialTranscript";
 import {
   capOfficialComposerFileAttachments,
   officialComposerFileAttachmentsFromFiles,
@@ -125,9 +127,11 @@ export function ExistingSessionComposer({
   onOpenPlan,
   onPermissionModeChange,
   onScrollToBottom,
+  onCancelQueued,
   onStop,
   onSubmit,
   promptSuggestion = null,
+  queuedEntries,
   reload,
   session,
   sessionRef,
@@ -154,8 +158,12 @@ export function ExistingSessionComposer({
   onOpenDiff?: () => void;
   /** Official Wk onOpenPlan → setSidePane("plan"). */
   onOpenPlan?: () => void;
+  /** Official Hb isQueued X — dropQueuedMessage / yt(e.id). */
+  onCancelQueued?: (entryId: string) => void;
   /** Official Wk onModeChange after plan accept (target permission mode). */
   onPermissionModeChange?: (mode: string) => void | Promise<void>;
+  /** Official ge — Hb isQueued tail in composer column, not Fu. */
+  queuedEntries?: TranscriptEntry[];
   onScrollToBottom: () => void;
   onStop?: () => void | Promise<void>;
   onSubmit: (text: string, input?: SendMessageInput) => Promise<void>;
@@ -1267,6 +1275,21 @@ export function ExistingSessionComposer({
         <Icon name="ChevronDownSmall" size="s" />
       </button>
       <OfficialEpitaxyBranchRows bridge={bridge} onOpenDiff={onOpenDiff} session={session} sessionRef={sessionRef} />
+      {queuedEntries && queuedEntries.length > 0 ? (
+        <div
+          className="flex flex-col gap-[var(--chat-item-gap)]"
+          data-official-source="c11959232-h_zsw3wI.js:Xb ge isQueued Hb"
+        >
+          {queuedEntries.map((entry) => (
+            <CodeUserEntryMessage
+              entry={entry}
+              isQueued
+              key={entry.id}
+              onCancelQueued={onCancelQueued ? () => onCancelQueued(entry.id) : undefined}
+            />
+          ))}
+        </div>
+      ) : null}
       <InlineToolPermissionApprovals
         bridge={bridge}
         onOpenPlan={onOpenPlan}

@@ -519,15 +519,16 @@ export function useEpitaxySessionData(sessionId?: string) {
     || Boolean(spawnLabel)
     || isUltrareviewLaunching;
   // Official Ya = Kwe(Xa, Va). Tool settle is eke/rke object-ref mutation — no settleOrphan invent.
-  // Official also appends ge (queued Hb rows) after the main stream-merged transcript.
-  const entries = useMemo(() => {
-    const merged = mergeOfficialStreamSnapshot(parsedEntries, streamSnapshot);
-    if (queuedEntries.length === 0) return merged;
-    return [...merged, ...queuedEntries];
-  }, [parsedEntries, queuedEntries, streamSnapshot]);
+  // Official ge (queued Hb) is NOT in Ya/Fu — Xb paints Gv as last Fu row, then ge sits
+  // in the composer column (c11959232 ~659669). Concatenating ge into entries put Gv
+  // under the queued bubbles.
+  const entries = useMemo(
+    () => mergeOfficialStreamSnapshot(parsedEntries, streamSnapshot),
+    [parsedEntries, streamSnapshot],
+  );
 
   // Residual Ja (c119): Boolean(D) && 0===Ya.length && (B||J)
-  // Ya = painted entries (Xa+Va+queue), not raw messages alone. B=isTranscriptPending, J=isMetaPending
+  // Ya = Xa+Va only (ge queued Hb is outside Fu). B=isTranscriptPending, J=isMetaPending
   // (product maps residual J=X&&!O via isMetaPending until session meta lands).
   // Do NOT invent !session as loading — that flashed Ja on empty idle buckets.
   const isLoading = Boolean(sessionId)
@@ -559,6 +560,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     busy: H,
     cancelQueuedMessage,
     entries,
+    queuedEntries,
     error: bucket.error,
     errorCategory: bucket.errorCategory,
     isLoading,
