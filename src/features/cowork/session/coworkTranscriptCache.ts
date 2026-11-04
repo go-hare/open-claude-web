@@ -1,5 +1,5 @@
 /**
- * Official D1e transcript cache (index-BELzQL5P ~131430–131471, hydrate ~140154–140248).
+ * Official D1e transcript cache (c21f11e6d-CxD82rYo.js ~131430–131471, hydrate ~140154–140248).
  *
  *   lZe  31457280 (~30MB) total byte budget
  *   cZe  Map sessionId → { transcript, lastActivityAt, approxBytes }

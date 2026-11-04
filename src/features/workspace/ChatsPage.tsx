@@ -1,5 +1,5 @@
 /**
- * Official desktop ChatsSurface residual: index-BELzQL5P.js `g4t` → `f4t` (B4 desktop).
+ * Official desktop ChatsSurface residual: index-D35w9RK9.js `g4t` → `f4t` (B4 desktop).
  * Route remains `/chats` (`$os` path:"chats"), but copy branches on mode:
  *   cowork → p4t Tasks ("任务" / Filter tasks / 新任务 → /task/new)
  *   chat   → u4t Chats
@@ -51,7 +51,7 @@ const META_CLASS = "text-xs text-text-500";
 const SURFACE_TABS: SurfaceTab[] = ["active", "archived", "all"];
 /** Official f4t `r4t` fade ladder for a4t skeleton rows while H&&B. */
 const SKELETON_OPACITIES = [1, 0.7, 0.4, 0.15] as const;
-/** Official `sge` light skeleton (index-BELzQL5P). */
+/** Official `sge` light skeleton (index-D35w9RK9). */
 const SKELETON_BLOCK_CLASS =
   "relative bg-bg-400 overflow-hidden after:absolute after:inset-0 after:translate-x-[-100%] after:bg-gradient-to-r after:from-bg-000/0 after:from-0% after:via-bg-000/20 after:via-50% after:to-100% after:to-bg-000/0 after:animate-[shimmer_1.5s_infinite]";
 
@@ -352,7 +352,7 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
       }
       title={copy.title}
     >
-      <div data-official-source="index-BELzQL5P.js:f4t g4t">
+      <div data-official-source="index-D35w9RK9.js:f4t g4t">
         {selectionMode ? (
           <div className="flex items-center h-12 my-1 -ml-[calc(1.5rem+0.5rem)]">
             <div className="group/menu flex items-center rounded-lg w-full gap-2.5">
@@ -402,7 +402,7 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
         ) : null}
 
         {showSearchSkeleton ? (
-          <div className="flex flex-col" data-official-source="index-BELzQL5P.js:a4t r4t">
+          <div className="flex flex-col" data-official-source="index-D35w9RK9.js:a4t r4t">
             {SKELETON_OPACITIES.map((opacity, index) => (
               <SkeletonRow key={index} opacity={opacity} />
             ))}
@@ -410,7 +410,7 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
         ) : showEmpty ? (
           <div className="text-sm text-text-500 mt-4">{emptyLabel}</div>
         ) : (
-          <div className="flex flex-col" data-official-source="index-BELzQL5P.js:TGt">
+          <div className="flex flex-col" data-official-source="index-D35w9RK9.js:TGt">
             {items.map((item, index) => {
               const prev = items[index - 1];
               const showActiveHeader =
@@ -494,7 +494,7 @@ function TasksListRow({
   const iconName = item.type === "code" ? "Code" : item.type === "chat" ? "Chat" : "Tasks";
 
   return (
-    <div className="relative group/row" data-official-source="index-BELzQL5P.js:IGt TGt">
+    <div className="relative group/row" data-official-source="index-D35w9RK9.js:IGt TGt">
       {/* Official IGt hover checkbox left of row */}
       <div
         className={cn(
@@ -562,7 +562,7 @@ function SkeletonRow({ opacity }: { opacity: number }) {
     <div
       aria-hidden
       className={cn(ROW_CLASS, "pointer-events-none")}
-      data-official-source="index-BELzQL5P.js:a4t"
+      data-official-source="index-D35w9RK9.js:a4t"
       style={{ opacity }}
     >
       <span className={ICON_SLOT}>
@@ -589,7 +589,7 @@ function SkeletonBlock({
   return (
     <div
       className={cn(SKELETON_BLOCK_CLASS, rounded === "sm" ? "rounded-sm" : "rounded-md")}
-      data-official-source="index-BELzQL5P.js:sge"
+      data-official-source="index-D35w9RK9.js:sge"
       style={{ height, width, maxWidth: "100%" }}
     >
       <span className="sr-only">Loading...</span>

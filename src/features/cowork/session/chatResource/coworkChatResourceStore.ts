@@ -1,6 +1,6 @@
 /**
  * Official gle chat-resource reducer for local_session cFt drawer
- * (index-BELzQL5P.pretty.js ~51843–51933).
+ * (c21f11e6d-CxD82rYo.js ~51843–51933).
  * local_session reachable selectedItem types from activity panel (~249120+):
  * file | mcp_server | web_search | browser_extension | skill
  * Cloud-only types (artifact/doc/compass/attachment/ccr) kept as typed actions

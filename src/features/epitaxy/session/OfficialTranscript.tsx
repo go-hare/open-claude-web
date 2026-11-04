@@ -15,8 +15,8 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type MutableRefObject,
   type ReactElement,
@@ -25,8 +25,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import type { SessionSummary } from "../../../adapters/desktopBridge";
 import type { ChatMessage } from "../../../adapters/desktopBridge/types";
 import { Icon } from "../../../shell/icons";
@@ -58,13 +57,37 @@ import {
   OfficialAssistantMessage,
   OfficialButton,
   OfficialMessageActions,
+  officialUserBubbleProseClass,
+  officialUserBubbleTextClass,
   officialUserMessageClass,
   type OfficialTranscriptMode,
 } from "../OfficialEpitaxyComponents";
+import { copyOfficialMessagePlain } from "./officialMessageClipboard";
+import {
+  officialEpitaxyEditorPrefsStore,
+  type EditorSize,
+} from "../diff/officialEpitaxyEditorPrefs";
 import {
   officialTranscriptModeExpandsDetails,
   officialTranscriptModeShowsThinking,
 } from "./officialTranscriptMode";
+import { estimateOfficialTranscriptRowSize } from "./officialTranscriptRowEstimate";
+import {
+  OFFICIAL_WINDOW_ROW_STYLE,
+  OFFICIAL_WINDOW_SCROLLER_CLASS,
+  OFFICIAL_WINDOW_SIZER_CLASS,
+  useOfficialTranscriptFu,
+} from "./officialTranscriptFu";
+import { OfficialOlderStatusChrome } from "./OfficialOlderStatusChrome";
+import { useOfficialCodeSessionHasOlder } from "./officialCodeSessionStore";
+import { useOfficialTranscriptScrollState } from "./officialTranscriptScrollState";
+import {
+  OFFICIAL_PERF_REGION_TRANSCRIPT,
+  officialTranscriptRowPerf,
+} from "./officialTranscriptPerf";
+import { MESSAGE_ACTION_MESSAGES, SESSION_LOAD_MESSAGES, TOOL_GROUP_SUMMARY_MESSAGES, TRANSCRIPT_FEED_MESSAGES, TRANSCRIPT_SURFACE_MESSAGES } from "../officialCodeChromeMessages";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { formatOfficialIcu } from "../../../i18n/formatOfficialIcu";
 import {
   OFFICIAL_DURABLE_UUID_RE,
   OfficialUserBashCommand,
@@ -94,16 +117,66 @@ import {
 } from "./epitaxyTranscriptActionContext";
 import {
   type OfficialBackgroundTask as OfficialBackgroundTaskImported,
-  type OfficialTaskStatus,
 } from "./officialTasksAndPlan";
+import { OfficialArtifactSurfaceCard } from "./OfficialArtifactSurfaceCard";
 import {
+  extractOfficialArtifactSurface,
+  isOfficialArtifactSurfaceInput,
+  isOfficialArtifactTool,
+  officialArtifactFilePath,
+  officialArtifactPublishedVerb,
+} from "./officialArtifactSurface";
+import { OfficialKbNoticeCard } from "./OfficialKbNoticeCards";
+import { isOfficialKbNoticeItem } from "./officialKbNoticeKinds";
+import { OfficialSendUserFileCard } from "./OfficialSendUserFileCard";
+import { isOfficialSendUserFileTool, parseOfficialSendUserFileCard } from "./officialSendUserFile";
+import { OfficialSendUserMessageWords } from "./OfficialSendUserMessageWords";
+import { isOfficialSendUserMessageAsWords } from "./officialSendUserMessage";
+import { OfficialAskUserTranscriptCard } from "./OfficialAskUserTranscriptCard";
+import { officialAskUserTranscriptPairs } from "./officialAskUserQuestionModel";
+import { OfficialWorkflowSurfaceCard } from "./OfficialWorkflowSurfaceCard";
+import { officialWorkflowT1 } from "./officialWorkflowSurface";
+import { OfficialIbeStandaloneCard } from "./OfficialIbeStandaloneCard";
+import { officialIbeStandaloneKind } from "./officialIbeStandalone";
+import { officialEvEmptyBody, officialEvShowsLine } from "./officialEvEmptyBody";
+import {
+  officialToolGroupDefaultExpanded,
+  useOfficialToolGroupExpanded,
+} from "./officialToolGroupExpandedStore";
+import {
+  formatOfficialCompactTokens,
+  formatOfficialHookNoticeMessage,
+  type OfficialHookNotice,
   type OfficialToolGroupTaskEvent,
   type TranscriptEntry,
   type TranscriptEntryItem,
   type TranscriptToolUse,
 } from "./officialTranscriptParse";
+import {
+  officialTaskEventChipDetail,
+  officialTaskEventChipVerb,
+  officialTaskEventRunParts,
+  officialTaskEventRunsByFirstId,
+  type OfficialTaskEventItem,
+} from "./officialTaskEventRun";
+import { officialGetTurnStartedAt } from "./officialStreamSessionStore";
+import {
+  OfficialTurnLiveProvider,
+  officialNmMark,
+  officialQj,
+  useOfficialTurnLive,
+  useOfficialZjFace,
+} from "./officialTurnLiveStore";
+import { OfficialTurnStatusStep } from "./OfficialTurnStatusStep";
+import {
+  OFFICIAL_HANG_BUSY_BODY_MIN_MS,
+  officialHangBusyLine,
+  officialHangFaceKey,
+  useOfficialHangFace,
+} from "./officialHangFace";
 import { SessionError, SessionNotFound, basename } from "./useEpitaxySessionData";
 import { classifyOfficialMemoryOp, isOfficialMemoryTool } from "./officialMemoryPath";
+import { officialRendersBareRow } from "./officialToolRunBareRow";
 import { CodeStatsCard } from "../CodeStatsCard";
 import type { EpitaxyUploadedFile } from "../epitaxyUploadedFiles";
 
@@ -137,10 +210,7 @@ export type OfficialTranscriptHandle = {
   scrollToEntry: (entryId: string) => void;
 };
 
-export type OfficialTranscriptScrollState = {
-  showBottomFade: boolean;
-  showScrollButton: boolean;
-};
+export type { OfficialTranscriptScrollState } from "./officialTranscriptScrollState";
 
 /** Residual Gb scrollToBottom body (no 450ms hard-snap invent). */
 export function scrollElementToBottom(node: HTMLElement, behavior?: OfficialTranscriptScrollBehavior) {
@@ -203,18 +273,12 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
   }
   // Residual li = 0===Ya.length && !oi && !H && "spawning"!==Os
   if (entries.length === 0 && !isResponding) {
-    return (
-      <div className="h-full flex items-center justify-center text-body text-t5">
-        No messages yet.
-      </div>
-    );
+    return <OfficialNoMessagesYet />;
   }
   // Residual c119 Xb mount (third jsx arg is React key):
   //   Gn = `${D ?? "draft"}:${Kn}`  // Kn = transcriptMode
   //   c.jsx(Xb, { sessionId:D, entries:Ya, ... }, Gn)
-  // Warm A→B / mode change REMOUNTS Fu/Xb — not invent keep-mounted. Scroll cleanup may
-  // briefly clear bottom fade (official epitaxy-bottom-scrim transition); do not strip key
-  // to paper over that. Code Gb still does NOT pass restoreKey into Fu.
+  // Warm A→B remounts Fu. Official Code Gb Fu: no restoreKey.
   return (
     <Transcript
       entries={entries}
@@ -234,10 +298,20 @@ export function renderTranscriptBody({ entries, error, initialSessionId, isLoadi
 
 /** Official remote tR empty pending: residual jd Spinner size m + "Connecting to session…" (NOT Ed Spark). */
 function OfficialConnectingToSession() {
+  const text = useI18nText(SESSION_LOAD_MESSAGES);
   return (
     <div className="h-full flex flex-col items-center justify-center gap-g4 text-body text-t5">
       <OfficialSpinner size="m" />
-      <span>Connecting to session…</span>
+      <span data-intl-id="L2r8A2+O5x">{text.connectingToSession}</span>
+    </div>
+  );
+}
+
+function OfficialNoMessagesYet() {
+  const text = useI18nText(SESSION_LOAD_MESSAGES);
+  return (
+    <div className="h-full flex items-center justify-center text-body text-t5">
+      <span data-intl-id="xc7r0SA6rC">{text.noMessagesYet}</span>
     </div>
   );
 }
@@ -254,18 +328,7 @@ function officialIsBlockedPostTurnCategory(category?: string) {
 
 type TranscriptRow =
   | { entry: TranscriptEntry; entryIdx: number; id: string; kind: "assistant" | "user" }
-  | { id: string; kind: "loader" }
-  | { id: string; kind: "running-tasks" };
-
-/** Official Fu (c119 / c3d5) transcript restore: pin + measurements + anchor. */
-type OfficialTranscriptRestore = {
-  anchorKey?: string;
-  anchorOffsetPx: number;
-  isPinned: boolean;
-  measurements: VirtualItem[];
-};
-
-const officialTranscriptScrollRestores = new Map<string, OfficialTranscriptRestore>();
+  | { id: string; kind: "loader" };
 
 type TranscriptProps = {
   entries: TranscriptEntry[];
@@ -281,35 +344,115 @@ type TranscriptProps = {
 
 const emptyCodeUserChaptersByAfterId = new Map<string, OfficialCodeUserChapter[]>();
 
+/** Official shared-2 `AU` / `WI`: s→sm, m→undefined (base), l→lg. */
+function officialCdsTextSize(size: EditorSize): "sm" | "lg" | undefined {
+  if (size === "s") return "sm";
+  if (size === "l") return "lg";
+  return undefined;
+}
+
+/** Official shared-2 `OW=100`, collapseThreshold default 300. */
+const OFFICIAL_USER_COLLAPSE_THRESHOLD = 300;
+const OFFICIAL_USER_OVERFLOW_PAD = 100;
+
+/** Official c119 Gb scroller — fade is parent Ka `epitaxy-*-scrim`, not Fu. */
+
+function OfficialUserMessageCollapsibleBody({
+  children,
+  expandPrompts = false,
+}: {
+  children: ReactNode;
+  /** Official c4a9 `collapsible:f!==!0` — verbose `Tm()` / `expandPrompts`. */
+  expandPrompts?: boolean;
+}) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const measure = () => {
+      setOverflows(el.scrollHeight > OFFICIAL_USER_COLLAPSE_THRESHOLD);
+    };
+    measure();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    observer?.observe(el);
+    return () => observer?.disconnect();
+  }, [children]);
+  const collapsed = !expandPrompts && overflows && !expanded;
+  const maxHeight = Math.max(OFFICIAL_USER_COLLAPSE_THRESHOLD - OFFICIAL_USER_OVERFLOW_PAD, 60);
+  return (
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <div
+        className={collapsed ? "overflow-hidden [mask-image:linear-gradient(to_bottom,black_calc(100%_-_3rem),transparent)]" : undefined}
+        data-find-omitted={collapsed ? "" : undefined}
+        style={collapsed ? { maxHeight } : undefined}
+      >
+        <div className="cds-user-message-body flex flex-col gap-g4" ref={bodyRef}>
+          {children}
+        </div>
+      </div>
+      {!expandPrompts && overflows ? (
+        <button
+          aria-expanded={expanded}
+          className="self-start text-footnote text-muted"
+          data-official-source="cd5a31703-B4nKQMBN.js:Rs aWpBzjCXKS"
+          onClick={() => setExpanded((value) => !value)}
+          type="button"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
+
 /**
- * Official Gb/R transcript (c11959232):
- *   Fu({ items, getKey, estimateSize, overscan, paddingStart:48, paddingEnd:48 })
- *   DOM: scrollRef > sizerRef(height) > absolute translateY(virtualItems[0].start) > measureElement rows
- *   scrollToBottom: setPinned(true); scrollTo({ top: scrollHeight })
+ * Official Gb/R transcript (cd5a31703 Gat):
+ *   wse/cr window + Lse/T pin. DOM: scroller > sizer[data-rocksteady-sizer] >
+ *   rows > spacerTop + flow-root rows (data-rs-index) + spacerBottom.
+ *   scrollToBottom: Lse.scrollToBottom (writes settledBottom, browser clamps).
  */
 // Residual Xb = memo(Gb) — skip re-render when only parent noise changes.
 const Transcript = memo(forwardRef<OfficialTranscriptHandle, TranscriptProps>(function Transcript({ entries, isAwaitingReply, isResponding, onScrollState, scrollRef, sessionId, spawnLabel, tasks, transcriptMode }, ref) {
   const rowsRef = useRef<TranscriptRow[]>([]);
   const initialCount = useRef(entries.length);
+  const chatTextSize = useSyncExternalStore(
+    officialEpitaxyEditorPrefsStore.subscribe,
+    () => officialEpitaxyEditorPrefsStore.getState().chatTextSize,
+    () => "m" as EditorSize,
+  );
+  const cdsTextSize = officialCdsTextSize(chatTextSize);
+  const feedText = useI18nText(TRANSCRIPT_FEED_MESSAGES);
+  const expandPrompts = officialTranscriptModeExpandsDetails(transcriptMode);
   // Residual Vb: Um(sessionId) store — not local useState + invent clear on sessionId.
   const userChapters = useOfficialSessionUserChapters(sessionId);
   const rows = useMemo(() => buildTranscriptRows(entries), [entries]);
   const userChaptersByAfterId = useMemo(() => groupCodeUserChaptersByAfterId(userChapters), [userChapters]);
   const lastEntryIdx = entries.length - 1;
 
-  // Official c119 Gb: Fu({ items, getKey, estimateSize:Wb, overscan:6, paddingStart:48, paddingEnd:48, useFlushSync:!1 })
-  // — no restoreKey on Code path. Parent Xb remounts via residual key Gn=`${sessionId}:${mode}`.
-  const officialVirtualizer = useOfficialTranscriptVirtualizer({
-    estimateSize: estimateTranscriptRowSize,
-    getKey: (row) => row.id,
+  // Official cd5a Gat: wse({items, getKey:t9, estimate, overscan Q7=600,
+  // paddingTop/Bottom 48, skipNoopRenders, retainOverscan, no restoreKey).
+  // Estimate is pin `$it` (not coarse Wb 400) so a live tool row is ~Y5.
+  const estimateSize = useCallback((row: TranscriptRow) => estimateOfficialTranscriptRowSize(row, {
+    chatTextSize,
+    showThinking: officialTranscriptModeShowsThinking(transcriptMode),
+    verboseToolBodies: expandPrompts,
+  }), [chatTextSize, expandPrompts, transcriptMode]);
+  const getRowKey = useCallback((row: TranscriptRow) => row.id, []);
+  const hasOlder = useOfficialCodeSessionHasOlder(sessionId);
+  const officialFu = useOfficialTranscriptFu({
+    estimate: estimateSize,
+    getKey: getRowKey,
+    hasOlder,
     items: rows,
-    overscan: 6,
-    paddingEnd: 48,
-    paddingStart: 48,
-    useFlushSync: false,
+    sessionId,
   });
-  const virtualItems = officialVirtualizer.virtualItems;
-  const translateY = virtualItems[0]?.start ?? 0;
+  const windowRows = officialFu.rows;
+  const sizerRef = useRef<HTMLDivElement | null>(null);
+  const endSentinelRef = useRef<HTMLDivElement | null>(null);
+  const getContentEnd = useCallback(() => endSentinelRef.current, []);
 
   useLayoutEffect(() => {
     rowsRef.current = rows;
@@ -319,68 +462,35 @@ const Transcript = memo(forwardRef<OfficialTranscriptHandle, TranscriptProps>(fu
   // Residual chapters: Um re-subscribe by sessionId; no invent setUserChapters([]) on swap.
 
   useLayoutEffect(() => {
-    scrollRef.current = officialVirtualizer.scrollRef.current;
+    scrollRef.current = officialFu.scrollElRef.current;
     return () => {
       scrollRef.current = null;
     };
-  }, [officialVirtualizer.scrollRef, scrollRef]);
+  }, [officialFu.scrollElRef, scrollRef, windowRows]);
 
-  // Official R (c119 Gb): scroll listener only drives showScrollButton / showBottomFade.
-  // Pin state lives entirely in Fu — never toggle pin from distance-from-bottom here.
-  const onScrollStateRef = useRef(onScrollState);
-  useLayoutEffect(() => {
-    onScrollStateRef.current = onScrollState;
-  }, [onScrollState]);
-
-  useLayoutEffect(() => {
-    const node = officialVirtualizer.scrollRef.current;
-    const sizer = officialVirtualizer.sizerRef.current;
-    if (!node) return undefined;
-    const updateScrollState = () => {
-      if (node.offsetParent === null) return;
-      const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-      onScrollStateRef.current({ showScrollButton: distanceFromBottom > 200, showBottomFade: distanceFromBottom > 8 });
-    };
-    node.addEventListener("scroll", updateScrollState, { passive: true });
-    const observer = new ResizeObserver(updateScrollState);
-    if (sizer) observer.observe(sizer);
-    observer.observe(node);
-    updateScrollState();
-    return () => {
-      node.removeEventListener("scroll", updateScrollState);
-      observer.disconnect();
-      onScrollStateRef.current({ showScrollButton: false, showBottomFade: false });
-    };
-  }, [officialVirtualizer.scrollRef, officialVirtualizer.sizerRef]);
+  // Official D9 `Ene` / shared-4 `gw`: IO on transcript-end-sentinel, not scrollHeight math.
+  useOfficialTranscriptScrollState({
+    getContentEnd,
+    getScrollElement: officialFu.getScrollElement,
+    isPinned: officialFu.isPinned,
+    onChange: onScrollState,
+    subscribePin: officialFu.subscribePin,
+  });
 
   useImperativeHandle(ref, () => ({
     scrollToBottom: (behavior) => {
-      // Official R: setPinned(true); scrollTo({ top: scrollHeight, behavior ?? "instant" })
-      officialVirtualizer.setPinned(true);
-      const node = officialVirtualizer.scrollRef.current;
-      if (!node) return;
-      node.scrollTo({
-        top: Math.max(0, node.scrollHeight - node.clientHeight),
-        behavior: (behavior ?? "instant") as ScrollBehavior,
-      });
+      officialFu.scrollToBottom(behavior === "smooth" ? "smooth" : "instant");
     },
     scrollToEntry: (entryId) => {
       const index = rowsRef.current.findIndex((row) => (row.kind === "user" || row.kind === "assistant") && row.entry.id === entryId);
-      if (index >= 0) officialVirtualizer.scrollToIndex(index, "start");
+      if (index >= 0) officialFu.scrollToIndex(index, { align: "start" });
     },
-  }), [officialVirtualizer]);
+  }), [officialFu]);
 
-  // Official R: pointer/keyboard on the list unpins (user intent). Wheel/touch unpin is Fu scroll-direction.
-  const unpinTranscript = useCallback(() => {
-    officialVirtualizer.setPinned(false);
-  }, [officialVirtualizer]);
-  const unpinTranscriptFromKeyboard = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    const target = event.target;
-    if (target instanceof HTMLElement && !target.matches('input,textarea,[contenteditable="true"]')) {
-      officialVirtualizer.setPinned(false);
-    }
-  }, [officialVirtualizer]);
+  const attachSizer = useCallback((node: HTMLDivElement | null) => {
+    sizerRef.current = node;
+    officialFu.attachSizer(node);
+  }, [officialFu.attachSizer]);
   // Residual Vb pinUserChapter / unpinUserChapter → Um.addUserChapter / removeUserChapter(chapterId).
   const pinUserChapter = useCallback((afterId: string, text: string) => {
     if (!sessionId) return;
@@ -395,24 +505,82 @@ const Transcript = memo(forwardRef<OfficialTranscriptHandle, TranscriptProps>(fu
     officialEpitaxyChaptersStore.getState().removeUserChapter(sessionId, chapterId);
   }, [sessionId]);
 
-  // Official DOM structure (c119 Gb return) — NOT bare virtua <Virtualizer>.
-  // Empty/loading is branch-returned above Fu (renderTranscriptBody); this path only paints rows.
-  // Residual scroll root: h-full overflow-y-auto overflow-x-hidden [contain:strict] — no invent relative.
+  // Official Gat DOM: scroller (HD) > sizer[data-rocksteady-sizer] > rows
+  // spacerTop + flow-root data-rs-index rows + spacerBottom. No translateY window.
   return (
-    <div ref={officialVirtualizer.scrollRef} data-testid="epitaxy-virtual-transcript" className="h-full overflow-y-auto overflow-x-hidden [contain:strict]">
+    <OfficialTurnLiveProvider entries={entries} isResponding={isResponding} sessionId={sessionId}>
+    <div
+      {...OFFICIAL_PERF_REGION_TRANSCRIPT}
+      aria-busy={isResponding}
+      aria-label={feedText.chatMessages}
+      className={OFFICIAL_WINDOW_SCROLLER_CLASS}
+      data-autoscroll-container=""
+      data-intl-id="SCYmnElliz"
+      data-testid="epitaxy-virtual-transcript"
+      ref={officialFu.attachScroller}
+      role="feed"
+    >
       <div
-        ref={officialVirtualizer.sizerRef}
-        className="relative epitaxy-chat-column"
-        style={{ height: officialVirtualizer.sizerHeight }}
+        className={OFFICIAL_WINDOW_SIZER_CLASS}
+        data-rocksteady-sizer=""
+        data-testid="transcript-sizer"
+        ref={attachSizer}
       >
-        <div onPointerDownCapture={unpinTranscript} onKeyDownCapture={unpinTranscriptFromKeyboard} className="absolute top-0 left-0 w-full" style={{ transform: `translateY(${translateY}px)` }}>
-          {virtualItems.map((virtualRow) => {
+        <div
+          aria-hidden="true"
+          className="absolute bottom-0 left-0 h-px w-full pointer-events-none"
+          data-testid="transcript-end-sentinel"
+          ref={endSentinelRef}
+        />
+        {officialFu.olderStatus ? (
+          <OfficialOlderStatusChrome
+            onRetry={() => {
+              void officialFu.loadOlder("retry");
+            }}
+            status={officialFu.olderStatus}
+            topPx={officialFu.bottomAnchorGapPx}
+          />
+        ) : null}
+        <div
+          data-testid="transcript-rows"
+          onBlur={officialFu.keepMountedBlur}
+          onFocus={officialFu.keepMountedFocus}
+          onKeyDownCapture={officialFu.holdProps.onKeyDownCapture}
+          onPointerDownCapture={officialFu.holdProps.onPointerDownCapture}
+          ref={officialFu.attachRows}
+        >
+          <div aria-hidden data-testid="transcript-spacer" style={{ height: officialFu.spacerTop }} />
+          {windowRows.flatMap((virtualRow, mountedIndex) => {
             const row = rows[virtualRow.index];
-            if (!row) return null;
-            return (
-              <div data-index={virtualRow.index} key={virtualRow.key} ref={officialVirtualizer.measureElement}>
-                <div className={virtualRow.index < rows.length - 1 ? "epitaxy-chat-size pb-[var(--chat-turn-gap)] empty:pb-0" : "epitaxy-chat-size"}>
+            if (!row) return [];
+            const previous = mountedIndex > 0 ? windowRows[mountedIndex - 1] : undefined;
+            const gap = previous !== undefined && virtualRow.index !== previous.index + 1
+              ? Math.max(0, virtualRow.start - (previous.start + previous.size))
+              : 0;
+            const node = (
+              <div
+                data-index={virtualRow.index}
+                data-rs-index={virtualRow.index}
+                data-testid="transcript-row"
+                {...officialTranscriptRowPerf(
+                  row.kind,
+                  rows.length - 1 - virtualRow.index,
+                  isResponding
+                    && row.kind !== "loader"
+                    && "entryIdx" in row
+                    && row.entryIdx === lastEntryIdx,
+                )}
+                {...(row.kind === "loader" ? { "data-transcript-keeps-pin": "" } : {})}
+                key={virtualRow.key}
+                ref={officialFu.rowRef}
+                style={OFFICIAL_WINDOW_ROW_STYLE}
+              >
+                <div
+                  className={virtualRow.index < rows.length - 1 ? "epitaxy-chat-size pb-[var(--chat-turn-gap)] empty:pb-0" : "epitaxy-chat-size"}
+                >
                   <TranscriptRowContent
+                    cdsTextSize={cdsTextSize}
+                    expandPrompts={expandPrompts}
                     initialCount={initialCount.current}
                     isAwaitingReply={isAwaitingReply}
                     isResponding={isResponding}
@@ -429,10 +597,18 @@ const Transcript = memo(forwardRef<OfficialTranscriptHandle, TranscriptProps>(fu
                 </div>
               </div>
             );
+            return gap > 0
+              ? [
+                <div aria-hidden data-testid="transcript-spacer" key={`${String(virtualRow.key)}:gap`} style={{ height: gap }} />,
+                node,
+              ]
+              : [node];
           })}
+          <div aria-hidden data-testid="transcript-spacer" style={{ height: officialFu.spacerBottom }} />
         </div>
       </div>
     </div>
+    </OfficialTurnLiveProvider>
   );
 }));
 
@@ -453,457 +629,7 @@ function officialChapterTitleFromText(text: string) {
   return firstLine.length > 40 ? `${title}…` : title || "Chapter";
 }
 
-/**
- * Residual c119 Wb (c11959232):
- *   assistant 400 | init/pool 200 | user 80 | chapter/running-tasks/loader 48
- * Product rows: assistant/user/running-tasks/loader only (no invent mermaid estimate).
- */
-function estimateTranscriptRowSize(row: TranscriptRow) {
-  switch (row.kind) {
-    case "assistant":
-      return 400;
-    case "user":
-      return 80;
-    case "running-tasks":
-    case "loader":
-      return 48;
-  }
-}
 
-/**
- * Package-only adapter (not UI invent): residual ion-dist c43 `qs._measureElement` verbatim:
- *   n=indexFromElement(e); r=measurementsCache[n]; if(!r)return;
- *   o=r.key; i=elementsCache.get(o); i!==e → unobserve/observe/set;
- *   e.isConnected && resizeItem(n, options.measureElement(e,t,this))
- * No isScrolling gate. Product `@tanstack/virtual-core@3.17` `measureElement` gates:
- *   if ((!this.isScrolling || this.scrollState) && this.shouldMeasureDuringScroll(index))
- * so ref/RO measure is dropped for ~isScrollingResetDelay(150ms) after pin sets
- * scrollTop — totalSize stays on estimateSize and pin sticks to a short sizer.
- *
- * Do NOT mutate `isScrolling` around package measureElement: that notifies React
- * with a false mid-scroll flag, re-runs pin layout, re-sets scrollTop, and the
- * 150ms timer re-enters isScrolling — estimate↔measure thrash (stream jitter).
- * Port residual `_measureElement` body so resizeItem always runs when connected.
- */
-type ResidualVirtualizerMeasureApi = {
-  elementsCache: Map<string | number, Element>;
-  indexFromElement: (node: Element) => number;
-  measurementsCache: Array<{ key: string | number } | undefined>;
-  observer: {
-    observe: (node: Element) => void;
-    unobserve: (node: Element) => void;
-  };
-  options: {
-    measureElement: (node: Element, entry: ResizeObserverEntry | undefined, instance: unknown) => number;
-  };
-  resizeItem: (index: number, size: number) => void;
-};
-
-function measureVirtualRowLikeResidual(
-  virtualizer: ReturnType<typeof useVirtualizer<HTMLDivElement, Element>>,
-  node: Element,
-) {
-  // Residual c43: this._measureElement=(e,t)=>{const n=…,r=this.measurementsCache[n];if(!r)return;…}
-  const instance = virtualizer as unknown as ResidualVirtualizerMeasureApi;
-  const index = instance.indexFromElement(node);
-  const measured = instance.measurementsCache[index];
-  if (!measured) return;
-  const key = measured.key;
-  const prevNode = instance.elementsCache.get(key);
-  if (prevNode !== node) {
-    if (prevNode) instance.observer.unobserve(prevNode);
-    instance.observer.observe(node);
-    instance.elementsCache.set(key, node);
-  }
-  if (node.isConnected) {
-    instance.resizeItem(index, instance.options.measureElement(node, undefined, instance));
-  }
-}
-
-/**
- * Official Fu virtualizer (c3d5 `ve`, used as Fu from c119 Gb/R):
- * - pin is set only by scroll-direction in Fu, setPinned/scrollToIndex, or restore
- * - while pinned + not mid-user-scroll, stick scrollTop = totalSize
- * - measureElement ResizeObserver re-pins when nested content reflows (markdown/fonts/tools)
- * - mid-scroll size delta uses sizer translateY compensation (residual I/z), flushed when scroll ends
- * - unmount saves isPinned + anchorKey + anchorOffsetPx + measurements for restoreKey
- */
-function useOfficialTranscriptVirtualizer<TItem>({
-  estimateSize,
-  getKey,
-  items,
-  overscan = 6,
-  paddingEnd = 48,
-  paddingStart = 48,
-  restoreKey,
-  /** Residual c119 Gb: Fu({ ..., useFlushSync:!1 }). Cold-start only. */
-  useFlushSync = false,
-}: {
-  estimateSize: (item: TItem, index: number) => number;
-  getKey: (item: TItem) => string;
-  items: TItem[];
-  overscan?: number;
-  paddingEnd?: number;
-  paddingStart?: number;
-  restoreKey?: string;
-  useFlushSync?: boolean;
-}) {
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const sizerRef = useRef<HTMLDivElement | null>(null);
-  const itemCount = items.length;
-  const restoreRef = useRef<OfficialTranscriptRestore | undefined | null>(null);
-  if (restoreRef.current === null) {
-    restoreRef.current = restoreKey !== undefined ? officialTranscriptScrollRestores.get(restoreKey) : undefined;
-  }
-  const pinnedRef = useRef(restoreRef.current?.isPinned ?? true);
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
-  const getKeyRef = useRef(getKey);
-  getKeyRef.current = getKey;
-  const estimateSizeRef = useRef(estimateSize);
-  estimateSizeRef.current = estimateSize;
-
-  // Residual ve refs (c3d5): w/E/R/T/C/M/z — names below keep product clarity.
-  const lastObservedScrollTopRef = useRef(0); // w
-  const lastObservedTotalSizeRef = useRef(0); // E
-  const lastProgrammaticScrollTopRef = useRef(-1); // R
-  const restoreTargetIndexRef = useRef<number | null>(null); // T
-  const pendingMissingAnchorKeyRef = useRef<string | null>(null); // C
-  const didInitRestoreRef = useRef(false); // O
-  const lastItemCountForMissingRef = useRef(0); // _
-  const midScrollShiftPxRef = useRef(0); // z
-  const skipNextPrependAdjustRef = useRef(false); // M
-  const firstItemKeyRef = useRef<string | null>(null); // F
-  const lastTotalSizeForPrependRef = useRef(0); // L
-  const paddingStartRef = useRef(paddingStart ?? 0); // $
-  const prependAdjustedThisPassRef = useRef(false); // A
-
-  // Residual ve x: pinned → sum(estimate)+padding; else 0 (restore anchor path sets later).
-  // Code Gb does not pass restoreKey; warm full→full keeps this Fu instance — residual does
-  // NOT invent sessionId measure()/setPinned on swap; pin layout + RO re-pin own bottom stick.
-  const initialOffsetRef = useRef<number | undefined>(undefined);
-  if (initialOffsetRef.current === undefined) {
-    if (pinnedRef.current) {
-      initialOffsetRef.current = (paddingStart ?? 0)
-        + items.reduce((total, item, index) => total + estimateSize(item, index), 0)
-        + (paddingEnd ?? 0);
-    } else {
-      initialOffsetRef.current = 0;
-    }
-  }
-
-  const virtualizer = useVirtualizer({
-    count: itemCount,
-    estimateSize: (index) => estimateSizeRef.current(itemsRef.current[index], index),
-    getItemKey: (index) => getKeyRef.current(itemsRef.current[index]),
-    getScrollElement: () => scrollRef.current,
-    initialMeasurementsCache: restoreRef.current?.measurements,
-    initialOffset: initialOffsetRef.current,
-    overscan,
-    paddingEnd,
-    paddingStart,
-    useFlushSync,
-  });
-  // Residual: S.shouldAdjustScrollPositionOnItemSizeChange = (e,t,n) => !p.current && e.end <= (n.scrollOffset??0)
-  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => (
-    !pinnedRef.current && item.end <= (instance.scrollOffset ?? 0)
-  );
-
-  const virtualizerRef = useRef(virtualizer);
-  virtualizerRef.current = virtualizer;
-  const totalSize = virtualizer.getTotalSize(); // k
-  const viewportHeight = virtualizer.scrollRect?.height ?? 0; // H
-  const isScrolling = virtualizer.isScrolling; // N
-  // Residual: sizerHeight: Math.max(k, H) — no invent floor.
-  const sizerHeight = Math.max(totalSize, viewportHeight);
-
-  // Residual I: mid-scroll size compensation via sizer translateY.
-  const applyScrollDelta = useCallback((delta: number, node: HTMLElement) => {
-    const vz = virtualizerRef.current;
-    if (vz.isScrolling) {
-      midScrollShiftPxRef.current += delta;
-      const sizer = sizerRef.current;
-      if (sizer) sizer.style.transform = `translateY(${-midScrollShiftPxRef.current}px)`;
-    } else {
-      node.scrollTop += delta;
-      lastObservedScrollTopRef.current = node.scrollTop;
-    }
-  }, []);
-
-  // Residual t(e) inside pin layout: resolve anchor key → T index, unpin, skip prepend once.
-  const tryRestoreAnchorKey = useCallback((anchorKey: string) => {
-    const index = itemsRef.current.findIndex((item) => getKeyRef.current(item) === anchorKey);
-    if (index < 0) return false;
-    restoreTargetIndexRef.current = index;
-    pendingMissingAnchorKeyRef.current = null;
-    pinnedRef.current = false;
-    skipNextPrependAdjustRef.current = true;
-    return true;
-  }, []);
-
-  // Residual P: scroll direction vs content shrink decides pin.
-  const onScrollPin = useCallback((node: HTMLElement) => {
-    const vz = virtualizerRef.current;
-    const nextTotal = vz.getTotalSize();
-    const scrollTop = node.scrollTop + midScrollShiftPxRef.current;
-    const deltaUp = lastObservedScrollTopRef.current - scrollTop;
-    const shrinkAllowance = Math.max(0, lastObservedTotalSizeRef.current - nextTotal);
-    lastObservedScrollTopRef.current = scrollTop;
-    lastObservedTotalSizeRef.current = nextTotal;
-    if (Math.abs(deltaUp) > shrinkAllowance + 8) {
-      restoreTargetIndexRef.current = null;
-      pendingMissingAnchorKeyRef.current = null;
-    }
-    const scrollingUp = deltaUp > shrinkAllowance + 1;
-    // Residual P: distanceFromBottom < 8 && !scrollingUp → pin; scrollingUp → unpin.
-    // Code Gb Fu call has no onNearTop — residual y.current is undefined there too.
-    if (nextTotal - scrollTop - node.clientHeight < 8 && !scrollingUp) pinnedRef.current = true;
-    else if (scrollingUp) pinnedRef.current = false;
-  }, []);
-
-  // Residual pin layout (c3d5 ve useLayoutEffect [h,k,N,P,S]):
-  // restore anchor once; while pinned: if(N && scrollTop !== R) return; else sizer + scrollTop=total.
-  useLayoutEffect(() => {
-    skipNextPrependAdjustRef.current = false;
-    if (itemCount === 0) return;
-    const vz = virtualizerRef.current;
-    const node = scrollRef.current;
-    const liveTotal = vz.getTotalSize();
-
-    if (!didInitRestoreRef.current) {
-      didInitRestoreRef.current = true;
-      const anchorKey = restoreRef.current?.anchorKey;
-      if (!pinnedRef.current) {
-        if (anchorKey === undefined || tryRestoreAnchorKey(anchorKey)) {
-          if (anchorKey === undefined) pinnedRef.current = true;
-        } else {
-          pendingMissingAnchorKeyRef.current = anchorKey;
-          lastItemCountForMissingRef.current = itemCount;
-          pinnedRef.current = true;
-        }
-      }
-    } else if (
-      pendingMissingAnchorKeyRef.current
-      && itemCount > lastItemCountForMissingRef.current
-    ) {
-      lastItemCountForMissingRef.current = itemCount;
-      tryRestoreAnchorKey(pendingMissingAnchorKeyRef.current);
-    }
-
-    if (restoreTargetIndexRef.current !== null && node) {
-      // Residual: if(N && e.scrollTop !== R.current) return
-      if (isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
-      const targetItem = vz.measurementsCache[restoreTargetIndexRef.current];
-      if (targetItem) {
-        const offset = restoreRef.current?.anchorOffsetPx ?? 0;
-        const targetTop = targetItem.start + offset;
-        const currentOffset = vz.scrollOffset;
-        if (currentOffset !== null && Math.abs(currentOffset - targetTop) < 1) {
-          restoreTargetIndexRef.current = null;
-          return;
-        }
-        const sizer = sizerRef.current;
-        if (sizer) {
-          const height = vz.scrollRect?.height ?? 0;
-          sizer.style.height = `${Math.max(liveTotal, height)}px`;
-        }
-        node.scrollTop = targetTop;
-        lastProgrammaticScrollTopRef.current = node.scrollTop;
-        lastObservedScrollTopRef.current = node.scrollTop;
-        lastObservedTotalSizeRef.current = liveTotal;
-      }
-      return;
-    }
-
-    if (!pinnedRef.current || !node) return;
-    // Residual: if(N && e.scrollTop !== R.current) return — skip only user-driven mid-scroll.
-    // Programmatic pin (stream growth) keeps N true while scrollTop === R; still stick.
-    if (isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
-    const sizer = sizerRef.current;
-    const viewport = vz.scrollRect?.height ?? node.clientHeight;
-    if (sizer) sizer.style.height = `${Math.max(liveTotal, viewport)}px`;
-    // Max scrollTop is scrollHeight-clientHeight. Residual assigns e.scrollTop=n (totalSize);
-    // browsers clamp. Use the clamp explicitly so R matches the settled offset and the
-    // last row (streaming markdown) stays in view instead of sitting under the composer.
-    node.scrollTop = Math.max(0, liveTotal - viewport);
-    lastProgrammaticScrollTopRef.current = node.scrollTop;
-    lastObservedScrollTopRef.current = node.scrollTop;
-    lastObservedTotalSizeRef.current = liveTotal;
-    // Residual pin layout deps (c3d5 ve): [h,k,N,P,S]. Product cannot put the
-    // virtualizer object S in deps (new object each render → Maximum update depth).
-    // viewportHeight is S.scrollRect.height (H) — composer shelf shrinks the
-    // scrollport; without H the sizer stays at the old max(k,H) and a classic
-    // Windows scrollbar steals 10px (epitaxy-chat-size margin-inline:auto jump).
-  }, [isScrolling, itemCount, totalSize, tryRestoreAnchorKey, viewportHeight]);
-
-  // Residual prepend layout: head key change → I(delta) when unpinned.
-  useLayoutEffect(() => {
-    const firstKey = itemCount > 0 ? getKeyRef.current(itemsRef.current[0]) : null;
-    const previousFirstKey = firstItemKeyRef.current;
-    firstItemKeyRef.current = firstKey;
-    const totalDelta = totalSize - lastTotalSizeForPrependRef.current;
-    lastTotalSizeForPrependRef.current = totalSize;
-    prependAdjustedThisPassRef.current = false;
-    if (previousFirstKey === null || firstKey === previousFirstKey) return;
-    if (pinnedRef.current) return;
-    // Residual M: skip once after anchor restore (cleared at next pin layout start).
-    if (skipNextPrependAdjustRef.current) return;
-    if (restoreTargetIndexRef.current !== null) {
-      const previousIndex = itemsRef.current.findIndex((item) => getKeyRef.current(item) === previousFirstKey);
-      if (previousIndex > 0) restoreTargetIndexRef.current += previousIndex;
-    }
-    const node = scrollRef.current;
-    if (node && totalDelta !== 0) {
-      prependAdjustedThisPassRef.current = true;
-      applyScrollDelta(totalDelta, node);
-      lastObservedTotalSizeRef.current = totalSize;
-    }
-  }, [applyScrollDelta, itemCount, totalSize]);
-
-  // Residual paddingStart layout.
-  useLayoutEffect(() => {
-    const previous = paddingStartRef.current;
-    const next = paddingStart ?? 0;
-    paddingStartRef.current = next;
-    if (next === previous) return;
-    if (pinnedRef.current) return;
-    if (restoreTargetIndexRef.current !== null) return;
-    if (prependAdjustedThisPassRef.current) return;
-    const node = scrollRef.current;
-    if (node) applyScrollDelta(next - previous, node);
-  }, [applyScrollDelta, paddingStart]);
-
-  // Residual: flush mid-scroll translateY when isScrolling ends.
-  useLayoutEffect(() => {
-    if (isScrolling) return;
-    const shift = midScrollShiftPxRef.current;
-    if (shift === 0) return;
-    const node = scrollRef.current;
-    const sizer = sizerRef.current;
-    if (!node || !sizer) return;
-    midScrollShiftPxRef.current = 0;
-    sizer.style.transform = "";
-    node.scrollTop += shift;
-    lastObservedScrollTopRef.current = node.scrollTop;
-  }, [isScrolling]);
-
-  // Residual scroll listener → P.
-  useEffect(() => {
-    const node = scrollRef.current;
-    if (!node) return undefined;
-    const onScroll = () => onScrollPin(node);
-    node.addEventListener("scroll", onScroll, { passive: true });
-    return () => node.removeEventListener("scroll", onScroll);
-  }, [onScrollPin]);
-
-  // Residual unmount save (restoreKey path; Code Gb does not pass restoreKey).
-  const restoreKeyRef = useRef(restoreKey);
-  restoreKeyRef.current = restoreKey;
-  useEffect(() => () => {
-    const key = restoreKeyRef.current;
-    if (key === undefined) return;
-    if (pendingMissingAnchorKeyRef.current && restoreRef.current) {
-      officialTranscriptScrollRestores.set(key, restoreRef.current);
-      return;
-    }
-    const vz = virtualizerRef.current;
-    const shift = midScrollShiftPxRef.current;
-    const scrollOffset = (vz.scrollOffset ?? 0) + shift;
-    const measurements = vz.measurementsCache;
-    const anchor = measurements.find((item) => item.end > scrollOffset);
-    officialTranscriptScrollRestores.set(key, {
-      isPinned: pinnedRef.current,
-      anchorKey: anchor ? String(anchor.key) : undefined,
-      anchorOffsetPx: anchor ? scrollOffset - anchor.start : 0,
-      measurements: measurements.slice(),
-    });
-  }, []);
-
-  // Residual Q RO (c3d5): for each entry S.measureElement; if pinned && size changed → sizer + scrollTop.
-  // Residual gate: if(S.isScrolling && t.scrollTop !== R.current) return; if(r === E.current) return.
-  // Package-only bridge: residual c43 qs._measureElement has no isScrolling gate; product
-  // @tanstack/virtual-core@3.14 does — measureVirtualRowLikeResidual mirrors residual qs.
-  const resizeObserveBag = useMemo(() => {
-    if (typeof ResizeObserver === "undefined") return null;
-    const observed = new Set<Element>();
-    const ro = new ResizeObserver((entries) => {
-      const vz = virtualizerRef.current;
-      for (const entry of entries) measureVirtualRowLikeResidual(vz, entry.target as Element);
-      if (!pinnedRef.current) return;
-      const node = scrollRef.current;
-      const sizer = sizerRef.current;
-      if (!node || !sizer) return;
-      // Residual RO: if(S.isScrolling && t.scrollTop !== R.current) return
-      if (vz.isScrolling && node.scrollTop !== lastProgrammaticScrollTopRef.current) return;
-      const nextTotal = vz.getTotalSize();
-      // Residual RO: if(r === E.current) return
-      if (nextTotal === lastObservedTotalSizeRef.current) return;
-      const height = vz.scrollRect?.height ?? node.clientHeight;
-      sizer.style.height = `${Math.max(nextTotal, height)}px`;
-      node.scrollTop = Math.max(0, nextTotal - height);
-      lastProgrammaticScrollTopRef.current = node.scrollTop;
-      lastObservedScrollTopRef.current = node.scrollTop;
-      lastObservedTotalSizeRef.current = nextTotal;
-    });
-    return { observed, ro };
-    // RO callback reads virtualizerRef — do not depend on unstable virtualizer object.
-  }, []);
-
-  useEffect(() => {
-    if (!resizeObserveBag) return undefined;
-    for (const node of resizeObserveBag.observed) {
-      resizeObserveBag.ro.observe(node, { box: "border-box" });
-    }
-    return () => resizeObserveBag.ro.disconnect();
-  }, [resizeObserveBag]);
-
-  // Residual B: S.measureElement(e) + observe; no re-pin here (RO owns re-pin).
-  const measureElement = useCallback((node: HTMLElement | null) => {
-    const vz = virtualizerRef.current;
-    if (node) measureVirtualRowLikeResidual(vz, node);
-    else vz.measureElement(node);
-    if (!resizeObserveBag) return;
-    if (node) {
-      if (!resizeObserveBag.observed.has(node)) {
-        resizeObserveBag.observed.add(node);
-        resizeObserveBag.ro.observe(node, { box: "border-box" });
-      }
-      return;
-    }
-    for (const observed of resizeObserveBag.observed) {
-      if (!observed.isConnected) {
-        resizeObserveBag.ro.unobserve(observed);
-        resizeObserveBag.observed.delete(observed);
-      }
-    }
-  }, [resizeObserveBag]);
-
-  // Residual W: unpin + clear T + scrollToIndex.
-  const scrollToIndex = useCallback((index: number, align: "start" | "center" | "end" | "auto" = "start") => {
-    pinnedRef.current = false;
-    restoreTargetIndexRef.current = null;
-    virtualizerRef.current.scrollToIndex(index, { align });
-  }, []);
-
-  // Residual V: setPinned only flips flag.
-  const setPinned = useCallback((value: boolean) => {
-    pinnedRef.current = value;
-    if (!value) restoreTargetIndexRef.current = null;
-  }, []);
-
-  const isPinned = useCallback(() => pinnedRef.current, []);
-
-  return {
-    isPinned,
-    measureElement,
-    scrollRef,
-    scrollToIndex,
-    setPinned,
-    sizerHeight,
-    sizerRef,
-    virtualItems: virtualizer.getVirtualItems(),
-  };
-}
 
 function buildTranscriptRows(entries: TranscriptEntry[]): TranscriptRow[] {
   const usedIds = new Set<string>();
@@ -922,12 +648,14 @@ function buildTranscriptRows(entries: TranscriptEntry[]): TranscriptRow[] {
     id: rowId(entry.id, entryIdx),
     kind: entry.author,
   }));
-  rows.push({ id: "running-tasks", kind: "running-tasks" });
+  // cd5a: only kind:"loader" trailing — running-tasks morph lives on OfficialWorkingStatus.
   rows.push({ id: "loader", kind: "loader" });
   return rows;
 }
 
 function TranscriptRowContent({
+  cdsTextSize,
+  expandPrompts = false,
   initialCount,
   isAwaitingReply,
   isResponding,
@@ -941,6 +669,8 @@ function TranscriptRowContent({
   transcriptMode = "normal",
   userChaptersByAfterId,
 }: {
+  cdsTextSize?: "sm" | "lg";
+  expandPrompts?: boolean;
   initialCount: number;
   isAwaitingReply: boolean;
   isResponding: boolean;
@@ -954,14 +684,14 @@ function TranscriptRowContent({
   transcriptMode?: OfficialTranscriptMode;
   userChaptersByAfterId: Map<string, OfficialCodeUserChapter[]>;
 }) {
-  if (row.kind === "running-tasks") return <OfficialRunningTasks isResponding={isResponding} tasks={tasks} />;
   if (row.kind === "loader") {
-    // Residual Gv: sessionId + isWorking + spawnLabel only (tokens/elapsed from maps).
+    // Residual Gv/$8: sessionId + isWorking + spawnLabel; tasks trail via morphKey running-tasks.
     return (
       <OfficialWorkingStatus
         isWorking={isResponding}
         sessionId={sessionId}
         spawnLabel={spawnLabel}
+        tasks={tasks}
       />
     );
   }
@@ -970,10 +700,12 @@ function TranscriptRowContent({
   const isStreaming = row.kind === "assistant" && isResponding && row.entryIdx === lastEntryIdx;
   const showCodeAwaitingDot = row.kind === "assistant" && isAwaitingReply && row.entryIdx === lastEntryIdx;
   const content = row.kind === "user"
-    ? <CodeUserEntryMessage entry={row.entry} isQueued={row.entry.isQueued === true} />
+    ? <CodeUserEntryMessage cdsTextSize={cdsTextSize} entry={row.entry} expandPrompts={expandPrompts} isQueued={row.entry.isQueued === true} />
     : (
       <CodeAssistantEntryMessage
+        cdsTextSize={cdsTextSize}
         entry={row.entry}
+        isLastEntry={row.entryIdx === lastEntryIdx}
         isStreaming={isStreaming}
         onPinChapter={onPinChapter}
         onUnpinChapter={onUnpinChapter}
@@ -988,91 +720,22 @@ function TranscriptRowContent({
   return <div data-epitaxy-entry={row.entry.id}>{content}</div>;
 }
 
-function OfficialRunningTasks({ isResponding, tasks }: { isResponding: boolean; tasks: OfficialBackgroundTask[] }) {
-  const context = useContext(EpitaxyTranscriptActionContext);
-  const summary = useMemo(() => summarizeOfficialRunningTasks(tasks), [tasks]);
-  if (isResponding || !summary) return null;
-  const content = (
-    <>
-      <OfficialTextShine className={`text-body truncate min-w-0 ${summary.waiting ? "epitaxy-text-shine" : "text-assistant-secondary"}`}>
-        {formatOfficialRunningTasksSummary(summary)}
-      </OfficialTextShine>
-      <ToolChevron expanded={false} />
-    </>
-  );
-  if (!context?.openTasks) {
-    return <div className="flex self-start max-w-full items-center">{content}</div>;
-  }
-  return (
-    <button type="button" onClick={context.openTasks} className="flex self-start max-w-full items-center gap-g1 text-left outline-none hide-focus-ring focus:ring-focus rounded-r3">
-      {content}
-    </button>
-  );
-}
-
-type OfficialRunningTaskKind = "shell" | "agent" | "workflow" | "monitor" | "dream" | "task";
-
-type OfficialRunningTasksSummary = {
-  count: number;
-  kind: OfficialRunningTaskKind;
-  waiting: boolean;
-};
-
-function summarizeOfficialRunningTasks(tasks: OfficialBackgroundTask[]): OfficialRunningTasksSummary | null {
-  const running = tasks.filter((task) => task.status === "running");
-  if (running.length === 0) return null;
-  const selectedKind = officialTaskRunningKind(running[0]?.taskType);
-  const sameKindCount = running.filter((task) => officialTaskRunningKind(task.taskType) === selectedKind).length;
-  return {
-    count: sameKindCount,
-    kind: selectedKind,
-    waiting: running.some((task) => !task.lastToolName && !task.usage),
-  };
-}
-
-function officialTaskRunningKind(taskType?: string): OfficialRunningTaskKind {
-  switch (taskType) {
-    case "local_bash":
-      return "shell";
-    case "local_agent":
-    case "remote_agent":
-    case "in_process_teammate":
-      return "agent";
-    case "local_workflow":
-      return "workflow";
-    case "monitor_mcp":
-      return "monitor";
-    case "dream":
-      return "dream";
-    default:
-      return "task";
-  }
-}
-
-function formatOfficialRunningTasksSummary(summary: OfficialRunningTasksSummary) {
-  if (summary.kind === "dream") return "Dreaming";
-  if (summary.kind === "task") return `${summary.count} ${summary.count === 1 ? "background task" : "background tasks"}`;
-  const label = summary.kind === "shell" ? "shell" : summary.kind;
-  return `${summary.count} ${label}${summary.count === 1 ? " running" : "s running"}`;
-}
-
-
 /**
- * Official Hb user entry (c11959232):
+ * Official Hb user entry (cd5a31703-B4nKQMBN):
  * filters file/image/text/event/bash/peer, then branch layouts
  * (bash-only / peer-only / event-only / default bubble).
- */
-/**
- * Official Hb (c11959232):
- * branches — bash-only → code-attachment (Ob) → peer-only → event-only → default bubble.
  * Text segments via Eb/Pb/Tb; inline via zb; durable Ub gates fork/rewind.
  */
 export function CodeUserEntryMessage({
+  cdsTextSize,
   entry,
+  expandPrompts = false,
   isQueued = false,
   onCancelQueued,
 }: {
+  cdsTextSize?: "sm" | "lg";
   entry: TranscriptEntry;
+  expandPrompts?: boolean;
   isQueued?: boolean;
   onCancelQueued?: () => void;
 }) {
@@ -1095,13 +758,14 @@ export function CodeUserEntryMessage({
     if (forked?.id) actions.onNavigate(sessionPath(forked));
   }, [actions, entry.id]);
   const errors = useErrorsOptional();
+  const sessionLoadText = useI18nText(SESSION_LOAD_MESSAGES);
   const rewindToHere = useCallback(async () => {
     // Official $a: local-only fe.rewind; null → "Can't rewind"; else xt(prompt||text)+focus.
     if (!actions?.sessionId || !actions.bridge.rewind) return;
     if (actions.sessionRef && actions.sessionRef.type !== "local") return;
     const prompt = await actions.bridge.rewind(actions.sessionId, entry.id);
     if (prompt === null) {
-      errors?.addError("Can't rewind to this message.", {
+      errors?.addError(sessionLoadText.cantRewindToThisMessage, {
         messageForLogging: "epitaxy-rewind-not-possible",
       });
       return;
@@ -1110,7 +774,7 @@ export function CodeUserEntryMessage({
     const prefill =
       typeof prompt === "string" && prompt.length > 0 ? prompt : copyText;
     actions.setComposerText?.(prefill);
-  }, [actions, copyText, entry.id, errors]);
+  }, [actions, copyText, entry.id, errors, sessionLoadText.cantRewindToThisMessage]);
   // Official: n && y ? () => n(t.id, b) : void 0 — only durable UUIDs enable fork/rewind.
   // Official onRewindToMessage: !ue || H || xn ? void 0 : $a (local + !responding).
   const canRewind =
@@ -1130,10 +794,6 @@ export function CodeUserEntryMessage({
   );
   // Official M: any code segment with filePath → code-attachment layout.
   const hasCodeAttachment = textSegments.some((segment) => segment.kind === "code" && Boolean(segment.filePath));
-  const [expandedLongText, setExpandedLongText] = useState(false);
-  const textLength = useMemo(() => textItems.reduce((sum, item) => sum + item.text.length, 0), [textItems]);
-  // Official R = !M && N > 1200
-  const isLongText = !hasCodeAttachment && textLength > 1200;
   const attachmentStrip = (
     <OfficialUserAttachments
       files={fileItems}
@@ -1145,7 +805,7 @@ export function CodeUserEntryMessage({
   // Official Hb bash-only: m.length > 0 && u/f/p empty (images/text/events).
   if (bashItems.length > 0 && imageItems.length === 0 && textItems.length === 0 && eventItems.length === 0) {
     return (
-      <div className="flex flex-col gap-g6 w-full" data-official-source="c11959232-h_zsw3wI.js:Hb bash-only">
+      <div className="flex flex-col gap-g6 w-full" data-official-source="cd5a31703-B4nKQMBN.js:Hb bash-only">
         {attachmentStrip}
         {bashItems.map((item) => <UserBashBlock item={item} key={item.id} />)}
       </div>
@@ -1155,7 +815,16 @@ export function CodeUserEntryMessage({
   // Official Hb code-attachment (M && no images): Ob cards + per-segment text bubbles.
   if (hasCodeAttachment && imageItems.length === 0) {
     return (
-      <div className="group/msg flex flex-col items-start gap-g6 w-full" data-official-source="c11959232-h_zsw3wI.js:Hb code-attachment">
+      <div
+        className="epitaxy-user-turn group/message-row group/msg flex w-full min-w-0 flex-col gap-xs font-sans ms-auto items-end"
+        data-author="self"
+        data-cds="UserMessage"
+        data-official-source="cd5a31703-B4nKQMBN.js:Hb code-attachment"
+        data-state={isQueued ? "pending" : undefined}
+        data-testid="user-message"
+        data-text-size={cdsTextSize}
+        data-turn-key={entry.id}
+      >
         {attachmentStrip}
         {textSegments.map((segment) => {
           if (segment.kind === "code") {
@@ -1180,17 +849,18 @@ export function CodeUserEntryMessage({
               text={segment.text}
             >
               <div className={`${officialUserMessageClass} max-w-[75%]`}>
-                <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty m-0">
-                  {renderOfficialUserInlineText(segment.text, false, openPath)}
-                </p>
+                <div className={officialUserBubbleProseClass}>
+                  <p className={officialUserBubbleTextClass}>
+                    {renderOfficialUserInlineText(segment.text, false, openPath)}
+                  </p>
+                </div>
               </div>
             </OfficialTranscriptItemMenu>
           );
         })}
         <OfficialMessageActions
-          buttonVariant="link"
-          className="-mt-[8px]"
           copyText={copyText || undefined}
+          layout="pretty"
           onFork={onFork}
           onRewind={onRewind}
           timestamp={entry.timestamp}
@@ -1202,7 +872,7 @@ export function CodeUserEntryMessage({
   // Official Hb peer-only.
   if (peerItems.length > 0 && imageItems.length === 0 && textItems.length === 0) {
     return (
-      <div className="flex flex-col gap-g3 w-full" data-official-source="c11959232-h_zsw3wI.js:Hb peer-only">
+      <div className="flex flex-col gap-[var(--chat-item-gap)] w-full" data-official-source="cd5a31703-B4nKQMBN.js:Hb peer-only">
         {attachmentStrip}
         {peerItems.map((item) => <OfficialUserPeerCard item={item} key={item.id} />)}
       </div>
@@ -1212,14 +882,14 @@ export function CodeUserEntryMessage({
   // Official Hb event-only.
   if (eventItems.length > 0 && imageItems.length === 0 && textItems.length === 0) {
     return (
-      <div className="flex flex-col gap-g3 w-full" data-official-source="c11959232-h_zsw3wI.js:Hb event-only">
+      <div className="flex flex-col gap-[var(--chat-item-gap)] w-full" data-official-source="cd5a31703-B4nKQMBN.js:Hb event-only">
         {attachmentStrip}
         {eventItems.map((item) => <OfficialUserEventCard item={item} key={item.id} />)}
       </div>
     );
   }
 
-  // Official Hb default bubble (max-w-[75%], Uv, zb/Ob segments, show more, Vv).
+  // Official Hb default bubble — shared-2 RW collapsible overflow (threshold 300, pad 100).
   const bubbleBody = textItems.length > 0 ? (
     <OfficialTranscriptItemMenu
       onAttachAsContext={onAttachAsContext}
@@ -1228,55 +898,48 @@ export function CodeUserEntryMessage({
       text={copyText}
     >
       <div className={`${officialUserMessageClass} max-w-full`}>
-        <div className={isLongText && !expandedLongText
-          ? "flex flex-col gap-g4 max-h-[16rem] overflow-clip [mask-image:linear-gradient(to_bottom,black_calc(100%_-_3rem),transparent)]"
-          : "flex flex-col gap-g4"}
-        >
-          {textSegments.map((segment) => (
-            segment.kind === "code" ? (
-              <OfficialUserCodeAttachment
-                key={segment.key}
-                lang={segment.lang}
-                text={segment.text}
-              />
-            ) : (
-              <p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere] text-pretty m-0" key={segment.key}>
-                {renderOfficialUserInlineText(segment.text, isLongText && !expandedLongText, openPath)}
-              </p>
-            )
-          ))}
+        <div className={officialUserBubbleProseClass}>
+          <OfficialUserMessageCollapsibleBody expandPrompts={expandPrompts}>
+            {textSegments.map((segment) => (
+              segment.kind === "code" ? (
+                <OfficialUserCodeAttachment
+                  key={segment.key}
+                  lang={segment.lang}
+                  text={segment.text}
+                />
+              ) : (
+                <p className={officialUserBubbleTextClass} key={segment.key}>
+                  {renderOfficialUserInlineText(segment.text, false, openPath)}
+                </p>
+              )
+            ))}
+          </OfficialUserMessageCollapsibleBody>
         </div>
-        {isLongText ? (
-          <OfficialButton
-            ariaLabel={expandedLongText ? "Show less" : "Show more"}
-            className="self-start"
-            onClick={() => setExpandedLongText((value) => !value)}
-            size="small"
-            variant="uncontained"
-          >
-            {expandedLongText ? "Show less" : "Show more"}
-          </OfficialButton>
-        ) : null}
       </div>
     </OfficialTranscriptItemMenu>
   ) : null;
 
   return (
     <div
-      className={`group/msg flex justify-start items-start gap-g3 w-full transition-opacity duration-200 ${isQueued ? "opacity-50 hover:opacity-80" : ""}`}
-      data-official-source="c11959232-h_zsw3wI.js:Hb default"
+      className={`epitaxy-user-turn group/message-row group/msg flex w-full min-w-0 flex-col gap-xs font-sans ms-auto items-end transition-opacity duration-200 ${isQueued ? "opacity-50 hover:opacity-80" : ""}`}
+      data-author="self"
+      data-cds="UserMessage"
+      data-official-source="cd5a31703-B4nKQMBN.js:Hb default"
+      data-state={isQueued ? "pending" : undefined}
+      data-testid="user-message"
+      data-text-size={cdsTextSize}
+      data-turn-key={entry.id}
     >
       {isQueued ? (
-        <span className="sr-only">Queued. Claude will read this after the current turn.</span>
+        <span className="sr-only" data-intl-id="QIwl3NMza9">Queued. Claude will read this after the current turn.</span>
       ) : null}
-      <div className="flex flex-col items-start gap-g6 max-w-[75%] min-w-0">
+      <div className="flex flex-col items-end gap-g6 max-w-[85%] min-w-0">
         {attachmentStrip}
         {bubbleBody}
         {textItems.length > 0 && !isQueued ? (
           <OfficialMessageActions
-            buttonVariant="link"
-            className="-mt-[8px]"
             copyText={copyText || undefined}
+            layout="pretty"
             onFork={onFork}
             onRewind={onRewind}
             timestamp={entry.timestamp}
@@ -1287,7 +950,7 @@ export function CodeUserEntryMessage({
       {isQueued && cancelQueued ? (
         <OfficialButton
           ariaLabel="Remove queued message"
-          className="self-center opacity-0 group-hover/msg:opacity-100 focus-visible:opacity-100 transition-opacity"
+          className="self-center opacity-0 group-hover/message-row:opacity-100 group-hover/msg:opacity-100 focus-visible:opacity-100 transition-opacity"
           icon="XCrossCloseMedium"
           onClick={cancelQueued}
           size="small"
@@ -1309,6 +972,7 @@ function OfficialUserAttachments({
   uploaded: Array<Extract<TranscriptEntryItem, { kind: "uploaded-file" }>>;
 }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
+  const surfaceText = useI18nText(TRANSCRIPT_SURFACE_MESSAGES);
   const fileChips = [
     ...files.map((file) => ({ id: file.id, fileName: file.fileName, path: undefined as string | undefined })),
     ...uploaded.map((item) => ({ id: item.id, fileName: item.file.fileName, path: item.file.path })),
@@ -1318,9 +982,9 @@ function OfficialUserAttachments({
     <>
       {fileChips.length > 0 ? (
         <ul
-          aria-label="Attached files"
+          aria-label={surfaceText.attachedFiles}
           className="flex flex-wrap items-end gap-g4 max-w-full"
-          data-official-source="c11959232-h_zsw3wI.js:Sv files"
+          data-official-source="cd5a31703-B4nKQMBN.js:Sv files"
           role="list"
         >
           {fileChips.map((file) => {
@@ -1372,7 +1036,7 @@ function OfficialUserImageGallery({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   return (
     <>
-      <div className="flex flex-wrap items-end gap-g6 max-w-full p-[1px]" data-official-source="c11959232-h_zsw3wI.js:Sv images">
+      <div className="flex flex-wrap items-end gap-g6 max-w-full p-[1px]" data-official-source="cd5a31703-B4nKQMBN.js:Sv images">
         {images.map((image, index) => (
           <OfficialImageContextMenu key={image.id} src={`data:${image.mimeType};base64,${image.data}`}>
             <button
@@ -1493,6 +1157,8 @@ function OfficialImageLightbox({
   items: Array<{ alt: string; id: string; url: string }>;
   onClose: () => void;
 }) {
+  const surfaceText = useI18nText(TRANSCRIPT_SURFACE_MESSAGES);
+  const loadText = useI18nText(SESSION_LOAD_MESSAGES);
   const [index, setIndex] = useState(initialIndex);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const restoreFocusRef = useRef<Element | null>(null);
@@ -1515,7 +1181,7 @@ function OfficialImageLightbox({
 
   return createPortal(
     <div
-      aria-label="Image preview"
+      aria-label={surfaceText.imagePreview}
       aria-modal="true"
       className="epitaxy-lightbox fixed inset-0 z-50 bg-always-black/80 backdrop-blur-[40px] flex flex-col overflow-hidden draggable-none outline-none"
       onClick={onClose}
@@ -1533,7 +1199,7 @@ function OfficialImageLightbox({
     >
       <div className="relative flex items-center justify-end p-4 z-10">
         <button
-          aria-label="Close"
+          aria-label={loadText.close}
           className="size-8 rounded-full flex items-center justify-center text-always-white/70 hover:text-always-white hover:bg-always-white/10"
           onClick={(event) => { event.stopPropagation(); onClose(); }}
           type="button"
@@ -1570,7 +1236,7 @@ function OfficialImageLightbox({
             onClick={(event) => event.stopPropagation()}
           >
             <button
-              aria-label="Previous image"
+              aria-label={surfaceText.previousImage}
               className="p-2 rounded-lg text-always-white disabled:text-always-white/30 enabled:hover:bg-always-white/10"
               disabled={index === 0}
               onClick={(event) => { event.stopPropagation(); previous(); }}
@@ -1579,10 +1245,10 @@ function OfficialImageLightbox({
               <Icon customSize={20} name="CaretLeft" />
             </button>
             <span aria-live="polite" className="px-2 text-always-white/80 text-sm tabular-nums pointer-events-none select-none">
-              {index + 1} of {items.length}
+              {formatOfficialIcu(surfaceText.currentOfTotal, { current: index + 1, total: items.length })}
             </span>
             <button
-              aria-label="Next image"
+              aria-label={surfaceText.nextImage}
               className="p-2 rounded-lg text-always-white disabled:text-always-white/30 enabled:hover:bg-always-white/10"
               disabled={index === items.length - 1}
               onClick={(event) => { event.stopPropagation(); next(); }}
@@ -1615,12 +1281,12 @@ function OfficialUserPeerCard({ item }: { item: Extract<TranscriptEntryItem, { k
     }
   })();
   return (
-    <div className="flex w-full flex-col gap-g3 rounded-r6 border border-t3 bg-t1 p-p5" data-official-source="c11959232-h_zsw3wI.js:Ib">
-      <div className="flex items-center gap-g3 text-body text-assistant-secondary">
+    <div className="flex w-full flex-col gap-1 rounded-lg border border-alpha-2 bg-alpha-1 p-sm" data-official-source="cd5a31703-B4nKQMBN.js:wz">
+      <div className="flex items-center gap-0.75 text-body text-secondary">
         <Icon name="ChatBubble" size="xs" />
         <span className="truncate">{title}</span>
       </div>
-      <p className="text-body text-assistant-primary whitespace-pre-wrap [overflow-wrap:anywhere] select-text m-0">
+      <p className="text-body text-primary whitespace-pre-wrap [overflow-wrap:anywhere] select-text m-0">
         {renderOfficialUserInlineText(item.content)}
       </p>
     </div>
@@ -1640,18 +1306,18 @@ function OfficialUserEventCard({ item }: { item: Extract<TranscriptEntryItem, { 
   const rawType = item.eventType ? String(item.eventType) : "event";
   const label = OFFICIAL_USER_EVENT_LABELS[rawType] ?? rawType;
   return (
-    <div className="flex flex-col w-full" data-official-source="c11959232-h_zsw3wI.js:Rb">
+    <div className="flex flex-col w-full" data-official-source="cd5a31703-B4nKQMBN.js:Rb">
       <button
         aria-expanded={expanded}
-        className="relative group/tool flex self-start max-w-full items-center py-0 gap-g3 text-left outline-none hide-focus-ring focus:ring-focus rounded-r3 border-0 bg-transparent p-0 m-0 cursor-default"
+        className="relative group/tool flex self-start max-w-full items-center py-0 gap-0.75 text-left focus-visible:outline-hidden hide-focus-ring focus-visible:shadow-focus rounded-sm border-0 bg-transparent p-0 m-0 cursor-default"
         onClick={() => setExpanded((value) => !value)}
         type="button"
       >
-        <span className="text-body text-assistant-primary">{label}</span>
+        <span className="text-body">{label}</span>
         <Icon name={expanded ? "ChevronDownSmall" : "ChevronRightSmall"} size="xs" />
       </button>
       {expanded ? (
-        <div className="pl-p6 pt-p3 text-code text-assistant-secondary whitespace-pre-wrap break-all select-text">
+        <div className="pl-p6 pt-p3 text-code text-secondary whitespace-pre-wrap break-all select-text">
           {item.content}
         </div>
       ) : null}
@@ -1660,7 +1326,9 @@ function OfficialUserEventCard({ item }: { item: Extract<TranscriptEntryItem, { 
 }
 
 export function CodeAssistantEntryMessage({
+  cdsTextSize,
   entry,
+  isLastEntry = false,
   isStreaming = false,
   onPinChapter,
   onUnpinChapter,
@@ -1668,7 +1336,10 @@ export function CodeAssistantEntryMessage({
   transcriptMode = "normal",
   userChaptersByAfterId,
 }: {
+  cdsTextSize?: "sm" | "lg";
   entry: TranscriptEntry;
+  /** Official LX vs PX: last assistant entry paints the live prompt_blocked card. */
+  isLastEntry?: boolean;
   isStreaming?: boolean;
   /** Residual Kb onPinChapter(afterId, titleText). */
   onPinChapter?: (afterId: string, text: string) => void;
@@ -1681,6 +1352,7 @@ export function CodeAssistantEntryMessage({
   const actions = useContext(EpitaxyTranscriptActionContext);
   const chaptersByAfterId = userChaptersByAfterId ?? emptyCodeUserChaptersByAfterId;
   const visibleItems = entry.items.filter(isVisibleAssistantEntryItem);
+  const taskEventRuns = officialTaskEventRunsByFirstId(visibleItems);
   const copyText = visibleItems.flatMap((item) => item.kind === "text" ? [item.text] : []).join("\n\n") || undefined;
   const firstVisibleItem = visibleItems[0];
   const hasErrorItem = visibleItems.some((item) => item.kind === "error");
@@ -1711,13 +1383,14 @@ export function CodeAssistantEntryMessage({
     if (forked?.id) actions.onNavigate(sessionPath(forked));
   }, [actions, entry.id]);
   const errors = useErrorsOptional();
+  const sessionLoadText = useI18nText(SESSION_LOAD_MESSAGES);
   const rewindToHere = useCallback(async () => {
     // Official $a local-only + composer prefill (same as Hb path).
     if (!actions?.sessionId || !actions.bridge.rewind) return;
     if (actions.sessionRef && actions.sessionRef.type !== "local") return;
     const prompt = await actions.bridge.rewind(actions.sessionId, entry.id);
     if (prompt === null) {
-      errors?.addError("Can't rewind to this message.", {
+      errors?.addError(sessionLoadText.cantRewindToThisMessage, {
         messageForLogging: "epitaxy-rewind-not-possible",
       });
       return;
@@ -1728,14 +1401,13 @@ export function CodeAssistantEntryMessage({
         ? prompt
         : (copyText ?? "");
     actions.setComposerText?.(prefill);
-  }, [actions, copyText, entry.id, errors]);
+  }, [actions, copyText, entry.id, errors, sessionLoadText.cantRewindToThisMessage]);
   const retryLastTurn = useCallback(async () => {
     if (!actions?.sessionId || !actions.bridge.rewind) return;
     await actions.bridge.rewind(actions.sessionId, entry.id);
     await actions.reload({ silent: true });
   }, [actions, entry.id]);
-  // Official Kb: fork/rewind only on Uv (item context menu), not on Vv hover action bar.
-  // Official onRewindToMessage: local + !responding.
+  // Official r2 → HI (cd5a): hover bar Copy/Fork/thumbs + trailing timestamp; rewind stays on Uv / item menu.
   const canRewind =
     !isStreaming
     && Boolean(actions?.bridge.rewind)
@@ -1756,24 +1428,30 @@ export function CodeAssistantEntryMessage({
     : undefined;
   if (visibleItems.length === 0) return null;
 
-  // Official Kb (c11959232): shell + per-item Uv + Vv (text/timestamp/rate/pin only).
+  // Official r2/i2 (cd5a): shell + per-item Uv + HI/Vv (copy/pin/fork/thumbs/timestamp).
   return (
     <OfficialAssistantMessage
       copyText={copyText}
       createdAt={isStreaming ? undefined : entry.timestamp}
       isPinned={Boolean(firstPin.isPinned)}
-      onPinChapter={firstPin.onPinChapter}
+      onFork={onFork}
+      onPinChapter={"onPinChapter" in firstPin ? firstPin.onPinChapter : undefined}
       onRateMessage={onRateMessage}
       rateMessageUuid={entry.id}
       showAwaitingDot={showAwaitingDot}
+      textSize={cdsTextSize}
     >
-      {visibleItems.map((item) => (
+      {visibleItems.map((item, index) => (
         <Fragment key={item.id}>
           {chaptersByAfterId.get(item.id)?.map((chapter) => <CodeChapterTitle chapter={chapter} key={chapter.id} />)}
           {/* Official Kb: hide turn_error when same entry already has error items (x). */}
-          {item.kind === "turn_error" && hasErrorItem
+          {item.kind === "task_event" && !taskEventRuns.has(item.id)
+            ? null
+            : item.kind === "turn_error" && hasErrorItem
             ? null
             : renderCodeAssistantEntryItem(item, {
+              isLastEntry,
+              isLastTools: item.kind === "tools" && !visibleItems.slice(index + 1).some((next) => next.kind === "tools"),
               isStreaming,
               onAttachAsContext: actions?.attachAsContext,
               onFork,
@@ -1781,6 +1459,7 @@ export function CodeAssistantEntryMessage({
               onRewind,
               pin: pinHandlersForItem,
               sessionId: actions?.sessionId,
+              taskEventRun: item.kind === "task_event" ? taskEventRuns.get(item.id) : undefined,
               transcriptMode,
             })}
         </Fragment>
@@ -1789,9 +1468,168 @@ export function CodeAssistantEntryMessage({
   );
 }
 
+function officialHookNoticeHasWarning(notices: OfficialHookNotice[]) {
+  return notices.some((notice) => notice.level === "warning");
+}
+
+/** Official RM — collapsible hook_notice. `s=n||(o??r)`: verbose always open; warning default open. */
+function OfficialRmHookNotice({
+  item,
+  transcriptMode = "normal",
+}: {
+  item: Extract<TranscriptEntryItem, { kind: "hook_notice" }>;
+  transcriptMode?: OfficialTranscriptMode;
+}) {
+  const actionsText = useI18nText(MESSAGE_ACTION_MESSAGES);
+  const verbose = officialTranscriptModeExpandsDetails(transcriptMode);
+  const warning = officialHookNoticeHasWarning(item.notices);
+  const [expanded, setExpanded] = useState(warning);
+  const open = verbose || expanded;
+  if (item.plugin !== undefined) {
+    const first = item.notices[0];
+    if (!first) return null;
+    return (
+      <div className="flex w-full items-baseline gap-xs ps-[var(--cds-assistant-message-text-inset,0px)]" data-official-source="cd5a31703-B4nKQMBN.js:zM" data-plugin-log={item.plugin}>
+        <span className="shrink-0 text-caption text-muted">{item.plugin}</span>
+        <div className="min-w-0 text-body text-muted whitespace-pre-wrap [overflow-wrap:anywhere]">{formatOfficialHookNoticeMessage(first)}</div>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="flex w-full flex-col ps-[var(--cds-assistant-message-text-inset,0px)]"
+      data-official-source="cd5a31703-B4nKQMBN.js:Jz RM hook_notice"
+    >
+      <button
+        aria-expanded={open}
+        className="relative group/tool flex self-start max-w-full items-center py-0 gap-1 text-left focus-visible:outline-hidden hide-focus-ring focus-visible:shadow-focus rounded-sm"
+        onClick={() => {
+          if (!verbose) setExpanded((value) => !value);
+        }}
+        type="button"
+      >
+        {warning ? <Icon className="shrink-0 text-extended-yellow" name="Warning" size="sm" /> : null}
+        <span className={`min-w-0 truncate text-body ${warning ? "text-muted group-hover/tool:text-secondary" : "text-secondary group-hover/tool:text-primary"}`}>
+          {formatOfficialIcu(actionsText.claudeCodeNotice, { count: item.notices.length })}
+        </span>
+        <ToolChevron colorClassName={warning ? "text-muted group-hover/tool:text-secondary" : "text-secondary group-hover/tool:text-primary"} expanded={open} />
+      </button>
+      <OfficialCollapse expanded={open}>
+        <div className="flex flex-col gap-1 pl-md pt-xs">
+          {item.notices.map((notice) => (
+            <div className="flex items-start gap-1 select-text" key={notice.id}>
+              {item.notices.length > 1 && notice.level === "warning" ? (
+                <span className="text-body flex h-[1lh] shrink-0 items-center">
+                  <Icon className="shrink-0 text-extended-yellow" name="Warning" size="sm" />
+                </span>
+              ) : null}
+              <div className="text-body text-muted whitespace-pre-wrap [overflow-wrap:anywhere]">{formatOfficialHookNoticeMessage(notice)}</div>
+            </div>
+          ))}
+        </div>
+      </OfficialCollapse>
+    </div>
+  );
+}
+
+function OfficialJzNotice({
+  item,
+  transcriptMode = "normal",
+}: {
+  item: Extract<TranscriptEntryItem, { kind: "event" }>;
+  transcriptMode?: OfficialTranscriptMode;
+}) {
+  if (item.eventType === "hook") {
+    return (
+      <OfficialRmHookNotice
+        item={{
+          id: item.id,
+          kind: "hook_notice",
+          notices: [{ id: item.id, level: "notice", message: item.content }],
+        }}
+        transcriptMode={transcriptMode}
+      />
+    );
+  }
+  return <OfficialUserEventCard item={item} />;
+}
+
+/** Official Yj / c93058 `f`: elapsedSeconds when ≥ 2s while aM holds the busy mark. */
+function OfficialAmElapsedSeconds() {
+  const actions = useContext(EpitaxyTranscriptActionContext);
+  const startedAt = officialGetTurnStartedAt(actions?.sessionId);
+  const [elapsed, setElapsed] = useState(() => (
+    startedAt != null ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0
+  ));
+  useEffect(() => {
+    if (startedAt == null) {
+      setElapsed(0);
+      return undefined;
+    }
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [startedAt]);
+  if (elapsed < 2) return null;
+  return (
+    <span className="text-body text-muted tabular-nums shrink-0" data-official-source="cd5a31703-B4nKQMBN.js:Yj">
+      {elapsed}s
+    </span>
+  );
+}
+
+/** Official Nj / c80ec Le — compact_boundary ap.Step label. */
+function OfficialNjCompacted({ item }: { item: Extract<TranscriptEntryItem, { kind: "compacted" }> }) {
+  const actionsText = useI18nText(MESSAGE_ACTION_MESSAGES);
+  const saved = item.preTokens !== undefined && item.postTokens !== undefined && item.preTokens > item.postTokens
+    ? formatOfficialCompactTokens(item.preTokens - item.postTokens)
+    : undefined;
+  const from = item.preTokens !== undefined && item.preTokens > 0
+    ? formatOfficialCompactTokens(item.preTokens)
+    : undefined;
+  const label = saved
+    ? actionsText.compactedSessionSaved.replace("{tokens}", saved)
+    : from
+      ? actionsText.compactedSessionFrom.replace("{tokens}", from)
+      : actionsText.compactedSession;
+  return (
+    <OfficialTurnStatusStep
+      findOmitted
+      label={label}
+      source="cd5a31703-B4nKQMBN.js:Nj"
+      state="done"
+    />
+  );
+}
+
+/** Official Mj — catalog 4Zkm5mSVWS / FnKhqMbHN5 / k0/cAE4jdO (Wo ids not in en-US.json). */
+function OfficialMjModelFallback({ item }: { item: Extract<TranscriptEntryItem, { kind: "model_fallback" }> }) {
+  const actionsText = useI18nText(MESSAGE_ACTION_MESSAGES);
+  const explanation = item.apiRefusalExplanation?.trim();
+  const label = item.trigger
+    ? actionsText.modelFallbackUnavailable.replace("{fallbackModel}", item.fallbackModel)
+    : explanation
+      ? actionsText.modelFallbackSafeguardOriginal
+        .replace("{fallback}", item.fallbackModel)
+        .replace("{original}", item.originalModel)
+      : actionsText.modelFallbackSafeguard.replace("{fallback}", item.fallbackModel);
+  return (
+    <OfficialTurnStatusStep
+      label={label}
+      source="cd5a31703-B4nKQMBN.js:Mj"
+      state="done"
+    >
+      {explanation ?? undefined}
+    </OfficialTurnStatusStep>
+  );
+}
+
 function renderCodeAssistantEntryItem(
   item: Exclude<TranscriptEntryItem, { kind: "file" | "image" | "peer" | "uploaded-file" }>,
   options: {
+    isLastEntry?: boolean;
+    isLastTools?: boolean;
     isStreaming: boolean;
     onAttachAsContext?: (text: string) => void;
     onFork?: () => void;
@@ -1799,10 +1637,36 @@ function renderCodeAssistantEntryItem(
     onRewind?: () => void;
     pin: (itemId: string, textForTitle: () => string) => { isPinned?: boolean; onPinChapter?: () => void };
     sessionId?: string;
+    taskEventRun?: OfficialTaskEventItem[];
     transcriptMode: OfficialTranscriptMode;
   },
 ) {
-  if (item.kind === "thinking") return <CodeThinkingBlock text={item.text} transcriptMode={options.transcriptMode} />;
+  if (item.kind === "thinking") return <CodeThinkingBlock expansionKey={item.id} text={item.text} transcriptMode={options.transcriptMode} />;
+  if (item.kind === "event") return <OfficialJzNotice item={item} transcriptMode={options.transcriptMode} />;
+  if (item.kind === "hook_notice") return <OfficialRmHookNotice item={item} transcriptMode={options.transcriptMode} />;
+  if (item.kind === "compacted") return <OfficialNjCompacted item={item} />;
+  if (item.kind === "model_fallback") return <OfficialMjModelFallback item={item} />;
+  if (item.kind === "tools") {
+    const pin = options.pin(item.id, () => officialToolsCopyText(item.tools));
+    return (
+      <OfficialTranscriptItemMenu
+        isPinned={pin.isPinned}
+        onAttachAsContext={options.onAttachAsContext}
+        onFork={options.onFork}
+        onPinChapter={pin.onPinChapter}
+        onRewind={options.onRewind}
+        text={officialToolsCopyText(item.tools) || undefined}
+      >
+        <div className="flex flex-col gap-[var(--chat-item-gap)]">
+          <AssistantToolsBlock
+            item={item}
+            liveTail={Boolean(options.isStreaming && options.isLastTools)}
+            transcriptMode={options.transcriptMode}
+          />
+        </div>
+      </OfficialTranscriptItemMenu>
+    );
+  }
   if (item.kind === "text") {
     const pin = options.pin(item.id, () => item.text);
     return (
@@ -1816,23 +1680,6 @@ function renderCodeAssistantEntryItem(
       >
         <div>
           <OfficialCodeMarkdown isStreaming={options.isStreaming} sessionId={options.sessionId} text={item.text} />
-        </div>
-      </OfficialTranscriptItemMenu>
-    );
-  }
-  if (item.kind === "tools") {
-    const pin = options.pin(item.id, () => officialToolsCopyText(item.tools));
-    return (
-      <OfficialTranscriptItemMenu
-        isPinned={pin.isPinned}
-        onAttachAsContext={options.onAttachAsContext}
-        onFork={options.onFork}
-        onPinChapter={pin.onPinChapter}
-        onRewind={options.onRewind}
-        text={officialToolsCopyText(item.tools) || undefined}
-      >
-        <div className="flex flex-col gap-[var(--chat-item-gap)]">
-          <AssistantToolsBlock item={item} transcriptMode={options.transcriptMode} />
         </div>
       </OfficialTranscriptItemMenu>
     );
@@ -1852,9 +1699,9 @@ function renderCodeAssistantEntryItem(
       />
     );
   }
-  // Official Kb: task_event → ev EpitaxyTaskChip
+  // Official Kb: task_event → i4e(KX/tQe). Consecutive events share a cR run.
   if (item.kind === "task_event") {
-    return <CodeTaskEventChip item={item} />;
+    return <CodeTaskEventRun events={options.taskEventRun ?? [item]} />;
   }
   // Official Kb: chapter → Lh
   if (item.kind === "chapter") {
@@ -1863,7 +1710,7 @@ function renderCodeAssistantEntryItem(
   // Official Kb: context → Ku; stats → $x
   if (item.kind === "context") {
     return (
-      <div className="max-w-[520px]" data-official-source="c11959232-h_zsw3wI.js:Ku + index dCe">
+      <div className="max-w-[520px]" data-official-source="cd5a31703-B4nKQMBN.js:Ku + index dCe">
         <OfficialContextWindowUsage usage={item.usage} />
       </div>
     );
@@ -1871,8 +1718,17 @@ function renderCodeAssistantEntryItem(
   if (item.kind === "stats") {
     return <CodeStatsCard stats={item.stats} />;
   }
+  if (isOfficialKbNoticeItem(item)) {
+    return (
+      <OfficialKbNoticeCard
+        isLastEntry={options.isLastEntry}
+        item={item}
+        sessionId={options.sessionId}
+      />
+    );
+  }
   if (item.kind === "bash") return <UserBashBlock item={item} />;
-  return <div className="text-body text-t6 whitespace-pre-wrap break-words">{item.content}</div>;
+  return null;
 }
 
 /**
@@ -1932,8 +1788,8 @@ function CodeApiErrorBlock({
   };
 
   return (
-    <div className="rounded-r3 border border-[var(--fill-destructive-default)] overflow-hidden" data-official-source="c11959232-h_zsw3wI.js:Bb+Dh">
-      <div className="px-p3 py-p2 bg-[var(--fill-destructive-default)] text-destructive-default text-footnote flex items-center justify-between gap-g3">
+    <div className="rounded-lg border border-[var(--fill-destructive-default)] overflow-hidden" data-official-source="cd5a31703-B4nKQMBN.js:Bb+Dh">
+      <div className="px-p3 py-p2 bg-[var(--fill-destructive-default)] text-destructive-default text-footnote flex items-center justify-between gap-0.75">
         <span>API Error</span>
         {isRateLimit && canReset ? (
           <OfficialButton
@@ -1951,7 +1807,7 @@ function CodeApiErrorBlock({
         <code className="text-code break-words whitespace-pre-wrap">{text}</code>
       </div>
       {onRetry && !isRateLimit ? (
-        <div className="flex flex-wrap items-center gap-g3 px-p3 pb-p3">
+        <div className="flex flex-wrap items-center gap-0.75 px-p3 pb-p3">
           <OfficialButton onClick={onRetry} size="small" variant="contained">
             Try again
           </OfficialButton>
@@ -1987,14 +1843,14 @@ function CodeTurnErrorBlock({
   const mutedGuidance = statusCode === 429 || (statusCode !== undefined && statusCode >= 500);
 
   return (
-    <div className="rounded-r3 border border-[var(--fill-destructive-default)] overflow-hidden" data-official-source="c11959232-h_zsw3wI.js:rv">
+    <div className="rounded-lg border border-[var(--fill-destructive-default)] overflow-hidden" data-official-source="cd5a31703-B4nKQMBN.js:rv">
       <div className="px-p3 py-p2 bg-[var(--fill-destructive-default)] text-destructive-default text-footnote">{title}</div>
-      <div className="flex flex-col gap-g3 px-p3 py-p3">
-        <p className={`text-body ${mutedGuidance ? "text-assistant-secondary" : "text-assistant-primary"}`}>{guidance}</p>
+      <div className="flex flex-col gap-0.75 px-p3 py-p3">
+        <p className={`text-body ${mutedGuidance ? "text-secondary" : "text-primary"}`}>{guidance}</p>
         {showDetailToggle && detailsOpen ? (
-          <code className="rounded-r3 bg-t1 px-p3 py-p2 text-code text-t7 break-words whitespace-pre-wrap">{detailText}</code>
+          <code className="rounded-sm bg-t1 px-p3 py-p2 text-code text-t7 break-words whitespace-pre-wrap">{detailText}</code>
         ) : null}
-        <div className="flex flex-wrap items-center gap-g3">
+        <div className="flex flex-wrap items-center gap-0.75">
           {preferRewind && onRewind ? (
             <OfficialButton onClick={onRewind} size="small" variant="contained">Rewind</OfficialButton>
           ) : null}
@@ -2004,7 +1860,7 @@ function CodeTurnErrorBlock({
           {showDetailToggle ? (
             <button
               aria-expanded={detailsOpen}
-              className="flex items-center gap-g2 text-footnote text-assistant-secondary hover:text-t7 hide-focus-ring focus:ring-focus rounded-r3 border-0 bg-transparent cursor-pointer p-0"
+              className="flex items-center gap-0.5 text-footnote text-secondary hover:text-primary hide-focus-ring focus-visible:shadow-focus rounded-sm border-0 bg-transparent cursor-pointer p-0"
               onClick={() => setDetailsOpen((value) => !value)}
               type="button"
             >
@@ -2042,73 +1898,89 @@ function officialHttpStatusFromErrors(errors: string[]) {
   return undefined;
 }
 
-/** Official ev / EpitaxyTaskChip (c11959232). */
-function CodeTaskEventChip({ item }: { item: Extract<TranscriptEntryItem, { kind: "task_event" }> }) {
+/** Official GX: click opens Tasks pane to this task. */
+function CodeTaskEventHost({
+  asCard,
+  children,
+}: {
+  asCard: boolean;
+  children: ReactNode;
+  finished: boolean;
+  taskId: string;
+}) {
   const actions = useContext(EpitaxyTranscriptActionContext);
-  const failed = item.status === "failed";
-  const noun = officialTaskTypeNoun(item.taskType);
-  const statusWord = officialTaskStatusWord(item.status);
-  const label = item.description ?? item.summary;
-  const body = (
-    <>
-      <span className={`text-body min-w-0 truncate ${failed ? "text-extended-pink" : "text-assistant-primary"}`}>
-        Background {noun} {statusWord}
-      </span>
-      {label ? <span className="text-body text-assistant-secondary min-w-0 truncate">{label}</span> : null}
-    </>
-  );
+  const surfaceText = useI18nText(TRANSCRIPT_SURFACE_MESSAGES);
   if (actions?.openTasks) {
     return (
       <button
-        aria-label="View background task"
-        className="flex items-center gap-g3 py-0 max-w-full text-left cursor-pointer hover:opacity-80 transition-opacity border-0 bg-transparent p-0"
-        data-official-source="c11959232-h_zsw3wI.js:ev EpitaxyTaskChip"
-        onClick={actions.openTasks}
+        aria-label={surfaceText.viewBackgroundTask}
+        className={
+          asCard
+            ? "group/tool my-[6px] flex max-w-full items-center gap-1 rounded-lg border-0 bg-transparent p-0 text-left cursor-pointer"
+            : "group/tool flex flex-col gap-1 py-0 max-w-full items-start text-left focus-visible:outline-hidden hide-focus-ring focus-visible:shadow-focus rounded-sm border-0 bg-transparent p-0 cursor-pointer"
+        }
+        data-official-source="cd5a31703-B4nKQMBN.js:GX"
+        onClick={() => actions.openTasks?.()}
         type="button"
       >
-        {body}
+        {asCard ? <Icon className="shrink-0 self-center text-muted" name="AgentsSimple" size="sm" /> : null}
+        {children}
       </button>
     );
   }
   return (
-    <div className="flex items-center gap-g3 py-0 max-w-full" data-official-source="c11959232-h_zsw3wI.js:ev EpitaxyTaskChip">
-      {body}
+    <div className="flex flex-col gap-1 py-0 max-w-full items-start" data-official-source="cd5a31703-B4nKQMBN.js:GX">
+      {children}
     </div>
   );
 }
 
-function officialTaskTypeNoun(taskType?: string) {
-  switch (taskType) {
-    case "local_bash":
-      return "shell";
-    case "local_agent":
-    case "remote_agent":
-    case "in_process_teammate":
-      return "agent";
-    case "local_workflow":
-      return "workflow";
-    case "monitor_mcp":
-      return "monitor";
-    case "dream":
-      return "dream";
-    default:
-      return "task";
-  }
+/** Official tQe: one Background {noun} {status} · description. Verb is shrink-0. */
+function CodeTaskEventChip({ inGroup = false, item }: { inGroup?: boolean; item: OfficialTaskEventItem }) {
+  const failed = item.status === "failed";
+  const running = item.status === "running";
+  const verb = officialTaskEventChipVerb(item);
+  const detail = officialTaskEventChipDetail(item);
+  const asCard = !inGroup && running;
+  return (
+    <CodeTaskEventHost asCard={asCard} finished={!running} taskId={item.taskId}>
+      <span className="flex min-w-0 items-center gap-1 max-w-full">
+        <span className={`text-body shrink-0 ${failed ? "text-danger" : asCard ? "text-primary" : "text-secondary group-hover/tool:text-primary"}`} data-official-source="cd5a31703-B4nKQMBN.js:tQe m3qXDI92OE">
+          {verb}
+        </span>
+        {detail ? (
+          <span className="text-body text-secondary group-hover/tool:text-primary min-w-0 truncate">
+            {detail}
+          </span>
+        ) : null}
+      </span>
+    </CodeTaskEventHost>
+  );
 }
 
-function officialTaskStatusWord(status: OfficialTaskStatus) {
-  switch (status) {
-    case "running":
-      return "started";
-    case "completed":
-      return "completed";
-    case "failed":
-      return "failed";
-    case "stopped":
-      return "stopped";
-    default:
-      return status;
-  }
+/** Official KX: consecutive task_event → UX count line (`hEJp1hFtWd`). */
+function CodeTaskEventRun({ events, inGroup = false }: { events: OfficialTaskEventItem[]; inGroup?: boolean }) {
+  if (events.length === 0) return null;
+  if (events.length === 1) return <CodeTaskEventChip inGroup={inGroup} item={events[0]!} />;
+  const parts = officialTaskEventRunParts(events);
+  const anyRunning = events.some((event) => event.status === "running");
+  const anySettled = events.some((event) => event.status !== "running");
+  const tint = inGroup || !anyRunning;
+  const asCard = !inGroup && anyRunning;
+  return (
+    <CodeTaskEventHost asCard={asCard} finished={anySettled && !anyRunning} taskId={events[0]!.taskId}>
+      <span className={`flex min-w-0 items-center gap-1 max-w-full ${asCard ? "text-body text-primary tabular-nums" : "text-body text-secondary group-hover/tool:text-primary"} min-w-0 break-words`} data-official-source="cd5a31703-B4nKQMBN.js:KX hEJp1hFtWd">
+        {parts.map((part, index) => (
+          <Fragment key={part.key}>
+            {index > 0 ? <span>, </span> : null}
+            <span className={`${index > 0 ? "whitespace-nowrap" : ""} ${tint && part.danger ? "text-danger" : ""}`}>
+              {part.text}
+            </span>
+          </Fragment>
+        ))}
+      </span>
+    </CodeTaskEventHost>
+  );
 }
 
 function officialToolsCopyText(tools: TranscriptToolUse[]) {
@@ -2123,8 +1995,8 @@ function CodeChapterTitle({ chapter }: { chapter: OfficialCodeUserChapter }) {
   return (
     <div
       id={officialChapterDomId(chapter.id)}
-      className="text-body-semibold text-assistant-primary select-text scroll-mt-[56px]"
-      data-official-source="c11959232-h_zsw3wI.js:zh"
+      className="text-body-semibold text-primary select-text scroll-mt-[56px]"
+      data-official-source="cd5a31703-B4nKQMBN.js:zh"
     >
       {chapter.title}
     </div>
@@ -2145,52 +2017,172 @@ function CodeOfficialChapterItem({
   const title = (renamedTitle ?? item.title) || "Chapter";
   return (
     <div
-      className="text-body-semibold text-assistant-primary select-text scroll-mt-[56px]"
-      data-official-source="c11959232-h_zsw3wI.js:Lh + zh"
+      className="text-body-semibold text-primary select-text scroll-mt-[56px]"
+      data-official-source="cd5a31703-B4nKQMBN.js:Lh + zh"
       id={officialChapterDomId(item.id)}
     >
       {title}
       {item.summary ? (
-        <div className="text-body text-assistant-secondary font-normal mt-p2">{item.summary}</div>
+        <div className="text-body text-secondary font-normal mt-p2">{item.summary}</div>
       ) : null}
     </div>
   );
 }
 
-/**
- * Official qb (c11959232): mode-gated plain italic thinking — not collapsible O9e ThinkingCell.
- * Do not import CoworkThinkingCell / expand-collapse UX onto Code residual.
- */
-const CodeThinkingBlock = memo(function CodeThinkingBlock({
+function officialThinkingQuoteMarkdown(text: string) {
+  return `> **Thinking** (~${Math.round(text.length / 4)} tok)\n>\n${text.split("\n").map((line) => (line.length > 0 ? `> ${line}` : ">")).join("\n")}`;
+}
+
+function OfficialThinkingCopyQuote({
+  placement = "hover",
   text,
-  transcriptMode,
 }: {
+  placement?: "action" | "hover";
   text: string;
-  transcriptMode: OfficialTranscriptMode;
 }) {
-  if (!officialTranscriptModeShowsThinking(transcriptMode)) return null;
+  const actionsText = useI18nText(MESSAGE_ACTION_MESSAGES);
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    void copyOfficialMessagePlain(officialThinkingQuoteMarkdown(text)).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    });
+  };
+  const button = (
+    <OfficialButton
+      ariaLabel={copied ? actionsText.copied : actionsText.copyAsQuote}
+      icon={copied ? "Check" : "Copy"}
+      onClick={copy}
+      preferFont
+      size="base"
+      variant="ghost"
+    />
+  );
+  if (placement === "action") {
+    return (
+      <div
+        aria-label={actionsText.thinkingActions}
+        className="flex h-[1lh] shrink-0 items-center"
+        data-official-source="cd5a31703-B4nKQMBN.js:YX"
+        role="toolbar"
+      >
+        {button}
+      </div>
+    );
+  }
   return (
     <div
-      className="text-body text-t6 italic whitespace-pre-wrap break-words"
-      data-official-source="c11959232-h_zsw3wI.js:qb"
+      aria-label={actionsText.thinkingActions}
+      className="absolute right-0 top-0 opacity-0 pointer-events-none group-hover/thinking:opacity-100 group-hover/thinking:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto"
+      data-official-source="cd5a31703-B4nKQMBN.js:nQe"
+      role="toolbar"
     >
-      {text}
+      {button}
     </div>
   );
-});
+}
 
-/** Official av (c11959232): italic qb-style lines for precedingThinking on tool groups. */
-function OfficialPrecedingThinkingLines({ lines }: { lines: string[] }) {
+function OfficialY1ThinkingLines({ lines }: { lines: string[] }) {
   if (lines.length === 0) return null;
   return (
-    <div className="flex flex-col gap-g2" data-official-source="c11959232-h_zsw3wI.js:av">
+    <div className="flex flex-col gap-0.75" data-find-omitted="" data-official-source="cd5a31703-B4nKQMBN.js:Y1">
       {lines.map((line, index) => (
-        <div className="text-body text-t6 italic whitespace-pre-wrap break-words" key={index}>
+        <div className="text-body text-muted italic whitespace-pre-wrap break-words" key={index}>
           {line}
         </div>
       ))}
     </div>
   );
+}
+
+/** Official XX / ap.Step — thinking-mode collapsible Thought process + YX Copy as quote in the panel. */
+function OfficialThoughtProcessStep({
+  expansionKey,
+  forceOpen = false,
+  text,
+}: {
+  expansionKey: string;
+  forceOpen?: boolean;
+  text: string;
+}) {
+  const actionsText = useI18nText(MESSAGE_ACTION_MESSAGES);
+  const [open, setOpen] = useState(true);
+  if (text.trim() === "") return null;
+  const expanded = forceOpen || open;
+  return (
+    <div data-expansion-key={expansionKey}>
+      <OfficialTurnStatusStep
+        actions={<OfficialThinkingCopyQuote placement="action" text={text} />}
+        actionsLabel={actionsText.thinkingActions}
+        defaultOpen
+        findOmitted
+        label={actionsText.thoughtProcess}
+        onOpenChange={forceOpen ? undefined : setOpen}
+        open={expanded}
+        source="cd5a31703-B4nKQMBN.js:XX"
+        state="done"
+      >
+        {text}
+      </OfficialTurnStatusStep>
+    </div>
+  );
+}
+
+/** Official ZX verbose: italic body + nQe hover Copy (not Y1; Y1 is precedingThinking). */
+function OfficialZxVerboseThinking({ text }: { text: string }) {
+  if (text.trim() === "") return null;
+  return (
+    <div className="group/thinking relative" data-official-source="cd5a31703-B4nKQMBN.js:ZX">
+      <div className="text-body text-muted italic whitespace-pre-wrap break-words pr-[calc(var(--cds-h-control)+var(--cds-pad-xs))]">
+        {text}
+      </div>
+      <OfficialThinkingCopyQuote text={text} />
+    </div>
+  );
+}
+
+/** Official ZX: thinking mode → XX Step; verbose → italic + nQe. */
+const CodeThinkingBlock = memo(function CodeThinkingBlock({
+  expansionKey,
+  text,
+  transcriptMode,
+}: {
+  expansionKey?: string;
+  text: string;
+  transcriptMode: OfficialTranscriptMode;
+}) {
+  if (!officialTranscriptModeShowsThinking(transcriptMode)) return null;
+  if (transcriptMode === "thinking") {
+    return <OfficialThoughtProcessStep expansionKey={expansionKey ?? "thinking"} forceOpen={false} text={text} />;
+  }
+  return <OfficialZxVerboseThinking text={text} />;
+});
+
+/** Official X1({tools}) vs Y1({lines}) for precedingThinking. */
+function OfficialPrecedingThinkingLines({
+  expansionKey,
+  lines,
+  transcriptMode = "normal",
+}: {
+  expansionKey?: string;
+  lines: string[];
+  transcriptMode?: OfficialTranscriptMode;
+}) {
+  if (lines.length === 0) return null;
+  if (transcriptMode === "thinking") {
+    return (
+      <div className="contents" data-official-source="cd5a31703-B4nKQMBN.js:X1">
+        {lines.map((line, index) => (
+          <OfficialThoughtProcessStep
+            expansionKey={`${expansionKey ?? "thinking"}:thinking:${index}`}
+            key={index}
+            text={line}
+          />
+        ))}
+      </div>
+    );
+  }
+  return <OfficialY1ThinkingLines lines={lines} />;
 }
 
 // Mode helpers live in officialTranscriptMode.ts (residual pr/xc; unit-tested).
@@ -2199,37 +2191,116 @@ export {
   officialTranscriptModeShowsThinking,
 } from "./officialTranscriptMode";
 
+/** Official DX: completed Artifact publish/open with surface input → kX instead of Zg. */
+function officialDxArtifactSurface(tool: TranscriptToolUse) {
+  if (!isOfficialArtifactTool(tool.name) || tool.status !== "completed" || tool.isError) return false;
+  const extracted = extractOfficialArtifactSurface(tool);
+  return Boolean(extracted?.isSurfaceInput && extracted.filePath);
+}
+
+function OfficialStandaloneArtifactSurface({ tool }: { tool: TranscriptToolUse }) {
+  const actions = useContext(EpitaxyTranscriptActionContext);
+  return (
+    <OfficialArtifactSurfaceCard
+      onOpenPath={actions ? (path: string) => actions.openFile({ path }) : undefined}
+      tool={tool}
+    />
+  );
+}
+
+function OfficialStandaloneWorkflowSurface({ tool }: { tool: TranscriptToolUse }) {
+  const actions = useContext(EpitaxyTranscriptActionContext);
+  return <OfficialWorkflowSurfaceCard onOpenTasks={actions?.openTasks} tool={tool} />;
+}
+
+/**
+ * Official t2e specials that replace Zg for a 1-tool standalone run.
+ * kQe AskUser TIe · TH SendUserMessage as-words · DX Artifact kX · E1 Workflow · IBe leftovers.
+ */
+function officialStandaloneSpecialCard(tool: TranscriptToolUse): ReactNode | null {
+  if (officialDxArtifactSurface(tool)) return <OfficialStandaloneArtifactSurface tool={tool} />;
+  if (isOfficialSendUserMessageAsWords(tool)) return <OfficialSendUserMessageWords tool={tool} />;
+  if (officialAskUserTranscriptPairs(tool)) return <OfficialAskUserTranscriptCard tool={tool} />;
+  if (officialWorkflowT1(tool)) return <OfficialStandaloneWorkflowSurface tool={tool} />;
+  const ibe = officialIbeStandaloneKind(tool);
+  if (ibe && ibe !== "push_notification") return <OfficialIbeStandaloneCard tool={tool} />;
+  return null;
+}
+
 function wrapStandaloneToolWithPrecedingThinking(
-  tool: TranscriptToolUse,
+  tools: TranscriptToolUse[],
   transcriptMode: OfficialTranscriptMode,
   key?: string,
+  liveTail = false,
 ) {
+  const head = tools[0];
+  if (!head) return null;
   const showThinking = officialTranscriptModeShowsThinking(transcriptMode);
-  const thinking = showThinking ? tool.precedingThinking : undefined;
-  const row = <OfficialToolRow key={key} tool={tool} transcriptMode={transcriptMode} />;
+  const thinking = showThinking ? head.precedingThinking : undefined;
+  const rowKey = key ?? `${head.id}:zg`;
+  const coalescedRun = tools.length > 1 ? tools : undefined;
+  const stripped = thinking ? { ...head, precedingThinking: undefined } : head;
+  const special = tools.length === 1 ? officialStandaloneSpecialCard(stripped) : null;
+  const row = special
+    ? <div className="contents" key={rowKey}>{special}</div>
+    : (
+      <OfficialToolRow
+        coalescedRun={coalescedRun}
+        inGroup={tools.length > 1}
+        key={rowKey}
+        liveTail={liveTail}
+        tool={stripped}
+        transcriptMode={transcriptMode}
+      />
+    );
   if (!thinking?.length) return row;
   return (
-    <div className="flex flex-col gap-[var(--chat-item-gap)] w-full" key={key}>
-      <OfficialPrecedingThinkingLines lines={thinking} />
-      <OfficialToolRow tool={{ ...tool, precedingThinking: undefined }} transcriptMode={transcriptMode} />
+    <div className="flex flex-col gap-[var(--chat-item-gap)] w-full" key={rowKey}>
+      <OfficialPrecedingThinkingLines expansionKey={head.id} lines={thinking} transcriptMode={transcriptMode} />
+      {row}
     </div>
   );
 }
 
-function AssistantToolsBlock({ item, transcriptMode = "normal" }: { item: Extract<TranscriptEntryItem, { kind: "tools" }>; transcriptMode?: OfficialTranscriptMode }) {
-  // Official Kb: _v(tools, memoryPath?, taskEvents) → map iv groups.
+function AssistantToolsBlock({
+  item,
+  liveTail = false,
+  transcriptMode = "normal",
+}: {
+  item: Extract<TranscriptEntryItem, { kind: "tools" }>;
+  liveTail?: boolean;
+  transcriptMode?: OfficialTranscriptMode;
+}) {
+  const showThinking = officialTranscriptModeShowsThinking(transcriptMode);
   const runs = groupOfficialToolRuns(item.tools, item.taskEvents);
-  if (runs.length === 1) {
-    const run = runs[0];
-    return run.tools.length === 1 && run.bucket !== "memory" && !(run.taskEvents?.length)
-      ? wrapStandaloneToolWithPrecedingThinking(run.tools[0], transcriptMode)
-      : <OfficialToolGroup memoryOps={run.memoryOps} taskEvents={run.taskEvents} tools={run.tools} transcriptMode={transcriptMode} />;
-  }
+  const lastIndex = runs.length - 1;
+  const paintRun = (run: OfficialToolRunGroup, index: number) => {
+    const runLiveTail = liveTail && index === lastIndex;
+    // Official B1/HC: 1 tool or same-file coalesce → t2e/Zg; else o2e.
+    // Live 1→N remounts Zg→o2e (official).
+    const bare = officialRendersBareRow({
+      memoryOps: run.memoryOps,
+      showThinking,
+      taskEvents: run.taskEvents,
+      tools: run.tools,
+    });
+    return bare
+      ? wrapStandaloneToolWithPrecedingThinking(run.tools, transcriptMode, runs.length === 1 ? undefined : run.id, runLiveTail)
+      : (
+        <OfficialToolGroup
+          key={run.tools[0]?.id ?? run.id}
+          liveTail={runLiveTail}
+          memoryOps={run.memoryOps}
+          taskEvents={run.taskEvents}
+          tools={run.tools}
+          transcriptMode={transcriptMode}
+        />
+      );
+  };
+  if (runs.length === 1) return paintRun(runs[0]!, 0);
   return (
     <div className="flex flex-col gap-[var(--chat-item-gap)] w-full">
-      {runs.map((run) => run.tools.length === 1 && run.bucket !== "memory" && !(run.taskEvents?.length)
-        ? wrapStandaloneToolWithPrecedingThinking(run.tools[0], transcriptMode, run.id)
-        : <OfficialToolGroup key={run.id} memoryOps={run.memoryOps} taskEvents={run.taskEvents} tools={run.tools} transcriptMode={transcriptMode} />)}
+      {runs.map((run, index) => paintRun(run, index))}
     </div>
   );
 }
@@ -2252,6 +2323,11 @@ const standaloneToolNames = new Set([
   "TaskStop",
   "SendUserMessage",
   "SendUserFile",
+  "Artifact",
+  "Workflow",
+  "ReportFindings",
+  "ClaudeDesign",
+  "PushNotification",
 ]);
 
 type OfficialMemoryOps = { read: number; search: number; write: number };
@@ -2339,33 +2415,38 @@ function groupOfficialToolRuns(tools: TranscriptToolUse[], taskEvents?: Official
   return groups;
 }
 
-function officialMemorySummaryPieces(ops: OfficialMemoryOps): ToolSummaryPiece[] {
-  // Official: recalled {a memory|# memories}, saved {a memory|# memories}
+type OfficialToolGroupSummaryText = Record<keyof typeof TOOL_GROUP_SUMMARY_MESSAGES, string>;
+
+function officialMemorySummaryPieces(ops: OfficialMemoryOps, text: OfficialToolGroupSummaryText): ToolSummaryPiece[] {
+  // Official ca80 `dR`: verb FyGldNBVoJ/dxFzERrTJq + meta iezAjNRKVQ `{n, plural, one {a memory} other {# memories}}`.
   const pieces: ToolSummaryPiece[] = [];
   const recalled = ops.read + ops.search;
-  if (recalled > 0) pieces.push({ meta: officialCountNoun(recalled, "memory", "memories", "a"), verb: "recalled" });
-  if (ops.write > 0) pieces.push({ meta: officialCountNoun(ops.write, "memory", "memories", "a"), verb: "saved" });
+  if (recalled > 0) pieces.push({ meta: formatOfficialIcu(text.memories, { n: recalled }), verb: text.recalled });
+  if (ops.write > 0) pieces.push({ meta: formatOfficialIcu(text.memories, { n: ops.write }), verb: text.saved });
   return pieces.length ? pieces : [{ meta: "memories", verb: "used" }];
 }
 
 function OfficialToolGroup({
+  liveTail = false,
   memoryOps,
   taskEvents,
   tools,
   transcriptMode = "normal",
 }: {
+  liveTail?: boolean;
   memoryOps?: OfficialMemoryOps;
   taskEvents?: OfficialToolGroupTaskEvent[];
   tools: TranscriptToolUse[];
   transcriptMode?: OfficialTranscriptMode;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const actions = useContext(EpitaxyTranscriptActionContext);
+  const text = useI18nText(TOOL_GROUP_SUMMARY_MESSAGES);
   const isVerbose = officialTranscriptModeExpandsDetails(transcriptMode);
   const showThinking = officialTranscriptModeShowsThinking(transcriptMode);
-  const toolsKey = tools.map((tool) => tool.id).join("|");
-  useEffect(() => {
-    setExpanded(false);
-  }, [toolsKey]);
+  // Official cc6e9624e `_` / cd5a `dS(Te)` — Te = first tool id. Live append must not reset.
+  const groupKey = tools[0]?.id ?? "";
+  const defaultExpanded = officialToolGroupDefaultExpanded(tools);
+  const [expanded, setExpanded] = useOfficialToolGroupExpanded(actions?.sessionId, groupKey, defaultExpanded);
 
   /**
    * Official iv thinking runs (c11959232):
@@ -2417,7 +2498,7 @@ function OfficialToolGroup({
     return lines.length > 0 ? lines : undefined;
   }, [memoryOps, showThinking, tools]);
 
-  const summary = memoryOps ? officialMemorySummaryPieces(memoryOps) : officialToolSummaryPieces(tools);
+  const summary = memoryOps ? officialMemorySummaryPieces(memoryOps, text) : officialToolSummaryPieces(tools, text);
   const status = aggregateToolStatus(tools);
   const isRunning = status === "running";
   const isAwaitingApproval = status === "awaiting_approval";
@@ -2440,17 +2521,25 @@ function OfficialToolGroup({
   }, [taskEvents, tools.length]);
   const toggle = () => {
     if (isVerbose) return;
-    setExpanded((value) => !value);
+    setExpanded(!expanded);
   };
 
   // Official early return: thinking runs replace the single iv card.
   if (thinkingRuns) {
     return (
-      <div className="flex flex-col gap-[var(--chat-item-gap)] w-full" data-official-source="c11959232-h_zsw3wI.js:iv thinking runs">
+      <div className="flex flex-col gap-[var(--chat-item-gap)] w-full" data-official-source="cd5a31703-B4nKQMBN.js:iv thinking runs">
         {thinkingRuns.map((run) => (
           <Fragment key={run.tools[0]?.id ?? `thinking-run-${run.start}`}>
-            {run.thinking?.length ? <OfficialPrecedingThinkingLines lines={run.thinking} /> : null}
+            {run.thinking?.length ? (
+              <OfficialPrecedingThinkingLines
+                expansionKey={run.tools[0]?.id}
+                lines={run.thinking}
+                transcriptMode={transcriptMode}
+              />
+            ) : null}
             <OfficialToolGroup
+              key={run.tools[0]?.id ?? `thinking-run-${run.start}`}
+              liveTail={liveTail}
               taskEvents={run.taskEvents}
               tools={run.tools}
               transcriptMode={transcriptMode}
@@ -2461,44 +2550,58 @@ function OfficialToolGroup({
     );
   }
 
-  // Official: single tool, no memoryOps, no taskEvents → Zg standalone (not a group card).
-  if (tools.length === 1 && !memoryOps && !(taskEvents?.length)) {
-    return wrapStandaloneToolWithPrecedingThinking(tools[0]!, transcriptMode);
+  // Official B1/HC: same-file coalesce or a single tool → t2e/Zg, not the iv group card.
+  if (officialRendersBareRow({ memoryOps, showThinking, taskEvents, tools })) {
+    return wrapStandaloneToolWithPrecedingThinking(tools, transcriptMode, undefined, liveTail);
   }
 
   const groupCard = (
-    <div className="flex flex-col w-full" data-official-source="c11959232-h_zsw3wI.js:iv group">
+    <div className="flex flex-col w-full" data-official-source="cd5a31703-B4nKQMBN.js:o2e">
       <button
         aria-expanded={isExpanded}
-        className="relative group/tool flex self-start max-w-full items-center py-0 gap-g1 text-left outline-none hide-focus-ring focus:ring-focus rounded-r3"
+        className="relative group/tool flex self-start max-w-full items-center py-0 gap-0.5 text-left focus-visible:outline-hidden hide-focus-ring focus-visible:shadow-focus rounded-sm"
         onClick={toggle}
         type="button"
       >
         {isRunning ? <span className="sr-only">running</span> : null}
-        <OfficialAnimatedToolLabel className="inline-flex items-center gap-g3 min-w-0" mode="wait" morphKey={runningSummary ? debouncedRunningToolId : "settled"}>
+        <OfficialAnimatedToolLabel
+          className={`inline-flex items-center gap-1 min-w-0 ${isRunning ? "" : isAwaitingApproval ? "text-secondary group-hover/tool:text-primary" : officialSettledToolVerbClass}`}
+          mode="wait"
+          morphKey={runningSummary ? "busy" : "settled"}
+        >
           {runningSummary ? (
             <>
               <OfficialTextShine className="text-body epitaxy-text-shine shrink-0">{runningSummary.runningVerb}</OfficialTextShine>
-              {runningSummary.meta ? <span className="text-body text-assistant-secondary truncate min-w-0">{runningSummary.meta}</span> : null}
+              {runningSummary.meta ? <span className="text-body truncate min-w-0">{runningSummary.meta}</span> : null}
             </>
           ) : (
             <>
-              <span className="text-body truncate min-w-0">{summary.map(renderToolSummaryPiece)}</span>
-              {isAwaitingApproval ? <span className="text-body text-extended-yellow shrink-0">Needs approval</span> : null}
+              <span className="text-body truncate min-w-0" data-testid="counted-line-names">{summary.map(renderToolSummaryPiece)}</span>
+              {isAwaitingApproval ? <span className="text-body text-warning shrink-0">Needs approval</span> : null}
             </>
           )}
         </OfficialAnimatedToolLabel>
-        <ToolChevron expanded={isExpanded} />
+        <ToolChevron colorClassName={officialSettledToolVerbClass} expanded={isExpanded} />
       </button>
       <OfficialCollapse expanded={isExpanded}>
-        <div className="flex flex-col gap-g3 bg-t1 rounded-r6 p-p7 mt-[var(--p6)]">
+        <div className="flex flex-col epitaxy-card-outline-layer rounded-lg overflow-clip mt-pad-md divide-y [&>*]:px-2.5 [&>*]:py-md">
           {tools.map((tool, index) => (
             <Fragment key={tool.id}>
-              {taskEventsByIndex?.get(index)?.map((event) => <CodeTaskEventChip item={event} key={event.id} />)}
-              <OfficialToolRow inGroup tool={tool} transcriptMode={transcriptMode} />
+              {taskEventsByIndex?.get(index)?.length
+                ? <CodeTaskEventRun events={taskEventsByIndex.get(index)!} inGroup key={`ev-${index}`} />
+                : null}
+              <OfficialToolRow
+                inGroup
+                key={`${tool.id}:zg`}
+                liveTail={liveTail && index === tools.length - 1}
+                tool={tool}
+                transcriptMode={transcriptMode}
+              />
             </Fragment>
           ))}
-          {taskEventsByIndex?.get(tools.length)?.map((event) => <CodeTaskEventChip item={event} key={event.id} />)}
+          {taskEventsByIndex?.get(tools.length)?.length
+            ? <CodeTaskEventRun events={taskEventsByIndex.get(tools.length)!} inGroup />
+            : null}
         </div>
       </OfficialCollapse>
     </div>
@@ -2506,8 +2609,8 @@ function OfficialToolGroup({
 
   if (memoryPrecedingThinking?.length) {
     return (
-      <div className="flex flex-col gap-[var(--chat-item-gap)] w-full" data-official-source="c11959232-h_zsw3wI.js:iv memory precedingThinking">
-        <OfficialPrecedingThinkingLines lines={memoryPrecedingThinking} />
+      <div className="flex flex-col gap-[var(--chat-item-gap)] w-full" data-official-source="cd5a31703-B4nKQMBN.js:iv memory precedingThinking">
+        <OfficialPrecedingThinkingLines expansionKey={tools[0]?.id} lines={memoryPrecedingThinking} transcriptMode={transcriptMode} />
         {groupCard}
       </div>
     );
@@ -2515,7 +2618,19 @@ function OfficialToolGroup({
   return groupCard;
 }
 
-function OfficialToolRow({ inGroup = false, tool, transcriptMode = "normal" }: { inGroup?: boolean; tool: TranscriptToolUse; transcriptMode?: OfficialTranscriptMode }) {
+function OfficialToolRow({
+  coalescedRun,
+  inGroup = false,
+  liveTail = false,
+  tool,
+  transcriptMode = "normal",
+}: {
+  coalescedRun?: TranscriptToolUse[];
+  inGroup?: boolean;
+  liveTail?: boolean;
+  tool: TranscriptToolUse;
+  transcriptMode?: OfficialTranscriptMode;
+}) {
   const actions = useContext(EpitaxyTranscriptActionContext);
   const summary = useMemo(() => officialToolRowSummary(tool), [tool]);
   // Official Zg C: diffMeta for Write/Edit when !error.
@@ -2523,12 +2638,12 @@ function OfficialToolRow({ inGroup = false, tool, transcriptMode = "normal" }: {
     () => (summary.kind === "diff" ? buildOfficialToolDiffMeta(tool) : null),
     [summary.kind, tool],
   );
-  // Official Zg: j = !(todos && empty); details always available unless empty todos.
-  const hasDetails = hasToolDetails(tool, summary);
-  const [expanded, setExpanded] = useState(false);
   const isVerbose = officialTranscriptModeExpandsDetails(transcriptMode);
+  const hasDetails = hasToolDetails(tool, summary, !inGroup, !isVerbose);
   const isQuestionPrompt = summary.kind === "question" && typeof tool.output !== "string" && !tool.isError;
-  const isExpanded = isVerbose || expanded || isQuestionPrompt;
+  // Official Zg: `[d,u]=e.useState(!1)` then `f=o||d||l` (verbose || local || question).
+  const [rowExpanded, setRowExpanded] = useState(false);
+  const isExpanded = isVerbose || rowExpanded || isQuestionPrompt;
   const isRunning = tool.status === "running";
   const isError = tool.status === "error" || Boolean(tool.isError);
   const isAwaitingApproval = tool.status === "awaiting_approval";
@@ -2546,19 +2661,81 @@ function OfficialToolRow({ inGroup = false, tool, transcriptMode = "normal" }: {
       return;
     }
     if (isVerbose || !hasDetails || isQuestionPrompt) return;
-    setExpanded((value) => !value);
+    setRowExpanded(!rowExpanded);
   };
+  const coalescedTools = coalescedRun && coalescedRun.length > 1 ? coalescedRun : undefined;
+  const turnLive = useOfficialTurnLive();
+  const actionsText = useI18nText(MESSAGE_ACTION_MESSAGES);
+  const toolsForMark = coalescedTools ?? [tool];
+  const nm = officialNmMark(
+    turnLive,
+    isRunning
+      ? { key: tool.id, toolIds: toolsForMark.map((entry) => entry.id), wireRunning: true }
+      : undefined,
+    liveTail && tool.status === "completed" && !isError,
+  );
+  const tailHeld = nm.tailHeld;
+  const blocked = nm.showsBlocked;
+  const busyLabel = blocked
+    ? actionsText.needsYourInput
+    : isRunning
+      ? summary.runningVerb
+      : isError && summary.failedVerb
+        ? summary.failedVerb
+        : summary.verb;
+  const zjWord = nm.marked && !blocked && typeof busyLabel === "string" ? officialQj(busyLabel) : null;
+  const zj = useOfficialZjFace(zjWord);
+  const tree = zj.kind === "tree";
+  /**
+   * Official c734 `ye` line: `St(w)` when `w` (busyStepKeys) is passed,
+   * else `xt(E)` sibling busy keys. Tool row hang uses this tool's id.
+   */
+  const hangVisual = blocked ? "blocked" : isRunning || tailHeld ? "busy" : "done";
+  const hangEmptyBody = !hasDetails;
+  const hangFace = useOfficialHangFace(hangVisual, officialHangFaceKey(hangVisual, busyLabel), {
+    hangMark: nm.marked,
+    line: hangVisual === "busy" && !hangEmptyBody ? officialHangBusyLine(toolsForMark.map((entry) => entry.id)) : undefined,
+    minMs: (current) => (current === "busy" && hangVisual === "busy" ? (hangEmptyBody ? undefined : OFFICIAL_HANG_BUSY_BODY_MIN_MS) : 0),
+    restretch: hangVisual === "busy" || hangVisual === "blocked" || nm.marked,
+    settleMs: nm.marked || hangVisual === "busy" || hangVisual === "blocked" ? 250 : 0,
+  });
+  const hangBusy = hangFace.value === "busy";
+  /**
+   * Official aM: shine only while `nM.marked` (`l`). Unmounting aM drops busy
+   * paint immediately — Qk restretch must not keep `epitaxy-text-shine` on Ran.
+   */
+  const shineBusy = Boolean(nm.marked && !blocked && !tree && hangBusy);
+  const hang = (nm.marked && (hangBusy || blocked)) || hangFace.hang;
   const details = hasDetails ? (
     <OfficialCollapse expanded={isExpanded}>
-      <OfficialToolDetails diffMeta={diffMeta} tool={tool} />
+      {coalescedTools ? (
+        <div className="flex flex-col gap-0.75" data-official-source="cd5a31703-B4nKQMBN.js:vB coalescedRun">
+          {coalescedTools.map((entry) => (
+            <OfficialToolDetails
+              diffMeta={entry.id === tool.id ? diffMeta : (officialToolRowKind(entry.name) === "diff" ? buildOfficialToolDiffMeta(entry) : null)}
+              key={entry.id}
+              tool={entry}
+            />
+          ))}
+        </div>
+      ) : (
+        <OfficialToolDetails diffMeta={diffMeta} tool={tool} />
+      )}
       {inGroup ? <OfficialToolOutputImages images={tool.outputImages} /> : null}
     </OfficialCollapse>
   ) : null;
   return (
-    <div className="flex flex-col w-full">
+    <div
+      className="flex flex-col w-full"
+      data-hang={hang ? "" : undefined}
+      data-live-tail={tailHeld ? "" : undefined}
+      data-official-source={tailHeld ? "cd5a31703-B4nKQMBN.js:aM" : undefined}
+      data-parked={nm.parked ? "" : undefined}
+      data-zj={zj.kind}
+    >
       <div
         aria-expanded={opensSubagent || !hasDetails ? undefined : isExpanded}
-        className="relative group/tool flex self-start max-w-full items-center py-0 gap-g2 text-left cursor-pointer outline-none hide-focus-ring focus:ring-focus rounded-r3"
+        className="relative group/tool flex self-start max-w-full items-center py-0 gap-0.75 text-left focus-visible:outline-hidden hide-focus-ring focus-visible:shadow-focus rounded-sm"
         onClick={toggle}
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== " ") return;
@@ -2569,34 +2746,38 @@ function OfficialToolRow({ inGroup = false, tool, transcriptMode = "normal" }: {
         tabIndex={0}
       >
         <OfficialAnimatedToolLabel
-          className={`shrink-0 ${isRunning ? "text-body epitaxy-text-shine" : isError ? "text-body text-extended-pink" : "text-body text-assistant-secondary"}`}
-          morphKey={isRunning ? "running" : "settled"}
+          className={`shrink-0 ${shineBusy ? "text-body epitaxy-text-shine" : blocked ? "text-body text-muted" : isError ? "text-body text-danger" : `text-body ${officialSettledToolVerbClass}`}`}
+          morphKey={blocked ? "blocked" : shineBusy ? "busy" : "settled"}
         >
-          {isRunning ? summary.runningVerb : summary.verb}
+          {zj.kind === "rewritten" ? zj.label : tree && zj.kind === "tree" ? zj.label : busyLabel}
         </OfficialAnimatedToolLabel>
-        {tool.subagentActivity?.model ? <span className="text-body text-assistant-secondary shrink-0">{tool.subagentActivity.model}</span> : null}
+        {tool.subagentActivity?.model ? <span className="text-body text-secondary shrink-0">{tool.subagentActivity.model}</span> : null}
         {tool.subagentActivity ? (
-          <span className="text-body text-assistant-secondary truncate min-w-0">
+          <span className="text-body text-secondary truncate min-w-0">
             {tool.subagentActivity.model ? "· " : ""}{tool.subagentActivity.latestToolName ?? tool.name} · {tool.subagentActivity.toolCallCount ?? 0}
           </span>
-        ) : isAwaitingApproval ? <span className="text-body text-extended-yellow shrink-0">Needs approval</span> : null}
+        ) : isAwaitingApproval && !blocked ? <span className="text-body text-warning shrink-0">Needs approval</span> : null}
         {!tool.subagentActivity && !isAwaitingApproval && summary.meta ? (
           metaHref ? (
-            <a className="text-code text-assistant-primary truncate min-w-0" href={metaHref} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()} rel="noreferrer" target="_blank">{summary.meta}</a>
+            <a className="text-body text-primary truncate min-w-0" href={metaHref} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()} rel="noreferrer" target="_blank">{summary.meta}</a>
           ) : (
             <span className={officialToolRowMetaClassName(summary)}>{summary.meta}</span>
           )
         ) : null}
-        {isRunning ? <span className="sr-only">running</span> : null}
-        {/* Official Vg+Xg: settled diff counts after meta */}
-        {showDiffBadge && diffMeta ? (
+        {shineBusy ? <span className="sr-only">running</span> : null}
+        {tree ? <OfficialThinkingSpark className="shrink-0" size={14} /> : null}
+        {/* Official qIe inner o2e rows (inGroup): no Yj. Elapsed is Gv / aM turnRow only.
+            Inserting `{n}s` here shifts chevrons when a new Running row lands. */}
+        {!inGroup && nm.marked && !nm.parked && !tree ? <OfficialAmElapsedSeconds /> : null}
+        {/* Official Vg+Xg: settled diff counts after meta. aM busy trailing omits diff. */}
+        {showDiffBadge && diffMeta && !tailHeld ? (
           <OfficialToolDiffBadge
             adds={diffMeta.counts.additions}
             dels={diffMeta.counts.deletions}
             flashOnMount={flashDiffBadgeRef.current}
           />
         ) : null}
-        {hasDetails ? <ToolChevron expanded={isExpanded} /> : null}
+        {hasDetails ? <ToolChevron colorClassName={isError ? "text-danger" : officialSettledToolVerbClass} expanded={isExpanded} /> : null}
       </div>
       {details}
       {showImagesOutsideCollapse ? <OfficialToolOutputImages images={tool.outputImages} /> : null}
@@ -2604,23 +2785,23 @@ function OfficialToolRow({ inGroup = false, tool, transcriptMode = "normal" }: {
   );
 }
 
+/**
+ * Official c425 `F` (`_y`): keep the body after first expand, toggle `hidden`.
+ * Class is `epitaxy-expanding-body` (+ `flow-root` while open). No motion spring —
+ * Fu ResizeObserver must not restretch the sizer for 350ms on every tool collapse.
+ */
 function OfficialCollapse({ children, expanded }: { children: ReactNode; expanded: boolean }) {
-  const reducedMotion = useReducedMotion();
-  if (reducedMotion) return expanded ? <div>{children}</div> : null;
+  const [mounted, setMounted] = useState(expanded);
+  if (expanded && !mounted) setMounted(true);
+  if (!mounted) return null;
   return (
-    <AnimatePresence initial={false}>
-      {expanded ? (
-        <motion.div
-          animate={{ height: "auto", opacity: 1 }}
-          className="overflow-hidden"
-          exit={{ height: 0, opacity: 0 }}
-          initial={{ height: 0, opacity: 0 }}
-          transition={{ height: { type: "spring", duration: 0.35, bounce: 0 }, opacity: { duration: 0.2, ease: "easeOut" } }}
-        >
-          {children}
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
+    <div
+      className={expanded ? "epitaxy-expanding-body flow-root" : "epitaxy-expanding-body"}
+      data-official-source="c425fb3cf-C8q5-d1_.js:F"
+      hidden={!expanded}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -2667,34 +2848,52 @@ function OfficialTextShine({ children, className }: { children: ReactNode; class
 }
 
 /**
- * Residual Kg (c119): morph label + className that may include epitaxy-text-shine.
+ * Official shared-frame `Jk` / cd5a `cv`: stacked morph (`inline-grid` +
+ * `col-start-1 row-start-1`). Leaving face is frozen (`Kk`) and aria-hidden.
+ * AnimatePresence popLayout laid verbs side-by-side → live `RanRan`.
  */
-function OfficialAnimatedToolLabel({ children, className, mode = "popLayout", morphKey }: { children: ReactNode; className: string; mode?: "popLayout" | "sync" | "wait"; morphKey: string }) {
+function OfficialAnimatedToolLabel({ children, className, morphKey }: { children: ReactNode; className: string; mode?: "popLayout" | "sync" | "wait"; morphKey: string }) {
   const reducedMotion = useReducedMotion();
-  const hasShine = className.includes("epitaxy-text-shine");
-  const shineRef = useResidualTextShineKick(hasShine && !reducedMotion);
-
-  if (reducedMotion) {
-    return (
-      <span className={className} ref={shineRef as RefObject<HTMLSpanElement>}>
-        {children}
-      </span>
-    );
+  const [shown, setShown] = useState(morphKey);
+  const [leaving, setLeaving] = useState<string[]>([]);
+  const frozen = useRef(new Map<string, { children: ReactNode; className: string }>());
+  frozen.current.set(morphKey, { children, className });
+  let stacked = leaving;
+  if (shown !== morphKey) {
+    stacked = reducedMotion
+      ? []
+      : [...leaving.filter((key) => key !== morphKey && key !== shown), shown].slice(-2);
+    setShown(morphKey);
+    setLeaving(stacked);
   }
+  const shineRef = useResidualTextShineKick(className.includes("epitaxy-text-shine") && !reducedMotion);
+  const keys = reducedMotion ? [morphKey] : [...stacked.filter((key) => key !== morphKey), morphKey];
   return (
-    <AnimatePresence initial={false} mode={mode}>
-      <motion.span
-        animate={{ opacity: 1, y: 0 }}
-        className={className}
-        exit={{ opacity: 0, y: -3 }}
-        initial={{ opacity: 0, y: 3 }}
-        key={morphKey}
-        ref={shineRef as never}
-        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-      >
-        {children}
-      </motion.span>
-    </AnimatePresence>
+    <span className="group/morph inline-grid min-w-0 items-center justify-items-start" data-official-source="shared-frame-DVFSKIcx.js:Jk">
+      {keys.map((key) => {
+        const face = frozen.current.get(key);
+        if (!face) return null;
+        const current = key === morphKey;
+        return (
+          <motion.span
+            animate={current ? { opacity: 1, y: 0 } : { opacity: 0, y: -3 }}
+            aria-hidden={current ? undefined : true}
+            className={`col-start-1 row-start-1 flex min-w-0 max-w-full items-center ${face.className}${current ? "" : " w-0 overflow-hidden invisible"}`}
+            data-morph-key={key}
+            initial={current && stacked.length > 0 && !reducedMotion ? { opacity: 0, y: 3 } : false}
+            key={key}
+            onAnimationComplete={() => {
+              if (current) return;
+              setLeaving((keys) => keys.filter((entry) => entry !== key));
+            }}
+            ref={current ? shineRef as never : undefined}
+            transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+          >
+            {face.children}
+          </motion.span>
+        );
+      })}
+    </span>
   );
 }
 
@@ -2734,11 +2933,24 @@ function aggregateToolStatus(tools: TranscriptToolUse[]): TranscriptToolUse["sta
   return status;
 }
 
-/** Official c11959232 `Qg` — tool-row expand chevron (size m + --class-base-icon 14px). */
-function ToolChevron({ expanded }: { expanded: boolean }) {
+/** Official c425 `Q`/`jy` — CaretRight 14, rotate when open; color is yy/Ly not assistant-secondary. */
+const officialSettledToolVerbClass =
+  "text-muted group-hover/tool:text-secondary group-focus-visible/tool:text-secondary group-has-[:focus-visible]/tool:text-secondary";
+
+function ToolChevron({
+  colorClassName = officialSettledToolVerbClass,
+  expanded,
+}: {
+  colorClassName?: string;
+  expanded: boolean;
+}) {
   return (
-    <span className="shrink-0 text-assistant-secondary" style={{ "--class-base-icon": "14px" } as CSSProperties}>
-      <Icon name={expanded ? "ChevronDownSmall" : "ChevronRightSmall"} size="m" />
+    <span className={`shrink-0 ${colorClassName}`}>
+      <Icon
+        className={`transition-transform duration-fast motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`}
+        customSize={14}
+        name="CaretRight"
+      />
     </span>
   );
 }
@@ -2746,6 +2958,7 @@ function ToolChevron({ expanded }: { expanded: boolean }) {
 type OfficialToolRowKind = "bash" | "diff" | "file" | "plan" | "question" | "text" | "todos";
 
 type OfficialToolRowSummary = {
+  failedVerb?: string;
   kind: OfficialToolRowKind;
   meta?: string;
   metaHref?: string;
@@ -2792,25 +3005,29 @@ function officialToolRowSummary(tool: TranscriptToolUse): OfficialToolRowSummary
   const input = tool.input;
   const inputString = (key: string) => stringValue(input[key]);
   const kind = officialToolRowKind(tool.name);
+  const ran = "Ran";
+  const read = "Read";
+  const running = "Running";
+  const reading = "Reading";
   switch (tool.name) {
     case "Bash":
     case "BashTool": {
       const command = inputString("command");
       const recognized = command && !tool.isError ? officialRecognizedBashAction(command, tool.output) : null;
       if (recognized) {
-        const verbs = officialBashActionVerbs(recognized);
+        const recognizedVerbs = officialBashActionVerbs(recognized);
         return {
-          ...verbs,
+          ...recognizedVerbs,
           kind,
           meta: recognized.meta ?? inputString("description") ?? command,
           metaHref: recognized.kind === "pr" ? recognized.url : undefined,
           metaIsCode: recognized.meta !== undefined,
         };
       }
-      return { kind, meta: inputString("description") ?? command, runningVerb: "Running", verb: "Ran" };
+      return { kind, meta: inputString("description") ?? command, runningVerb: running, verb: ran };
     }
     case "Read":
-      return { kind, meta: basename(inputString("file_path")), runningVerb: "Reading", verb: "Read" };
+      return { kind, meta: basename(inputString("file_path")), runningVerb: reading, verb: read };
     case "Write":
       return { kind, meta: basename(inputString("file_path")), runningVerb: "Creating", verb: "Created" };
     case "Edit":
@@ -2842,9 +3059,11 @@ function officialToolRowSummary(tool: TranscriptToolUse): OfficialToolRowSummary
     case "TodoWrite":
       return { kind, runningVerb: "Updating todos", verb: Array.isArray(input.todos) && input.todos.length > 0 ? "Updated todos" : "Cleared todos" };
     case "EnterPlanMode":
-      return { kind, runningVerb: "Entering plan mode", verb: "Entered plan mode" };
+      // Official c52b02f3f: verb qha/thgxcv, running lYgHzdY14t, failed BOOK2kUerX.
+      return { failedVerb: "Failed to start planning", kind, runningVerb: "Making a plan", verb: "Started planning" };
     case "ExitPlanMode":
-      return { kind, runningVerb: "Proposing plan", verb: "Proposed plan" };
+      // Official c52b02f3f: verb OOujErWXBR, running WZ2fCj8VUf, failed TBvKNM6xbZ.
+      return { failedVerb: "Failed to propose plan", kind, runningVerb: "Proposing plan", verb: "Proposed plan" };
     case "AskUserQuestion": {
       const questions = Array.isArray(input.questions) ? input.questions : [];
       const firstQuestion = asRecord(questions[0]);
@@ -2853,6 +3072,47 @@ function officialToolRowSummary(tool: TranscriptToolUse): OfficialToolRowSummary
     case "SendUserMessage":
     case "SendUserFile":
       return { kind, runningVerb: "Sending", verb: "Sent" };
+    case "Workflow":
+      return { failedVerb: "Failed to run workflow", kind, runningVerb: "Running workflow", verb: "Ran workflow" };
+    case "ReportFindings":
+      return { failedVerb: "Failed to report review findings", kind, runningVerb: "Reporting review findings", verb: "Reported review findings" };
+    case "ClaudeDesign":
+      return { failedVerb: "Failed to use Claude Design", kind, runningVerb: "Using Claude Design", verb: "Used Claude Design" };
+    case "PushNotification": {
+      const unsent = typeof tool.output === "string" && /not sent/i.test(tool.output);
+      return {
+        failedVerb: "Failed to send notification",
+        kind,
+        meta: inputString("message"),
+        runningVerb: "Sending notification",
+        verb: unsent ? "Notification not sent" : "Sent notification",
+      };
+    }
+    case "Artifact": {
+      const published = officialArtifactPublishedVerb(tool.status, tool.isError);
+      const filePath = officialArtifactFilePath(input, tool.output);
+      if (isOfficialArtifactSurfaceInput(input)) {
+        return {
+          failedVerb: "Failed to publish artifact",
+          kind,
+          meta: filePath,
+          metaIsCode: true,
+          runningVerb: "Publishing artifact",
+          verb: published.text,
+        };
+      }
+      const action = inputString("action");
+      if (action === "list") {
+        return { failedVerb: "Failed to list artifacts", kind, runningVerb: "Listing artifacts", verb: "Listed artifacts" };
+      }
+      if (action === "pin") {
+        return { failedVerb: "Failed to pin artifact", kind, runningVerb: "Pinning artifact", verb: "Pinned artifact" };
+      }
+      if (action === "unpin") {
+        return { failedVerb: "Failed to unpin artifact", kind, runningVerb: "Unpinning artifact", verb: "Unpinned artifact" };
+      }
+      return { kind, meta: filePath, metaIsCode: true, runningVerb: published.text, verb: published.text };
+    }
     default: {
       const label = tool.name.startsWith("mcp__") ? tool.name.split("__").at(-1)?.replace(/_/g, " ") ?? tool.name : tool.name;
       return { kind, runningVerb: `Using ${label}`, verb: `Used ${label}` };
@@ -2862,8 +3122,8 @@ function officialToolRowSummary(tool: TranscriptToolUse): OfficialToolRowSummary
 
 function officialToolRowMetaClassName(summary: OfficialToolRowSummary) {
   return summary.kind === "diff" || summary.kind === "file" || summary.metaIsCode
-    ? "text-code text-assistant-primary truncate min-w-0"
-    : "text-body text-assistant-secondary truncate min-w-0";
+    ? "text-body text-primary truncate min-w-0"
+    : "text-body text-secondary truncate min-w-0";
 }
 
 const officialGitCommitRe = officialGitCommandRe("commit");
@@ -2947,7 +3207,7 @@ type ToolSummaryPiece = {
   verb: string;
 };
 
-function officialToolSummaryPieces(tools: TranscriptToolUse[]): ToolSummaryPiece[] {
+function officialToolSummaryPieces(tools: TranscriptToolUse[], text: OfficialToolGroupSummaryText): ToolSummaryPiece[] {
   const order: string[] = [];
   const counts = new Map<string, number>();
   const errors = new Map<string, boolean>();
@@ -2964,68 +3224,100 @@ function officialToolSummaryPieces(tools: TranscriptToolUse[]): ToolSummaryPiece
     counts.set(kind, (counts.get(kind) ?? 0) + 1);
     errors.set(kind, errors.get(kind) || Boolean(tool.isError));
   }
-  const pieces = order.flatMap((kind) => officialToolKindSummary(kind, counts.get(kind) ?? 0, errors.get(kind)));
-  if (otherCount > 0) pieces.push({ isError: otherError, meta: plural(otherCount, "tool", "tools"), verb: "used" });
-  return pieces.length ? pieces : [{ meta: plural(tools.length, "tool", "tools"), verb: "used" }];
+  const pieces = order.flatMap((kind) => officialToolKindSummary(kind, counts.get(kind) ?? 0, errors.get(kind), text));
+  // Official c05b unknown-tool group — full sentence in verb (BRG8o6gNdU / JtrYJ8F4gT), no invent `used 1 tool`.
+  if (otherCount > 0) {
+    pieces.push({
+      isError: otherError,
+      verb: otherCount === 1 ? text.usedATool : formatOfficialIcu(text.usedCountTools, { count: otherCount }),
+    });
+  }
+  return pieces.length
+    ? pieces
+    : [{
+        verb: tools.length === 1
+          ? text.usedATool
+          : formatOfficialIcu(text.usedCountTools, { count: tools.length }),
+      }];
 }
 
 function renderToolSummaryPiece(piece: ToolSummaryPiece, index: number) {
   const verb = index === 0 ? capitalize(piece.verb) : piece.verb;
   return (
     <span key={`${piece.verb}-${piece.meta ?? index}`}>
-      {index > 0 ? <span className="text-assistant-secondary">, </span> : null}
-      <span className={piece.isError ? "text-extended-pink" : "text-assistant-secondary"}>{verb}</span>
-      {piece.meta ? <span className="text-assistant-secondary"> {piece.meta}</span> : null}
+      {index > 0 ? <span>, </span> : null}
+      <span className={piece.isError ? "text-body text-danger" : "text-body"} data-failed={piece.isError || undefined}>{verb}</span>
+      {piece.meta ? (
+        <span className="data-[tone=danger]:text-danger" data-tone={piece.isError ? "danger" : undefined}> {piece.meta}</span>
+      ) : null}
     </span>
   );
 }
 
 /**
- * Official index-BELzQL5P `rhe` tool-group settled labels (all tools, not just Read):
- *   read:  Read a file / Read {n} files
- *   write: Created a file / Created {n} files
- *   edit:  Edited a file / Edited {n} files
- *   bash:  Ran a command / Ran {n} commands
- *   grep:  Searched code / Searched {n} patterns
- *   glob:  Found files / Searched {n} patterns
- *   web:   Searched the web
- *   task:  Ran an agent / Ran {n} agents
- * Verb is lowercase; renderToolSummaryPiece capitalizes the first piece.
+ * Official shared-125 `Zg` tool-group settled labels (full sentence in verb, no meta):
+ *   bash:  cv9VNYMHXY / LVG1dX6B8u
+ *   task:  WSkLyhVgSu / X9Z2S33opa
+ *   read/view: MVQTRBWYud / cPnivFkT6E
+ *   write: tTVI3GQeyu / 14+jcDS33B
+ *   edit:  wT63jkA9qK / y5DX5NCmrm
+ *   delete_file: MM7OHMBA9j / 242T21lCRb
+ *   glob:  8XsqEcZQPV (no count)
+ *   grep:  ZdOS6uyq8n (no count)
+ *   web:   4+310Bnuvz
+ *   skill: 0AQGELjf8F / QE4MKdaawu
+ *   todo:  sdr9aWC1S/
+ * unknown: BRG8o6gNdU / JtrYJ8F4gT (officialToolSummaryPieces, not a kind)
+ * notebook_edit leftover did not name a catalog id — leave verb+meta as-is.
  */
-function officialToolKindSummary(kind: string, count: number, isError?: boolean): ToolSummaryPiece[] {
+function officialToolKindSummary(kind: string, count: number, isError: boolean | undefined, text: OfficialToolGroupSummaryText): ToolSummaryPiece[] {
   switch (kind) {
     case "bash":
-      return [{ isError, meta: officialCountNoun(count, "command", "commands", "a"), verb: "ran" }];
+      return [{
+        isError,
+        verb: count === 1 ? text.ranACommand : formatOfficialIcu(text.ranCountCommands, { count }),
+      }];
     case "read":
-      return [{ isError, meta: officialCountNoun(count, "file", "files", "a"), verb: "read" }];
     case "view":
-      return [{ isError, meta: officialCountNoun(count, "file", "files", "a"), verb: "viewed" }];
+      return [{
+        isError,
+        verb: count === 1 ? text.readAFile : formatOfficialIcu(text.readCountFiles, { count }),
+      }];
     case "write":
-      return [{ isError, meta: officialCountNoun(count, "file", "files", "a"), verb: "created" }];
+      return [{
+        isError,
+        verb: count === 1 ? text.createdAFile : formatOfficialIcu(text.createdCountFiles, { count }),
+      }];
     case "edit":
-      return [{ isError, meta: officialCountNoun(count, "file", "files", "a"), verb: "edited" }];
+      return [{
+        isError,
+        verb: count === 1 ? text.editedAFile : formatOfficialIcu(text.editedCountFiles, { count }),
+      }];
     case "notebook_edit":
       return [{ isError, meta: officialCountNoun(count, "notebook", "notebooks", "a"), verb: "edited" }];
     case "delete_file":
-      return [{ isError, meta: officialCountNoun(count, "file", "files", "a"), verb: "deleted" }];
+      return [{
+        isError,
+        verb: count === 1 ? text.deletedAFile : formatOfficialIcu(text.deletedCountFiles, { count }),
+      }];
     case "grep":
-      // Official: 1 → "Searched code"; n → "Searched {n} patterns"
-      return count === 1
-        ? [{ isError, meta: "code", verb: "searched" }]
-        : [{ isError, meta: `${count} patterns`, verb: "searched" }];
+      return [{ isError, verb: text.searchedFiles }];
     case "glob":
-      // Official: 1 → "Found files"; n → "Searched {n} patterns"
-      return count === 1
-        ? [{ isError, meta: "files", verb: "found" }]
-        : [{ isError, meta: `${count} patterns`, verb: "searched" }];
+      return [{ isError, verb: text.lookedForFiles }];
     case "web":
-      return [{ isError, meta: "the web", verb: "searched" }];
+      return [{ isError, verb: text.searchedTheWeb }];
     case "task":
-      return [{ isError, meta: officialCountNoun(count, "agent", "agents", "an"), verb: "ran" }];
+      return [{
+        isError,
+        verb: count === 1 ? text.ranAnAgent : formatOfficialIcu(text.ranCountAgents, { count }),
+      }];
     case "todo":
-      return [{ isError, meta: "todos", verb: "updated" }];
+      return [{ isError, verb: text.updatedTasks }];
     case "skill":
-      return [{ isError, meta: officialCountNoun(count, "skill", "skills", "a"), verb: "ran" }];
+      return [{
+        isError,
+        verb: count === 1 ? text.loadedASkill : formatOfficialIcu(text.loadedCountSkills, { count }),
+      }];
     case "exit_plan_mode":
       return [{ isError, meta: "a plan", verb: "proposed" }];
     default:
@@ -3059,8 +3351,34 @@ function officialToolKind(name: string) {
   return undefined;
 }
 
-function hasToolDetails(tool: TranscriptToolUse, summary: OfficialToolRowSummary) {
-  return !(summary.kind === "todos" && officialTodoItems(tool.input).length === 0);
+function hasToolDetails(
+  tool: TranscriptToolUse,
+  summary: OfficialToolRowSummary,
+  hoistImages = true,
+  shortToolBodies = true,
+) {
+  // Official qIe `pe` / c52b02f3f `xn` oy: running+empty input has no body.
+  // cb6930 `ll` Ev: shortToolBodies default on (`Zt=!verbose && be()`); empty-says catalog.
+  if ((tool.status === "running" || tool.status === "awaiting_approval") && Object.keys(tool.input).length === 0) {
+    return false;
+  }
+  if (officialEvEmptyBody(tool, hoistImages, shortToolBodies)) return false;
+  if (summary.kind === "todos") return officialTodoItems(tool.input).length > 0;
+  if (summary.kind === "plan") return typeof tool.input.plan === "string" && tool.input.plan.length > 0;
+  if (summary.kind === "question") {
+    const raw = Array.isArray(tool.input.questions) ? tool.input.questions : [];
+    return raw.some((item) => {
+      const question = asRecord(item).question;
+      return typeof question === "string" && question.length > 0;
+    });
+  }
+  if (summary.kind === "diff") return true;
+  if (tool.name === "Bash" || tool.name === "BashTool") {
+    return Boolean(stringValue(tool.input.command) || tool.output);
+  }
+  if (tool.name === "Read" && tool.output && !tool.isError) return true;
+  if (isOfficialSendUserFileTool(tool.name) && parseOfficialSendUserFileCard(tool)) return true;
+  return officialSxGenericKeys(tool.input).length > 0 || Boolean(tool.output);
 }
 
 function officialTodoItems(input: Record<string, unknown>) {
@@ -3080,7 +3398,14 @@ function officialTodoItems(input: Record<string, unknown>) {
 function OfficialToolDetails({ diffMeta, tool }: { diffMeta?: OfficialToolDiffMeta | null; tool: TranscriptToolUse }) {
   const actions = useContext(EpitaxyTranscriptActionContext);
   const summaryKind = officialToolRowKind(tool.name);
-  // Official sx order: todos → plan → question → bash → diff+meta → file → error/generic.
+  const showsLine = officialEvShowsLine(tool, true);
+  if (showsLine !== undefined) {
+    return showsLine
+      ? <div className="text-body text-secondary whitespace-pre-wrap break-words pt-p3" data-official-source="cb6930dae-Q_S3-FcC.js:sl">{showsLine}</div>
+      : null;
+  }
+  // Official sx order: todos → plan → question → bash → diff+meta → file → SendUserFile tile → error/generic.
+  // Artifact publish/open completed is DX/kX (wrapStandalone), not this Zg body.
   if (summaryKind === "todos") {
     const todos = officialTodoItems(tool.input);
     return todos.length > 0 ? <OfficialTodosToolDetails todos={todos} /> : null;
@@ -3102,6 +3427,14 @@ function OfficialToolDetails({ diffMeta, tool }: { diffMeta?: OfficialToolDiffMe
       />
     );
   }
+  if (isOfficialSendUserFileTool(tool.name) && parseOfficialSendUserFileCard(tool)) {
+    return (
+      <OfficialSendUserFileCard
+        onOpenPath={actions ? (path: string) => actions.openFile({ path }) : undefined}
+        tool={tool}
+      />
+    );
+  }
   return <OfficialGenericToolDetails tool={tool} />;
 }
 
@@ -3111,7 +3444,7 @@ function OfficialTodosToolDetails({ todos }: { todos: Array<{ content: string; i
     <ul className="flex flex-col gap-[var(--p5)] text-body py-p3">
       {todos.map((todo) => (
         <li
-          className={`flex items-start gap-g3 ${todo.status === "completed" ? "line-through decoration-1 text-assistant-secondary" : "text-assistant-primary"}`}
+          className={`flex items-start gap-0.75 ${todo.status === "completed" ? "line-through decoration-1 text-secondary" : "text-primary"}`}
           key={todo.id}
         >
           <OfficialTodoStatusIcon status={todo.status} />
@@ -3124,7 +3457,7 @@ function OfficialTodosToolDetails({ todos }: { todos: Array<{ content: string; i
 
 function OfficialTodoStatusIcon({ status }: { status: "completed" | "in_progress" | "pending" }) {
   // Official ux + dx: 14px status slot.
-  const className = "flex size-[14px] shrink-0 items-center justify-center text-assistant-primary";
+  const className = "flex size-[14px] shrink-0 items-center justify-center text-primary";
   if (status === "completed") {
     return (
       <span className={className}>
@@ -3155,21 +3488,21 @@ function OfficialPlanToolDetails({ tool }: { tool: TranscriptToolUse }) {
   const plan = typeof tool.input.plan === "string" ? tool.input.plan : "";
   if (tool.status === "running" || tool.status === "awaiting_approval") {
     return plan ? (
-      <div className="text-body text-assistant-secondary whitespace-pre-wrap break-words pl-p6 border-l-2 border-[var(--border-default)] py-p3">
+      <div className="text-body text-secondary whitespace-pre-wrap break-words pl-p6 border-l-2 border-[var(--border-default)] py-p3">
         {plan}
       </div>
     ) : null;
   }
   return (
-    <div className="flex flex-col gap-g3 py-p3">
+    <div className="flex flex-col gap-0.75 py-p3">
       {tool.isError ? null : (
-        <div className="flex items-center gap-g3 text-body text-extended-green">
+        <div className="flex items-center gap-0.75 text-body text-extended-green">
           <Icon name="CircleCheck" size="sm" />
           <span>Plan approved</span>
         </div>
       )}
       {plan ? (
-        <div className="text-body text-assistant-secondary whitespace-pre-wrap break-words pl-p6 border-l-2 border-[var(--border-default)]">
+        <div className="text-body text-secondary whitespace-pre-wrap break-words pl-p6 border-l-2 border-[var(--border-default)]">
           {plan}
         </div>
       ) : null}
@@ -3190,9 +3523,9 @@ function OfficialQuestionToolDetails({ tool }: { tool: TranscriptToolUse }) {
   }, [tool.input.questions]);
   if (questions.length === 0) return null;
   return (
-    <div className="flex flex-col gap-g3 pt-p3">
+    <div className="flex flex-col gap-0.75 pt-p3">
       {questions.map((question, index) => (
-        <div className="text-body text-assistant-secondary [overflow-wrap:anywhere]" key={`${index}-${question.slice(0, 24)}`}>
+        <div className="text-body text-secondary [overflow-wrap:anywhere]" key={`${index}-${question.slice(0, 24)}`}>
           {question}
         </div>
       ))}
@@ -3207,12 +3540,12 @@ function OfficialBashToolDetails({ tool }: { tool: TranscriptToolUse }) {
     <div className="group/body py-p6">
       <div className="bg-t1 rounded-r6 flex flex-col">
         <div className="flex items-center px-p6 py-p5">
-          <span className="flex-1 text-body text-assistant-secondary">Bash</span>
+          <span className="flex-1 text-body text-secondary">Bash</span>
           <ToolDetailsCopyButton text={copyText} />
         </div>
         <div className="flex flex-col gap-g8 px-p6 pb-p8 text-code">
           {command ? <div className="whitespace-pre-wrap">$ {command}</div> : null}
-          {tool.output ? <div className={`whitespace-pre-wrap break-all ${tool.isError ? "text-extended-pink" : "text-assistant-secondary"}`}>{tool.output}</div> : null}
+          {tool.output ? <div className={`whitespace-pre-wrap break-all ${tool.isError ? "text-danger" : "text-secondary"}`}>{tool.output}</div> : null}
         </div>
       </div>
     </div>
@@ -3235,18 +3568,42 @@ function OfficialReadFileToolDetails({ tool }: { tool: TranscriptToolUse }) {
   );
 }
 
-/** Official c11959232 sx generic branch: only render when ox(tool) is non-empty; error output is pink. */
+const OFFICIAL_SX_GENERIC_SKIP_KEYS = new Set([
+  "description",
+  "file_path",
+  "notebook_path",
+  "command",
+  "pattern",
+  "path",
+  "plan",
+  "prompt",
+  "questions",
+  "todos",
+]);
+
+function officialSxGenericKeys(input: Record<string, unknown>) {
+  return Object.keys(input).filter((key) => {
+    if (OFFICIAL_SX_GENERIC_SKIP_KEYS.has(key)) return false;
+    const value = input[key];
+    if (value == null || value === "") return false;
+    return true;
+  });
+}
+
+/** Official sx generic catalog: skip named-kind fields; dump remaining key:value + output. */
 function OfficialGenericToolDetails({ tool }: { tool: TranscriptToolUse }) {
-  const inputKeys = Object.keys(tool.input);
-  const copyText = toolCopyText(tool);
-  // Official: if (t.isError && t.output) error body; else if (ox(t)) generic; else null.
+  const inputKeys = officialSxGenericKeys(tool.input);
+  const copyText = [
+    ...inputKeys.map((key) => `${key}: ${inputValueText(tool.input[key])}`),
+    tool.output ?? "",
+  ].filter(Boolean).join("\n\n");
   if (tool.isError && tool.output) {
     return (
       <div className="group/body relative flex flex-col w-full pt-p3">
         <div className="flex w-full">
           <div className="flex-1 min-w-0 flex flex-col gap-g4 text-body whitespace-pre-wrap break-words">
-            {inputKeys.length > 0 ? <div className="text-assistant-secondary">{inputKeys.map((key) => <ToolInputLine input={tool.input} inputKey={key} key={key} />)}</div> : null}
-            <div className="text-extended-pink">{tool.output}</div>
+            {inputKeys.length > 0 ? <div className="text-secondary">{inputKeys.map((key) => <ToolInputLine input={tool.input} inputKey={key} key={key} />)}</div> : null}
+            <div className="text-danger">{tool.output}</div>
           </div>
           <ToolDetailsCopyButton text={copyText} />
         </div>
@@ -3257,8 +3614,8 @@ function OfficialGenericToolDetails({ tool }: { tool: TranscriptToolUse }) {
   return (
     <div className="group/body relative flex flex-col w-full pt-p3">
       <div className="flex w-full">
-        <div className="flex-1 min-w-0 flex flex-col gap-g4 text-body text-assistant-secondary whitespace-pre-wrap break-words">
-          {inputKeys.length > 0 ? <div className="text-assistant-secondary">{inputKeys.map((key) => <ToolInputLine input={tool.input} inputKey={key} key={key} />)}</div> : null}
+        <div className="flex-1 min-w-0 flex flex-col gap-g4 text-body text-secondary whitespace-pre-wrap break-words">
+          {inputKeys.length > 0 ? <div className="text-secondary">{inputKeys.map((key) => <ToolInputLine input={tool.input} inputKey={key} key={key} />)}</div> : null}
           {tool.output ? <div>{tool.output}</div> : null}
         </div>
         <ToolDetailsCopyButton text={copyText} />
@@ -3271,7 +3628,7 @@ function OfficialGenericToolDetails({ tool }: { tool: TranscriptToolUse }) {
 function OfficialToolOutputImages({ images }: { images?: TranscriptToolUse["outputImages"] }) {
   if (!images?.length) return null;
   return (
-    <div className="flex flex-wrap gap-g3 pt-p3">
+    <div className="flex flex-wrap gap-0.75 pt-p3">
       {images.map((image, index) => {
         const src = image.url ?? (image.data ? `data:${image.mimeType ?? image.media_type ?? "image/png"};base64,${image.data}` : undefined);
         if (!src) return null;
@@ -3285,7 +3642,7 @@ function OfficialTextToolDetails({ label, text }: { label: string; text: string 
   return (
     <div className="group/body py-p6">
       <div className="bg-t1 rounded-r6 flex flex-col overflow-hidden">
-        <div className="px-p6 pt-p5 pb-p3 text-body text-assistant-secondary">{label}</div>
+        <div className="px-p6 pt-p5 pb-p3 text-body text-secondary">{label}</div>
         <pre className="m-0 px-p6 pb-p5 text-code text-t8 whitespace-pre-wrap break-words">{text}</pre>
       </div>
     </div>
@@ -3299,7 +3656,7 @@ function ToolPathButton({ path }: { path: string }) {
     actions?.openFile({ path });
   };
   return (
-    <button className="flex flex-1 min-w-0 text-left text-body text-assistant-secondary outline-none hide-focus-ring ring-focus hover:underline underline-offset-[3px] bg-transparent border-0 p-0 m-0 cursor-default" onClick={open} type="button">
+    <button className="flex flex-1 min-w-0 text-left text-body text-secondary outline-none hide-focus-ring ring-focus hover:underline underline-offset-[3px] bg-transparent border-0 p-0 m-0 cursor-default" onClick={open} type="button">
       <span className="truncate">{basename(path) ?? path}</span>
     </button>
   );
@@ -3367,7 +3724,7 @@ function ToolDetailsCopyButton({ text }: { text: string }) {
   if (!text) return null;
   return (
     <div className="opacity-0 group-hover/body:opacity-100 focus-within:opacity-100 [transition:opacity_150ms_cubic-bezier(0.215,0.61,0.355,1)] motion-reduce:transition-none">
-      <OfficialButton ariaLabel={copied ? "Copied" : "Copy"} icon={copied ? "CheckSelection" : "CopySquareBehind"} onClick={copy} size="small" variant="uncontained" />
+      <OfficialButton ariaLabel={copied ? "Copied" : "Copy"} icon={copied ? "Check" : "Copy"} onClick={copy} preferFont size="base" variant="ghost" />
     </div>
   );
 }
@@ -3391,18 +3748,18 @@ function capitalize(value: string) {
 function UserBashBlock({ item }: { item: Extract<TranscriptEntryItem, { kind: "bash" }> }) {
   const command = item.command;
   return (
-    <div className="relative max-w-full w-full select-text" data-official-source="c11959232-h_zsw3wI.js:ib">
+    <div className="relative max-w-full w-full select-text" data-official-source="cd5a31703-B4nKQMBN.js:ib">
       {command ? <OfficialUserBashCommand command={command} /> : null}
       <div
         className={`${command ? "mt-[var(--p4)]" : ""} rounded-r6 bg-t1 overflow-clip font-mono text-code max-h-[160px] overflow-y-auto px-[var(--p6)] py-[var(--p4)]`}
       >
-        <pre className="m-0 text-assistant-secondary whitespace-pre-wrap break-all">
+        <pre className="m-0 text-secondary whitespace-pre-wrap break-all">
           {item.error ? (
             <span className="text-destructive-default">{item.error}</span>
           ) : item.output !== undefined ? (
             item.output || "(no output)"
           ) : (
-            <span className="text-assistant-secondary">Running…</span>
+            <span className="text-secondary">Running…</span>
           )}
         </pre>
       </div>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useSyncExternalStore } from "react";
 import {
   assignToCustomGroupState,
   clampSidebarWidth,
@@ -34,6 +34,12 @@ export type FrameState = {
   darkerCode: boolean;
   groupByByMode: DFrameGroupByByMode;
   navPinnedIds: string[] | null;
+  /**
+   * Official H6t `navHasCodeRoutinesByOrg` (shared-50). w2 `Kf`/`Yg` reads this
+   * until CCD settles so Code Routines does not flash overflow on first paint.
+   * Only `true` entries are kept (official merge filter `e===!0`).
+   */
+  navHasCodeRoutinesByOrg: Record<string, true>;
   pinnedOrder: string[];
   seenDragPinHint: boolean;
   sidebarCollapsed: boolean;
@@ -44,6 +50,10 @@ export type FrameState = {
   sortByByMode: DFrameSortByByMode;
   systemFont: boolean;
   moreOpen: boolean;
+  /** Official T1 NgcLgMejq0. Default false; S1 treats true as an active filter. */
+  showEmptyGroups: boolean;
+  /** Official Wz `Oy(Qc, !0)`. Default true. */
+  showPrStatus: boolean;
 };
 
 export type FrameActions = {
@@ -63,11 +73,15 @@ export type FrameActions = {
   setGroupBy: (mode: FrameMode, groupBy: DFrameGroupBy) => void;
   setMode: (mode: FrameMode) => void;
   setMoreOpen: (open: boolean) => void;
+  /** Official `setNavHasCodeRoutines(orgId, value)` — true writes, false deletes. */
+  setNavHasCodeRoutines: (orgId: string, value: boolean) => void;
   setNavPinnedIds: (ids: string[] | null) => void;
   setPinnedOrder: (ids: string[]) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setSidebarHovering: (hovering: boolean) => void;
   setSidebarResizing: (resizing: boolean) => void;
+  setShowEmptyGroups: (enabled: boolean) => void;
+  setShowPrStatus: (enabled: boolean) => void;
   setSortBy: (mode: FrameMode, sortBy: DFrameSortBy) => void;
   setSystemFont: (enabled: boolean) => void;
   toggleGroupCollapsed: (id: string) => void;
@@ -80,94 +94,225 @@ export type FrameStore = FrameState & FrameActions & {
   collapsedGroups: string[];
 };
 
-export function useFrameStore(): FrameStore {
-  const [state, setState] = useState<FrameState>(createInitialFrameState);
+/**
+ * Official H6t (shared-50): module store, not useState inside DesktopFrame.
+ * toggleCollapsed patches `collapsed` on the store; session tiles do not subscribe.
+ * Product used to keep useState in DesktopFrame so Cmd+B rebuilt PaneLayout + Fu.
+ */
+const subscribers = new Set<() => void>();
+let frameState: FrameState = createInitialFrameState();
 
-  return useMemo(() => ({
-    ...state,
-    collapsedGroups: collapsedGroupsForMode(state.collapsedGroupsByMode, state.mode),
-    addCustomGroup: (name) => {
-      const group = { id: `cg-${crypto.randomUUID()}`, name };
-      setState((current) => {
-        const customGroups = [...current.customGroups, group];
-        persistDFrameState({ customGroups });
-        return { ...current, customGroups };
-      });
-      return group;
-    },
-    assignToCustomGroup: (sessionKey, groupId, nextOrder) => setState((current) => assignToCustomGroupState(current, sessionKey, groupId, nextOrder)),
-    clearSessionSidebarMeta: (sessionKey) => setState((current) => clearSessionSidebarMetaState(current, sessionKey)),
-    commitSidebarWidth: (width) => setState((current) => {
+function emitFrameStore() {
+  for (const listener of subscribers) listener();
+}
+
+function patchFrameState(updater: (current: FrameState) => FrameState) {
+  const next = updater(frameState);
+  if (next === frameState) return;
+  frameState = next;
+  emitFrameStore();
+}
+
+const frameActions: FrameActions = {
+  addCustomGroup: (name) => {
+    const group = { id: `cg-${crypto.randomUUID()}`, name };
+    patchFrameState((current) => {
+      const customGroups = [...current.customGroups, group];
+      persistDFrameState({ customGroups });
+      return { ...current, customGroups };
+    });
+    return group;
+  },
+  assignToCustomGroup: (sessionKey, groupId, nextOrder) => {
+    patchFrameState((current) => assignToCustomGroupState(current, sessionKey, groupId, nextOrder));
+  },
+  clearSessionSidebarMeta: (sessionKey) => {
+    patchFrameState((current) => clearSessionSidebarMetaState(current, sessionKey));
+  },
+  commitSidebarWidth: (width) => {
+    patchFrameState((current) => {
       const sidebarWidth = clampSidebarWidth(width);
       persistDFrameState({ sidebarWidth });
       return { ...current, sidebarWidth };
-    }),
-    deleteCustomGroup: (id) => setState((current) => deleteCustomGroupState(current, id)),
-    markDragPinHintSeen: () => setState((current) => {
+    });
+  },
+  deleteCustomGroup: (id) => {
+    patchFrameState((current) => deleteCustomGroupState(current, id));
+  },
+  markDragPinHintSeen: () => {
+    patchFrameState((current) => {
       persistDFrameState({ seenDragPinHint: true });
       return { ...current, seenDragPinHint: true, showDragPinHint: false };
-    }),
-    maybeShowDragPinHint: () => setState((current) => (current.seenDragPinHint || current.sidebarCollapsed ? current : { ...current, showDragPinHint: true })),
-    moveCustomGroup: (id, index) => setState((current) => moveCustomGroupState(current, id, index)),
-    removeFromPinnedOrder: (id) => setState((current) => {
+    });
+  },
+  maybeShowDragPinHint: () => {
+    patchFrameState((current) => (
+      current.seenDragPinHint || current.sidebarCollapsed ? current : { ...current, showDragPinHint: true }
+    ));
+  },
+  moveCustomGroup: (id, index) => {
+    patchFrameState((current) => moveCustomGroupState(current, id, index));
+  },
+  removeFromPinnedOrder: (id) => {
+    patchFrameState((current) => {
       if (!current.pinnedOrder.includes(id)) return current;
       const pinnedOrder = current.pinnedOrder.filter((item) => item !== id);
       persistDFrameState({ pinnedOrder });
       return { ...current, pinnedOrder };
-    }),
-    renameCustomGroup: (id, name) => setState((current) => {
+    });
+  },
+  renameCustomGroup: (id, name) => {
+    patchFrameState((current) => {
       const customGroups = current.customGroups.map((group) => group.id === id ? { ...group, name } : group);
       persistDFrameState({ customGroups });
       return { ...current, customGroups };
-    }),
-    setCustomGroupOrder: (id, order) => setState((current) => {
+    });
+  },
+  setCustomGroupOrder: (id, order) => {
+    patchFrameState((current) => {
       const customGroupOrder = { ...current.customGroupOrder, [id]: order };
       persistDFrameState({ customGroupOrder });
       return { ...current, customGroupOrder };
-    }),
-    setDarkerCode: (darkerCode) => setState((current) => {
+    });
+  },
+  setDarkerCode: (darkerCode) => {
+    patchFrameState((current) => {
       persistDFrameState({ darkerCode });
       return { ...current, darkerCode };
-    }),
-    setGroupBy: (mode, groupBy) => setState((current) => {
+    });
+  },
+  setGroupBy: (mode, groupBy) => {
+    patchFrameState((current) => {
       const groupByByMode = { ...current.groupByByMode, [mode]: groupBy };
       persistDFrameState({ groupByByMode });
       return { ...current, groupByByMode };
-    }),
-    setMode: (mode) => setState((current) => {
+    });
+  },
+  setMode: (mode) => {
+    patchFrameState((current) => {
       persistDFrameState({ mode });
       return { ...current, mode, moreOpen: false, showDragPinHint: false };
-    }),
-    setMoreOpen: (moreOpen) => setState((current) => ({ ...current, moreOpen })),
-    setNavPinnedIds: (navPinnedIds) => setState((current) => {
+    });
+  },
+  setMoreOpen: (moreOpen) => {
+    patchFrameState((current) => (current.moreOpen === moreOpen ? current : { ...current, moreOpen }));
+  },
+  setNavHasCodeRoutines: (orgId, value) => {
+    patchFrameState((current) => {
+      const prev = current.navHasCodeRoutinesByOrg[orgId] === true;
+      if (prev === value) return current;
+      const navHasCodeRoutinesByOrg = { ...current.navHasCodeRoutinesByOrg };
+      if (value) navHasCodeRoutinesByOrg[orgId] = true;
+      else delete navHasCodeRoutinesByOrg[orgId];
+      persistDFrameState({ navHasCodeRoutinesByOrg });
+      return { ...current, navHasCodeRoutinesByOrg };
+    });
+  },
+  setNavPinnedIds: (navPinnedIds) => {
+    patchFrameState((current) => {
       persistDFrameState({ navPinnedIds });
       return { ...current, navPinnedIds };
-    }),
-    setPinnedOrder: (pinnedOrder) => setState((current) => {
+    });
+  },
+  setPinnedOrder: (pinnedOrder) => {
+    patchFrameState((current) => {
       persistDFrameState({ pinnedOrder });
       return { ...current, pinnedOrder };
-    }),
-    setSidebarCollapsed: (sidebarCollapsed) => setState((current) => {
+    });
+  },
+  setSidebarCollapsed: (sidebarCollapsed) => {
+    patchFrameState((current) => {
       persistDFrameState({ collapsed: sidebarCollapsed });
       return { ...current, sidebarCollapsed, moreOpen: false, showDragPinHint: false, sidebarHovering: false };
-    }),
-    setSidebarHovering: (sidebarHovering) => setState((current) => ({ ...current, sidebarHovering, showDragPinHint: sidebarHovering ? current.showDragPinHint : false })),
-    setSidebarResizing: (sidebarResizing) => setState((current) => ({ ...current, sidebarResizing })),
-    setSortBy: (mode, sortBy) => setState((current) => {
+    });
+  },
+  setSidebarHovering: (sidebarHovering) => {
+    patchFrameState((current) => (
+      current.sidebarHovering === sidebarHovering
+        ? current
+        : { ...current, sidebarHovering, showDragPinHint: sidebarHovering ? current.showDragPinHint : false }
+    ));
+  },
+  setSidebarResizing: (sidebarResizing) => {
+    patchFrameState((current) => (
+      current.sidebarResizing === sidebarResizing ? current : { ...current, sidebarResizing }
+    ));
+  },
+  setShowEmptyGroups: (showEmptyGroups) => {
+    patchFrameState((current) => {
+      persistDFrameState({ showEmptyGroups });
+      return { ...current, showEmptyGroups };
+    });
+  },
+  setShowPrStatus: (showPrStatus) => {
+    patchFrameState((current) => {
+      persistDFrameState({ showPrStatus });
+      return { ...current, showPrStatus };
+    });
+  },
+  setSortBy: (mode, sortBy) => {
+    patchFrameState((current) => {
       const sortByByMode = { ...current.sortByByMode, [mode]: sortBy };
       persistDFrameState({ sortByByMode });
       return { ...current, sortByByMode };
-    }),
-    setSystemFont: (systemFont) => setState((current) => {
+    });
+  },
+  setSystemFont: (systemFont) => {
+    patchFrameState((current) => {
       persistDFrameState({ systemFont });
       return { ...current, systemFont };
-    }),
-    toggleGroupCollapsed: (id) => setState((current) => toggleGroupCollapsedState(current, id)),
-    toggleMore: () => setState((current) => ({ ...current, moreOpen: !current.moreOpen })),
-    toggleSidebar: () => setState((current) => {
+    });
+  },
+  toggleGroupCollapsed: (id) => {
+    patchFrameState((current) => toggleGroupCollapsedState(current, id));
+  },
+  toggleMore: () => {
+    patchFrameState((current) => ({ ...current, moreOpen: !current.moreOpen }));
+  },
+  toggleSidebar: () => {
+    patchFrameState((current) => {
       const sidebarCollapsed = !current.sidebarCollapsed;
       persistDFrameState({ collapsed: sidebarCollapsed });
       return { ...current, sidebarCollapsed, moreOpen: false, showDragPinHint: false, sidebarHovering: false };
-    }),
-  }), [state]);
+    });
+  },
+};
+
+function subscribeFrameStore(onStoreChange: () => void) {
+  subscribers.add(onStoreChange);
+  return () => {
+    subscribers.delete(onStoreChange);
+  };
+}
+
+function getFrameState() {
+  return frameState;
+}
+
+function toFrameStore(state: FrameState): FrameStore {
+  return {
+    ...state,
+    collapsedGroups: collapsedGroupsForMode(state.collapsedGroupsByMode, state.mode),
+    ...frameActions,
+  };
+}
+
+export const frameStore = {
+  getState: getFrameState,
+  subscribe: subscribeFrameStore,
+  ...frameActions,
+};
+
+export function useFrameStore(): FrameStore {
+  const state = useSyncExternalStore(subscribeFrameStore, getFrameState, getFrameState);
+  return toFrameStore(state);
+}
+
+/** Official H6t selector: session tiles must not subscribe to collapsed. */
+export function useFrameStoreSelector<T>(selector: (state: FrameState) => T): T {
+  return useSyncExternalStore(
+    subscribeFrameStore,
+    () => selector(frameState),
+    () => selector(frameState),
+  );
 }

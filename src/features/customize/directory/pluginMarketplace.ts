@@ -1,5 +1,5 @@
 /**
- * Official fusion marketplace helpers (index-BELzQL5P.js):
+ * Official fusion marketplace helpers (index-D35w9RK9.js):
  *   NX / qX / BX / bJ / I8t / lJ / LT
  * Host CustomPlugins: listMarketplaces / listAvailablePlugins (local disk only).
  */

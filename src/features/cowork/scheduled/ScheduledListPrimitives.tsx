@@ -1,5 +1,5 @@
 /**
- * Official scheduled-task list primitives from index-BELzQL5P:
+ * Official scheduled-task list primitives from c21f11e6d-CxD82rYo.js:
  * EGt page shell, BFe header (desktop large/narrow), NGt grid, SGt/MGt cards, jGt card chrome,
  * gYt filter (vIe + Dc ghost icon_sm), Ide sort, Kfe/Gfe banner, yYt/bYt status pill.
  */
@@ -47,10 +47,10 @@ export function ScheduledTasksPageShell({
   ) : null;
 
   return (
-    <div className="flex flex-col h-full" data-official-source="index-BELzQL5P.js:EGt">
+    <div className="flex flex-col h-full" data-official-source="c21f11e6d-CxD82rYo.js:EGt">
       <header
         className="flex w-full bg-bg-100 h-12 mx-auto md:h-24 md:items-end max-w-4xl shrink-0 md:!h-14 md:!items-center [&_h1]:font-normal [&>div]:md:!px-8"
-        data-official-source="index-BELzQL5P.js:BFe large narrow"
+        data-official-source="c21f11e6d-CxD82rYo.js:BFe large narrow"
         data-testid="page-header"
       >
         <div className="flex w-full items-center justify-between gap-4 pl-11 lg:px-8 px-4 md:px-8">
@@ -75,7 +75,7 @@ export function ScheduledTaskCardGrid({ children }: { children: ReactNode }) {
   return (
     <div
       className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 md:gap-4 grid-cols-1 auto-rows-fr mb-3 md:mb-6"
-      data-official-source="index-BELzQL5P.js:NGt"
+      data-official-source="c21f11e6d-CxD82rYo.js:NGt"
     >
       {children}
     </div>
@@ -99,7 +99,7 @@ export function ScheduledTaskCard({
 }) {
   // Official MGt body
   const body = (
-    <div className="flex flex-col flex-grow gap-1.5" data-official-source="index-BELzQL5P.js:MGt">
+    <div className="flex flex-col flex-grow gap-1.5" data-official-source="c21f11e6d-CxD82rYo.js:MGt">
       <div className={`flex items-center overflow-hidden ${overlay ? "pr-28" : "pr-10"}`}>
         <div className="font-base-bold text-text-100 truncate">{title}</div>
       </div>
@@ -128,7 +128,7 @@ export function ScheduledTaskCard({
   );
 
   return (
-    <div className="relative group h-full" data-official-source="index-BELzQL5P.js:SGt">
+    <div className="relative group h-full" data-official-source="c21f11e6d-CxD82rYo.js:SGt">
       {surface}
       {overlay ? (
         <div className="absolute top-3 right-3 z-10 transition-opacity pointer-events-none">{overlay}</div>
@@ -155,7 +155,7 @@ export function ScheduledTaskStatusPill({
     return (
       <span
         className={`${statusPillChrome} bg-success-900/50 border-success-000/40 text-success-000`}
-        data-official-source="index-BELzQL5P.js:yYt"
+        data-official-source="c21f11e6d-CxD82rYo.js:yYt"
       >
         <Icon name="ClockTimeslot" size="xs" />
         {label}
@@ -166,7 +166,7 @@ export function ScheduledTaskStatusPill({
     return (
       <span
         className={`${statusPillChrome} bg-bg-200 border-border-300 text-text-400`}
-        data-official-source="index-BELzQL5P.js:yYt paused"
+        data-official-source="c21f11e6d-CxD82rYo.js:yYt paused"
       >
         <Icon name={completed ? "check" : "Stop"} size="xs" />
         {completed ? (completedLabel ?? "Completed") : (pausedLabel ?? "Paused")}
@@ -225,7 +225,7 @@ export function ScheduledTasksFilterControl({
         }
         aria-label={placeholder}
         className="w-[200px]"
-        data-official-source="index-BELzQL5P.js:gYt expanded vIe"
+        data-official-source="c21f11e6d-CxD82rYo.js:gYt expanded vIe"
         onBlur={() => {
           if (!value) setExpanded(false);
         }}
@@ -252,7 +252,7 @@ export function ScheduledTasksFilterControl({
     <OfficialTooltip keyboardShortcut="cmd+f" side="top" tooltipContent={placeholder}>
       <OfficialButton
         aria-label={placeholder}
-        data-official-source="index-BELzQL5P.js:gYt collapsed Dc"
+        data-official-source="c21f11e6d-CxD82rYo.js:gYt collapsed Dc"
         onClick={expand}
         size="icon_sm"
         variant="ghost"
@@ -285,7 +285,7 @@ export function ScheduledTasksSortControl({
   }, [open]);
 
   return (
-    <div className="relative" data-official-source="index-BELzQL5P.js:CYt sort Ide" ref={rootRef}>
+    <div className="relative" data-official-source="c21f11e6d-CxD82rYo.js:CYt sort Ide" ref={rootRef}>
       {/* Official Ide trigger is Dc ghost icon_sm aria-label Sort by; hover description via Xp-style tooltip */}
       <OfficialTooltip side="top" tooltipContent={text.sortBy}>
         <OfficialButton
@@ -330,11 +330,11 @@ export function ScheduledLocalAwakeBanner({ action }: { action?: ReactNode }) {
   const text = useI18nText(SCHEDULED_LIST_MESSAGES);
   const resolvedAction = action ?? <KeepAwakeControl size="md" />;
   return (
-    <div className="w-full mb-6" data-official-source="index-BELzQL5P.js:CYt awake wrapper">
+    <div className="w-full mb-6" data-official-source="c21f11e6d-CxD82rYo.js:CYt awake wrapper">
       <div
         className={`${bannerMainChrome} !w-full`}
         data-color-context="main"
-        data-official-source="index-BELzQL5P.js:Kfe/Gfe main"
+        data-official-source="c21f11e6d-CxD82rYo.js:Kfe/Gfe main"
       >
         <div className="h-8 ml-1 flex items-center text-text-300">
           <Icon name="LockShield" size="md" />
@@ -356,7 +356,7 @@ export function ScheduledTasksEmptyState() {
   return (
     <div
       className="flex flex-col items-center justify-center py-16 gap-4 text-text-500 font-base"
-      data-official-source="index-BELzQL5P.js:CYt empty"
+      data-official-source="c21f11e6d-CxD82rYo.js:CYt empty"
     >
       <ScheduledTasksEmptyPictogram size="medium" />
       {text.emptyState}

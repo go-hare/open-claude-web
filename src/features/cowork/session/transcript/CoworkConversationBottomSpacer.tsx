@@ -9,7 +9,7 @@
  * - container = parentContainerRef?.clientHeight || window.innerHeight
  * - RO deps official `[scrollRefs, m, messageCount]`; no observeEpoch in ion
  * - does NOT setPin / restick — pin is IYe RO + t$t only
- * Source: index-BELzQL5P.js LUt ~221588–221678.
+ * Source: c21f11e6d-CxD82rYo.js LUt ~221588–221678.
  *
  * Desktop-shell residuals (keep; do not delete as “approx”):
  * 1) parentContainerRef — LUt accepts it, but official v$t call site omits it → window.
@@ -210,7 +210,7 @@ export function CoworkConversationBottomSpacer(props: CoworkConversationBottomSp
     props.scrollRef,
   ]);
 
-  // Official LUt effect order (index-BELzQL5P LUt):
+  // Official LUt effect order (c21f11e6d-CxD82rYo.js LUt):
   // (1) messageCount > prev → m() + optional scroll
   // (2) RO observe lastAssistant/lastHuman/chatInput/extras + resize (no sync m on mount)
   // (3) initial scrollToBottom("instant") unless disableInitial / initialPrev set

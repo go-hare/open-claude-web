@@ -1,7 +1,7 @@
 import type { MessageDescriptors } from "../../../i18n/footerMenuMessages";
 
 /**
- * Official residual uYt create modal copy (index-BELzQL5P function uYt + Lkt/Ikt).
+ * Official residual uYt create modal copy (c21f11e6d-CxD82rYo.js function uYt + Lkt/Ikt).
  * Message ids from residual defaultMessage/id pairs; zh-CN via /i18n catalog + overrides.
  */
 export const SCHEDULED_CREATE_MESSAGES = {
@@ -20,7 +20,7 @@ export const SCHEDULED_CREATE_MESSAGES = {
       "Check my Google Calendar for today's meetings and summarize my unread emails. Highlight anything urgent.",
     id: "__local.scheduledCreatePromptPlaceholder",
   },
-  workInProject: { defaultMessage: "Work in a project", id: "bNgYGVAxfX" },
+  workInProject: { defaultMessage: "Work in a project or folder", id: "eTP2WIUJLu" },
   model: { defaultMessage: "Model", id: "rhSI1/3g21" },
   defaultModel: { defaultMessage: "Default model", id: "bV+YmcFCEb" },
   fromProject: { defaultMessage: "from project", id: "qGTwh00PBY" },
@@ -63,7 +63,7 @@ export const SCHEDULED_CREATE_MESSAGES = {
     defaultMessage: "Failed to create scheduled task. You can try again.",
     id: "nLDzPb081t",
   },
-  /** Residual uYt update failure (index-BELzQL5P id yv4zgUReyK). */
+  /** Residual uYt update failure (c21f11e6d-CxD82rYo.js id yv4zgUReyK). */
   editFailed: {
     defaultMessage: "Failed to update scheduled task. You can try again.",
     id: "yv4zgUReyK",

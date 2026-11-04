@@ -1,5 +1,5 @@
 /**
- * Official D1e directory reverse-RPC helpers (index-BELzQL5P ~46977 pae / ~46990 mae / ~113664).
+ * Official D1e directory reverse-RPC helpers (c21f11e6d-CxD82rYo.js ~46977 pae / ~46990 mae / ~113664).
  * tae() returns [] in this bundle — search is firstParty (iae) + custom dae from a1 store.
  */
 import Fuse from "fuse.js";

@@ -7,6 +7,8 @@
 
 export type ThemeMode = "auto" | "light" | "dark";
 export type ChatFontSetting = "default" | "sans" | "system" | "dyslexia";
+/** Official Un / Dz (shared-150 wz). */
+export type MotionMode = "system" | "reduce";
 
 /** Official Kx key in ThemeProvider zR. */
 export const USER_THEME_MODE_KEY = "userThemeMode";
@@ -14,6 +16,9 @@ export const USER_THEME_MODE_KEY = "userThemeMode";
 export const THEME_STORAGE_KEY = "claude-rebuild-theme-mode";
 /** Official customStyles:chatFont. */
 export const CHAT_FONT_STORAGE_KEY = "customStyles:chatFont";
+/** Official Dz wz (shared-150). */
+export const REDUCE_MOTION_STORAGE_KEY = "appearance:reduceMotion";
+export const MOTION_MODE_CHANGE_EVENT = "claude-motion-mode-change";
 
 const CHAT_FONT_MAP: Record<ChatFontSetting, { user: string; claude: string }> = {
   default: { user: "--font-sans-serif", claude: "--font-serif" },
@@ -113,9 +118,44 @@ export function applyChatFontSetting(value: ChatFontSetting) {
   document.documentElement.style.setProperty("--font-claude-response", `var(${mapped.claude})`);
 }
 
+export function readMotionMode(): MotionMode {
+  if (typeof window === "undefined") return "system";
+  return window.localStorage.getItem(REDUCE_MOTION_STORAGE_KEY) === "reduce" ? "reduce" : "system";
+}
+
+export function writeMotionMode(mode: MotionMode) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(REDUCE_MOTION_STORAGE_KEY, mode);
+  applyMotionMode(mode);
+}
+
+/** Official Oz: dataset.reduceMotion when reduce or prefers-reduced-motion. */
+export function applyMotionMode(mode: MotionMode) {
+  if (typeof document === "undefined") return;
+  const prefersReduce =
+    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (mode === "reduce" || prefersReduce) document.documentElement.dataset.reduceMotion = "true";
+  else delete document.documentElement.dataset.reduceMotion;
+  try {
+    window.dispatchEvent(new CustomEvent(MOTION_MODE_CHANGE_EVENT, { detail: mode }));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Official Oz consume: dataset.reduceMotion OR OS prefers-reduced-motion. */
+export function isReducedMotionActive(): boolean {
+  if (typeof document !== "undefined" && document.documentElement.dataset.reduceMotion === "true") {
+    return true;
+  }
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export function bootstrapAppearanceFromStorage() {
   applyThemeMode(readThemeMode());
   applyChatFontSetting(readChatFontSetting());
+  applyMotionMode(readMotionMode());
 }
 
 /** Resolved light/dark for cds-root data-mode (official ThemeProvider resolvedMode). */

@@ -1,5 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { primaryButtonClass } from "../shared/buttonClasses";
+import { useI18nText } from "../../i18n/footerMenuMessages";
+import { SESSION_LOAD_MESSAGES, TILE_KEYBOARD_HINT_MESSAGES } from "./officialCodeChromeMessages";
 
 const tileVars = {
   "--tile-container-border": "transparent",
@@ -83,6 +85,7 @@ const tileShellStyle: CSSProperties = {
 };
 
 export function EpitaxyTileLayout({ children }: { children: ReactNode }) {
+  const tileHint = useI18nText(TILE_KEYBOARD_HINT_MESSAGES);
   return (
     <div className="relative h-full w-full" style={tileVars}>
       <div style={viewportStyle}>
@@ -94,7 +97,7 @@ export function EpitaxyTileLayout({ children }: { children: ReactNode }) {
               </div>
             </div>
           </div>
-          <span className="sr-only">Arrow keys move the tile. Perpendicular arrows preview a split; press Enter to commit or Escape to cancel.</span>
+          <span className="sr-only">{tileHint.arrowKeys}</span>
           <span role="status" className="sr-only" />
         </div>
       </div>
@@ -119,7 +122,16 @@ function TileBackdrop() {
   return <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated opacity-0 transition-opacity duration-200 [.tiles-dragging_&]:opacity-100" />;
 }
 
-export function EpitaxyLandingError({ onBack }: { onBack: () => void }) {
+export function EpitaxyLandingError({
+  onBack,
+  onRetry,
+}: {
+  error?: Error | null;
+  onBack: () => void;
+  /** Official pL `zr` onRetry — clear Ho and remount the chat panel. */
+  onRetry?: () => void;
+}) {
+  const text = useI18nText(SESSION_LOAD_MESSAGES);
   return (
     <EpitaxyRouteFrame>
       <div className="h-full w-full min-w-0 relative isolate rounded-r6">
@@ -127,10 +139,16 @@ export function EpitaxyLandingError({ onBack }: { onBack: () => void }) {
         <div className="min-h-screen flex flex-col items-center justify-center px-4">
           <div className="text-center max-w-md">
             <div className="text-danger-000 mb-6 text-lg font-medium">Something went wrong loading this session.</div>
-            <button className={primaryButtonClass} type="button" onClick={onBack}>
-              <span className="mr-2 inline-flex h-5 w-5 items-center justify-center" aria-hidden="true" />
-              Back to landing page
-            </button>
+            {onRetry ? (
+              <button className={primaryButtonClass} type="button" onClick={onRetry}>
+                <span data-intl-id="FazwRldA7z">{text.tryAgain}</span>
+              </button>
+            ) : (
+              <button className={primaryButtonClass} type="button" onClick={onBack}>
+                <span className="mr-2 inline-flex h-5 w-5 items-center justify-center" aria-hidden="true" />
+                <span data-intl-id="KGeQPLIrlo">{text.backToLandingPage}</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 /**
- * Official ZN + XN + JN (c11959232-h_zsw3wI.js):
+ * Official ZN + XN + JN (cd5a31703-B4nKQMBN.js; was c11959232):
  * - XN(sessionRef) reads oe(sessionId) full transcript
  * - empty → CheckList + "No plan yet." / "Claude writes the plan here…"
  * - content → markdown pipeline in epitaxy-markdown max-w-[68ch]
@@ -16,6 +16,8 @@ import {
 import { OfficialPlanMarkdown } from "../plan/OfficialPlanMarkdown";
 import { useOfficialCodeSessionBucket } from "./officialCodeSessionStore";
 import { parseOfficialPlan } from "./officialTasksAndPlan";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { SIDE_PANE_EMPTY_MESSAGES } from "../officialCodeChromeMessages";
 
 type EpitaxySessionRef = {
   id: string;
@@ -23,6 +25,7 @@ type EpitaxySessionRef = {
 };
 
 export function OfficialPlanPane({ session, sessionRef }: { session: SessionSummary | null; sessionRef: EpitaxySessionRef }) {
+  const emptyText = useI18nText(SIDE_PANE_EMPTY_MESSAGES);
   const bucket = useOfficialCodeSessionBucket(sessionRef.id);
   const messages = bucket?.messages ?? session?.messages ?? [];
   const plan = useMemo(() => parseOfficialPlan(messages), [messages]);
@@ -30,8 +33,8 @@ export function OfficialPlanPane({ session, sessionRef }: { session: SessionSumm
     return (
       <div className="flex h-full flex-col items-center justify-center gap-g3 px-[32px] text-center text-t6">
         <Icon name="CheckList" size="lg" />
-        <div className="text-body">No plan yet.</div>
-        <div className="text-caption">Claude writes the plan here as it explores. Keep chatting.</div>
+        <div className="text-body">{emptyText.noPlanYet}</div>
+        <div className="text-caption">{emptyText.planEmptyHint}</div>
       </div>
     );
   }

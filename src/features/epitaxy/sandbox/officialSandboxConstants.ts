@@ -1,6 +1,6 @@
 /**
  * Official claudeusercontent sandbox constants from residual:
- *   index-BELzQL5P A4e / U4e / userContentRendererUrl
+ *   cd5a31703 A4e / U4e / userContentRendererUrl
  *   c5f4e1303 zL / xm MIME enum
  *
  * Product decision C: C-slice paint (Html|Svg|Mermaid|React) runs on
@@ -8,7 +8,7 @@
  * Remote claudeusercontent.com is residual production URL; product uses local.
  */
 
-/** Residual config userContentRendererUrl (index-BELzQL5P) — remote official. */
+/** Residual config userContentRendererUrl (cd5a31703) — remote official. */
 export const OFFICIAL_REMOTE_USER_CONTENT_RENDERER_URL =
   "https://www.claudeusercontent.com";
 
@@ -39,7 +39,7 @@ export const OFFICIAL_USER_CONTENT_RENDERER_URL =
     ? `${window.location.origin}/sandbox-runtime`
     : "/sandbox-runtime";
 
-/** Official A4e (index-BELzQL5P). */
+/** Official A4e (cd5a31703). */
 export const OFFICIAL_SANDBOX = {
   ReadyForContent: "anthropic.claude.usercontent.sandbox.ReadyForContent",
   SetContent: "anthropic.claude.usercontent.sandbox.SetContent",

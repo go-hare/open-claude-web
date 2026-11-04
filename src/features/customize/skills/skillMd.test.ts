@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   descriptionHasXmlTags,
+  extractSkillArchiveFiles,
   formatSkillMarkdown,
   isSkillUploadName,
   parseSkillMarkdown,
   reservedWordInName,
   sanitizeSkillName,
+  skillMdFromArchive,
 } from "./skillMd";
 
 describe("skillMd residual (c0659e756 F / c4101dbe9 J)", () => {
@@ -41,6 +43,28 @@ describe("skillMd residual (c0659e756 F / c4101dbe9 J)", () => {
     expect(descriptionHasXmlTags("hello <tool> x")).toBe(true);
     expect(isSkillUploadName("foo.zip")).toBe(true);
     expect(isSkillUploadName("foo.plugin")).toBe(false);
+  });
+
+  it("extracts zip SKILL.md for overlay Jn preview", async () => {
+    const body = "---\nname: weekly-status-report\ndescription: Summarize work.\n---\nDo the thing.\n";
+    const bytes = new TextEncoder().encode(body);
+    const name = "SKILL.md";
+    const nameBytes = new TextEncoder().encode(name);
+    const header = new Uint8Array(30 + nameBytes.length + bytes.length);
+    header.set([0x50, 0x4b, 0x03, 0x04], 0);
+    header[26] = nameBytes.length;
+    header[27] = 0;
+    header[18] = bytes.length;
+    header[19] = 0;
+    header[22] = bytes.length;
+    header[23] = 0;
+    header.set(nameBytes, 30);
+    header.set(bytes, 30 + nameBytes.length);
+    const file = new File([header], "weekly.zip", { type: "application/zip" });
+    const files = await extractSkillArchiveFiles(file);
+    expect("error" in files).toBe(false);
+    if ("error" in files) return;
+    expect(skillMdFromArchive(files)).toContain("weekly-status-report");
   });
 
   it("HLe formats SKILL.md for saveLocalSkill", () => {

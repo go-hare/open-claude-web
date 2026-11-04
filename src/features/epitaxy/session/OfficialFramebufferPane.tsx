@@ -1,11 +1,13 @@
 /**
- * Official AN / _N EpitaxyFramebufferPane (c11959232-h_zsw3wI.js).
+ * Official AN / _N EpitaxyFramebufferPane (cd5a31703-B4nKQMBN.js; was c11959232).
  * Gate: YR shows Screen when framebufferPreview supported && (sources.length || already open).
  * Body: no cwd → "Open a folder…"; else attach(cwd, sessionName) → Connecting / error+Retry / canvas.
  */
 import { useCallback, useEffect, useState } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { SIDE_PANE_CHROME_MESSAGES } from "../officialCodeChromeMessages";
 import { featureStatus, useDesktopSupportedFeatures } from "../../settings/useDesktopPreferences";
 import type { EpitaxySessionRef } from "./epitaxyTranscriptActionContext";
 import type { SessionSummary } from "../../../adapters/desktopBridge";
@@ -80,19 +82,23 @@ export function useOfficialFramebufferMenuGate(cwd: string | undefined | null, p
 }
 
 export function OfficialFramebufferPane({
+  landingCwd,
   session,
   sessionRef,
 }: {
+  /** Official AN `t` landingCwd when session meta has no cwd. */
+  landingCwd?: string | null;
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef | null;
 }) {
-  const cwd = session?.cwd?.trim() || undefined;
+  const chromeText = useI18nText(SIDE_PANE_CHROME_MESSAGES);
+  const cwd = session?.cwd?.trim() || landingCwd?.trim() || undefined;
   const sessionName = session?.title?.trim() || sessionRef?.id || "session";
 
   if (!cwd) {
     return (
       <div role="status" className="flex h-full flex-col items-center justify-center text-t5 text-body">
-        Open a folder to view a screen.
+        {chromeText.openFolderToViewScreen}
       </div>
     );
   }
@@ -102,6 +108,7 @@ export function OfficialFramebufferPane({
 
 /** Official _N FramebufferPreviewPane */
 function OfficialFramebufferPreviewPane({ cwd, sessionName }: { cwd: string; sessionName: string }) {
+  const chromeText = useI18nText(SIDE_PANE_CHROME_MESSAGES);
   const [state, setState] = useState<AttachState>({ status: "idle" });
   const [retryNonce, setRetryNonce] = useState(0);
 
@@ -196,7 +203,7 @@ function OfficialFramebufferPreviewPane({ cwd, sessionName }: { cwd: string; ses
   if (state.status === "idle" || state.status === "loading") {
     return (
       <div role="status" aria-busy="true" className="flex h-full flex-col items-center justify-center text-t5 text-body">
-        Connecting to screen…
+        {chromeText.connectingToScreen}
       </div>
     );
   }
@@ -204,8 +211,8 @@ function OfficialFramebufferPreviewPane({ cwd, sessionName }: { cwd: string; ses
   if (state.status === "error") {
     return (
       <div role="alert" className="flex h-full flex-col items-center justify-center gap-g4 px-p8 text-center">
-        <p className="text-body text-t7 max-w-[36ch]">Couldn&apos;t connect to the screen share.</p>
-        <OfficialButton variant="contained" onClick={retry}>Retry</OfficialButton>
+        <p className="text-body text-t7 max-w-[36ch]">{chromeText.couldntConnectToScreenShare}</p>
+        <OfficialButton variant="contained" onClick={retry}>{chromeText.retry}</OfficialButton>
       </div>
     );
   }
@@ -231,7 +238,7 @@ function OfficialFramebufferPreviewPane({ cwd, sessionName }: { cwd: string; ses
         }}
         tabIndex={0}
         role="application"
-        aria-label="Remote screen"
+        aria-label={chromeText.remoteScreen}
       />
     </div>
   );

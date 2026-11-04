@@ -210,7 +210,7 @@ function MoreFlyoutButton({
   const label = activeItem ? navLabel(activeItem, text) : text.more;
   return (
     <LegacyDropdownMenu.Trigger
-      className="group relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded-[var(--df-radius-pill)] border-none px-[var(--df-row-px)] text-left text-[length:var(--df-row-font)] text-text-300 hover:bg-[var(--df-hover)] focus-within:bg-[var(--df-hover)] data-[selected=focused]:bg-bg-200 data-[selected=focused]:text-text-000 data-[selected=open]:bg-bg-200 data-[menu-open=true]:bg-[var(--df-hover)] [&_.df-leading-slot]:text-text-300 data-[selected=focused]:[&_.df-leading-slot]:text-text-000 hide-focus-ring focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--accent-100)),0_0_6px_0_hsl(var(--accent-100)/0.2)]"
+      className="relative flex h-[var(--df-row-h)] w-full shrink-0 items-center gap-[var(--df-row-gap)] rounded-[var(--df-radius-pill)] border-none px-[var(--df-row-px)] text-left text-[length:var(--df-row-font)] text-text-300 hover:bg-[var(--df-hover)] focus-within:bg-[var(--df-hover)] data-[selected=focused]:bg-bg-200 data-[selected=focused]:text-text-000 data-[selected=open]:bg-bg-200 data-[menu-open=true]:bg-[var(--df-hover)] [&_.df-leading-slot]:text-text-300 data-[selected=focused]:[&_.df-leading-slot]:text-text-000 hide-focus-ring focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--accent-100)),0_0_6px_0_hsl(var(--accent-100)/0.2)]"
       data-row=""
       data-row-main-button=""
       data-menu-open={!activeItem && open || undefined}
@@ -222,8 +222,10 @@ function MoreFlyoutButton({
       onPointerDownCapture={onPointerDownCapture}
       type="button"
     >
-      <span className="df-leading-slot relative"><Icon name="CaretDown" size="sm" className={activeItem ? undefined : "opacity-50"} /></span>
-      <span className="flex min-w-0 flex-1 items-center"><span className={activeItem ? undefined : "text-text-400"}>{label}</span></span>
+      <span className="df-leading-slot relative" data-official-source="shared-21-CGGmSsMS.js:jh CaretRight">
+        <Icon className={activeItem ? undefined : "opacity-50"} name="CaretRight" preferFont size="auto" />
+      </span>
+      <span className="flex min-w-0 flex-1 items-center"><span className={activeItem ? undefined : "text-muted"}>{label}</span></span>
     </LegacyDropdownMenu.Trigger>
   );
 }
@@ -238,16 +240,19 @@ function MoreFlyoutContent({ items, onCustomizeSidebar, onNavigate, text }: {
     <>
       {items.map((item) => <MoreFlyoutItem item={localizeNavItem(item, text)} key={item.key} onClick={() => onNavigate(item.href)} />)}
       {items.length > 0 ? <LegacyDropdownSeparator /> : null}
-      <MoreFlyoutItem icon="Settings" label={text.customizeSidebar} onClick={onCustomizeSidebar} />
+      <MoreFlyoutItem label={text.editSidebarMenu} onClick={onCustomizeSidebar} />
     </>
   );
 }
 
 function MoreFlyoutItem({ icon, item, label, onClick }: { icon?: string; item?: SidebarNavItem; label?: string; onClick: () => void }) {
-  const iconName = item?.icon ?? icon ?? "settings";
+  const iconName = item?.icon ?? icon;
   const text = item?.label ?? label ?? "";
   return (
-    <LegacyDropdownItem icon={<Icon name={iconName} />} onSelect={onClick}>
+    <LegacyDropdownItem
+      icon={iconName ? <Icon name={iconName} preferFont size="auto" /> : undefined}
+      onSelect={onClick}
+    >
       {text}
     </LegacyDropdownItem>
   );
@@ -261,7 +266,7 @@ function navLabel(item: SidebarNavItem, text: ShellText) {
   if (item.key === "new-session") return item.visibleIn.includes("code") && !item.visibleIn.includes("cowork") ? text.newChat : text.newTask;
   if (item.key === "projects") return text.projects;
   if (item.key === "artifacts") return text.artifacts;
-  if (item.key === "scheduled") return text.scheduledTasks;
+  if (item.key === "scheduled") return item.href.startsWith("/code/") ? text.routines : text.scheduledTasks;
   if (item.key === "customize") return text.customize;
   return item.label;
 }

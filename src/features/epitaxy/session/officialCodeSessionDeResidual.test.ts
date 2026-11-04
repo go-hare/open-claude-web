@@ -9,7 +9,7 @@ function readSrc(name: string): string {
   return readFileSync(join(dir, name), "utf8");
 }
 
-describe("official De / he residual (c4bf De, index-BELzQL5P he)", () => {
+describe("official De / he residual (c4bf De, cd5a31703 he)", () => {
   it("store has Wke lifecycle fields and he.openSession/releaseSession", () => {
     const store = readSrc("officialCodeSessionStore.ts");
     expect(store).toContain("sub: OfficialCodeSessionSub | null");
@@ -19,6 +19,7 @@ describe("official De / he residual (c4bf De, index-BELzQL5P he)", () => {
     expect(store).toContain("openSessionTransport:");
     expect(store).toContain("releaseSession:");
     expect(store).toContain("OFFICIAL_CODE_SESSION_PENDING_CLOSE_MS = 36e4");
+    expect(store).toContain("OFFICIAL_CODE_SESSION_IDLE_CLOSE_MS = 6e4");
     expect(store).toContain("resetOnCleared:");
     expect(store).toContain('connection: "idle"');
     expect(store).toContain("promptSuggestion: null");
@@ -41,16 +42,41 @@ describe("official De / he residual (c4bf De, index-BELzQL5P he)", () => {
     expect(hook).not.toContain("Soft meta refresh is best-effort");
     expect(hook).not.toContain("const offCode = desktopBridge.LocalSessions.onEvent");
     expect(hook).not.toContain("existing.streamSnapshot");
+    // A→B must Kwe(Xa, this id's Va) on the same frame — not merge prev streamSnapshot then setState.
+    expect(hook).toContain("const va = sessionChanged ? ownedOnSwitch : streamSnapshot");
+    expect(hook).toContain("mergeOfficialStreamSnapshot(parsedEntries, va)");
   });
 
   it("transport module is official U.subscribe + U.fetchTranscript", () => {
     const transport = readSrc("officialCodeSessionTransport.ts");
     expect(transport).toContain('import "./officialCodeSessionHostApply"');
     expect(transport).toContain("async fetchTranscript");
+    expect(transport).toContain("Official local U: getTranscript only");
+    expect(transport).toContain("if (getTranscript)");
     expect(transport).toContain('onEvent({ type: "connection", state: "connected" })');
     expect(transport).toContain("officialCodeLocalTransport");
     expect(transport).not.toContain("fetchTail?:");
     expect(transport).not.toContain("async fetchTail");
+  });
+
+  it("getTranscriptPage is in LOCAL_SESSIONS_METHODS and adapter does not swallow IPC miss as empty", () => {
+    const handlers = readFileSync(
+      join(dir, "../../../../../open-claude-desktop/electron/main/ipc/localSessionsHandlers.ts"),
+      "utf8",
+    );
+    expect(handlers).toMatch(/"getTranscript","getTranscriptPage","getTrustedSSHHosts"/);
+    expect(handlers).toContain('"changeCwd"');
+    expect(handlers).toContain("Official LocalSessions.changeCwd");
+    const preload = readFileSync(
+      join(dir, "../../../../../open-claude-desktop/electron/preload/bridges/webBridge.ts"),
+      "utf8",
+    );
+    expect(preload).toContain('"changeCwd"');
+    const adapter = readFileSync(join(dir, "../../../adapters/desktopBridge/officialBridgeAdapter.ts"), "utf8");
+    expect(adapter).toContain("normalizeChangeCwdResult");
+    expect(adapter).toContain("changeCwd:");
+    expect(adapter).toContain("do not swallow into empty li");
+    expect(adapter).toContain("raw?.getTranscript?.(id)");
   });
 
   it("host apply still handles initialization_status (official $s)", () => {
@@ -74,11 +100,11 @@ describe("official De / he residual (c4bf De, index-BELzQL5P he)", () => {
   it("Qj _e residual: suppress class + absolute span + Tab/ArrowRight accept", () => {
     const editor = readSrc("../OfficialPromptEditor.tsx");
     expect(editor).toContain("[&_.is-editor-empty]:before:!content-['']");
-    expect(editor).toContain("pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5");
+    expect(editor).toContain("pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] italic text-muted");
     expect(editor).toContain('event.key === "Tab" || event.key === "ArrowRight"');
     const composer = readSrc("OfficialExistingSessionComposer.tsx");
     expect(composer).toContain("[&_.is-editor-empty]:before:!content-['']");
-    expect(composer).toContain("pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5");
+    expect(composer).toContain("pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] italic text-muted");
     expect(composer).toContain('event.key === "Tab" || event.key === "ArrowRight"');
     expect(composer).toContain("handleKeyDown:");
     expect((composer.match(/event\.key === "Tab" \|\| event\.key === "ArrowRight"/g) ?? []).length).toBe(1);
@@ -99,5 +125,28 @@ describe("official De / he residual (c4bf De, index-BELzQL5P he)", () => {
     const tk = readSrc("../OfficialComposerUsageIndicator.tsx");
     expect(tk).toContain("useOfficialCodeSessionContextTokens");
     expect(tk).toContain("contextTokens ?? usage?.totalTokens ?? 0");
+  });
+
+  it("Code Gb Fu has no restoreKey / onNearTop (c119 R=Fu)", () => {
+    const transcript = readSrc("OfficialTranscript.tsx");
+    expect(transcript).toContain("useFlushSync: false");
+    expect(transcript).toContain("paddingBottom: 48");
+    expect(transcript).toContain("paddingTop: 48");
+    expect(transcript).not.toMatch(/restoreKey: sessionId/);
+    expect(transcript).not.toContain("officialFuLastViewport");
+    expect(transcript).not.toContain("assignScrollRef");
+    expect(transcript).not.toContain("observeElementOffset");
+    expect(transcript).not.toMatch(/maybeLoadOlder\(\)/);
+    expect(transcript).toContain("ref={officialVirtualizer.scrollRef}");
+  });
+
+  it("Qj is not keyed on sessionId (TipTap remount hitch with Xb)", () => {
+    const tile = readSrc("../EpitaxySessionTile.tsx");
+    const composer = readSrc("OfficialExistingSessionComposer.tsx");
+    expect(tile).toContain("<ExistingSessionComposer");
+    expect(tile).not.toMatch(/key=\{initialSessionId\}/);
+    expect(composer).toContain("composerSessionIdRef");
+    expect(composer).toContain("seedComposerModel");
+    expect(composer).toContain("seedComposerPermissionMode");
   });
 });

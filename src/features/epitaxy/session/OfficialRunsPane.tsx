@@ -10,6 +10,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { desktopBridge, type SessionSummary } from "../../../adapters/desktopBridge";
 import { Icon } from "../../../shell/icons";
 import type { OfficialSessionRef } from "../OfficialEpitaxyComponents";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { SIDE_PANE_EMPTY_MESSAGES } from "../officialCodeChromeMessages";
 
 function RunsSpinner({ size = "s" }: { size?: "s" | "m" | "l" }) {
   const box = size === "s" ? 12 : size === "l" ? 20 : 16;
@@ -151,6 +153,7 @@ function OfficialLocalRunsPane({
   session: SessionSummary | null;
   sessionRef: OfficialSessionRef;
 }) {
+  const emptyText = useI18nText(SIDE_PANE_EMPTY_MESSAGES);
   const scheduledTaskId = session?.scheduledTaskId ?? null;
   const [runs, setRuns] = useState<RunRow[] | null>(null);
   const [loading, setLoading] = useState(Boolean(scheduledTaskId));
@@ -208,7 +211,7 @@ function OfficialLocalRunsPane({
     return (
       <div className="h-full flex items-center justify-center text-t5" role="status">
         <RunsSpinner size="l" />
-        <span className="sr-only">Loading</span>
+        <span className="sr-only">{emptyText.loading}</span>
       </div>
     );
   }
@@ -216,8 +219,8 @@ function OfficialLocalRunsPane({
   if (error) {
     return (
       <EmptyState
-        body="Something went wrong fetching this routine's runs. Close and reopen the panel to retry."
-        title="Failed to load run history"
+        body={emptyText.failedToLoadRunHistoryBody}
+        title={emptyText.failedToLoadRunHistory}
       />
     );
   }
@@ -225,8 +228,8 @@ function OfficialLocalRunsPane({
   if (!scheduledTaskId) {
     return (
       <EmptyState
-        body="This session wasn't started from a scheduled task. Open a session that ran on a schedule to see its run history here."
-        title="Not a scheduled run"
+        body={emptyText.notAScheduledRunBody}
+        title={emptyText.notAScheduledRun}
       />
     );
   }
@@ -246,11 +249,11 @@ function OfficialLocalRunsPane({
           </div>
         </header>
         {(runs?.length ?? 0) === 0 ? (
-          <p className="py-p4 text-footnote text-t5 text-center">No runs yet.</p>
+          <p className="py-p4 text-footnote text-t5 text-center">{emptyText.noRunsYet}</p>
         ) : (
           <>
             <RunSection
-              heading="Running"
+              heading={emptyText.running}
               renderRow={(run) => (
                 <RunLink
                   href={runHref(run.id)}
@@ -264,7 +267,7 @@ function OfficialLocalRunsPane({
               runs={running}
             />
             <RunSection
-              heading="Completed"
+              heading={emptyText.completed}
               renderRow={(run) => (
                 <RunLink
                   href={runHref(run.id)}
@@ -298,6 +301,7 @@ function OfficialRemoteRunsPane({
   session: SessionSummary | null;
   sessionRef: OfficialSessionRef;
 }) {
+  const emptyText = useI18nText(SIDE_PANE_EMPTY_MESSAGES);
   const triggerId = useMemo(() => {
     if (typeof window !== "undefined") {
       const fromQuery = new URLSearchParams(window.location.search).get("trigger");
@@ -315,8 +319,8 @@ function OfficialRemoteRunsPane({
   if (!triggerId) {
     return (
       <EmptyState
-        body="This session wasn't started from a scheduled task. Open a session that ran on a schedule to see its run history here."
-        title="Not a scheduled run"
+        body={emptyText.notAScheduledRunBody}
+        title={emptyText.notAScheduledRun}
       />
     );
   }
@@ -335,7 +339,7 @@ function OfficialRemoteRunsPane({
             </div>
           </div>
         </header>
-        <p className="py-p4 text-footnote text-t5 text-center">No runs yet.</p>
+        <p className="py-p4 text-footnote text-t5 text-center">{emptyText.noRunsYet}</p>
         {onNavigate ? (
           <p className="text-footnote text-t5 text-center">
             <a

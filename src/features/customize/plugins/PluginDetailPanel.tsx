@@ -1,5 +1,5 @@
 /**
- * Official zl PluginDetailPanel (c63a78ed4-M1yh4U9h.js).
+ * Official zl PluginDetailPanel (c63a78ed4-DmFZsHvd.js).
  * Header: title + enable switch + Pl overflow (Uninstall).
  * Fl metadata: Source / Version. Description. Ml skills/agents chips.
  */

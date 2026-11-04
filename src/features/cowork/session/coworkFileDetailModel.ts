@@ -1,5 +1,5 @@
 /**
- * Official Gzt / Dme local-session file-detail helpers (index-BELzQL5P.pretty.js).
+ * Official Gzt / Dme local-session file-detail helpers (c21f11e6d-CxD82rYo.js).
  * Pure routing/title helpers live here so tests can load without desktopBridge.
  * Async load lives in loadCoworkFileDetail.ts (readLocalFile session signature).
  */
@@ -242,7 +242,7 @@ export function formatCoworkFileCodeContent(content: string, language: string): 
 }
 
 /**
- * Official pzt(e) for SKILL.md / markdown frontmatter (index-BELzQL5P ~213719).
+ * Official pzt(e) for SKILL.md / markdown frontmatter (c21f11e6d-CxD82rYo ~213719).
  * Simple key:value YAML only (WPt-compatible subset for local skill files).
  */
 export function parseCoworkSkillMdFrontmatter(source: string): CoworkSkillMdFrontmatter {

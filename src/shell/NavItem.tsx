@@ -8,17 +8,17 @@ type NavItemProps = {
 };
 
 export function NavItem({ active, item, onNavigate }: NavItemProps) {
-  // Official customize row wraps pC icon with group-hover rotate/scale (index-BELzQL5P ~338118).
+  // Official customize row wraps pC icon with group-hover rotate/scale (index-D35w9RK9 ~338118).
   const leading =
     item.key === "customize" ? (
       <span className="flex items-center justify-center transition-all ease-in-out group-hover:-rotate-3 group-hover:scale-110 group-active:rotate-6 group-active:scale-[0.98]">
-        <Icon name={item.icon} />
+        <Icon name={item.icon} preferFont size="auto" />
       </span>
     ) : (
-      <Icon name={item.icon} />
+      <Icon name={item.icon} preferFont size="auto" />
     );
 
-  // Official SidebarItem mZt (index-BELzQL5P):
+  // Official SidebarItem mZt (index-D35w9RK9):
   // - selected true → data-selected="focused" (+ bg via dZt on the same node)
   // - shortcut (nav, no icon/tail props path): <kbd className="ml-auto mr-1 font-ui text-xs text-text-500 opacity-0 transition-opacity group-hover:opacity-100">
   // - button gets "group" when shortcut is set so hover reveals kbd

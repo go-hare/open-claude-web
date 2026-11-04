@@ -1,5 +1,5 @@
 /**
- * Official k4t / _4t directory chips (index-BELzQL5P.js).
+ * Official k4t / _4t directory chips (index-D35w9RK9.js).
  */
 import type { ReactNode } from "react";
 

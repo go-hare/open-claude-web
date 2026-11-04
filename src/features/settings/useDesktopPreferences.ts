@@ -15,7 +15,11 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   ccBranchPrefix: "claude",
   // Official HSA chicagoEnabled:!1
   chicagoEnabled: false,
+  chicagoAutoUnhide: true,
+  chicagoUserDeniedBundleIds: [],
+  chicagoPreferredMode: "background",
   chillingSlothLocation: "default",
+  coworkPreferredBrowser: "built_in",
   coworkSpaceContextEnabled: false,
   dockBounceEnabled: false,
   enabledCoworkMemory: true,
@@ -23,8 +27,23 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   // Official SSA launchEnabled: true (Preview default on when Ea residual available).
   launchEnabled: true,
   launchPreviewPersistSession: false,
+  launchPreviewStorage: "none",
+  launchChromeImportPrompt: "pending",
+  launchPreviewAllowedOrigins: [],
+  localAgentModeTrustedFolders: [],
+  notificationLevels: {},
+  notificationSound: "system",
+  ccKeepAwakeWhileWorking: true,
+  ccKeepAwakeOnBattery: true,
+  ccPromptSuggestions: true,
+  ccAutoArchiveInactiveDays: 0,
+  ccNewTaskPrompt: "ask",
+  claudeIosSimulatorAccessEnabled: true,
+  claudeAndroidEmulatorAccessEnabled: true,
   menuBarEnabled: true,
+  remoteFolderConsentMemory: [],
   quickEntryDictationShortcut: "off",
+  dictationShortcut: "default",
   quickEntryShortcut: "double-tap-option",
   useBuiltInNodeForMcp: true,
 };
@@ -129,14 +148,23 @@ function normalizeSupportedFeatures(raw: Record<string, unknown>): DesktopSuppor
 
 export function useDesktopPreferences() {
   const [preferences, setPreferences] = useState<DesktopPreferences>(defaultDesktopPreferences);
+  /** Official c887 `O`: `g` is undefined until getPreferences; D overlay waits. */
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    void desktopBridge.Preferences.getPreferences?.().then((loaded) => {
-      if (alive && loaded) setPreferences({ ...defaultDesktopPreferences, ...loaded });
-    });
+    void desktopBridge.Preferences.getPreferences?.()
+      .then((loaded) => {
+        if (!alive) return;
+        if (loaded) setPreferences({ ...defaultDesktopPreferences, ...loaded });
+        setHydrated(true);
+      })
+      .catch(() => {
+        if (alive) setHydrated(true);
+      });
     const unsubscribe = desktopBridge.Preferences.onPreferencesChanged?.((next) => {
       setPreferences({ ...defaultDesktopPreferences, ...next });
+      setHydrated(true);
     });
     return () => {
       alive = false;
@@ -149,7 +177,7 @@ export function useDesktopPreferences() {
     void desktopBridge.Preferences.setPreference?.(key, value);
   }, []);
 
-  return [preferences, setPreference] as const;
+  return [preferences, setPreference, hydrated] as const;
 }
 
 export type DesktopNativeSettingsState = {

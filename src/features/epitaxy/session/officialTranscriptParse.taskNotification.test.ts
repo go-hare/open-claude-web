@@ -86,6 +86,64 @@ describe("officialTranscriptParse The residual (task-notification)", () => {
     expect(entries.filter((entry) => entry.author === "user")).toEqual([]);
   });
 
+  it("keeps workflow chip description from task_started, not Critic progress", () => {
+    const messages: ChatMessage[] = [
+      {
+        id: "w1",
+        role: "system",
+        text: "",
+        createdAt: "2026-08-01T12:00:10.000Z",
+        raw: {
+          type: "system",
+          subtype: "task_started",
+          task_id: "ww7k0mz12",
+          task_type: "local_workflow",
+          description: "1:1 peel gold 289 auto-mode server classifier + billing notice chain",
+          uuid: "uuid-wf-start",
+          timestamp: "2026-08-01T12:00:10.000Z",
+        },
+      },
+      {
+        id: "w2",
+        role: "system",
+        text: "",
+        createdAt: "2026-08-01T12:00:11.000Z",
+        raw: {
+          type: "system",
+          subtype: "task_progress",
+          task_id: "ww7k0mz12",
+          description: "Critic: critic",
+          summary: "1:1 peel gold 289 auto-mode server classifier + billing notice chain",
+          uuid: "uuid-wf-progress",
+          timestamp: "2026-08-01T12:00:11.000Z",
+        },
+      },
+      {
+        id: "w3",
+        role: "system",
+        text: "",
+        createdAt: "2026-08-01T12:00:12.000Z",
+        raw: {
+          type: "system",
+          subtype: "task_notification",
+          task_id: "ww7k0mz12",
+          status: "completed",
+          summary: 'Dynamic workflow "1:1 peel gold 289 auto-mode server classifier + billing notice chain" completed',
+          uuid: "uuid-wf-done",
+          timestamp: "2026-08-01T12:00:12.000Z",
+        },
+      },
+    ];
+    const entries = parseOfficialTranscriptEntries(messages);
+    const chip = entries.flatMap((entry) => entry.items).find((item) => item.kind === "task_event");
+    expect(chip?.kind).toBe("task_event");
+    if (chip?.kind === "task_event") {
+      expect(chip.description).toBe("1:1 peel gold 289 auto-mode server classifier + billing notice chain");
+      expect(chip.status).toBe("completed");
+      expect(chip.description).not.toBe("Critic: critic");
+    }
+  });
+
   it("does not paint host local_bash task_started chips as assistant Hb", () => {
     const messages: ChatMessage[] = [
       {

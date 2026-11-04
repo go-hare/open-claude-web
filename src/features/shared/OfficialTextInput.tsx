@@ -1,5 +1,5 @@
 /**
- * Official vIe TextInput (index-BELzQL5P yIe + vIe).
+ * Official vIe TextInput (index-D35w9RK9 yIe + vIe).
  * Used by gYt filter and uYt name/description fields.
  */
 import {
@@ -75,7 +75,7 @@ export const OfficialTextInput = forwardRef<HTMLInputElement, OfficialTextInputP
         {prepend || append ? (
           <div
             className={`${shell} inline-flex cursor-text items-stretch gap-2 can-focus-within`}
-            data-official-source="index-BELzQL5P.js:vIe prepend"
+            data-official-source="index-D35w9RK9.js:vIe prepend"
             onClick={() => localRef.current?.focus()}
           >
             {prepend ? <div className="flex items-center">{prepend}</div> : null}
@@ -103,7 +103,7 @@ export const OfficialTextInput = forwardRef<HTMLInputElement, OfficialTextInputP
         ) : (
           <input
             className={shell}
-            data-official-source="index-BELzQL5P.js:vIe"
+            data-official-source="index-D35w9RK9.js:vIe"
             id={id}
             onChange={handleChange}
             ref={setRefs}

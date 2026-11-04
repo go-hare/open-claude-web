@@ -1,5 +1,5 @@
 /**
- * Artifacts preference residual (official index-BELzQL5P):
+ * Artifacts preference residual (official index-D35w9RK9):
  * - Settings Visuals `_e`: writes `preview_feature_uses_artifacts`
  *   (`b = l?.settings.preview_feature_uses_artifacts ?? !0` — default ON).
  * - Conversation path: `showArtifacts: h?.preview_feature_uses_artifacts ?? !1`

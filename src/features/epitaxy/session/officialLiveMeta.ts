@@ -1,5 +1,5 @@
 /**
- * Official ion-dist index-BELzQL5P `Fke` / `Uke` live meta extraction.
+ * Official ion-dist cd5a31703 `Fke` / `Uke` live meta extraction.
  *
  * CLI emits:
  * - system init → model + permissionMode

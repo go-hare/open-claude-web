@@ -17,6 +17,8 @@ import {
   useFloating,
 } from "@floating-ui/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { TRANSCRIPT_SURFACE_MESSAGES } from "../officialCodeChromeMessages";
 import {
   useCallback,
   useEffect,
@@ -117,6 +119,7 @@ function OfficialAttachmentImagePill({
   onRemove: (id: string) => void;
   previewOpen: boolean;
 }) {
+  const surfaceText = useI18nText(TRANSCRIPT_SURFACE_MESSAGES);
   const triggerRef = useRef<HTMLDivElement | null>(null);
   const reducedMotion = useReducedMotion();
   const loading = image.status === "loading";
@@ -222,7 +225,7 @@ function OfficialAttachmentImagePill({
                 {loading ? (
                   <div role="status" className="absolute inset-0 grid place-items-center bg-z0/60">
                     <OfficialSpinner size="s" />
-                    <span className="sr-only">Processing image</span>
+                    <span className="sr-only">{surfaceText.processingImage}</span>
                   </div>
                 ) : null}
               </div>
@@ -404,15 +407,141 @@ function OfficialAttachmentFilePill({
   );
 }
 
+/**
+ * Official yv `inlineLabel` residual (c119 Cv agent / issue):
+ *   epitaxy-pill-body inline-flex items-center gap-g4 h-[var(--h7)] px-p6
+ * Agent: thumbnail AgentPlanPath size s, label = real wr()?.agent. Do not invent.
+ */
+function OfficialAttachmentInlinePill({
+  icon,
+  label,
+  onRemove,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  onRemove: () => void;
+  value: string;
+}) {
+  const triggerRef = useRef<HTMLDivElement | null>(null);
+
+  const remove = useCallback(() => {
+    const current = triggerRef.current;
+    const neighbor = current?.nextElementSibling ?? current?.previousElementSibling;
+    neighbor?.querySelector<HTMLElement>(".epitaxy-pill-body")?.focus();
+    onRemove();
+  }, [onRemove]);
+
+  const onPillKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      const pill = event.currentTarget.closest(".epitaxy-attachment-pill");
+      const focusBody = (el: Element | null | undefined) => {
+        el?.querySelector<HTMLElement>(".epitaxy-pill-body")?.focus();
+      };
+      switch (event.key) {
+        case "Delete":
+        case "Backspace":
+          event.preventDefault();
+          remove();
+          return;
+        case "ArrowLeft":
+          event.preventDefault();
+          event.stopPropagation();
+          focusBody(pill?.previousElementSibling);
+          return;
+        case "ArrowRight":
+          event.preventDefault();
+          event.stopPropagation();
+          focusBody(pill?.nextElementSibling);
+          return;
+        case "Home":
+          event.preventDefault();
+          event.stopPropagation();
+          focusBody(pill?.parentElement?.firstElementChild);
+          return;
+        case "End":
+          event.preventDefault();
+          event.stopPropagation();
+          focusBody(pill?.parentElement?.lastElementChild);
+          return;
+        default:
+          return;
+      }
+    },
+    [remove],
+  );
+
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger
+        render={(props) => (
+          <div
+            {...props}
+            ref={(node) => {
+              triggerRef.current = node;
+              const incoming = (
+                props as {
+                  ref?:
+                    | ((el: HTMLDivElement | null) => void)
+                    | { current: HTMLDivElement | null }
+                    | null;
+                }
+              ).ref;
+              if (typeof incoming === "function") incoming(node);
+              else if (incoming && typeof incoming === "object") incoming.current = node;
+            }}
+            className="epitaxy-attachment-pill group/pill relative shrink-0 hover:z-10 focus-within:z-10"
+            style={{ "--pill-vt-name": pillVtName(value) } as CSSProperties}
+          >
+            <button
+              type="button"
+              aria-label={label}
+              onKeyDown={onPillKeyDown}
+              className="epitaxy-pill-body inline-flex items-center gap-g4 h-[var(--h7)] px-p6 rounded-r3 overflow-hidden outline-none border-0 ring-focus hide-focus-ring bg-fill-contained-default text-contained-default text-body"
+            >
+              <span className="flex items-center justify-center shrink-0">{icon}</span>
+              <span className="truncate max-w-[160px]">{label}</span>
+            </button>
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label={`Remove ${label}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                remove();
+              }}
+              onMouseDown={(event) => event.preventDefault()}
+              className="epitaxy-pill-remove absolute -top-1.5 -right-1.5 z-10 grid place-items-center w-4 h-4 rounded-full bg-z0 text-t7 ring-1 ring-[var(--t2)] opacity-0 pointer-events-none transition-opacity group-hover/pill:opacity-100 group-hover/pill:pointer-events-auto group-focus-within/pill:opacity-100 group-focus-within/pill:pointer-events-auto hover:text-t9"
+            >
+              <Icon name="XCrossCloseMedium" size="s" />
+            </button>
+          </div>
+        )}
+      />
+      <BaseContextMenuPopup>
+        <BaseContextMenuItem className="text-destructive-default" onClick={remove}>
+          Delete
+        </BaseContextMenuItem>
+      </BaseContextMenuPopup>
+    </ContextMenu.Root>
+  );
+}
+
 export function OfficialComposerStagedImages({
+  agent,
   fileAttachments = [],
   images,
   onRemove,
+  onRemoveAgent,
   onRemoveFile,
 }: {
+  /** Official Cv `agent:"draft"===Os?E:void 0` — falsy hides the pill. */
+  agent?: string | null;
   fileAttachments?: StagedComposerFileAttachment[];
   images: StagedComposerImage[];
   onRemove: (id: string) => void;
+  onRemoveAgent?: () => void;
   onRemoveFile?: (id: string) => void;
 }) {
   /** Official Cv: M preview id, S lightbox open, R {src,alt}. */
@@ -467,13 +596,14 @@ export function OfficialComposerStagedImages({
     setLightboxOpen(true);
   }, [clearPreview]);
 
-  if (images.length === 0 && fileAttachments.length === 0) return null;
+  const agentName = agent?.trim() || "";
+  if (images.length === 0 && fileAttachments.length === 0 && !agentName) return null;
 
   return (
     <>
       <div
         className="epitaxy-attachment-shelf px-p7 pt-p7"
-        data-official-source="c11959232-staged-images"
+        data-official-source="cd5a31703-B4nKQMBN.js:staged-images"
       >
         <div
           className="flex gap-g3 flex-wrap"
@@ -482,6 +612,14 @@ export function OfficialComposerStagedImages({
             if (!event.currentTarget.contains(event.relatedTarget as Node | null)) clearPreview();
           }}
         >
+          {agentName ? (
+            <OfficialAttachmentInlinePill
+              icon={<Icon name="AgentPlanPath" size="s" />}
+              label={agentName}
+              onRemove={onRemoveAgent ?? (() => undefined)}
+              value="agent"
+            />
+          ) : null}
           {images.map((image) => (
             <OfficialAttachmentImagePill
               key={image.id}

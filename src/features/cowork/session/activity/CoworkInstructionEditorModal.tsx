@@ -4,6 +4,7 @@ import type { LocalFileReadResult } from "../../../../adapters/desktopBridge/typ
 import { Icon } from "../../../../shell/icons";
 import { CoworkButton } from "../../ui/CoworkButton";
 import { CoworkModal } from "../../ui/CoworkModal";
+import { useCoworkActivityChromeText } from "./coworkActivityChromeMessages";
 
 type CoworkInstructionEditorModalProps = {
   folderPath: string;
@@ -12,12 +13,8 @@ type CoworkInstructionEditorModalProps = {
   sessionId: string;
 };
 
-const instructionsPlaceholder = `Example:
-This folder contains marketing campaign briefs written for external agencies
-Tone: direct and professional, not chatty
-Keep deliverables and timelines in a table format`;
-
 export function CoworkInstructionEditorModal({ folderPath, isOpen, onClose, sessionId }: CoworkInstructionEditorModalProps) {
+  const chromeText = useCoworkActivityChromeText();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const memoryFilePath = useMemo(() => joinInstructionFilePath(folderPath), [folderPath]);
   const [content, setContent] = useState("");
@@ -68,20 +65,22 @@ export function CoworkInstructionEditorModal({ folderPath, isOpen, onClose, sess
   if (!isOpen) return null;
 
   return (
-    <CoworkModal isOpen={isOpen} onClose={onClose} title="Folder instructions" width="w-[640px]">
+    <CoworkModal isOpen={isOpen} onClose={onClose} title={chromeText.folderInstructions} width="w-[640px]">
       <form className="flex flex-col gap-4" onSubmit={(event) => submitInstructionForm(event, save)}>
-        <p className="text-sm text-text-500">Use this to give Claude instructions for working in this folder.</p>
+        <p className="text-sm text-text-500" data-official-source="c21f11e6d-CxD82rYo.js:VOHzFFMkVd">
+          {chromeText.folderInstructionsDescription}
+        </p>
         {isLoading ? (
           <div className="flex h-64 items-center justify-center text-text-500">
             <Icon className="animate-spin" name="Spinner" size="sm" />
-            <span className="sr-only">Loading...</span>
+            <span className="sr-only">{chromeText.loading}</span>
           </div>
         ) : (
           <textarea
-            aria-label="Instructions"
+            aria-label={chromeText.instructions}
             className="h-96 w-full resize-y rounded-lg border border-border-300 bg-bg-100 p-3 font-mono text-sm text-text-100 focus:outline-none focus:ring-2 focus:ring-brand-100"
             onChange={(event) => setContent(event.target.value)}
-            placeholder={instructionsPlaceholder}
+            placeholder={chromeText.folderInstructionsPlaceholder}
             ref={textareaRef}
             spellCheck={false}
             value={content}
@@ -89,8 +88,8 @@ export function CoworkInstructionEditorModal({ folderPath, isOpen, onClose, sess
         )}
         {error ? <p className="text-sm text-extended-pink">{error}</p> : null}
         <div className="flex justify-end gap-g4">
-          <CoworkButton disabled={isSaving} onClick={onClose} variant="contained">Cancel</CoworkButton>
-          <CoworkButton disabled={isLoading || isSaving} onClick={() => void save()} variant="primary">{isSaving ? "Saving..." : "Save"}</CoworkButton>
+          <CoworkButton disabled={isSaving} onClick={onClose} variant="contained">{chromeText.cancel}</CoworkButton>
+          <CoworkButton disabled={isLoading || isSaving} onClick={() => void save()} variant="primary">{isSaving ? chromeText.saving : chromeText.save}</CoworkButton>
         </div>
       </form>
     </CoworkModal>

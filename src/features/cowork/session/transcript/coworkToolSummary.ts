@@ -76,7 +76,7 @@ function workflowToolSummary(tool: CoworkToolUse, kind: CoworkToolRowSummary["ki
   if (tool.name === "Skill") return { kind, meta: input("skill") ? `/${input("skill")}` : undefined, metaIsCode: true, runningVerb: "Running skill", verb: "Ran skill" };
   if (["TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskStop"].includes(tool.name)) return { kind, runningVerb: "Updating todos", verb: "Updated todos" };
   if (tool.name === "TodoWrite") return { kind, runningVerb: "Updating todos", verb: Array.isArray(tool.input.todos) && tool.input.todos.length ? "Updated todos" : "Cleared todos" };
-  if (tool.name === "EnterPlanMode") return { kind, runningVerb: "Entering plan mode", verb: "Entered plan mode" };
+  if (tool.name === "EnterPlanMode") return { kind, runningVerb: "Making a plan", verb: "Started planning" };
   if (tool.name === "ExitPlanMode") return { kind, runningVerb: "Proposing plan", verb: "Proposed plan" };
   if (tool.name === "AskUserQuestion") {
     const questions = Array.isArray(tool.input.questions) ? tool.input.questions : [];

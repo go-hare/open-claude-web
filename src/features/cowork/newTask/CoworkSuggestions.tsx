@@ -146,7 +146,7 @@ export function CoworkSuggestions({
   return (
     <section
       className="w-full max-w-2xl mt-8 group/suggestions"
-      data-official-source="index-BELzQL5P.js:r6t/n6t suggestion list"
+      data-official-source="c62135ccf-Dn28vJ3V.js:r6t/n6t suggestion list"
     >
       <div className="flex items-center justify-between mb-2 px-2">
         <button

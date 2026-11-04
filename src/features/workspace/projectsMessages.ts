@@ -1,7 +1,7 @@
 import type { MessageDescriptors } from "../../i18n/footerMenuMessages";
 
 /**
- * Official projects list residual (c1b9abf13 _Component32 / index-BELzQL5P):
+ * Official projects list residual (c1b9abf13 _Component32 / index-D35w9RK9):
  * title UxTJRaKagI, New project lJMkinm1YS, empty headline LnKqo+X3BJ,
  * web empty body ldzvy7zpnr, search Dw9BaeKr5H / doPT7U8q21,
  * sort aria 9rVGvCDexf, sort-by hDI+JMUhFd, no-match bzYWNlBFMV.
@@ -51,7 +51,7 @@ export const PROJECTS_MESSAGES = {
   },
   untitledProject: { defaultMessage: "Untitled project", id: "YuuESnYtfk" },
 
-  // ── SpaceOnboardingModal ukt residual (index-BELzQL5P pkt/wkt/jkt) ──
+  // ── SpaceOnboardingModal ukt residual (index-D35w9RK9 pkt/wkt/jkt) ──
   createNewProjectTitle: {
     defaultMessage: "Create a new project",
     id: "VbuX/vbFrq",

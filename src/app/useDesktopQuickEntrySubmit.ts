@@ -10,7 +10,7 @@ async function getDesktopBridge() {
 }
 
 /**
- * Official ion-dist residual (index-BELzQL5P.js `B0t` + `q0t`):
+ * Official ion-dist residual (index-D35w9RK9.js `B0t` + `q0t`):
  *
  *   KI?.onOnQuickEntrySubmit?.(payload => {
  *     log length/images/forChat

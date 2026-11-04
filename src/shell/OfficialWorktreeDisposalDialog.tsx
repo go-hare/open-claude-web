@@ -1,5 +1,5 @@
 /**
- * Official index-BELzQL5P VYt — ConfirmDialog over UYt.pending for $Yt.
+ * Official cd5a31703 VYt — ConfirmDialog over UYt.pending for $Yt.
  * Mount once near app root (same role as official VYt memo).
  */
 import { useSyncExternalStore, type ReactNode } from "react";

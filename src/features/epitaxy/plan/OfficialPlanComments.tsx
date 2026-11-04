@@ -20,6 +20,8 @@ import {
 import { createPortal } from "react-dom";
 import { Icon } from "../../../shell/icons";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { PLAN_COMMENT_MESSAGES } from "../officialCodeChromeMessages";
 import {
   mergeOfficialPlanCommentFeedback,
   officialPlanCommentsApi,
@@ -54,10 +56,11 @@ type DraftState = IdleDraft | SelectionDraft | EditingDraft;
 
 /** Official VN hint above plan markdown. */
 export function OfficialPlanCommentHint() {
+  const planText = useI18nText(PLAN_COMMENT_MESSAGES);
   return (
     <div className="mb-[var(--chat-item-gap)] flex items-center gap-g3 text-caption text-t6">
       <Icon name="ChatFeedbackMessage" size="s" />
-      <span>Select any text to leave a comment for Claude</span>
+      <span>{planText.selectAnyText}</span>
     </div>
   );
 }
@@ -277,7 +280,7 @@ function OfficialPlanCommentKeycap({ children }: { children: ReactNode }) {
   return <kbd className="text-caption opacity-60 shrink-0">{children}</kbd>;
 }
 
-/** Official k_e Surface elevation:"popover" (index-BELzQL5P w_e). */
+/** Official k_e Surface elevation:"popover" (cd5a31703 w_e). */
 function OfficialPlanCommentSurface() {
   return (
     <div
@@ -304,6 +307,7 @@ const OfficialPlanCommentPopover = memo(function OfficialPlanCommentPopover({
   onSubmit: (value: string) => void;
   range: Range;
 }) {
+  const planText = useI18nText(PLAN_COMMENT_MESSAGES);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [value, setValue] = useState(initialValue);
@@ -400,7 +404,7 @@ const OfficialPlanCommentPopover = memo(function OfficialPlanCommentPopover({
   return createPortal(
     <div className="epitaxy-root">
       <div
-        aria-label="Comment on selection"
+        aria-label={planText.commentOnSelection}
         className="draggable-none fixed left-0 top-0 isolate z-[90] w-[320px] rounded-r6 p-p4"
         data-plan-comment-popover=""
         ref={shellRef}
@@ -409,7 +413,7 @@ const OfficialPlanCommentPopover = memo(function OfficialPlanCommentPopover({
       >
         <OfficialPlanCommentSurface />
         <textarea
-          aria-label="Plan comment"
+          aria-label={planText.planComment}
           className="epitaxy-textarea w-full resize-none"
           onChange={(event) => {
             const next = event.target.value;
@@ -427,7 +431,7 @@ const OfficialPlanCommentPopover = memo(function OfficialPlanCommentPopover({
               submitLatest();
             }
           }}
-          placeholder="Leave a comment for Claude…"
+          placeholder={planText.leaveACommentForClaude}
           ref={textareaRef}
           rows={2}
           style={{ fieldSizing: "content", maxHeight: "8lh" } as CSSProperties}

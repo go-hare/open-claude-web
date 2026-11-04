@@ -1,5 +1,5 @@
 /**
- * Official ozt / rzt / izt residual (index-BELzQL5P.js).
+ * Official ozt / rzt / izt residual (index-D35w9RK9.js).
  * Builds the nested file tree for plugin skill files (c63a Ct → Z(r)).
  */
 

@@ -1,5 +1,5 @@
 /**
- * Official O8t / P8t LocalOrgPluginsContent (index-BELzQL5P.js).
+ * Official O8t / P8t LocalOrgPluginsContent (index-D35w9RK9.js).
  * Data: `_T = globalThis["claude.web"]?.CustomPlugins` listLocalOrgPlugins.
  */
 import { useQuery } from "@tanstack/react-query";

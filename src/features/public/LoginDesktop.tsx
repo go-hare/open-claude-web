@@ -14,7 +14,7 @@ import { primaryButtonClass, secondaryButtonClass } from "../shared/buttonClasse
  *   status && (provider || bootstrapHost) → M5t({ status })  // no hide1p
  *   else Get started / Sign In residual
  *
- * M5t (index-BELzQL5P.js):
+ * M5t (index-D35w9RK9.js):
  *   hide1p = hide1p ?? !status.enabled
  *   x5t() = Gbe.interactiveAuthStore (needsAuth / pendingUserCode / kind)
  *   phases: idle | relaunching | sso-pending | applying
@@ -406,7 +406,7 @@ export function LoginDesktopChooser({
     setPhase("idle");
   }, []);
 
-  // Official M5t (index-BELzQL5P.js): if (void 0 === r) return a.jsx(sVt, {})
+  // Official M5t (index-D35w9RK9.js): if (void 0 === r) return a.jsx(sVt, {})
   // Empty shell only — no Ace / no "Loading…" invent while interactiveAuth loads.
   if (interactiveAuth === undefined) {
     return <LoginDesktopShell />;
@@ -847,7 +847,7 @@ export function LoginDesktopPage(_props: RouteViewProps) {
 }
 
 /**
- * Official T5t residual (index-BELzQL5P.js):
+ * Official T5t residual (index-D35w9RK9.js):
  *   Mount when shell is up and interactiveAuth.needsAuth (parent gate).
  *   EQt status truthy → #root.inert + createPortal z-overlay → M5t({status, hide1p:true}).
  * Not the LoginRoute dual chooser.
@@ -913,7 +913,7 @@ export function LoginDesktopT5tPortal() {
       aria-modal="true"
       aria-label="Sign in to your organization"
       className="fixed inset-0 z-overlay"
-      data-official-source="index-BELzQL5P:T5t"
+      data-official-source="index-D35w9RK9:T5t"
     >
       <LoginDesktopChooser
         status={status}

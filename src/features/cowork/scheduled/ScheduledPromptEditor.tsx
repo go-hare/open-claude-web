@@ -1,6 +1,6 @@
 /**
  * Official aYt CodeTipTapEditor subset used by uYt scheduled create modal.
- * Source: index-BELzQL5P.js const aYt + vTt({ plainTextMode: true }) + rjt EditorContent.
+ * Source: c21f11e6d-CxD82rYo.js const aYt + vTt({ plainTextMode: true }) + rjt EditorContent.
  * Class strings must exist in official ion-dist CSS (c6a992d55).
  */
 import { Placeholder } from "@tiptap/extensions/placeholder";
@@ -126,7 +126,7 @@ export function ScheduledPromptEditor({
       ]
         .filter(Boolean)
         .join(" ")}
-      data-official-source="index-BELzQL5P.js:aYt"
+      data-official-source="c21f11e6d-CxD82rYo.js:aYt"
     >
       {/* Official rjt EditorContent classes */}
       <EditorContent

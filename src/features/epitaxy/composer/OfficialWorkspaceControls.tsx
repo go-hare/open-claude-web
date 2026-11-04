@@ -3,12 +3,10 @@ import { desktopBridge, type WorkspaceContext, type WorkspaceSshConfig } from ".
 import { setSelectedFolder } from "../../customize/selectedFolderStore";
 import {
   OfficialComposerFolderPill,
-  OfficialComposerPill,
   OfficialComposerPillPulse,
-  OfficialSearchSelect,
-  officialComposerSplitPillClass,
   type OfficialComposerFolderRecent,
 } from "../OfficialEpitaxyComponents";
+import { OfficialComposerAddFolderButton, OfficialComposerBranchGroup } from "../OfficialComposerPills";
 import { LocalEnvironmentPill } from "./LocalEnvironmentPill";
 import {
   asRecord,
@@ -19,6 +17,8 @@ import {
   stringValue,
   uniqueStrings,
 } from "./workspaceControlsHelpers";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { COMPOSER_GIT_MESSAGES } from "../officialCodeChromeMessages";
 
 export type EnsureWorkspaceTrusted = (cwd: string | undefined, afterAccept: () => void) => Promise<boolean>;
 
@@ -47,6 +47,7 @@ export function OfficialWorkspaceControls({
   useWorktree,
   workspace,
 }: OfficialWorkspaceControlsProps) {
+  const gitText = useI18nText(COMPOSER_GIT_MESSAGES);
   const [branches, setBranches] = useState<string[]>([sourceBranch].filter(Boolean));
   /**
    * Official Vn = Mt(local cwd) ?? true. SSH never calls Mt so Vn stays true.
@@ -177,12 +178,23 @@ export function OfficialWorkspaceControls({
       onFolderMenuClosed?.();
       return;
     }
-    const selectedPaths = await desktopBridge.Preferences.getDirectoryPath?.(false);
-    const selectedPath = selectedPaths?.[0];
+    const browse = desktopBridge.FileSystem.browseFolder;
+    const selectedPath = browse
+      ? await browse(gitText.selectFolderForLocalSession)
+      : (await desktopBridge.Preferences.getDirectoryPath?.(false))?.[0];
     if (selectedPath) await applyWorkspacePath(selectedPath);
     // Native dialog steals focus; official residual re-focuses composer (Ye.focus).
     onFolderMenuClosed?.();
-  }, [applyWorkspacePath, isSsh, onFolderMenuClosed, workspace.cwd, workspace.sshConfig]);
+  }, [applyWorkspacePath, gitText.selectFolderForLocalSession, isSsh, onFolderMenuClosed, workspace.cwd, workspace.sshConfig]);
+
+  const addAnotherFolder = useCallback(async () => {
+    const browse = desktopBridge.FileSystem.browseFolder;
+    const selectedPath = browse
+      ? await browse(gitText.addFolderToSession)
+      : (await desktopBridge.Preferences.getDirectoryPath?.(false))?.[0];
+    if (selectedPath) await applyWorkspacePath(selectedPath);
+    onFolderMenuClosed?.();
+  }, [applyWorkspacePath, gitText.addFolderToSession, onFolderMenuClosed]);
 
   const selectLocalEnv = useCallback(() => {
     const next: WorkspaceContext = {
@@ -258,44 +270,17 @@ export function OfficialWorkspaceControls({
         />
       </OfficialComposerPillPulse>
       {showGitControls ? (
-        <div className="group/split inline-flex rounded-r5 bg-fill-contained-default effect-contained-default has-[[aria-expanded=true]]:bg-[var(--fill-contained-selected)]">
-          <OfficialSearchSelect
-            disabled={disabled || branchItems.length === 0}
-            emptyMessage="No branches match."
-            icon="GitBranch"
-            itemToLabel={(branch) => branch}
-            items={branchItems}
-            onSelect={selectBranch}
-            placeholder="Search branches…"
-            triggerAriaLabel="Branch"
-            triggerClassName={`${officialComposerSplitPillClass} gap-g5 px-p5`}
-            triggerLabel={sourceBranch || workspace.branchName}
-            value={sourceBranch || null}
-          />
-          <span aria-hidden="true" className="w-px my-[7px] bg-t3 transition-opacity group-hover/split:opacity-0 group-focus-within/split:opacity-0" />
-          <button
-            aria-checked={useWorktree}
-            className={`${officialComposerSplitPillClass} group/cb gap-g2 pl-p4 pr-p5`}
-            data-checked={useWorktree || undefined}
-            disabled={disabled}
-            onClick={() => onUseWorktreeChange(!useWorktree)}
-            role="switch"
-            type="button"
-          >
-            <span className="inline-flex items-center justify-center size-[16px] shrink-0 p-[2.4px]">
-              <span className="flex items-center justify-center size-full rounded-[2.4px] bg-[var(--ui-switch-off-background)] group-data-[checked]/cb:bg-[var(--accent)]">
-                <span className="flex items-center justify-center data-[unchecked]:hidden" data-unchecked={!useWorktree || undefined}>
-                  <svg width="6" height="5" viewBox="0 0 5.875 5.375" fill="none" aria-hidden="true" className="text-[var(--core-white)]">
-                    <path d="M0.500014 2.75004L2.25001 4.87504L5.37501 0.500039" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-              </span>
-            </span>
-            <span>worktree</span>
-          </button>
-        </div>
+        <OfficialComposerBranchGroup
+          branch={sourceBranch || workspace.branchName}
+          branches={branchItems}
+          branchPickerDisabled={disabled || branchItems.length === 0}
+          onSelectBranch={selectBranch}
+          onWorktreeChange={onUseWorktreeChange}
+          worktree={useWorktree}
+          worktreeSupported={worktreeSupported}
+        />
       ) : null}
-      {workspace.cwd ? <OfficialComposerPill ariaLabel="Add another folder" icon="FolderAddRight" onClick={() => void chooseWorkspace()} /> : null}
+      {workspace.cwd ? <OfficialComposerAddFolderButton onClick={() => void addAnotherFolder()} /> : null}
     </div>
   );
 }

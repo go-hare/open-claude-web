@@ -31,6 +31,7 @@ import {
 } from "./officialDiffAnnotationsStore";
 import { officialPierreLangFromPath } from "./officialPierreLang";
 import { useOfficialPierreTheme } from "./OfficialPierreWorkerPool";
+import { pierreTokenPaintOnPostRender } from "./pierreTokenPaint";
 import "./ensurePierreDiffsContainer";
 
 const FIELD_SIZING: CSSProperties = { fieldSizing: "content" };
@@ -291,6 +292,7 @@ function OfficialEcFence({ lang, text }: { lang?: string; text: string }) {
     overflow: "wrap" as const,
     theme,
     unsafeCSS: "[data-file] { --diffs-bg: var(--t1); }",
+    onPostRender: pierreTokenPaintOnPostRender,
   }), [theme]);
   return (
     <div className={`epitaxy-diff overflow-clip rounded-r3 text-code ${EC_BLOCK_GAP}`}>
@@ -315,6 +317,7 @@ function OfficialEcSuggestion({
     overflow: "wrap" as const,
     theme,
     unsafeCSS: EC_SUGGESTION_UNSAFE_CSS,
+    onPostRender: pierreTokenPaintOnPostRender,
   }), [theme]);
   const fileOptions = useMemo(() => ({
     disableFileHeader: true,
@@ -322,6 +325,7 @@ function OfficialEcSuggestion({
     overflow: "wrap" as const,
     theme,
     unsafeCSS: EC_SUGGESTION_UNSAFE_CSS,
+    onPostRender: pierreTokenPaintOnPostRender,
   }), [theme]);
   const fileDiff = useMemo(
     () => (patch ? processFile(patch, { cacheKey: patch }) : null),

@@ -1,5 +1,5 @@
 /**
- * Official empty-state pictogram xB (index-BELzQL5P), via Wq size medium=96 + Vq/Hq fills.
+ * Official empty-state pictogram xB (c21f11e6d-CxD82rYo), via Wq size medium=96 + Vq/Hq fills.
  * Used by CYt when tasks.length === 0 and no filter.
  */
 import type { SVGProps } from "react";
@@ -67,7 +67,7 @@ export function ScheduledTasksEmptyPictogram({
       aria-hidden={alt ? undefined : true}
       aria-label={alt}
       className={lineColorClass(lineColor)}
-      data-official-source="index-BELzQL5P.js:xB/Wq"
+      data-official-source="c21f11e6d-CxD82rYo.js:xB/Wq"
       fill="none"
       height={px}
       role={alt ? "img" : undefined}

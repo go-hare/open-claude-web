@@ -1,5 +1,5 @@
 /**
- * Official ukt SpaceOnboardingModal (index-BELzQL5P lG).
+ * Official ukt SpaceOnboardingModal (index-D35w9RK9 lG).
  * Chooser pkt + create-new wkt + existing-folder jkt.
  * Create residual bkt: createSpaceFolder → createSpace → addFolderToSpace → copyFilesToSpaceFolder.
  * File drop residual ckt; location residual xkt/fkt (Documents/Claude/Projects); memory footer Mkt.
@@ -38,7 +38,7 @@ export function SpaceOnboardingModal({ isOpen, onClose, onCreated }: SpaceOnboar
 
   return (
     <OfficialModal hasCloseButton={false} isOpen={isOpen} modalSize="md" onClose={handleClose} title="">
-      <div data-official-source="index-BELzQL5P.js:ukt">
+      <div data-official-source="index-D35w9RK9.js:ukt">
         {step === "chooser" ? <ChooserStep onSelect={setStep} text={text} /> : null}
         {step === "create-new" ? (
           <CreateNewStep onBack={() => setStep("chooser")} onClose={handleClose} onCreated={onCreated} text={text} />
@@ -59,7 +59,7 @@ function ChooserStep({
   text: ProjectsText;
 }) {
   return (
-    <div className="flex flex-col gap-4" data-official-source="index-BELzQL5P.js:pkt">
+    <div className="flex flex-col gap-4" data-official-source="index-D35w9RK9.js:pkt">
       <div className="flex flex-col gap-1">
         <h2 className="text-xl font-semibold text-text-100">{text.createNewProjectTitle}</h2>
         <p className="text-sm text-text-400 leading-relaxed">{text.createNewProjectBody}</p>
@@ -96,7 +96,7 @@ function ChooserCard({
   return (
     <button
       className="flex items-center gap-3 rounded-xl border border-border-300 bg-bg-000 px-4 py-3.5 text-left transition-colors hover:border-border-200 hover:bg-bg-100 group"
-      data-official-source="index-BELzQL5P.js:mkt"
+      data-official-source="index-D35w9RK9.js:mkt"
       onClick={onClick}
       type="button"
     >
@@ -124,7 +124,7 @@ function StepHeader({
   title: string;
 }) {
   return (
-    <div className="mb-4 flex flex-col gap-1" data-official-source="index-BELzQL5P.js:ykt">
+    <div className="mb-4 flex flex-col gap-1" data-official-source="index-D35w9RK9.js:ykt">
       <button
         aria-label={goBackLabel}
         className="-ml-1 self-start rounded p-1 text-text-500 transition-colors hover:bg-bg-200 hover:text-text-200"
@@ -139,7 +139,7 @@ function StepHeader({
   );
 }
 
-/** Official residual ckt FileDropArea (index-BELzQL5P). */
+/** Official residual ckt FileDropArea (index-D35w9RK9). */
 function SpaceFileDropArea({
   disabled,
   dropLabel,
@@ -199,7 +199,7 @@ function SpaceFileDropArea({
   };
 
   return (
-    <div className="flex flex-col gap-2" data-official-source="index-BELzQL5P.js:ckt">
+    <div className="flex flex-col gap-2" data-official-source="index-D35w9RK9.js:ckt">
       {filePaths.length > 0 ? (
         <div className="flex flex-col gap-1">
           {filePaths.map((filePath) => {
@@ -252,7 +252,7 @@ function SpaceFileDropArea({
 }
 
 /**
- * Official residual Mkt (index-BELzQL5P):
+ * Official residual Mkt (index-D35w9RK9):
  * hse = account.settings.enabled_cowork_memory !== false.
  * Product: preference `enabledCoworkMemory` is mirrored from account.settings
  * (useSettingsBootstrap sync + Qt toggle write) so Space status matches Settings.
@@ -268,7 +268,7 @@ function SpaceMemoryStatus({ text }: { text: ProjectsText }) {
           "inline-flex cursor-default items-center gap-1.5 rounded text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-100",
           memoryOn ? "text-accent-100" : "text-text-500",
         ].join(" ")}
-        data-official-source="index-BELzQL5P.js:Mkt"
+        data-official-source="index-D35w9RK9.js:Mkt"
         role="status"
         tabIndex={0}
       >
@@ -398,7 +398,7 @@ function CreateNewStep({
   };
 
   return (
-    <div className="flex flex-col" data-official-source="index-BELzQL5P.js:wkt">
+    <div className="flex flex-col" data-official-source="index-D35w9RK9.js:wkt">
       <StepHeader goBackLabel={text.goBack} onBack={onBack} title={text.startNewProjectTitle} />
       <form
         className="flex flex-col gap-4"
@@ -447,7 +447,7 @@ function CreateNewStep({
             onFilePathsChange={setFilePaths}
           />
         </div>
-        <div className="flex flex-col gap-1.5" data-official-source="index-BELzQL5P.js:xkt">
+        <div className="flex flex-col gap-1.5" data-official-source="index-D35w9RK9.js:xkt">
           <label className="text-xs font-medium text-text-300">{text.chooseProjectLocation}</label>
           <button
             className="flex w-full items-center gap-2 rounded-lg border border-border-300 bg-bg-000 px-3 py-2.5 text-left text-sm text-text-300 transition-colors hover:border-border-200 disabled:opacity-50"
@@ -535,7 +535,7 @@ function ExistingFolderStep({
   };
 
   return (
-    <div className="flex flex-col" data-official-source="index-BELzQL5P.js:jkt">
+    <div className="flex flex-col" data-official-source="index-D35w9RK9.js:jkt">
       <StepHeader
         description={text.existingFolderStepBody}
         goBackLabel={text.goBack}

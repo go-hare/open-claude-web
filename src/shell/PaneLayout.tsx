@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import type { AppRoute } from "../app/routes";
 import { EpitaxySessionTile } from "../features/epitaxy/EpitaxySessionTile";
 import { CoworkSessionTile } from "../features/cowork/session/CoworkSessionTile";
@@ -13,6 +13,7 @@ import {
 } from "../features/cowork/session/coworkSessionDeletion";
 import { paneRefFromPath, paneRefKey, paneStore, usePaneStoreSnapshot, type PaneSlot } from "../stores/paneStore";
 import { PaneResizeHandles, useCommandHeldAttribute, usePaneDrag, usePaneKeyboard, usePaneSplitBounds } from "./PaneControls";
+import { PaneDropOverlay } from "./PaneDropOverlay";
 import { PrimaryPaneMenu } from "./PaneHeaderActions";
 
 type PaneLayoutProps = {
@@ -24,7 +25,7 @@ type PaneLayoutProps = {
 
 type OpenPaneEvent = CustomEvent<{ path: string; title?: string | null; slot?: PaneSlot }>;
 
-export function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLayoutProps) {
+export const PaneLayout = memo(function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLayoutProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const snapshot = usePaneLayoutSnapshot(mode);
   const currentRef = paneRefFromPath(window.location.pathname, currentRoute.title);
@@ -35,10 +36,19 @@ export function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLay
   const focusedIndex = Math.min(snapshot.focusedIndex, snapshot.extraPanes.length);
   const showColResize = slotSet.has("tr") || (slotSet.has("bl") && slotSet.has("br"));
   const showRowResize = slotSet.has("bl") || slotSet.has("br");
+  /**
+   * Official shared-23 `c$` / `JQ`: `--df-col-tracks` is `1fr` unsplit, `Nfr Mfr` when
+   * extra columns exist. Product cbc59 host is `1fr 0%` + primary `span 2`, which
+   * puts `qQ` in the 0% track so the Split view pill is 0×0.
+   */
+  const colTracks = hasSplit
+    ? `${snapshot.colSplit}fr ${1 - snapshot.colSplit}fr`
+    : "1fr";
   const paneStyle = useMemo(() => ({
     "--df-pane-col": String(snapshot.colSplit),
     "--df-pane-row": String(snapshot.rowSplit),
-  }) as CSSProperties, [snapshot.colSplit, snapshot.rowSplit]);
+    "--df-col-tracks": colTracks,
+  }) as CSSProperties, [colTracks, snapshot.colSplit, snapshot.rowSplit]);
 
   usePaneStoreEvents(mode, currentKey);
   usePaneKeyboard(mode, onNavigate);
@@ -103,9 +113,17 @@ export function PaneLayout({ children, currentRoute, mode, onNavigate }: PaneLay
         );
       })}
       <PaneResizeHandles hostRef={hostRef} showCol={showColResize} showRow={showRowResize} />
+      {mode === "code" ? (
+        <PaneDropOverlay
+          currentKey={currentKey}
+          extraSlots={slots}
+          hostRef={hostRef}
+          mode={mode}
+        />
+      ) : null}
     </div>
   );
-}
+});
 
 /**
  * Official cbc59a8af FrameHeader (`xs`): empty chrome only —

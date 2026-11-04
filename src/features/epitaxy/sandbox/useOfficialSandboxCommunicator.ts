@@ -1,5 +1,5 @@
 /**
- * Official m6e residual (index-BELzQL5P):
+ * Official m6e residual (cd5a31703):
  *   wait for iframeRef (retry up to 20 × 500ms) then construct p6e
  *   sendRequest is undefined until communicator ready (eit effect gates on g truthy)
  *   restartListening → p6e.restartListening

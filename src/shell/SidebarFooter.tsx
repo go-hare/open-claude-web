@@ -10,6 +10,7 @@ import { BaseMenuHeader, BaseMenuItem, BaseMenuPopup, BaseMenuSeparator, BaseSub
 import { Icon } from "./icons";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { RelaunchInterstitialOverlay } from "./RelaunchInterstitial";
+import { openSettingsModal } from "../features/settings/settingsModalStore";
 
 type SidebarFooterProps = {
   frame: FrameStore;
@@ -222,12 +223,18 @@ function UserMenu({
   text: FooterMenuText;
   onRequestSignOut: () => void;
 }) {
-  const settingsTarget = mode === "code" ? "/settings/claude-code" : "/settings/general";
+  // Official Gns: fe = epitaxy|code → claude-code else general; xe=D5() → P5(fe) (not /settings route).
+  const settingsSection = mode === "code" ? "claude-code" : "general";
   return (
     <>
       <BaseMenuHeader className="truncate"><span data-testid="user-menu-header">{displayName}</span></BaseMenuHeader>
       {/* 用户要求先隐藏:Organization settings / Analytics / 了解更多(恢复时删除此注释) */}
-      <BaseMenuItem icon="Settings" trailing={<FooterShortcut keys={["⌘", ","]} />} onClick={() => onNavigate(settingsTarget)}>{text.settings}</BaseMenuItem>
+      <BaseMenuItem
+        data-testid="user-menu-settings"
+        icon="Settings"
+        trailing={<FooterShortcut keys={["⌘", ","]} />}
+        onClick={() => openSettingsModal(settingsSection)}
+      >{text.settings}</BaseMenuItem>
       <BaseSubmenu icon="Globe" label={text.language}>
         {FOOTER_LANGUAGE_OPTIONS.map(language => <BaseMenuItem key={language.locale} checked={language.locale === locale} checkedRole="radio" lang={language.locale} onClick={() => onLocaleChange(language.locale)}><span className="capitalize">{language.localName}</span></BaseMenuItem>)}
       </BaseSubmenu>

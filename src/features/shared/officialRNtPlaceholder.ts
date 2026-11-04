@@ -1,5 +1,5 @@
 /**
- * Official residual index-BELzQL5P.js `INt` / `RNt` Placeholder — 1:1 plugin shape.
+ * Official residual index-D35w9RK9.js `INt` / `RNt` Placeholder — 1:1 plugin shape.
  *
  * Official:
  *   INt=ugt.create({name:"placeholder",addOptions:()=>({

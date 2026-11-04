@@ -804,7 +804,7 @@ function extensionDisplayName(ext: InstalledExtensionState): string {
 }
 
 /**
- * Official kC/dG (index-BELzQL5P → CrCPjj7D p):
+ * Official kC/dG (index-D35w9RK9 → CrCPjj7D p):
  *   id.startsWith("local.dxt") || id.startsWith("local.unpacked")
  * Residual also uses local.mcpb for .mcpb packages (same CUSTOM treatment).
  * CUSTOM badge + hide Details only for those ids. Directory/catalog ids stay non-custom.

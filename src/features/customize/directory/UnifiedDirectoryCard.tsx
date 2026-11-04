@@ -1,5 +1,5 @@
 /**
- * Official n8t / a8t UnifiedDirectoryCard (index-BELzQL5P.js).
+ * Official n8t / a8t UnifiedDirectoryCard (index-D35w9RK9.js).
  */
 import type { KeyboardEvent, ReactNode } from "react";
 import { Icon } from "../../../shell/icons";

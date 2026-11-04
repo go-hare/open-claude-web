@@ -139,7 +139,7 @@ export function CoworkConversation({
         <div
           className="overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable] pt-14 flex-1 min-h-0"
           data-autoscroll-container
-          data-official-source="index-BELzQL5P.js:IYe"
+          data-official-source="c21f11e6d-CxD82rYo.js:IYe"
           ref={localScrollRef}
         >
           <div className="relative w-full min-h-full flex flex-col" ref={innerRef}>
@@ -220,7 +220,7 @@ function CoworkResponseStatusAnnouncer({ isStreaming }: { isStreaming: boolean }
 }
 
 /**
- * Official conversation residual (index-BELzQL5P ~8222478):
+ * Official conversation residual (c21f11e6d-CxD82rYo.js ~8222478):
  * isLastMsg = n === length-1
  * isLastHuman = lastMessage.sender === "human" && (secondToLast || last)
  * Cat ref: isLastHuman ? lastHuman : isLastMessage ? lastAssistant : null

@@ -1,5 +1,5 @@
 /**
- * Official personal-settings account surface (c0db37792 H / X, cc989143e _t):
+ * Official personal-settings account surface (c0db37792 H / X, cf4f70727-a7CVSvFQ _t):
  * - PUT /api/account → full_name / display_name (profile X → b())
  * - PUT|PATCH /api/account_profile → avatar / work_function / conversation_preferences (v())
  * - GET|PATCH /api/account/settings → flat account.settings (Claude Code ccr_* keys via J())
@@ -221,7 +221,7 @@ export const WORK_FUNCTION_VALUES = [
 ] as const;
 
 /**
- * Official j4t defaultMessage residual (index-BELzQL5P) — EN fallback only.
+ * Official j4t defaultMessage residual (index-D35w9RK9) — EN fallback only.
  * UI must resolve labels via GENERAL_SETTINGS_MESSAGES / useGeneralSettingsText
  * (official message ids vln2MGiyKI …) so locale catalogs + overrides apply.
  * Product ZH补 lives in public/i18n/zh-CN.overrides.json (official zh-CN left EN).

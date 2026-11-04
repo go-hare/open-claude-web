@@ -1,5 +1,5 @@
 /**
- * Official c11959232 `_w.displayName = "EpitaxyActionCenter"`.
+ * Official cd5a31703 `_w.displayName = "EpitaxyActionCenter"`.
  *
  * allClear → null here (home shows CodeStats via $x branch).
  * else Sessions list (+ optional Show more); PR section only when activePrEntries non-empty
@@ -63,7 +63,7 @@ export function EpitaxyActionCenter({ onNavigate, state: stateProp }: EpitaxyAct
   return (
     <div
       className="min-h-full flex flex-col"
-      data-official-source="c11959232-h_zsw3wI.js:EpitaxyActionCenter"
+      data-official-source="cd5a31703-B4nKQMBN.js:EpitaxyActionCenter"
     >
       <div className="epitaxy-chat-column epitaxy-chat-size pt-[24px] pb-[56px] flex flex-col gap-[40px]">
         {attentionSessions.length > 0 ? (

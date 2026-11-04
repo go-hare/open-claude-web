@@ -5,6 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   bindOfficialCodeSessionHostApply,
+  OFFICIAL_CODE_SESSION_IDLE_CLOSE_MS,
   OFFICIAL_CODE_SESSION_PENDING_CLOSE_MS,
   officialCodeSessionStore,
 } from "./officialCodeSessionStore";
@@ -86,12 +87,39 @@ describe("official he.openSession / releaseSession (De)", () => {
     expect(unsubscribes).toEqual([]);
   });
 
-  it("idle last release evicts immediately", () => {
+  it("idle last release keeps bucket for Um=6e4 then evicts (c06cf64bb r)", () => {
     const { transport, unsubscribes } = fakeTransport();
     officialCodeSessionStore.getState().openSessionTransport("s1", transport);
     officialCodeSessionStore.getState().releaseSession("s1");
+    const held = officialCodeSessionStore.getState().buckets.s1!;
+    expect(held.refCount).toBe(0);
+    expect(held.pendingClose).toBe(false);
+    expect(held.sub).not.toBeNull();
+    expect(held.evictTimer).not.toBeNull();
+    expect(unsubscribes).toEqual([]);
+
+    vi.advanceTimersByTime(OFFICIAL_CODE_SESSION_IDLE_CLOSE_MS - 1);
+    expect(officialCodeSessionStore.getState().buckets.s1).toBeDefined();
+    vi.advanceTimersByTime(1);
     expect(officialCodeSessionStore.getState().buckets.s1).toBeUndefined();
     expect(unsubscribes).toEqual(["s1"]);
+  });
+
+  it("re-open during idle Um timer cancels evict and keeps the same sub", () => {
+    const { transport, subscribeCount, unsubscribes } = fakeTransport();
+    officialCodeSessionStore.getState().openSessionTransport("s1", transport);
+    officialCodeSessionStore.getState().releaseSession("s1");
+    const sub = officialCodeSessionStore.getState().buckets.s1!.sub;
+    officialCodeSessionStore.getState().openSessionTransport("s1", transport);
+    const bucket = officialCodeSessionStore.getState().buckets.s1!;
+    expect(subscribeCount()).toBe(1);
+    expect(bucket.refCount).toBe(1);
+    expect(bucket.pendingClose).toBe(false);
+    expect(bucket.evictTimer).toBeNull();
+    expect(bucket.sub).toBe(sub);
+    vi.advanceTimersByTime(OFFICIAL_CODE_SESSION_IDLE_CLOSE_MS);
+    expect(officialCodeSessionStore.getState().buckets.s1).toBeDefined();
+    expect(unsubscribes).toEqual([]);
   });
 
   it("pendingTurn last release sets pendingClose and evicts after 360s", () => {

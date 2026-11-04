@@ -35,7 +35,7 @@ export function CoworkScheduledTaskApproval({ busy, disableKeyboardShortcuts, on
       kind="scheduled-task"
       meta={<div className="font-small text-text-500 pl-[34px]">{scheduleLabel(input)}</div>}
       name={name}
-      officialSource="index-BELzQL5P:ITe"
+      officialSource="c21f11e6d-CxD82rYo.js:ITe"
       title={update ? "Update task" : "Schedule task"}
     >
       {prompt ? <ExpandableDetails label="Details"><CoworkMarkdown text={prompt} /></ExpandableDetails> : null}
@@ -57,7 +57,7 @@ export function CoworkSaveSkillApproval({ busy, disableKeyboardShortcuts, onDeci
       icon={<CoworkSkillGlyph className="text-text-300" size={16} />}
       kind="save-skill"
       name={name}
-      officialSource="index-BELzQL5P:ETe"
+      officialSource="c21f11e6d-CxD82rYo.js:ETe"
       title={update ? "Update skill" : "Save skill"}
     >
       {content ? <ExpandableDetails announceExpanded label="Content"><CoworkMarkdown text={content} /></ExpandableDetails> : null}
@@ -82,7 +82,7 @@ export function CoworkArtifactApproval({ busy, disableKeyboardShortcuts, isSched
       kind="artifact"
       leading={!update ? <ArtifactNotice /> : null}
       name={name}
-      officialSource="index-BELzQL5P:Gge"
+      officialSource="c21f11e6d-CxD82rYo.js:Gge"
       title={update ? "Update artifact" : "Create artifact"}
     >
       {tools.length ? <ArtifactTools tools={tools} /> : null}

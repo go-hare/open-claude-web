@@ -12,6 +12,7 @@ import { normalizeCoworkPath } from "./coworkResourcePaths";
 import { coworkResourceOperationLabel, isCoworkChromeMcpServer, type CoworkResourceActivity, type CoworkResourceCategory, type CoworkResourceOperation } from "./coworkResourceActivity";
 import type { CoworkOpenFileTarget } from "./coworkActivityTypes";
 import type { CoworkMountedProject } from "../../../../adapters/desktopBridge";
+import { useCoworkActivityChromeText } from "./coworkActivityChromeMessages";
 
 export function CoworkWorkingFolderContent({ folders, hasConnectedOfficeFiles = false, instructionFolder, onOpenFile, resources, scratchpadResources, sessionId }: { folders: string[]; hasConnectedOfficeFiles?: boolean; instructionFolder?: string; onOpenFile: (target: CoworkOpenFileTarget) => void; resources: CoworkResourceActivity[]; scratchpadResources: CoworkResourceActivity[]; sessionId: string }) {
   const [instructionsOpen, setInstructionsOpen] = useState(false);
@@ -61,7 +62,11 @@ export function CoworkContextContent({
   selectedPath?: string;
   userSelectedFolders: string[];
 }) {
-  const groups = useMemo(() => buildCoworkContextGroups(resources, userSelectedFolders), [resources, userSelectedFolders]);
+  const chromeText = useCoworkActivityChromeText();
+  const groups = useMemo(
+    () => buildCoworkContextGroups(resources, userSelectedFolders, chromeText.folderInstructions),
+    [chromeText.folderInstructions, resources, userSelectedFolders],
+  );
   if (groups.length === 0 && mountedProjects.length === 0 && !scheduledTaskId) return <CoworkContextEmptyStateWithConnectors onNavigate={onNavigate} />;
   return (
     <div className="flex flex-col -my-1">
@@ -100,11 +105,13 @@ function CoworkScheduledTaskContextRow({ onNavigate, scheduledTaskId }: { onNavi
 }
 
 function CoworkFolderInstructionsRow({ onOpen }: { onOpen: () => void }) {
+  const chromeText = useCoworkActivityChromeText();
   return (
     <button className="flex w-full cursor-pointer items-center gap-2.5 rounded px-1 py-1.5 -mx-1 text-left hover:bg-bg-200" onClick={onOpen} type="button">
       <CoworkResourceIcon name="BookText" />
       <span className="flex-1 truncate text-sm text-text-200">
-        Instructions <span className="text-text-500">· CLAUDE.md</span>
+        {chromeText.instructions}
+        <span className="text-text-500"> · CLAUDE.md</span>
       </span>
     </button>
   );
@@ -254,7 +261,11 @@ const contextCategoryLabels: Record<CoworkResourceCategory, string> = {
   working: "Working files",
 };
 
-function buildCoworkContextGroups(resources: CoworkResourceActivity[], userSelectedFolders: string[]) {
+function buildCoworkContextGroups(
+  resources: CoworkResourceActivity[],
+  userSelectedFolders: string[],
+  folderInstructionsLabel: string,
+) {
   const groupsByKey = new Map<string, CoworkContextGroup>();
   for (const resource of resources) {
     const key = coworkContextGroupKey(resource);
@@ -287,7 +298,7 @@ function buildCoworkContextGroups(resources: CoworkResourceActivity[], userSelec
       : undefined;
     groupsByKey.set(key, {
       categoryKey: coworkContextGroupCategory(resource),
-      displayName: coworkContextGroupDisplayName(resource, userSelectedFolders),
+      displayName: coworkContextGroupDisplayName(resource, userSelectedFolders, folderInstructionsLabel),
       fileName: resource.fileName,
       filePath:
         key === "browser_extension://all" || key === "web_search://all" || key.startsWith("mcp://")
@@ -329,12 +340,18 @@ function coworkContextGroupCategory(resource: CoworkResourceActivity): CoworkRes
   return resource.categoryKey;
 }
 
-function coworkContextGroupDisplayName(resource: CoworkResourceActivity, userSelectedFolders: string[]) {
+function coworkContextGroupDisplayName(
+  resource: CoworkResourceActivity,
+  userSelectedFolders: string[],
+  folderInstructionsLabel: string,
+) {
   if (resource.operation === "web_search") return "Web search";
   if (resource.operation === "mcp_tool" && coworkResourceIsChromeMcpServer(resource)) return resource.mcpServer?.name ?? "Claude in Chrome";
   if (resource.operation === "mcp_tool") return resource.mcpServer?.name ?? resource.mcpServerUuid ?? parseMcpServerFromPath(resource.filePath) ?? resource.displayName;
   if (resource.operation === "memory") return memoryDisplayName(resource);
-  if (resource.fileName === "CLAUDE.md" && userSelectedFolders.some((folder) => normalizeCoworkPath(resource.filePath).startsWith(`${normalizeCoworkPath(folder).replace(/\/+$/, "")}/`))) return "Folder instructions";
+  if (resource.fileName === "CLAUDE.md" && userSelectedFolders.some((folder) => normalizeCoworkPath(resource.filePath).startsWith(`${normalizeCoworkPath(folder).replace(/\/+$/, "")}/`))) {
+    return folderInstructionsLabel;
+  }
   return resource.displayName;
 }
 
@@ -373,11 +390,14 @@ function scheduledTaskDisplayName(taskId: string) {
 }
 
 function CoworkEmptyArtifactsState() {
+  const chromeText = useCoworkActivityChromeText();
   return (
-    <div className="flex flex-col items-start gap-3">
+    <div className="flex flex-col items-start gap-3" data-official-source="c21f11e6d-CxD82rYo.js:Fx">
       <img alt="" className="dark:hidden" draggable={false} height={43} src="/images/illustrations/session-artifacts.svg" width={63} />
       <img alt="" className="hidden dark:block" draggable={false} height={43} src="/images/illustrations/session-artifacts-dark.svg" width={63} />
-      <p className="text-text-500 font-small">View and open files created during this task.</p>
+      <p className="text-text-500 font-small" data-official-source="c21f11e6d-CxD82rYo.js:p41Nenxyun">
+        {chromeText.artifactsEmpty}
+      </p>
     </div>
   );
 }

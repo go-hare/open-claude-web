@@ -1,5 +1,5 @@
 /**
- * Official Zfe switch + lge wrapper (index-BELzQL5P).
+ * Official Zfe switch + lge wrapper (index-D35w9RK9).
  * dsVariant dark used by hYt Keep awake.
  */
 import type { InputHTMLAttributes, ReactNode } from "react";
@@ -34,7 +34,7 @@ export type OfficialSwitchProps = {
   disableAnimation?: boolean;
   dsVariant?: "default" | "dark";
   onCheckedChange?: (checked: boolean) => void;
-  size?: "default" | "sm" | "small";
+  size?: "default" | "sm" | "small" | "xs";
 } & Omit<InputHTMLAttributes<HTMLInputElement>, "size" | "type" | "onChange">;
 
 /** Official lge → Zfe */
@@ -50,7 +50,7 @@ export function OfficialSwitch({
   size = "default",
   ...rest
 }: OfficialSwitchProps) {
-  const resolvedSize = size === "sm" || size === "small" ? "small" : "default";
+  const resolvedSize = size === "sm" || size === "small" || size === "xs" ? "small" : "default";
   const { width, height } = sizeMap[resolvedSize];
   const widthPx = `${width}px`;
   const heightPx = `${height}px`;
@@ -59,7 +59,7 @@ export function OfficialSwitch({
   const variant = dsVariant === "dark" ? "dark" : "default";
 
   return (
-    <label className="inline-flex" htmlFor={id} data-official-source="index-BELzQL5P.js:lge">
+    <label className="inline-flex" htmlFor={id} data-official-source="index-D35w9RK9.js:lge">
       <div
         className={[
           "group/switch relative select-none cursor-pointer has-[:disabled]:pointer-events-none",
@@ -67,7 +67,7 @@ export function OfficialSwitch({
         ]
           .filter(Boolean)
           .join(" ")}
-        data-official-source="index-BELzQL5P.js:Zfe"
+        data-official-source="index-D35w9RK9.js:Zfe"
       >
         <input
           checked={checked}

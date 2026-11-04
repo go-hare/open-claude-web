@@ -1,6 +1,6 @@
 /**
  * Residual of official desktop Cowork Artifacts library surface:
- * - ion-dist index-BELzQL5P `_K = "/cowork-artifact"` (qQt list + UQt detail)
+ * - ion-dist index-D35w9RK9 `_K = "/cowork-artifact"` (qQt list + UQt detail)
  * - `fSe` (getAllArtifacts + onArtifactsChanged)
  * - `UGt` thumbnail card (group/thumb h-[164px] …)
  * - `kGt` detail host view via oT.showArtifact / hideArtifact bounds residual
@@ -30,7 +30,7 @@ import {
 import { primaryButtonClass, secondaryButtonClass } from "../shared/buttonClasses";
 import { useI18nText, type MessageDescriptors } from "../../i18n/footerMenuMessages";
 
-/** Official OGt residual (index-BELzQL5P). */
+/** Official OGt residual (index-D35w9RK9). */
 const ARTIFACTS_LIBRARY_MESSAGES = {
   title: { defaultMessage: "Live artifacts", id: "fo4LT2foY3" },
   headerHint: {
@@ -162,7 +162,7 @@ function ArtifactThumb({ artifactId }: { artifactId: string }) {
     <div
       ref={ref}
       className="group/thumb h-[164px] overflow-hidden rounded-xl border-0.5 border-border-300 px-6 pt-6 transition duration-300 hover:border-border-200 hover:bg-bg-000/20 group-focus-within:border-border-200 group-focus-within:bg-bg-000/20"
-      data-official-source="index-BELzQL5P.js:UGt"
+      data-official-source="index-D35w9RK9.js:UGt"
     >
       <div className="size-full translate-y-1 overflow-hidden rounded-t-xl border-l border-r border-t border-border-300 bg-gradient-to-b from-bg-000 to-bg-000/20 transition-all duration-300 group-hover/thumb:translate-y-0 group-hover/thumb:bg-bg-000 group-hover/thumb:shadow-lg group-focus-within:translate-y-0 group-focus-within:bg-bg-000 group-focus-within:shadow-lg">
         {src ? (
@@ -204,7 +204,7 @@ function ArtifactCard({
   return (
     <div
       className="group flex flex-col gap-2 rounded-xl text-left"
-      data-official-source="index-BELzQL5P.js:UGt card residual"
+      data-official-source="index-D35w9RK9.js:UGt card residual"
     >
       <button
         className="block w-full border-0 bg-transparent p-0 text-left"
@@ -291,7 +291,7 @@ function ArtifactHostPreview({
     <div
       ref={mountRef}
       className="relative min-h-[320px] flex-1 overflow-hidden rounded-xl border border-border-300 bg-bg-100"
-      data-official-source="index-BELzQL5P.js:kGt showArtifact mount"
+      data-official-source="index-D35w9RK9.js:kGt showArtifact mount"
       style={{ minHeight: 420 } satisfies CSSProperties}
     />
   );
@@ -358,7 +358,7 @@ function ArtifactDetailPanel({
   }, [artifact.id, onReloadList, selectedVersion]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 px-6 pb-8 pt-4" data-official-source="index-BELzQL5P.js:kGt">
+    <div className="flex h-full min-h-0 flex-col gap-3 px-6 pb-8 pt-4" data-official-source="index-D35w9RK9.js:kGt">
       <div className="flex items-center gap-2">
         <button className={secondaryButtonClass} onClick={onBack} type="button">
           Back
@@ -506,7 +506,7 @@ export function ArtifactsLibraryPage({ onNavigate }: RouteViewProps) {
   if (selectedId) {
     if (isLoading && !selected) {
       return (
-        <div className="py-16 text-center text-sm text-text-400" data-official-source="index-BELzQL5P.js:UQt loading">
+        <div className="py-16 text-center text-sm text-text-400" data-official-source="index-D35w9RK9.js:UQt loading">
           Loading artifact…
         </div>
       );
@@ -533,7 +533,7 @@ export function ArtifactsLibraryPage({ onNavigate }: RouteViewProps) {
   return (
     <div
       className="flex h-full min-h-0 flex-col overflow-auto px-6 pb-12 pt-4"
-      data-official-source="index-BELzQL5P.js:qQt _K=/cowork-artifact"
+      data-official-source="index-D35w9RK9.js:qQt _K=/cowork-artifact"
     >
       <div className="mb-6 flex items-end justify-between gap-4">
         <div>

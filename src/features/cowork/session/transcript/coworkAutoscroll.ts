@@ -4,7 +4,7 @@
  * pinToBottomConfig: { disabled, initialValue } — conversation defaults omit config (initial false);
  * agent session path re-pins via t$t scroll button / streaming session effects.
  * Near-bottom floor: Math.floor(distance) < 8. Unpin when scrolledUp && !nearBottom && !heightShrank.
- * Source: index-BELzQL5P.pretty.js IYe / t$t.
+ * Source: c21f11e6d-CxD82rYo.js IYe / t$t.
  */
 
 export type CoworkAutoscrollScrollBehavior = ScrollBehavior | "instant";
@@ -67,7 +67,7 @@ export function resolveCoworkScrollBehavior(behavior: CoworkAutoscrollScrollBeha
 }
 
 /**
- * Official z3t session-open gate (index-BELzQL5P.pretty.js function z3t):
+ * Official z3t session-open gate (c21f11e6d-CxD82rYo.js function z3t):
  * once per sessionId when !isLoading && messages.length > 0, rAF sets
  * [data-autoscroll-container].scrollTop = scrollHeight.
  * Does not restore mid-scroll — Cowork local session entry always opens at bottom.
@@ -94,7 +94,7 @@ export function scrollCoworkSessionOpenToBottom(
 }
 
 /**
- * Official D1e `cu_lock_released` (index-BELzQL5P ~114004–114009):
+ * Official D1e `cu_lock_released` (c21f11e6d-CxD82rYo.js ~114004–114009):
  * if event.sessionId === current session, rAF:
  *   document.querySelector("[data-autoscroll-container]").scrollTop = scrollHeight
  * Pure body shared with z3t; schedule helper for runtime/browser.

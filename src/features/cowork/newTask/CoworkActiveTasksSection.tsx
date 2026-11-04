@@ -30,7 +30,7 @@ type ActiveOverviewSession = SessionSummary & {
 /**
  * Official p6t task overview on /task/new:
  * active/pinned sessions (d6t rows + l6t status) + scheduled section.
- * Residual: index-BELzQL5P.js p6t / d6t / l6t (~6211905+).
+ * Residual: c62135ccf-Dn28vJ3V.js p6t / d6t / l6t (~6211905+).
  */
 export function CoworkActiveTasksSection({
   firstTaskRef,
@@ -141,7 +141,7 @@ export function CoworkActiveTasksSection({
   return (
     <div
       className="w-full max-w-2xl mt-4 space-y-8"
-      data-official-source="index-BELzQL5P.js:p6t task overview"
+      data-official-source="c62135ccf-Dn28vJ3V.js:p6t task overview"
     >
       {activeSessions.length > 0 ? (
         <section>
@@ -240,7 +240,7 @@ function TaskOverviewRow({
     <div
       ref={containerRef}
       className="relative flex items-center gap-3 px-2 py-3 transition-colors hover:bg-bg-200 hover:rounded-lg group"
-      data-official-source="index-BELzQL5P.js:d6t TaskOverviewRow"
+      data-official-source="c62135ccf-Dn28vJ3V.js:d6t TaskOverviewRow"
     >
       <button
         aria-label={title}
@@ -284,7 +284,7 @@ function TaskOverviewRow({
   );
 }
 
-/** Official l6t SessionStatusIcon. */
+/** Official shared-19 kI / jI leading status (idle → null). */
 function SessionStatusIcon({
   hasPendingPermissions,
   isRunning,
@@ -315,25 +315,18 @@ function SessionStatusIcon({
     );
   }
   if (isUnread) {
+    // Official shared-19 kI unread: accent dot (not Chat circle).
     return (
-      <div
+      <span
         aria-label={text.unreadActivity}
-        className="w-7 h-7 rounded-full bg-accent-900 flex items-center justify-center"
+        className="h-2 w-2 flex-shrink-0 rounded-full bg-fill-accent"
+        data-official-source="shared-19-DmuztgN-.js:kI unread accent dot"
         role="status"
-      >
-        <Icon className="text-accent-100" customSize={20} name="Chat" />
-      </div>
+      />
     );
   }
-  return (
-    <div
-      aria-label={text.noNewActivity}
-      className="w-7 h-7 rounded-full bg-bg-300 flex items-center justify-center"
-      role="status"
-    >
-      <Icon className="text-text-500" customSize={20} name="Chat" />
-    </div>
-  );
+  // Official kI idle: null — gray Chat circle was inventing 空灰块 when glyph missing.
+  return null;
 }
 
 function ScheduledOverviewRow({
@@ -366,7 +359,7 @@ function ScheduledOverviewRow({
 }
 
 /**
- * Official p6t filter residual (index-BELzQL5P.js):
+ * Official p6t filter residual (c62135ccf-Dn28vJ3V.js):
  *   (isStarred && localStarGate) || pendingPermissions
  *   || (activity > initializedAt && (YSe unread || isRunning || sticky))
  *

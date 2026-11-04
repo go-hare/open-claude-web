@@ -1,6 +1,9 @@
 /**
- * Official AskUserQuestion residual helpers (c11959232 Ow + index-BELzQL5P R2e).
+ * Official AskUserQuestion residual helpers (c11959232 Ow + cd5a31703 R2e / vv / TIe).
  * Shared pure types/constants — no UI.
+ *
+ * Transcript receipt pairs: cd5a31703 `kQe` → local Code has no `p_()` epitaxy-engine,
+ * so product uses `OQe` → `vv(tool)` → `TIe({pairs})`. Do not invent `DQe` / `SQe`.
  */
 
 export const OFFICIAL_ASK_USER_OTHER_INDEX = -1;
@@ -93,6 +96,97 @@ export function officialAskUserDisplayFromPersisted(
     response: answers[question.question] ?? "",
     preview: annotations?.[question.question]?.preview,
   }));
+}
+
+/** cd5a31703 `TIe` pair — question + answered text. */
+export type OfficialAskUserTranscriptPair = {
+  answer: string;
+  question: string;
+};
+
+/** Tool-shaped input for `OQe`/`vv` pair extraction (completed receipt, not Ow overlay). */
+export type OfficialAskUserTranscriptTool = {
+  input?: Record<string, unknown> | null;
+  isError?: boolean;
+  name?: string;
+  output?: unknown;
+  status?: string;
+  toolUseResult?: unknown;
+};
+
+/**
+ * Official `cb6930dae` `hi` as cd5a `vv`: answered AskUserQuestion pairs for `TIe`.
+ * Prefer persisted `input.answers` via `officialAskUserDisplayFromPersisted`;
+ * else JSON `tool.output` / `toolUseResult` `{answers}` / `{questions, answers}`.
+ * Empty → null so the coordinator keeps generic Zg / pending Ow overlay.
+ */
+export function officialAskUserTranscriptPairs(
+  tool: OfficialAskUserTranscriptTool | null | undefined,
+): OfficialAskUserTranscriptPair[] | null {
+  if (!tool) return null;
+  const input = parseOfficialAskUserInput(asRecord(tool.input));
+  const fromInput = pairsFromAnswers(input.answers, input.questions);
+  if (fromInput) return fromInput;
+
+  const resultRecord = asRecord(tool.toolUseResult);
+  const fromResult = pairsFromParsedRecord(resultRecord, input.questions);
+  if (fromResult) return fromResult;
+
+  const outputRecord = parseJsonObject(tool.output);
+  if (!outputRecord) return null;
+  return pairsFromParsedRecord(outputRecord, input.questions);
+}
+
+function pairsFromParsedRecord(
+  record: Record<string, unknown>,
+  fallbackQuestions: OfficialAskUserQuestion[],
+): OfficialAskUserTranscriptPair[] | null {
+  const parsed = parseOfficialAskUserInput({
+    answers: record.answers,
+    questions: Array.isArray(record.questions) ? record.questions : fallbackQuestions,
+  });
+  const questions = parsed.questions.length > 0 ? parsed.questions : fallbackQuestions;
+  return pairsFromAnswers(parsed.answers, questions);
+}
+
+function pairsFromAnswers(
+  answers: Record<string, string | string[]> | undefined,
+  questions: OfficialAskUserQuestion[],
+): OfficialAskUserTranscriptPair[] | null {
+  if (!answers || Object.keys(answers).length === 0) return null;
+  const persisted = officialAskUserDisplayFromPersisted({ answers }, questions.length > 0 ? questions : undefined);
+  if (persisted) {
+    const pairs = persisted.flatMap((row) => {
+      if (!Object.prototype.hasOwnProperty.call(answers, row.question)) return [];
+      return [{ question: row.question, answer: formatAskUserAnswer(row.response) }];
+    });
+    return pairs.length > 0 ? pairs : null;
+  }
+  const pairs = Object.entries(answers).map(([question, answer]) => ({
+    question,
+    answer: formatAskUserAnswer(answer),
+  }));
+  return pairs.length > 0 ? pairs : null;
+}
+
+function formatAskUserAnswer(value: string | string[]): string {
+  return Array.isArray(value) ? value.join(", ") : value;
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

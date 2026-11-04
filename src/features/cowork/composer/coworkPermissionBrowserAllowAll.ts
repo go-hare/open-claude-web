@@ -1,5 +1,5 @@
 /**
- * Official BrowserToolApproval Dfe residual (index-BELzQL5P ~60750):
+ * Official BrowserToolApproval Dfe residual (c21f11e6d-CxD82rYo.js ~60750):
  *   Dfe = () => { const { activeOrganization: e } = hc(); const t = Yc(); return !!e && !t; }
  * Yc residual in product settings path is raven org (wk("raven") / account.is_raven).
  * Show "Allow all browser actions" strip only when org present and not raven.

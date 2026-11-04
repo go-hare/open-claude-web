@@ -1,5 +1,5 @@
 /**
- * Official J6t AddMarketplaceModal (index-BELzQL5P.js).
+ * Official J6t AddMarketplaceModal (index-D35w9RK9.js).
  * Tm modalSize 2lg, URL field, Sync → _T.addMarketplace.
  * Host residual: local directory path only; git/url → REMOTE_HOST_UNSUPPORTED (Y6t).
  */

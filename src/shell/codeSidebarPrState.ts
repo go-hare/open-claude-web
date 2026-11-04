@@ -1,5 +1,5 @@
 /**
- * Official Code sidebar PR state pure residual (index-BELzQL5P Sye / L_e / G_e / W_e).
+ * Official Code sidebar PR state pure residual (cd5a31703 Sye / L_e / G_e / W_e).
  * No desktopBridge import — unit-testable without Electron window.
  */
 import type { LocalPrState } from "../adapters/desktopBridge/types";

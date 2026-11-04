@@ -1,7 +1,7 @@
 /**
  * Official IYe pin-to-bottom controller as a hook (pretty function IYe ~106047).
  * Owns pin ref + ResizeObserver re-stick + imperative handle surface.
- * Source: index-BELzQL5P.pretty.js IYe.
+ * Source: c21f11e6d-CxD82rYo.js IYe.
  *
  * Official scrollToBottom:
  *   if onlyIfPinned && !pinned return

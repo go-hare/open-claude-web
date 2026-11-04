@@ -1,4 +1,5 @@
 import { Fragment, createElement, useMemo, type MouseEvent, type ReactNode } from "react";
+import { handleCoworkTranscriptLinkClick } from "../../../settings/coworkTranscriptLinks";
 import type { Link, Parent, PhrasingContent, Root, RootContent } from "mdast";
 import { remark } from "remark";
 import {
@@ -159,7 +160,10 @@ function renderLinkReference(node: Extract<PhrasingContent, { type: "linkReferen
 
 function linkElement(url: string, children: ReactNode, key: string, context: RenderContext) {
   const safe = safeCoworkMarkdownUrl(url);
-  return <a className="underline underline-offset-2 decoration-1 decoration-current/40 hover:decoration-current focus:decoration-current" href={safe} key={key} onClick={safe && context.onLinkClick ? (event) => context.onLinkClick?.(event, safe) : undefined} rel="noopener noreferrer" target="_blank">{children}</a>;
+  return <a className="underline underline-offset-2 decoration-1 decoration-current/40 hover:decoration-current focus:decoration-current" href={safe} key={key} onClick={safe ? (event) => {
+    context.onLinkClick?.(event, safe);
+    if (!event.defaultPrevented) handleCoworkTranscriptLinkClick(event, safe);
+  } : undefined} rel="noopener noreferrer" target="_blank">{children}</a>;
 }
 
 function renderSpecialParagraph(node: Extract<RootContent, { type: "paragraph" }>, key: string, context: RenderContext) {

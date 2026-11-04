@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "../../../../shell/ConfirmDialog";
 import { Icon } from "../../../../shell/icons";
+import { useCoworkActivityChromeText } from "./coworkActivityChromeMessages";
 
 /**
- * Official residual: index-BELzQL5P.js
+ * Official residual: c21f11e6d-CxD82rYo.js
  * - QZt chrome install hook (dT = globalThis["claude.web"]?.ChromeExtension)
  * - sQt ConnectorRow (clicked/connected → pointer-events-none, no re-add)
  * - aQt SuggestedConnectors + nQt content
@@ -23,7 +24,7 @@ import { Icon } from "../../../../shell/icons";
 
 const dismissedKey = "suggested_connectors_dismissed_v1";
 const clickedKey = "suggested_connectors_clicked_v1";
-/** Official index-BELzQL5P sG residual. */
+/** Official c21f11e6d-CxD82rYo.js sG residual. */
 const CHROME_STORE_URL = "https://claude.com/chrome?open_in_browser=1";
 const CONNECTORS_PATH = "/customize/connectors";
 const CONNECTORS_DIRECTORY_PATH = "/customize/connectors?directory=true";
@@ -357,6 +358,7 @@ function CoworkSuggestedConnectors({ availableHeight, onNavigate }: { availableH
     triggerInstall,
   ]);
 
+  const chromeText = useCoworkActivityChromeText();
   const layout = useMemo(() => connectorLayout(availableHeight, connectors.length), [availableHeight, connectors.length]);
   const isCycling = layout.maxRows === 1 && connectors.length > 1 && availableHeight !== undefined;
   const [cycleIndex, setCycleIndex] = useState(0);
@@ -386,7 +388,7 @@ function CoworkSuggestedConnectors({ availableHeight, onNavigate }: { availableH
       <div className={`-mx-3 mt-auto border-t-0.5 border-border-300 transition-opacity duration-200 ${state.hasAppeared ? "opacity-100" : "opacity-0"}`}>
         {isCycling ? <style>{`@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style> : null}
         <SuggestedConnectorHeader onDismiss={state.dismiss} />
-        {layout.showDescription ? <p className="px-4 pt-2 pb-2 text-xs text-text-500">Cowork uses connectors to browse websites, manage tasks, and more.</p> : null}
+        {layout.showDescription ? <p className="px-4 pt-2 pb-2 text-xs text-text-500">{chromeText.coworkUsesConnectors}</p> : null}
         <div className="mx-4 mt-4 mb-1 rounded-lg border-0.5 border-border-300">
           {visible.map((connector) => (
             <div key={connector.id} style={isCycling ? { animation: "fadeIn 300ms ease-in-out" } : undefined}>
@@ -402,7 +404,7 @@ function CoworkSuggestedConnectors({ availableHeight, onNavigate }: { availableH
             onClick={() => onNavigate(CONNECTORS_PATH)}
             type="button"
           >
-            <span>See all connectors</span>
+            <span>{chromeText.seeAllConnectors}</span>
             <Icon className="text-text-500" customSize={16} name="ArrowRight" />
           </button>
         </div>
@@ -454,10 +456,11 @@ function persistClicked(previous: Set<string>, id: string) {
 }
 
 function SuggestedConnectorHeader({ onDismiss }: { onDismiss: () => void }) {
+  const chromeText = useCoworkActivityChromeText();
   return (
     <div className="flex items-center justify-between px-4 pt-4 pb-0">
-      <span className="font-medium text-sm text-text-100">Suggested connectors</span>
-      <button aria-label="Dismiss suggested connectors" className="p-1 rounded-md transition-colors duration-150 text-text-300 hover:text-text-100 hover:bg-bg-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-100" onClick={onDismiss} type="button">
+      <span className="font-medium text-sm text-text-100">{chromeText.suggestedConnectors}</span>
+      <button aria-label={chromeText.dismissSuggestedConnectors} className="p-1 rounded-md transition-colors duration-150 text-text-300 hover:text-text-100 hover:bg-bg-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-100" onClick={onDismiss} type="button">
         <Icon customSize={14} name="X" />
       </button>
     </div>
@@ -538,11 +541,14 @@ function ConnectorIconBox({ connector }: { connector: SuggestedConnector }) {
 }
 
 function CoworkEmptyContextState() {
+  const chromeText = useCoworkActivityChromeText();
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" data-official-source="c21f11e6d-CxD82rYo.js:zx">
       <img alt="" className="dark:hidden" draggable={false} height={56} src="/images/illustrations/session-context.svg" width={114} />
       <img alt="" className="hidden dark:block" draggable={false} height={56} src="/images/illustrations/session-context-dark.svg" width={114} />
-      <p className="text-text-500 font-small">Track tools and referenced files used in this task.</p>
+      <p className="text-text-500 font-small" data-official-source="c21f11e6d-CxD82rYo.js:WXQkdiBWrh">
+        {chromeText.contextEmpty}
+      </p>
     </div>
   );
 }

@@ -2,6 +2,18 @@ import { processFile, type DiffLineAnnotation, type FileDiffMetadata, type Selec
 import { FileDiff } from "@pierre/diffs/react";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalSessionsBridge } from "../../../adapters/desktopBridge/types";
+import {
+  BaseContextMenuItem,
+  BaseContextMenuPopup,
+  BaseContextMenuSeparator,
+  BaseContextMenuSubmenu,
+  ContextMenu,
+} from "../../../shell/BaseMenu";
+import { desktopBridge } from "../../../adapters/desktopBridge";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { useErrorsOptional } from "../../settings/errorsToast";
+import { SHOW_IN_FOLDER_MESSAGES, SIDE_PANE_CHROME_MESSAGES } from "../officialCodeChromeMessages";
+import { officialShowInFolderLabel } from "../session/officialFilePreviewUtils";
 import { EpitaxyTranscriptActionContext } from "../session/epitaxyTranscriptActionContext";
 import { OfficialDiffAnnotationCard, OfficialDiffPrCommentCard } from "./OfficialDiffAnnotationCard";
 import { extractOfficialDiffSnippet } from "./officialDiffPrCommentResidual";
@@ -56,12 +68,15 @@ const OFFICIAL_FC_UNSAFE_CSS =
 export function OfficialDiffFileRow({
   bridge,
   contentRef,
+  cwd,
   file,
   fileAttr,
   sessionId,
 }: {
   bridge: LocalSessionsBridge;
   contentRef: string;
+  /** Official Au `toAbs` — session cwd so yu Open in gets a host path. */
+  cwd?: string | null;
   file: OfficialDiffFileEntry;
   /** Official scroll target attribute (c11959232 `Jd` / c9a `jc`). */
   fileAttr: string;
@@ -163,9 +178,25 @@ export function OfficialDiffFileRow({
   const fileDiffRef = useRef(fileDiff);
   fileDiffRef.current = fileDiff;
   const transcriptActions = useContext(EpitaxyTranscriptActionContext);
+  const chrome = useI18nText(SIDE_PANE_CHROME_MESSAGES);
+  const folderText = useI18nText(SHOW_IN_FOLDER_MESSAGES);
+  const errors = useErrorsOptional();
   const onAnnotationSaved = useCallback((payload: { submit: boolean }) => {
     transcriptActions?.requestComposerAction?.(payload.submit ? "submit" : "focus");
   }, [transcriptActions]);
+  const onAttachFile = transcriptActions?.insertFileMention;
+  const copyPath = useCallback(() => {
+    void navigator.clipboard
+      ?.writeText(filePath)
+      .then(() => {
+        errors?.addSuccess(chrome.pathCopiedToClipboard);
+      })
+      .catch(() => undefined);
+  }, [chrome.pathCopiedToClipboard, errors, filePath]);
+  const absPath = officialDiffAbsPath(cwd, filePath);
+  const canOpenInEditor = Boolean(bridge.openInEditor) && Boolean(absPath);
+  const canShowInFolder = Boolean(desktopBridge.FileSystem.showInFolder) && Boolean(absPath);
+  const hasOpenIn = canOpenInEditor || canShowInFolder;
 
   const stageDraft = useCallback((start: number, end: number, side: OfficialDiffAnnotationSide | undefined) => {
     const nextSide = side ?? "additions";
@@ -313,38 +344,75 @@ export function OfficialDiffFileRow({
 
   return (
     <div {...attrProps}>
-      <div className="epitaxy-pane-subheader sticky top-0 z-[4]">
-        <button
-          type="button"
-          onClick={() => setCollapsed((value) => !value)}
-          disabled={!fileDiff}
-          aria-expanded={fileDiff ? expanded : undefined}
-          aria-label={expanded ? "Collapse file" : "Expand file"}
-          className="flex items-center justify-center size-[16px] shrink-0 text-t5 enabled:hover:text-t7 disabled:opacity-40 outline-none hide-focus-ring ring-focus rounded-r2"
-        >
-          <svg
-            width={16}
-            height={16}
-            viewBox="0 0 16 16"
-            aria-hidden="true"
-            className={expanded ? undefined : "-rotate-90"}
-          >
-            <path
-              d="M3.47 5.47a.75.75 0 0 1 1.06 0L8 8.94l3.47-3.47a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 0 1 0-1.06"
-              fill="currentColor"
-            />
-          </svg>
-        </button>
-        <span className="flex min-w-0 overflow-hidden text-code text-t7" title={filePath}>
-          {dirPrefix ? <span className="truncate">{dirPrefix}</span> : null}
-          <span className={dirPrefix ? "shrink-0" : "truncate"}>{baseName}</span>
-        </span>
-        <span className="shrink-0 text-code">
-          <span className="text-extended-green">{`+${file.additions}`}</span>
-          {" "}
-          <span className="text-extended-pink">{`-${file.deletions}`}</span>
-        </span>
-      </div>
+      <ContextMenu.Root>
+        <ContextMenu.Trigger
+          render={(props) => (
+            <div {...props} className="epitaxy-pane-subheader sticky top-0 z-[4]">
+              <button
+                type="button"
+                onClick={() => setCollapsed((value) => !value)}
+                disabled={!fileDiff}
+                aria-expanded={fileDiff ? expanded : undefined}
+                aria-label={expanded ? "Collapse file" : "Expand file"}
+                className="flex items-center justify-center size-[16px] shrink-0 text-t5 enabled:hover:text-t7 disabled:opacity-40 outline-none hide-focus-ring ring-focus rounded-r2"
+              >
+                <svg
+                  width={16}
+                  height={16}
+                  viewBox="0 0 16 16"
+                  aria-hidden="true"
+                  className={expanded ? undefined : "-rotate-90"}
+                >
+                  <path
+                    d="M3.47 5.47a.75.75 0 0 1 1.06 0L8 8.94l3.47-3.47a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 0 1 0-1.06"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <span className="flex min-w-0 overflow-hidden text-code text-t7" title={filePath}>
+                {dirPrefix ? <span className="truncate">{dirPrefix}</span> : null}
+                <span className={dirPrefix ? "shrink-0" : "truncate"}>{baseName}</span>
+              </span>
+              <span className="shrink-0 text-code">
+                <span className="text-extended-green">{`+${file.additions}`}</span>
+                {" "}
+                <span className="text-extended-pink">{`-${file.deletions}`}</span>
+              </span>
+            </div>
+          )}
+        />
+        <BaseContextMenuPopup>
+          {onAttachFile ? (
+            <BaseContextMenuItem onClick={() => onAttachFile(filePath)}>{chrome.attachAsContext}</BaseContextMenuItem>
+          ) : null}
+          <BaseContextMenuItem onClick={copyPath}>{chrome.copyPath}</BaseContextMenuItem>
+          {hasOpenIn ? (
+            <>
+              <BaseContextMenuSeparator />
+              <BaseContextMenuSubmenu label={chrome.openIn}>
+                {canOpenInEditor ? (
+                  <BaseContextMenuItem
+                    onClick={() => {
+                      void bridge.openInEditor?.(absPath);
+                    }}
+                  >
+                    Editor
+                  </BaseContextMenuItem>
+                ) : null}
+                {canShowInFolder ? (
+                  <BaseContextMenuItem
+                    onClick={() => {
+                      void desktopBridge.FileSystem.showInFolder?.(absPath)?.catch(() => undefined);
+                    }}
+                  >
+                    {officialShowInFolderLabel(folderText)}
+                  </BaseContextMenuItem>
+                ) : null}
+              </BaseContextMenuSubmenu>
+            </>
+          ) : null}
+        </BaseContextMenuPopup>
+      </ContextMenu.Root>
       {canMountPierre && fileDiff ? (
         <div className="epitaxy-diff-panel mx-[1px]">
           <FileDiff
@@ -361,6 +429,14 @@ export function OfficialDiffFileRow({
       ) : null}
     </div>
   );
+}
+
+/** Official Au `toAbs(filePath)` — git relative under session cwd. */
+function officialDiffAbsPath(cwd: string | null | undefined, filePath: string) {
+  if (!filePath) return filePath;
+  if (filePath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(filePath)) return filePath;
+  if (!cwd) return filePath;
+  return `${cwd.replace(/[\\/]+$/, "")}/${filePath.replace(/^[\\/]+/, "")}`;
 }
 
 /**

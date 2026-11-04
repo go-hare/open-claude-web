@@ -19,10 +19,24 @@ export type OfficialCodeSessionSub = {
   reclaim?: () => void;
 };
 
+export type OfficialTranscriptPage = {
+  messages: ChatMessage[];
+  hasMore: boolean;
+  cursor?: string;
+};
+
 export type OfficialCodeSessionTransport = {
   subscribe: (sessionId: string, onEvent: (event: unknown) => void) => OfficialCodeSessionSub;
-  /** Official U.fetchTranscript — getTranscript only, never fetchTail. */
-  fetchTranscript: (sessionId: string) => Promise<ChatMessage[]>;
+  /**
+   * Official Ae / U.fetchTranscript — LocalSessions.getTranscript (full jsonl).
+   * Newest-200 paging invents an empty-looking transcript when the latest page
+   * is tool_result-only (eke skips Hb). fetchEarlierTranscript still pages.
+   */
+  fetchTranscript: (sessionId: string) => Promise<ChatMessage[] | OfficialTranscriptPage>;
+  fetchEarlierTranscript?: (
+    sessionId: string,
+    beforeUuid: string,
+  ) => Promise<OfficialTranscriptPage>;
 };
 
 export { isOfficialCodeSessionEventForId };
@@ -30,10 +44,34 @@ export { isOfficialCodeSessionEventForId };
 export function createOfficialCodeLocalTransport(): OfficialCodeSessionTransport {
   return {
     async fetchTranscript(sessionId) {
+      // Official local U: getTranscript only — not getTranscriptPage(limit 200).
       const getTranscript = desktopBridge.LocalSessions.getTranscript;
-      if (!getTranscript) return [];
-      const transcript = await getTranscript(sessionId);
-      return Array.isArray(transcript) ? transcript : [];
+      if (getTranscript) {
+        const transcript = await getTranscript(sessionId);
+        return Array.isArray(transcript) ? transcript : [];
+      }
+      const getPage = desktopBridge.LocalSessions.getTranscriptPage;
+      if (typeof getPage === "function") {
+        const page = await getPage(sessionId, "", 200);
+        return {
+          messages: Array.isArray(page?.messages) ? page.messages : [],
+          hasMore: page?.hasMore === true,
+          cursor: page?.cursor,
+        };
+      }
+      return [];
+    },
+    async fetchEarlierTranscript(sessionId, beforeUuid) {
+      const getPage = desktopBridge.LocalSessions.getTranscriptPage;
+      if (typeof getPage !== "function" || !beforeUuid) {
+        return { messages: [], hasMore: false };
+      }
+      const page = await getPage(sessionId, beforeUuid, 200);
+      return {
+        messages: Array.isArray(page?.messages) ? page.messages : [],
+        hasMore: page?.hasMore === true,
+        cursor: page?.cursor,
+      };
     },
     subscribe(sessionId, onEvent) {
       const subscribe = desktopBridge.LocalSessions.onEvent;

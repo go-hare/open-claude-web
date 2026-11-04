@@ -1,5 +1,5 @@
 /**
- * Official model-options residual (index-BELzQL5P.js / c11959232):
+ * Official model-options residual (c21f11e6d-CxD82rYo.js / c11959232):
  *
  *   u2()  — allModelOptions = activeOrganization.claude_ai_bootstrap_models_config
  *   ote / Ye("cowork_model"|"ccr_model") — GrowthBook allowed_models / model / supports_1m_context /
@@ -52,7 +52,7 @@ function asString(value: unknown): string | undefined {
 }
 
 /**
- * Official Fee residual (index-BELzQL5P.js @1364880):
+ * Official Fee residual (c21f11e6d-CxD82rYo.js @1364880):
  *   claude-{tier}-{major}[-{minor}][-YYYYMMDD][-fast][1m]
  *   {brand}-v{n}[-{suffix}]
  * Hee joins base/suffix/ctx; product uses Hee-equivalent for labels.
@@ -266,7 +266,7 @@ export function codeModelSelectorItems(config: CoworkModelsConfig): CoworkModelS
 }
 
 /**
- * Official tyt trigger (index-BELzQL5P B4t/Ubt/Fbt):
+ * Official tyt trigger (c21f11e6d-CxD82rYo.js B4t/Ubt/Fbt):
  *   W = allModelOptions.find(H) || allModelOptions.find(L) ?? Zbt
  * New-task chin shows Fee/Hee of that option, not scheduled-form `bV+YmcFCEb` "Default model".
  */

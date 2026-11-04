@@ -1,5 +1,5 @@
 /**
- * Official HT directory overlay store (index-BELzQL5P.js).
+ * Official HT directory overlay store (index-D35w9RK9.js).
  *
  * `$T`: skills | connectors → plugins in this ion-dist (PT/EI compiled out).
  * `open` / `openItem` / `navigate` / `close` match HT action shapes.

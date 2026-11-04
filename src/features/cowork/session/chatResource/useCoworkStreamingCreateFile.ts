@@ -1,5 +1,5 @@
 /**
- * Official l$t (index-BELzQL5P.pretty.js ~226770–226941).
+ * Official l$t (c21f11e6d-CxD82rYo.js ~226770–226941).
  *
  * Current ion-dist candidate extraction is:
  *   const d = n.useMemo(() => null, [c, i])

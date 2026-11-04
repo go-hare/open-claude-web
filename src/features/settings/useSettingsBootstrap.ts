@@ -20,6 +20,15 @@ import {
   syncToolSearchModeFromSettings,
   writeToolSearchMode,
 } from "./toolAccessPreference";
+import {
+  syncCodeDefaultTranscriptViewFromSettings,
+  writeCodeDefaultTranscriptView,
+} from "../epitaxy/session/officialSidePaneSessionStore";
+import type { OfficialTranscriptMode } from "../epitaxy/OfficialEpitaxyComponents";
+
+function parseTranscriptModeFromSetting(value: unknown): OfficialTranscriptMode | null {
+  return value === "normal" || value === "thinking" || value === "verbose" ? value : null;
+}
 
 /**
  * Official Qt residual: account.settings.enabled_cowork_memory !== false.
@@ -167,6 +176,8 @@ async function loadSlice(): Promise<{
   syncToolSearchModeFromSettings(account?.settings);
   // Cowork memory Qt: mirror to preference for Space UI residual consumers.
   syncEnabledCoworkMemoryPreferenceFromSettings(account?.settings);
+  // Official pn: code_default_transcript_view → kr() default for new sessions.
+  syncCodeDefaultTranscriptViewFromSettings(account?.settings);
   return {
     notifications,
     slice: {
@@ -275,6 +286,10 @@ export function useSettingsBootstrap() {
         patch.enabled_cowork_memory !== false,
       );
     }
+    if ("code_default_transcript_view" in patch) {
+      const parsed = parseTranscriptModeFromSetting(patch.code_default_transcript_view);
+      if (parsed) writeCodeDefaultTranscriptView(parsed);
+    }
     setSlice((current) => ({
       ...current,
       account: current.account
@@ -312,7 +327,7 @@ export function useSettingsBootstrap() {
   );
 
   /**
-   * Official ZBe residual (index-BELzQL5P): Response completions toggles
+   * Official ZBe residual (index-D35w9RK9): Response completions toggles
    * feature_preference.compass + completion enable_push together in one PATCH.
    */
   const updateResponseCompletionsPush = useCallback(

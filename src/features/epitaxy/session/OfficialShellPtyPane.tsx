@@ -9,6 +9,10 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import type { LocalSessionsBridge } from "../../../adapters/desktopBridge/types";
 import { Icon } from "../../../shell/icons";
+import { OfficialButton } from "../OfficialEpitaxyComponents";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { TERMINAL_PANE_MESSAGES } from "../officialCodeChromeMessages";
+import { officialEpitaxyShellRunStore } from "./officialEpitaxyShellRunStore";
 
 type EpitaxySessionRef = {
   id: string;
@@ -65,12 +69,14 @@ function ensureOfficialShellBridgeSubscription(bridge: LocalSessionsBridge) {
     if (event.type === "shell_pty_data" && event.data) {
       if (entry.fitted) entry.terminal.write(event.data);
       else entry.pendingReplay = (entry.pendingReplay ?? "") + event.data;
+      officialEpitaxyShellRunStore.getState().appendInlineOutput(event.sessionId, event.data);
       return;
     }
     if (event.type === "shell_pty_close") {
       entry.closed = true;
       entry.terminal.dispose();
       officialShellTerminalCache.delete(event.sessionId);
+      officialEpitaxyShellRunStore.getState().setInlineError(event.sessionId, "Shell exited");
     }
   });
 }
@@ -161,16 +167,20 @@ function officialShellPtyError(error: string | undefined, ptyKey: string, sessio
  */
 export function OfficialShellPtyPane({
   bridge,
+  onPtyReady,
   onTerminalSelection,
   ptyKey,
   sessionRef,
 }: {
   bridge: LocalSessionsBridge;
+  /** Official BR onPtyReady — after startShellPty succeeds (pendingCd cd). */
+  onPtyReady?: () => void;
   /** Official onTerminalSelection — selection text → Ask about this. */
   onTerminalSelection?: (text: string) => void;
   ptyKey: string;
   sessionRef: EpitaxySessionRef;
 }) {
+  const terminalText = useI18nText(TERMINAL_PANE_MESSAGES);
   const [closed, setClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [restartNonce, setRestartNonce] = useState(0);
@@ -182,6 +192,14 @@ export function OfficialShellPtyPane({
   const lastSelectionTextRef = useRef("");
   const onTerminalSelectionRef = useRef(onTerminalSelection);
   onTerminalSelectionRef.current = onTerminalSelection;
+  const onPtyReadyRef = useRef(onPtyReady);
+  onPtyReadyRef.current = onPtyReady;
+  const ptyReadySentRef = useRef(false);
+  const markPtyReady = () => {
+    if (ptyReadySentRef.current) return;
+    ptyReadySentRef.current = true;
+    onPtyReadyRef.current?.();
+  };
 
   useEffect(() => {
     let alive = true;
@@ -191,6 +209,7 @@ export function OfficialShellPtyPane({
     setClosed(false);
     setError(null);
     setSelectionAnchor(null);
+    ptyReadySentRef.current = false;
     hostRef.current?.replaceChildren();
 
     const closeUnsubscribe = bridge.onShellPtyEvent?.((event) => {
@@ -216,6 +235,7 @@ export function OfficialShellPtyPane({
           entry.pendingReplay = undefined;
           entry.terminal.focus();
         }
+        markPtyReady();
         return;
       }
       entry.ptyStarted = true;
@@ -234,6 +254,7 @@ export function OfficialShellPtyPane({
             entry.pendingReplay = undefined;
           }
           entry.terminal.focus();
+          markPtyReady();
         })
         .catch(() => {
           entry.ptyStarted = false;
@@ -321,20 +342,19 @@ export function OfficialShellPtyPane({
         onMouseUp={onHostMouseUp}
       />
       {error ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-bg-100 text-text-300">
-          <p className="text-sm max-w-[320px] px-4 text-center text-balance">{error}</p>
+        <div className="absolute inset-0 bg-surface-1 flex flex-col items-center justify-center gap-g3 px-p7">
+          <p className="text-body text-t7 text-center text-balance max-w-[36ch]">{error}</p>
+          <OfficialButton onClick={restartShell} size="small" variant="contained">
+            {terminalText.tryAgain}
+          </OfficialButton>
         </div>
       ) : null}
       {!error && closed ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-g3 bg-bg-100 text-text-400">
-          <p className="text-body text-t6">Shell exited.</p>
-          <button
-            type="button"
-            onClick={restartShell}
-            className="rounded-md border-0.5 border-border-300 bg-bg-000 px-3 py-1.5 text-xs text-text-200 hover:bg-bg-200 transition-colors"
-          >
-            Restart shell
-          </button>
+        <div className="absolute inset-0 bg-surface-1 flex flex-col items-center justify-center gap-g3 px-p7">
+          <p className="text-body text-t7 text-center">{terminalText.shellExited}</p>
+          <OfficialButton onClick={restartShell} size="small" variant="contained">
+            {terminalText.restartShell}
+          </OfficialButton>
         </div>
       ) : null}
       {showAskAbout && selectionAnchor ? (
@@ -349,7 +369,7 @@ export function OfficialShellPtyPane({
           className="absolute -translate-x-1/2 -translate-y-full -mt-2 flex items-center gap-1.5 rounded-md bg-bg-000 border-0.5 border-border-300 px-2 py-1 text-xs text-text-200 shadow-lg hover:bg-bg-100 transition-colors z-10 whitespace-nowrap"
         >
           <Icon name="Chat" size="sm" />
-          Ask about this
+          {terminalText.askAboutThis}
         </button>
       ) : null}
     </div>

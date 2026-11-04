@@ -381,6 +381,7 @@ let preferences: DesktopPreferences = {
   ccAutoArchiveOnPrClose: false,
   ccBranchPrefix: "claude",
   chillingSlothLocation: "default",
+  coworkPreferredBrowser: "built_in",
   coworkSpaceContextEnabled: false,
   dockBounceEnabled: false,
   enabledCoworkMemory: true,
@@ -388,7 +389,25 @@ let preferences: DesktopPreferences = {
   // Official SSA launchEnabled: true
   launchEnabled: true,
   launchPreviewPersistSession: false,
+  launchPreviewStorage: "none",
+  launchPreviewAllowedOrigins: [],
+  localAgentModeTrustedFolders: [],
+  notificationLevels: {},
+  notificationSound: "system",
+  ccKeepAwakeWhileWorking: true,
+  ccKeepAwakeOnBattery: true,
+  ccPromptSuggestions: true,
+  ccAutoArchiveInactiveDays: 0,
+  ccNewTaskPrompt: "ask",
+  claudeIosSimulatorAccessEnabled: true,
+  claudeAndroidEmulatorAccessEnabled: true,
+  chicagoEnabled: false,
+  chicagoAutoUnhide: true,
+  chicagoUserDeniedBundleIds: [],
+  chicagoPreferredMode: "background",
+  dictationShortcut: "default",
   menuBarEnabled: true,
+  remoteFolderConsentMemory: [],
   quickEntryDictationShortcut: "off",
   quickEntryShortcut: "double-tap-option",
   useBuiltInNodeForMcp: true,
@@ -489,6 +508,19 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   list: async () => sessions.filter((session) => session.kind === targetKind),
   getSession: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind) ?? null,
   getTranscript: async (id) => sessions.find((session) => session.id === id && session.kind === targetKind)?.messages ?? [],
+  getTranscriptPage: async (id, beforeUuid, limit) => {
+    const all = sessions.find((session) => session.id === id && session.kind === targetKind)?.messages ?? [];
+    const cap = Number.isFinite(limit) && (limit ?? 0) > 0 ? Math.floor(limit as number) : 200;
+    let end = all.length;
+    if (beforeUuid) {
+      const index = all.findIndex((message) => message.id === beforeUuid);
+      if (index < 0) return { messages: [], hasMore: false };
+      end = index;
+    }
+    const start = Math.max(0, end - cap);
+    const messages = all.slice(start, end);
+    return { messages, hasMore: start > 0, cursor: messages[0]?.id };
+  },
   addFolderToSession: async (id, folder) => {
     const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
     if (index < 0) return null;
@@ -669,6 +701,9 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
   ),
   readSessionFile: async (_id, filePath) => `Preview for ${filePath}\n\nThis is fake desktop bridge content.`,
   readSessionImageAsDataUrl: async () => null,
+  getSessionImageStreamUrl: async () => null,
+  getSessionMediaStreamUrl: async () => null,
+  readSessionMediaAsDataUrl: async () => null,
   pickSessionFile: async () => "/tmp/preview.txt",
   pickFileAtCwd: async () => "/tmp/preview.txt",
   respondToToolPermission: async (requestId, decision, updatedInput) => {
@@ -698,6 +733,12 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     sessions[index] = { ...sessions[index], effort };
     return sessions[index];
   },
+  setFastMode: async (id, enabled) => {
+    const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
+    if (index < 0) return false;
+    sessions[index] = { ...sessions[index], fastMode: enabled === true };
+    return true;
+  },
   setModel: async (id, model) => {
     const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
     if (index < 0) return null;
@@ -715,6 +756,28 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     if (index < 0) return null;
     sessions[index] = { ...sessions[index], ...patch, updatedAt: "刚刚", updatedAtMs: Date.now() };
     return sessions[index];
+  },
+  changeCwd: async (id, cwd, trustAccepted, trustedDirectory) => {
+    const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
+    if (index < 0) return { status: "rejected" as const, reason: "not_active", message: "Session not found or archived." };
+    const session = sessions[index];
+    if (session.sshConfig) {
+      return { status: "rejected" as const, reason: "ssh_unsupported", message: "Changing the directory of an SSH session isn't supported yet." };
+    }
+    if (session.isRunning) {
+      return { status: "rejected" as const, reason: "busy", message: "Claude is working right now — wait for the current turn to finish, then try again." };
+    }
+    const current = session.cwd?.replace(/[\\/]+$/, "") ?? "";
+    const next = cwd.replace(/[\\/]+$/, "");
+    if (current && current === next) {
+      return { status: "ok" as const, cwd: next, changed: false, transcriptRelocated: true };
+    }
+    if (!trustAccepted && !fakeTrustedFolders.has(next)) {
+      return { status: "needs_trust" as const, directory: next, sources: [] };
+    }
+    if (trustAccepted && trustedDirectory) fakeTrustedFolders.add(trustedDirectory);
+    sessions[index] = { ...session, cwd: next, updatedAt: "刚刚", updatedAtMs: Date.now() };
+    return { status: "ok" as const, cwd: next, changed: true, transcriptRelocated: true };
   },
   startShellPty: async () => ({ ok: true, buffered: "" }),
   stop: async (id) => {
@@ -824,6 +887,17 @@ const createSessionBridge = (targetKind: SessionSummary["kind"]): DesktopBridge[
     };
     sessions.unshift(forked);
     return forked;
+  },
+  setManualKeepAwake: async (id, enabled) => {
+    const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
+    if (index < 0) return;
+    const on = enabled === true && sessions[index].isArchived !== true;
+    sessions[index] = {
+      ...sessions[index],
+      manualKeepAwake: on,
+      updatedAt: "刚刚",
+      updatedAtMs: Date.now(),
+    };
   },
   rewind: async (id, messageId) => {
     const index = sessions.findIndex((session) => session.id === id && session.kind === targetKind);
@@ -1177,9 +1251,13 @@ export const fakeDesktopBridge: DesktopBridge = {
   },
   Window: {
     close: async () => {},
+    dockPopout: async () => false,
+    getAlwaysOnTop: async () => false,
     getFullscreen: async () => false,
     getZoomFactor: async () => 1,
     onFullscreenChanged: () => () => undefined,
     onZoomFactorChanged: () => () => undefined,
+    openPopout: async () => false,
+    setAlwaysOnTop: async () => false,
   },
 };

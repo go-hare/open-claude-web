@@ -1,8 +1,11 @@
 /**
- * Official Gv working status + spinners (c11959232).
- * Extracted from EpitaxySessionTile for componentization — behavior unchanged.
+ * Official Gv / $8 working status + spinners (cd5a31703-B4nKQMBN).
+ * Extracted from EpitaxySessionTile for componentization.
+ *
+ * 2.31226.1: independent Fu `kind:"running-tasks"` row is gone — task counts
+ * trail Gv via status-control morphKey:"running-tasks" (TnXpPR7Rl5 / qQ8tlkeZbZ).
  */
-import { memo, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Icon } from "../../../shell/icons";
 import {
   useOfficialCodeSessionCompactionStatus,
@@ -13,6 +16,11 @@ import {
   officialGetTurnStartedAt,
 } from "./officialStreamSessionStore";
 import { OFFICIAL_SPARK_MASK_IMAGE } from "./officialSparkMaskUrl";
+import { EpitaxyTranscriptActionContext } from "./epitaxyTranscriptActionContext";
+import type { OfficialBackgroundTask } from "./officialTasksAndPlan";
+import { RUNNING_TASKS_STATUS_MESSAGES, SESSION_LOAD_MESSAGES } from "../officialCodeChromeMessages";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { formatOfficialIcu } from "../../../i18n/formatOfficialIcu";
 
 /** Residual c7fe8135c size map. */
 const OFFICIAL_SPARK_SIZE = { s: 12, m: 16, l: 20 } as const;
@@ -82,29 +90,24 @@ export const OfficialSparkSpinner = memo(function OfficialSparkSpinner({
     </span>
   );
 });
-OfficialSparkSpinner.displayName = "SparkSpinner";
 
 /**
- * Official Gv (c11959232):
- * - elapsed/tokens from session-level maps (je / _e), NOT props that reset every stream tick
- * - compactionStatus from store d_e(sessionId); compacting → "Compacting conversation" · elapsed
- * - spawnLabel prop wins over compacting / elapsed+tokens meta
- * - l = isWorking && !suppressed; meta opacity when (spawnLabel || elapsed>=2 || compacting) && l
- * - spark stays mounted; meta uses opacity transition (does not unmount on brief content updates)
- */
-/**
- * Residual Gv (c119): tokens/elapsed polled from je/_e maps on a 1s interval.
+ * Residual Gv/$8 (cd5a31703): tokens/elapsed polled from je/_e maps on a 1s interval.
  * Do NOT accept a stream-tick tokenEstimate prop in the interval deps — that restarts
  * the timer every PE paint and re-renders the loader row under Fu pin.
+ *
+ * running-tasks trailing (TnXpPR7Rl5 / qQ8tlkeZbZ) mounts beside Gv — not a Fu row.
  */
 export function OfficialWorkingStatus({
   isWorking,
   sessionId,
   spawnLabel,
+  tasks = [],
 }: {
   isWorking: boolean;
   sessionId?: string;
   spawnLabel?: string;
+  tasks?: OfficialBackgroundTask[];
 }) {
   // Residual Gv: r=ws(t) compactionStatus; o=js(t) permission pending — not full bucket.
   // Full-bucket subscribe re-rendered loader on every stream tick under Fu pin.
@@ -118,6 +121,7 @@ export function OfficialWorkingStatus({
     startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0
   ));
   const [tokens, setTokens] = useState(0);
+  const actionContext = useContext(EpitaxyTranscriptActionContext);
 
   useEffect(() => {
     // Official je(t): only zero when there is no turn-start timestamp for the session.
@@ -154,10 +158,10 @@ export function OfficialWorkingStatus({
     metaContent = spawnLabel;
   } else if (compacting) {
     metaContent = (
-      <>
-        Compacting conversation
+      <span data-morph-key="compacting" data-official-source="cd5a31703-B4nKQMBN.js:Gv compacting FIEdqIul1I">
+        Compacting session…
         {showElapsedGate ? <>{" · "}{formatElapsedSeconds(elapsedSeconds)}</> : null}
-      </>
+      </span>
     );
   } else {
     metaContent = (
@@ -174,14 +178,73 @@ export function OfficialWorkingStatus({
     );
   }
 
+  const taskCounts = useMemo(() => summarizeOfficialTaskCounts(tasks), [tasks]);
+  const tasksTrailing = taskCounts ? (
+    <OfficialRunningTasksStatusControl
+      finishedCount={taskCounts.finishedCount}
+      onOpenTasks={actionContext?.openTasks}
+      runningCount={taskCounts.runningCount}
+    />
+  ) : null;
+
   return (
-    <div className="flex items-center gap-[16px] h-h3">
+    <div className="flex items-center gap-[16px] h-h3" data-official-source="cd5a31703-B4nKQMBN.js:$8/e5 Gv">
       <OfficialSparkSpinner isWorking={sparkWorking} size="m" />
-      <div className={`flex items-center text-footnote text-assistant-secondary tabular-nums shrink-0 transition-opacity ${metaVisible ? "opacity-100" : "opacity-0"}`}>
+      <div className={`flex items-center text-footnote text-muted tabular-nums shrink-0 transition-opacity ${metaVisible ? "opacity-100" : "opacity-0"}`}>
         {metaContent}
       </div>
+      {tasksTrailing}
     </div>
   );
+}
+
+/** Official cd5a status-control trailing — morphKey:"running-tasks" (TnXpPR7Rl5 / qQ8tlkeZbZ). */
+function OfficialRunningTasksStatusControl({
+  finishedCount,
+  onOpenTasks,
+  runningCount,
+}: {
+  finishedCount: number;
+  onOpenTasks?: () => void;
+  runningCount: number;
+}) {
+  const text = useI18nText(RUNNING_TASKS_STATUS_MESSAGES);
+  const label =
+    runningCount > 0
+      ? formatOfficialIcu(text.runningTasks, { count: runningCount })
+      : formatOfficialIcu(text.tasksFinished, { count: finishedCount });
+  const body = (
+    <span className="text-footnote text-muted tabular-nums whitespace-nowrap">{label}</span>
+  );
+  const shellClass =
+    "epitaxy-status-control inline-flex items-center text-inherit hover:text-accent relative before:content-[''] before:absolute before:inset-x-0 before:-inset-y-[10px]";
+  if (!onOpenTasks) {
+    return (
+      <span className={shellClass} data-official-source="cd5a31703-B4nKQMBN.js:morphKey running-tasks" data-morph-key="running-tasks">
+        {body}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onOpenTasks}
+      className={`${shellClass} outline-none hide-focus-ring focus-visible:shadow-focus`}
+      data-official-source="cd5a31703-B4nKQMBN.js:morphKey running-tasks TnXpPR7Rl5"
+      data-morph-key="running-tasks"
+    >
+      {body}
+    </button>
+  );
+}
+
+function summarizeOfficialTaskCounts(tasks: OfficialBackgroundTask[]) {
+  const runningCount = tasks.filter((task) => task.status === "running").length;
+  const finishedCount = tasks.filter(
+    (task) => task.status === "completed" || task.status === "failed" || task.status === "stopped",
+  ).length;
+  if (runningCount === 0 && finishedCount === 0) return null;
+  return { runningCount, finishedCount };
 }
 
 /** Official Ph (c11959232) — always include seconds; hour branch when >= 1h. */
@@ -212,14 +275,18 @@ export function useOfficialDelayedFlag(active: boolean, delayMs: number) {
   return active && elapsed;
 }
 
-/** Official Ja/Za loading branch — residual jd Spinner size l (NOT Ed Spark; Spark is Gv only). */
+/** Official Ja/Za loading branch — residual jd Spinner size l (NOT Ed Spark; Spark is Gv only).
+ * Pin 2.31226.1: role=status + sr-only ujDQnooCch "Loading conversation"; Za delays 20ms then null.
+ * Np IY7S4mLrkm lives on OfficialPendingNavFrame, not Ja.
+ */
 export function OfficialConversationLoading() {
+  const text = useI18nText(SESSION_LOAD_MESSAGES);
   const showSpinner = useOfficialDelayedFlag(true, 20);
   if (!showSpinner) return null;
   return (
     <div role="status" className="h-full flex items-center justify-center text-t5">
       <OfficialSpinner size="l" />
-      <span className="sr-only">Loading conversation</span>
+      <span className="sr-only" data-intl-id="ujDQnooCch">{text.loadingConversation}</span>
     </div>
   );
 }

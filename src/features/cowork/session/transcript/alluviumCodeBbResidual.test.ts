@@ -57,8 +57,8 @@ describe("Code Alluvium bb residual (font + format)", () => {
 
   it("Code inline residual ports ob file-ref + db/pb classes", () => {
     expect(alluviumSource).toMatch(/parseOfficialFileRef/);
-    expect(alluviumSource).toMatch(/c11959232-h_zsw3wI\.js:ob\+ru/);
-    expect(alluviumSource).toMatch(/epitaxy-open-file/);
+    expect(alluviumSource).toMatch(/cd5a31703-B4nKQMBN\.js:ob\+ru/);
+    expect(alluviumSource).toMatch(/OfficialEuFileRef/);
     expect(alluviumSource).toMatch(
       /block max-w-full h-auto rounded-r4 border border-\[var\(--border-default\)\]/,
     );
@@ -71,5 +71,18 @@ describe("Code Alluvium bb residual (font + format)", () => {
     const coworkStart = alluviumSource.indexOf("function CoworkAlluviumBlockView");
     const coworkBlock = alluviumSource.slice(coworkStart, coworkStart + 2500);
     expect(coworkBlock).toMatch(/font-claude-response-body break-words whitespace-normal leading-\[1\.7\]/);
+  });
+
+  it("cc432 wL mediaLoader renders video/audio, not a Cowork media pane", () => {
+    expect(alluviumSource).toMatch(/OfficialCodeMarkdownMedia/);
+    expect(alluviumSource).toMatch(/getSessionMediaStreamUrl/);
+    expect(alluviumSource).toMatch(/readSessionMediaAsDataUrl/);
+    expect(alluviumSource).toMatch(/cc43287c9-Bchz60VT\.js:wL mediaLoader video/);
+    expect(alluviumSource).not.toMatch(/peanuts|PBKDF2/);
+  });
+
+  it("cc432 wL imageLoader prefers HMAC stream then dataUrl", () => {
+    expect(alluviumSource).toMatch(/getSessionImageStreamUrl/);
+    expect(alluviumSource).toMatch(/readSessionImageAsDataUrl/);
   });
 });

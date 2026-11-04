@@ -1,12 +1,13 @@
 /**
- * Official residual Progress section body (index-BELzQL5P):
+ * Official residual Progress section body (c21f11e6d-CxD82rYo.js):
  * - lQt title Progress `sIMS7iH+wa` / product 进度
- * - children: todos → vZt (CZt rows), else EmptyProgressState pQt `tq0BEownQn`
+ * - children: todos → vZt (CZt rows), else EmptyProgressState Nx `cKZ0dC17TM`
  * - NOT agent background tasks (those are transcript task_event, not Progress rail)
  * - CZt status chrome: wZt completed / _Zt in_progress numbered / kZt pending numbered
  */
 import { Icon } from "../../../../shell/icons";
 import { CoworkActivitySection } from "./CoworkActivitySection";
+import { useCoworkActivityChromeText } from "./coworkActivityChromeMessages";
 import type { CoworkTodoItem } from "./coworkActivityTypes";
 
 export function CoworkProgressSection({
@@ -47,7 +48,7 @@ export function CoworkProgressSection({
 /** Residual vZt TodoList */
 function CoworkTodoList({ todos }: { todos: CoworkTodoItem[] }) {
   return (
-    <div className="flex flex-col" data-official-source="index-BELzQL5P.js:vZt">
+    <div className="flex flex-col" data-official-source="c21f11e6d-CxD82rYo.js:vZt">
       {todos.map((todo, index) => (
         <CoworkTodoRow
           key={todo.id}
@@ -74,7 +75,7 @@ function CoworkTodoRow({
     todo.status === "in_progress" && todo.activeForm ? todo.activeForm : todo.content;
 
   return (
-    <div className="group/todo flex relative" data-official-source="index-BELzQL5P.js:CZt">
+    <div className="group/todo flex relative" data-official-source="c21f11e6d-CxD82rYo.js:CZt">
       <div className="flex flex-col items-center mr-3">
         <div className="flex-shrink-0">
           {todo.status === "completed" ? (
@@ -111,7 +112,7 @@ function OfficialCompletedTodoIcon() {
   return (
     <div
       className="w-6 h-6 rounded-full bg-accent-200 flex items-center justify-center"
-      data-official-source="index-BELzQL5P.js:wZt"
+      data-official-source="c21f11e6d-CxD82rYo.js:wZt"
     >
       <Icon className="text-bg-100" customSize={12} name="Check" />
     </div>
@@ -134,17 +135,18 @@ function OfficialNumberedTodoIcon({
       ]
         .filter(Boolean)
         .join(" ")}
-      data-official-source={accent ? "index-BELzQL5P.js:_Zt" : "index-BELzQL5P.js:kZt"}
+      data-official-source={accent ? "c21f11e6d-CxD82rYo.js:_Zt" : "c21f11e6d-CxD82rYo.js:kZt"}
     >
       <span className="text-xs font-bold text-text-400">{number}</span>
     </div>
   );
 }
 
-/** Residual pQt EmptyProgressState */
+/** Residual Nx EmptyProgressState (c21f11e6d) — was pQt / tq0BEownQn on older BELz. */
 function CoworkEmptyProgressState() {
+  const chromeText = useCoworkActivityChromeText();
   return (
-    <div className="flex flex-col items-start gap-3" data-official-source="index-BELzQL5P.js:pQt">
+    <div className="flex flex-col items-start gap-3" data-official-source="c21f11e6d-CxD82rYo.js:Nx">
       <div className="-ml-3">
         <img
           alt=""
@@ -163,7 +165,9 @@ function CoworkEmptyProgressState() {
           width={117}
         />
       </div>
-      <p className="text-text-500 font-small">See task progress for longer tasks.</p>
+      <p className="text-muted font-small" data-official-source="c21f11e6d-CxD82rYo.js:cKZ0dC17TM">
+        {chromeText.progressEmpty}
+      </p>
     </div>
   );
 }

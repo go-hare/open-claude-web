@@ -22,6 +22,8 @@ type OfficialEpitaxyDropZoneProps = {
   onFilesDropped: (files: File[]) => void;
   onFolderDropped?: (folders: File[]) => void;
   onNonImageFilesDropped?: (files: File[]) => void;
+  /** Official c119 `data-tile-host` — chat tile is `"chat"`. */
+  tileHost?: string;
   /** Product KI flex (chat vs side). Official Ek has no style — only className. */
   style?: CSSProperties;
 };
@@ -44,6 +46,7 @@ export const OfficialEpitaxyDropZone = memo(function OfficialEpitaxyDropZone({
   onFolderDropped,
   onNonImageFilesDropped,
   style,
+  tileHost,
 }: OfficialEpitaxyDropZoneProps) {
   const [active, setActive] = useState(false);
   const depthRef = useRef(0);
@@ -117,6 +120,7 @@ export const OfficialEpitaxyDropZone = memo(function OfficialEpitaxyDropZone({
       onDragLeave={onDragLeave}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      {...(tileHost ? { "data-tile-host": tileHost } : {})}
       {...(style ? { style } : {})}
     >
       {children}

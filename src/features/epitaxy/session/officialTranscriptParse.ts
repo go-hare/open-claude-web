@@ -9,6 +9,12 @@ import { parseEpitaxyUploadedFilesText, type EpitaxyUploadedFile } from "../epit
 import type { OfficialStreamSnapshot } from "../officialStreamSmoother";
 import { mergeOfficialStreamOntoTranscript } from "./officialStreamTranscriptMerge";
 import { isOfficialTaskEvent, type OfficialTaskStatus } from "./officialTasksAndPlan";
+import {
+  parseOfficialKbNoticeFromAssistantRaw,
+  parseOfficialKbNoticeFromSystemRaw,
+  parseOfficialKbNoticeFromUserRaw,
+  type OfficialKbNoticeItem,
+} from "./officialKbNoticeKinds";
 
 
 function stringValue(value: unknown): string | undefined {
@@ -79,14 +85,63 @@ export type OfficialToolGroupTaskEvent = {
   };
 };
 
+export type OfficialHookNotice = {
+  id: string;
+  level: "notice" | "warning";
+  message: string | OfficialHookNoticePayload;
+};
+
+export type OfficialHookNoticePayload =
+  | { notice: "agents_killed" }
+  | { notice: "away_summary"; recap: string }
+  | { count: number; notice: "memory_saved"; teamCount: number; verb?: string };
+
+export type OfficialModelFallbackTrigger =
+  | "last_resort"
+  | "model_blocked"
+  | "model_not_found"
+  | "overloaded"
+  | "permission_denied"
+  | "server_error";
+
+const OFFICIAL_MODEL_FALLBACK_TRIGGERS = new Set<OfficialModelFallbackTrigger>([
+  "last_resort",
+  "model_blocked",
+  "model_not_found",
+  "overloaded",
+  "permission_denied",
+  "server_error",
+]);
+
 export type TranscriptEntryItem =
   | { id: string; kind: "bash"; command?: string; error?: string; output?: string }
   /** Official eke nke / $we mark_chapter → chapter (Lh). */
   | { id: string; kind: "chapter"; summary?: string; title: string }
+  /** Official eke compact_boundary → compacted (Jz Nj/Pj). shared-100 `mT`. */
+  | { id: string; kind: "compacted"; postTokens?: number; preTokens?: number }
   /** Official eke local_command dCe → context (Ku). */
   | { id: string; kind: "context"; usage: ContextUsage }
   | { id: string; kind: "error"; code?: string; text: string }
   | { id: string; kind: "event"; content: string; eventType?: string }
+  /** Official eke informational / ui_log / Bu → Jz RM. */
+  | {
+    id: string;
+    kind: "hook_notice";
+    notices: OfficialHookNotice[];
+    plugin?: string;
+  }
+  /** Official eke model_fallback / model_refusal_fallback → Jz Mj. */
+  | {
+    apiRefusalCategory?: "bio" | "cyber" | "frontier_llm" | "reasoning_extraction" | null;
+    apiRefusalExplanation?: string | null;
+    content?: unknown;
+    direction?: "retry" | string;
+    fallbackModel: string;
+    id: string;
+    kind: "model_fallback";
+    originalModel: string;
+    trigger?: OfficialModelFallbackTrigger;
+  }
   /** Official Ike: attachment file chips (Hb `file`). */
   | { fileName: string; id: string; kind: "file" }
   /** Official Ike: image content blocks (Hb `image`). */
@@ -117,10 +172,12 @@ export type TranscriptEntryItem =
     taskEvents?: OfficialToolGroupTaskEvent[];
     tools: TranscriptToolUse[];
   }
-  /** Official eke result→turn_error (index-BELzQL5P) / rv card (c11959232). */
-  | { errors: string[]; id: string; kind: "turn_error"; subtype?: string };
+  /** Official eke result→turn_error (cd5a31703) / rv card (c11959232). */
+  | { errors: string[]; id: string; kind: "turn_error"; subtype?: string }
+  /** Official cd5a e2 leftover Kb kinds (VZe / MX / LX / nK / xK / …). */
+  | OfficialKbNoticeItem;
 
-/** Official $we chapter tool name (index-BELzQL5P). */
+/** Official $we chapter tool name (cd5a31703). */
 const OFFICIAL_CHAPTER_TOOL_NAME = "mcp__ccd_session__mark_chapter";
 
 /**
@@ -153,7 +210,7 @@ export type TranscriptToolUse = {
 };
 
 /**
- * Official Xwe cache (index-BELzQL5P): incremental eke when the durable message array only
+ * Official Xwe cache (cd5a31703): incremental eke when the durable message array only
  * grew by appending and streamingMessageId is unchanged. Full reparse every partial was the
  * stutter source when multi-emit assistants landed.
  */
@@ -203,7 +260,7 @@ export function parseOfficialTranscriptEntriesCached(
     && streamingMessageId === cached.streamingMessageId
   ) {
     if (messages.length === cached.inputLen) {
-      // Official Xwe (index-BELzQL5P): return [...a.entries] — new array identity.
+      // Official Xwe (cd5a31703): return [...a.entries] — new array identity.
       return [...cached.entries];
     }
     // Official eke: if (t && e === t) continue — live Anthropic message.id is not painted.
@@ -245,7 +302,7 @@ export function parseOfficialTranscriptEntriesCached(
 }
 
 /**
- * Official eke (index-BELzQL5P) → durable transcript entries.
+ * Official eke (cd5a31703) → durable transcript entries.
  * Critical control flow (must not invent):
  * 1. ake(content, messageId, pendingTools) ALWAYS runs for assistant — registers tool
  *    object refs into pendingTools before any streaming skip.
@@ -319,6 +376,15 @@ export function parseOfficialTranscriptEntries(messages: ChatMessage[], streamin
       if (lastItem?.kind === "tools" && first?.kind === "tools") {
         lastItem.tools.push(...first.tools);
         previous.items.push(...nextItems.slice(1));
+      } else if (
+        lastItem?.kind === "hook_notice"
+        && first?.kind === "hook_notice"
+        && lastItem.plugin === undefined
+        && first.plugin === undefined
+      ) {
+        // Official Su: merge consecutive plugin-less hook_notice notices[].
+        lastItem.notices = [...lastItem.notices, ...first.notices];
+        previous.items.push(...nextItems.slice(1));
       } else {
         previous.items.push(...nextItems);
       }
@@ -373,8 +439,90 @@ export function parseOfficialTranscriptEntries(messages: ChatMessage[], streamin
 
     if (rawType === "stream_event") return;
 
-    // Official eke: system local_command / local_command_output → context | stats | text.
+    const systemParentId = raw.parent_tool_use_id ?? raw.parentToolUseId;
+    // Official eke: compact_boundary → compacted (shared-100 mT / Yi as jt).
+    if (rawType === "system" && stringValue(raw.subtype) === "compact_boundary" && !systemParentId) {
+      const entryId = stringValue(raw.uuid) ?? stringValue(raw.id) ?? `compact-${index}`;
+      pushAuthorItems("assistant", [{ id: entryId, kind: "compacted", ...parseOfficialCompactMetadata(raw) }], entryId);
+      return;
+    }
+    // Official eke: model_refusal_fallback → BC; model_fallback availability → retry row.
+    if (rawType === "system" && stringValue(raw.subtype) === "model_refusal_fallback") {
+      const fallback = parseOfficialModelRefusalFallback(raw);
+      if (fallback) {
+        const entryId = stringValue(raw.uuid) ?? stringValue(raw.id) ?? `fallback-${index}`;
+        pushAuthorItems("assistant", [{ id: entryId, kind: "model_fallback", ...fallback }], entryId);
+      }
+      return;
+    }
+    if (rawType === "system" && stringValue(raw.subtype) === "model_fallback" && !systemParentId) {
+      const fallback = parseOfficialModelAvailabilityFallback(raw);
+      if (fallback) {
+        const entryId = stringValue(raw.uuid) ?? stringValue(raw.id) ?? `fallback-${index}`;
+        pushAuthorItems("assistant", [{ id: entryId, kind: "model_fallback", ...fallback }], entryId);
+      }
+      return;
+    }
+    // Official eke informational → leftover prompt_blocked (prevent_continuation / xr) else hook_notice.
+    if (rawType === "system" && stringValue(raw.subtype) === "informational" && !systemParentId) {
+      const leftover = parseOfficialKbNoticeFromSystemRaw(raw, index);
+      if (leftover) {
+        pushAuthorItems("assistant", [leftover], leftover.id);
+        return;
+      }
+      if (raw.prevent_continuation === true || raw.preventContinuation === true) return;
+      const content = typeof raw.content === "string" ? raw.content : stringValue(raw.content);
+      if (!content) return;
+      const message = content.trim().replace(/:$/, "").trimEnd();
+      if (!message) return;
+      const level = stringValue(raw.level);
+      if (level === "info") return;
+      const entryId = stringValue(raw.uuid) ?? stringValue(raw.id) ?? `notice-${index}`;
+      pushAuthorItems("assistant", [{
+        id: entryId,
+        kind: "hook_notice",
+        notices: [{ id: entryId, level: level === "warning" ? "warning" : "notice", message }],
+      }], entryId);
+      return;
+    }
+    if (rawType === "system" && stringValue(raw.subtype) === "ui_log" && !systemParentId) {
+      const plugin = stringValue(raw.plugin)?.trim();
+      const text = (stringValue(raw.text) ?? "").trim();
+      if (plugin && text && !/[\r\n]/.test(plugin)) {
+        const entryId = stringValue(raw.uuid) ?? stringValue(raw.id) ?? `uilog-${index}`;
+        pushAuthorItems("assistant", [{
+          id: entryId,
+          kind: "hook_notice",
+          notices: [{ id: entryId, level: "notice", message: text }],
+          plugin,
+        }], entryId);
+      }
+      return;
+    }
+    if (
+      rawType === "system"
+      && !systemParentId
+      && (
+        stringValue(raw.subtype) === "away_summary"
+        || stringValue(raw.subtype) === "memory_saved"
+        || stringValue(raw.subtype) === "agents_killed"
+        || stringValue(raw.subtype) === "model_consent_fallback"
+      )
+    ) {
+      const notice = parseOfficialBuHookNotice(stringValue(raw.subtype) ?? "", raw, stringValue(raw.uuid) ?? stringValue(raw.id) ?? `bu-${index}`);
+      if (notice) {
+        pushAuthorItems("assistant", [{ id: notice.id, kind: "hook_notice", notices: [notice] }], notice.id);
+      }
+      return;
+    }
+
+    // Official eke: system local_command / local_command_output → leftover (usage/status/auto_mode) | context | stats | text.
     if (rawType === "system" && (stringValue(raw.subtype) === "local_command" || stringValue(raw.subtype) === "local_command_output")) {
+      const leftover = parseOfficialKbNoticeFromSystemRaw(raw, index);
+      if (leftover) {
+        pushAuthorItems("assistant", [leftover], leftover.id);
+        return;
+      }
       const content = typeof raw.content === "string" ? raw.content : stringValue(raw.content);
       if (content && !officialSkipLocalCommandStdout(content)) {
         const stdout = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/)?.[1]?.trim();
@@ -399,6 +547,15 @@ export function parseOfficialTranscriptEntries(messages: ChatMessage[], streamin
     if (rawType === "system" && isOfficialTaskEvent(raw)) {
       officialAbsorbOrPushTaskEvent(entries, raw, index, pushAuthorItems, skipTranscriptTaskIds);
       return;
+    }
+
+    // Official eke leftover system kinds: gap_fill_failed / peerHold / auto_mode_* / …
+    if (rawType === "system") {
+      const leftover = parseOfficialKbNoticeFromSystemRaw(raw, index);
+      if (leftover) {
+        pushAuthorItems("assistant", [leftover], leftover.id);
+        return;
+      }
     }
 
     // queue-operation is Tasks residual (Jp Qp), not a user Hb row. Official eke never
@@ -429,11 +586,15 @@ export function parseOfficialTranscriptEntries(messages: ChatMessage[], streamin
           : undefined);
     if (role !== "assistant" && role !== "user") return;
 
-    // Official eke/pg: user isMeta / isSynthetic never paints a Hb bubble.
-    // Dual-emit CLI task rows land as isMeta user text ("Background shell failed …").
-    // Tasks pane still parses them via parseOfficialTasks; the transcript must skip.
-    if (role === "user" && (raw.isMeta === true || raw.isSynthetic === true)) {
-      return;
+    // Official eke/pg: user isMeta / isSynthetic never paints a Hb bubble,
+    // except leftover computer_disconnected (c06cf `fa`/`da` reminder).
+    if (role === "user") {
+      const userLeftover = parseOfficialKbNoticeFromUserRaw({ ...raw, type: stringValue(raw.type) ?? "user" }, index);
+      if (userLeftover?.kind === "computer_disconnected") {
+        pushAuthorItems("assistant", [userLeftover], userLeftover.id);
+        return;
+      }
+      if (raw.isMeta === true || raw.isSynthetic === true) return;
     }
 
     const content = Array.isArray(nestedMessage.content) || typeof nestedMessage.content === "string"
@@ -444,6 +605,12 @@ export function parseOfficialTranscriptEntries(messages: ChatMessage[], streamin
     const toolUseResult = raw.tool_use_result ?? raw.toolUseResult;
 
     if (role === "assistant") {
+      const assistantLeftover = parseOfficialKbNoticeFromAssistantRaw({ ...raw, type: stringValue(raw.type) ?? "assistant" }, index);
+      // Official: stamped Remote Control / synthetic auto-mode apply skip ake.
+      if (assistantLeftover && assistantLeftover.kind !== "stop_warning") {
+        pushAuthorItems("assistant", [assistantLeftover], assistantLeftover.id);
+        return;
+      }
       // Official Bwe: API error messages.
       if (raw.isApiErrorMessage === true || (typeof raw.error === "string" && raw.error.length > 0)) {
         const entryId = stringValue(raw.uuid) ?? `${rawType ?? "assistant"}-${index}`;
@@ -482,6 +649,10 @@ export function parseOfficialTranscriptEntries(messages: ChatMessage[], streamin
         return;
       }
 
+      if (assistantLeftover?.kind === "stop_warning") {
+        pushAuthorItems("assistant", [...items, assistantLeftover], entryId);
+        return;
+      }
       pushAuthorItems("assistant", items, entryId);
       return;
     }
@@ -494,9 +665,14 @@ export function parseOfficialTranscriptEntries(messages: ChatMessage[], streamin
     }
     const entryId = stringValue(raw.uuid) ?? stringValue(raw.id) ?? message.id;
     const userItems = parseUserTranscriptItems(content, index, message.text);
+    const userLeftover = parseOfficialKbNoticeFromUserRaw({ ...raw, type: stringValue(raw.type) ?? "user" }, index);
     // Pure tool_result user rows often have no visible text — rke already settled tools.
-    if (userItems.length === 0) return;
-    pushAuthorItems("user", userItems, entryId);
+    if (userItems.length === 0 && userLeftover?.kind !== "context_cleared") return;
+    if (userItems.length > 0) pushAuthorItems("user", userItems, entryId);
+    // Official `/clear` (`Js`) also paints VZe context_cleared on the assistant side.
+    if (userLeftover?.kind === "context_cleared") {
+      pushAuthorItems("assistant", [userLeftover], userLeftover.id);
+    }
   });
 
   return entries;
@@ -582,7 +758,7 @@ function officialDkeToolResultContent(content: unknown): {
   return { text: texts.join("\n"), images };
 }
 
-/** Official kke (index-BELzQL5P) — user interrupt markers. */
+/** Official kke (cd5a31703) — user interrupt markers. */
 const OFFICIAL_USER_INTERRUPT_TEXTS = new Set([
   "[Request interrupted by user]",
   "[Request interrupted by user for tool use]",
@@ -592,7 +768,7 @@ const OFFICIAL_USER_INTERRUPT_TEXTS = new Set([
 const OFFICIAL_NO_RESPONSE_REQUESTED = "No response requested.";
 
 /**
- * Official Mke (index-BELzQL5P): `if (kke.has(e)) return ""` then The/Dwe strip.
+ * Official Mke (cd5a31703): `if (kke.has(e)) return ""` then The/Dwe strip.
  * Ike string path: `const o = Mke(e); return o ? [...a, {kind:"text", text:o}] : a`.
  */
 function officialMkeVisibleUserText(text: string): string {
@@ -682,6 +858,8 @@ function officialTaskEventItemFromSystemRaw(raw: Record<string, unknown>, index:
   if (!taskId) return null;
   // Official eke: skip_transcript task_started never enters the transcript.
   if (raw.skip_transcript === true || raw.skipTranscript === true) return null;
+  // Official BELz eke only emits chips from task_started / task_notification.
+  if (subtype === "task_progress") return null;
   // Host taskBookends / CLI bookends without the flag: local_bash / local_agent
   // chips still belong in Tasks (Jp), not as standalone assistant Hb rows.
   const taskType = stringValue(raw.task_type) ?? stringValue(raw.taskType);
@@ -707,7 +885,7 @@ function officialTaskEventItemFromSystemRaw(raw: Record<string, unknown>, index:
 }
 
 /**
- * Official eke task absorb (index-BELzQL5P):
+ * Official eke task absorb (cd5a31703):
  * tryAbsorb(ev, toolUseId):
  *   last entry must be assistant; last item tools; not all Vwe tools;
  *   if toolUseId already in group tools → drop; else push {at: tools.length, ev}.
@@ -732,6 +910,10 @@ function officialAbsorbOrPushTaskEvent(
     return;
   }
   if (taskId && skipTranscriptTaskIds.has(taskId)) return;
+  // Official BELz eke: only task_started / task_notification. task_progress is
+  // Jp usage (last_tool_name / workflow phase) — must not overwrite chip
+  // description (CLI emits "Critic: critic" on progress).
+  if (subtype === "task_progress") return;
   const taskEvent = officialTaskEventItemFromSystemRaw(raw, index);
   if (!taskEvent) {
     if (taskId && (stringValue(raw.task_type) === "local_bash" || stringValue(raw.taskType) === "local_bash"
@@ -741,13 +923,15 @@ function officialAbsorbOrPushTaskEvent(
     return;
   }
 
-  // Official: if this taskId already exists, mutate status/description/summary in place.
+  // Official eke: existing task_started → description; task_notification → status+summary.
   const existing = findOfficialTaskEventRef(entries, taskEvent.taskId);
   if (existing) {
-    if (taskEvent.description) existing.description = taskEvent.description;
-    if (taskEvent.summary !== undefined) existing.summary = taskEvent.summary;
+    if (subtype === "task_started" && taskEvent.description) existing.description = taskEvent.description;
+    if (subtype === "task_notification") {
+      existing.status = taskEvent.status;
+      if (taskEvent.summary !== undefined) existing.summary = taskEvent.summary;
+    }
     if (taskEvent.taskType) existing.taskType = taskEvent.taskType;
-    existing.status = taskEvent.status;
     return;
   }
 
@@ -1087,7 +1271,7 @@ function parseAssistantTranscriptItems(
 }
 
 /**
- * Official Ike (index-BELzQL5P): user content → file | image | peer | event | bash | text.
+ * Official Ike (cd5a31703): user content → file | image | peer | event | bash | text.
  * Array path collects plain text blocks then **one** text item via `l.join("\n")`
  * (residual: `l.length > 0 && o.push({ kind: "text", id: t, text: l.join("\n") })`).
  * Also accepts local bridge shapes used by the desktop CLI runner.
@@ -1120,7 +1304,7 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
     uploaded.files.forEach((file, fileIndex) => {
       items.push({ file, id: `${entryId}-uploaded-${fileIndex}`, kind: "uploaded-file" });
     });
-    // Official Ike/Mke (index-BELzQL5P): kke.has(e) → "" then The(); empty → no Hb text item.
+    // Official Ike/Mke (cd5a31703): kke.has(e) → "" then The(); empty → no Hb text item.
     const visible = officialMkeVisibleUserText(uploaded.text);
     if (visible) items.push({ id: entryId, kind: "text", text: visible });
     return items;
@@ -1238,7 +1422,7 @@ function parseUserTranscriptItems(content: unknown, messageIndex: number, fallba
       }
     }
   });
-  // Residual Ike (index-BELzQL5P): `l.length > 0 && o.push({ kind:"text", id:t, text:l.join("\n") })`
+  // Residual Ike (cd5a31703): `l.length > 0 && o.push({ kind:"text", id:t, text:l.join("\n") })`
   // One text item for all plain blocks — NOT N items (product invent → N gap-g4 <p> in one Hb pill).
   if (plainTextParts.length > 0) {
     items.push({ id: entryId, kind: "text", text: plainTextParts.join("\n") });
@@ -1285,7 +1469,7 @@ function parseOfficialWebhookEventText(text: string): { content: string; eventTy
 }
 
 /**
- * Official Ske (index-BELzQL5P): parse bash / local_command tags from a text blob.
+ * Official Ske (cd5a31703): parse bash / local_command tags from a text blob.
  * Returns null when the blob is a bare <command-message> without bash/local-command streams.
  */
 function parseOfficialBashTaggedText(text: string): { command: string; output: string } | null {
@@ -1344,6 +1528,16 @@ function mergeAdjacentAssistantItems(items: TranscriptEntryItem[]) {
         taskEvents: [...(previous.taskEvents ?? []), ...shiftedEvents],
         tools: [...previous.tools, ...item.tools],
       };
+    } else if (
+      previous?.kind === "hook_notice"
+      && item.kind === "hook_notice"
+      && previous.plugin === undefined
+      && item.plugin === undefined
+    ) {
+      merged[merged.length - 1] = {
+        ...previous,
+        notices: [...previous.notices, ...item.notices],
+      };
     } else if (previous?.kind === "tools" && item.kind === "task_event") {
       // Official: task events attach into the surrounding default tool group at current length.
       merged[merged.length - 1] = {
@@ -1359,7 +1553,7 @@ function mergeAdjacentAssistantItems(items: TranscriptEntryItem[]) {
 
 
 /**
- * Official Kwe / lo(Xa, Va) from index-BELzQL5P — pure control flow only:
+ * Official Kwe / lo(Xa, Va) from cd5a31703 — pure control flow only:
  *   if (!Va) return Xa
  *   items = map(Va.blocks)  // tools always status:"running"
  *   if items empty return Xa
@@ -1467,6 +1661,137 @@ export function estimateOfficialStreamSnapshotTokens(snapshot: OfficialStreamSna
     return total + block.text.length;
   }, 0);
   return Math.round(charCount / 4);
+}
+
+/** Official c06cf `Bu` — away_summary / memory_saved / agents_killed / model_consent_fallback. */
+export function parseOfficialBuHookNotice(
+  subtype: string,
+  raw: Record<string, unknown>,
+  id: string,
+): OfficialHookNotice | null {
+  if (subtype === "agents_killed") {
+    return { id, level: "notice", message: { notice: "agents_killed" } };
+  }
+  if (subtype === "memory_saved") {
+    const paths = Array.isArray(raw.written_paths) ? raw.written_paths : Array.isArray(raw.writtenPaths) ? raw.writtenPaths : [];
+    const count = paths.length;
+    if (count === 0) return null;
+    const teamRaw = raw.team_count ?? raw.teamCount;
+    const teamCount = typeof teamRaw === "number" && teamRaw > 0 ? Math.min(Math.floor(teamRaw), count) : 0;
+    const verb = typeof raw.verb === "string" ? raw.verb.trim() : "";
+    return {
+      id,
+      level: "notice",
+      message: { count: count - teamCount, notice: "memory_saved", teamCount, ...(verb ? { verb } : {}) },
+    };
+  }
+  if (subtype === "away_summary") {
+    const recap = typeof raw.content === "string" ? raw.content.trim() : "";
+    if (!recap) return null;
+    return { id, level: "notice", message: { notice: "away_summary", recap } };
+  }
+  if (subtype === "model_consent_fallback") {
+    const text = typeof raw.content === "string" ? raw.content.trim() : "";
+    if (!text) return null;
+    return { id, level: "warning", message: text };
+  }
+  return null;
+}
+
+/** Official VM — format structured hook notice for RM body. */
+export function formatOfficialHookNoticeMessage(notice: OfficialHookNotice) {
+  const message = notice.message;
+  if (typeof message === "string") return message;
+  if (message.notice === "agents_killed") return "All background agents stopped";
+  if (message.notice === "away_summary") return `Recap: ${message.recap}`;
+  if (message.notice === "memory_saved") {
+    const parts: string[] = [];
+    if (message.count > 0) parts.push(message.count === 1 ? "1 memory" : `${message.count} memories`);
+    if (message.teamCount > 0) parts.push(message.teamCount === 1 ? "1 team memory" : `${message.teamCount} team memories`);
+    const saved = parts.join(" · ");
+    return message.verb ? `${message.verb} ${saved}` : `Saved ${saved}`;
+  }
+  return "";
+}
+
+/** Official shared-8 `xF` compact token count (c80ec `ve`). */
+export function formatOfficialCompactTokens(value: number) {
+  const trim = (text: string) => (text.endsWith(".0") ? text.slice(0, -2) : text);
+  if (value >= 1e9) return `${trim((value / 1e9).toFixed(1))}B`;
+  if (value >= 1e6) {
+    const millions = Number((value / 1e6).toFixed(1));
+    return millions >= 1e3 ? `${trim((value / 1e9).toFixed(1))}B` : `${trim(millions.toFixed(1))}M`;
+  }
+  if (value >= 1e3) {
+    const thousands = Number((value / 1e3).toFixed(1));
+    return thousands >= 1e3 ? `${trim((value / 1e6).toFixed(1))}M` : `${trim(thousands.toFixed(1))}k`;
+  }
+  return String(value);
+}
+
+/** Official c80ec `Le` / cd5a `Kf(n, pre, post)`. */
+export function formatOfficialCompactedLabel(preTokens?: number, postTokens?: number) {
+  if (preTokens !== undefined && postTokens !== undefined && preTokens > postTokens) {
+    return `Compacted session · saved ${formatOfficialCompactTokens(preTokens - postTokens)} tokens`;
+  }
+  if (preTokens !== undefined && preTokens > 0) {
+    return `Compacted session · from ${formatOfficialCompactTokens(preTokens)} tokens`;
+  }
+  return "Compacted session";
+}
+
+/** Official shared-100 `mT` compact_metadata → preTokens/postTokens. */
+export function parseOfficialCompactMetadata(raw: Record<string, unknown>) {
+  const meta = asRecord(raw.compact_metadata ?? raw.compactMetadata);
+  const pre = meta.pre_tokens ?? meta.preTokens;
+  const post = meta.post_tokens ?? meta.postTokens;
+  return {
+    ...(typeof pre === "number" && Number.isFinite(pre) ? { preTokens: pre } : {}),
+    ...(typeof post === "number" && Number.isFinite(post) ? { postTokens: post } : {}),
+  };
+}
+
+type OfficialModelFallbackItem = Extract<TranscriptEntryItem, { kind: "model_fallback" }>;
+
+/** Official shared-100 `BC` / Xa as kt — model_refusal_fallback. */
+export function parseOfficialModelRefusalFallback(raw: Record<string, unknown>): Omit<OfficialModelFallbackItem, "id" | "kind"> | null {
+  if (stringValue(raw.direction) !== "retry") return null;
+  const originalModel = stringValue(raw.original_model) ?? stringValue(raw.originalModel);
+  const fallbackModel = stringValue(raw.fallback_model) ?? stringValue(raw.fallbackModel);
+  if (!originalModel || !fallbackModel) return null;
+  const category = stringValue(raw.api_refusal_category) ?? stringValue(raw.apiRefusalCategory);
+  const explanation = stringValue(raw.api_refusal_explanation) ?? stringValue(raw.apiRefusalExplanation);
+  const apiRefusalCategory: OfficialModelFallbackItem["apiRefusalCategory"] =
+    category === "cyber" || category === "bio" || category === "frontier_llm" || category === "reasoning_extraction"
+      ? category
+      : null;
+  return {
+    apiRefusalCategory,
+    apiRefusalExplanation: explanation?.trim() ? explanation : null,
+    content: raw.content,
+    direction: "retry",
+    fallbackModel,
+    originalModel,
+  };
+}
+
+/** Official eke `t==="model_fallback"` availability retry. */
+export function parseOfficialModelAvailabilityFallback(raw: Record<string, unknown>): Omit<OfficialModelFallbackItem, "id" | "kind"> | null {
+  const originalModel = stringValue(raw.original_model) ?? stringValue(raw.originalModel);
+  const fallbackModel = stringValue(raw.fallback_model) ?? stringValue(raw.fallbackModel);
+  const triggerRaw = stringValue(raw.trigger);
+  const trigger = triggerRaw && OFFICIAL_MODEL_FALLBACK_TRIGGERS.has(triggerRaw as OfficialModelFallbackTrigger)
+    ? triggerRaw as OfficialModelFallbackTrigger
+    : undefined;
+  if (!originalModel || !fallbackModel || !trigger) return null;
+  return {
+    apiRefusalCategory: null,
+    content: raw.content,
+    direction: "retry",
+    fallbackModel,
+    originalModel,
+    trigger,
+  };
 }
 
 export function rawMessageContentContainsToolResult(raw: Record<string, unknown>) {

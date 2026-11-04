@@ -6,15 +6,19 @@ import {
   GhostSelect,
   InstructionsPreferencesField,
   SegmentedControl,
-  TextInputControl,
 } from "../SettingsControls";
 import {
+  applyChatFontSetting,
+  applyMotionMode,
   applyThemeMode,
   readChatFontSetting,
+  readMotionMode,
   readThemeMode,
   type ChatFontSetting,
+  type MotionMode,
   type ThemeMode,
   writeChatFontSetting,
+  writeMotionMode,
   writeThemeMode,
 } from "../appearanceSettings";
 import { WORK_FUNCTION_VALUES } from "../accountSettingsApi";
@@ -36,10 +40,9 @@ import { syncResponseCompletionsPrefMirror } from "../responseCompletionNotify";
  * Profile save toasts: PC addSuccess fsB/4pdUqN / addError ecSHaFmEbs.
  * CMEK: LBt taint:cmek → Instructions locked + tooltip D4CuWTj4f5.
  * Voice: official ne = C()?oe:null where C≈Iyt = voice_mode && media && !jd(); desktop jd() → omit.
- * Notifications (official ie + YBe/ZBe/KBe):
- *   Response completions — always; feature_preference.compass + completion enable_push
- *   Code / email / Dispatch rows: hide-on-missing aA/bas/VBe/GBe (notificationRowGates)
- *   3P without Anthropic entitlement flags → only Response completions
+ * Notifications (official pr): Response completions, Scheduled tasks (routines),
+ *   then Code / email / Dispatch hide-on-missing (notificationRowGates).
+ * Appearance $n title nwKczbeayM; screenshot 25: Theme, Chat font nr, Motion Un.
  * Code emails: Statsig keys 1tnv78j/162hnvx — residual EN defaults (not spa i18n).
  * Copy uses official /i18n message ids via useGeneralSettingsText.
  */
@@ -47,7 +50,6 @@ export function GeneralSettings() {
   const {
     bootstrap,
     notifications,
-    updateIdentity,
     updateNotificationFeature,
     updateProfile,
     updateResponseCompletionsPush,
@@ -56,6 +58,7 @@ export function GeneralSettings() {
   const { addSuccess, addError } = useErrors();
   const [appearance, setAppearance] = useState<ThemeMode>(() => readThemeMode());
   const [chatFont, setChatFont] = useState<ChatFontSetting>(() => readChatFontSetting());
+  const [motion, setMotion] = useState<MotionMode>(() => readMotionMode());
   const [avatarDraft, setAvatarDraft] = useState<number | undefined>(undefined);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [notifyError, setNotifyError] = useState("");
@@ -105,16 +108,6 @@ export function GeneralSettings() {
   const securityScanEmails = !!feature.code_security_scan?.enable_email;
   const dispatchMessages = !!feature.dispatch?.enable_push;
 
-  const chatFontLabels = useMemo(
-    () => ({
-      default: text.anthropicSerif,
-      sans: text.anthropicSans,
-      system: text.matchSystem,
-      dyslexia: text.dyslexicFriendly,
-    }),
-    [text.anthropicSans, text.anthropicSerif, text.dyslexicFriendly, text.matchSystem],
-  );
-
   // Official j4t map: value = English residual key; label = /i18n message id.
   const workFunctionOptions = useMemo(
     () =>
@@ -147,6 +140,24 @@ export function GeneralSettings() {
     [text.dark, text.light, text.matchSystem],
   );
 
+  const motionOptions = useMemo(
+    () => [
+      { value: "system", label: text.motionSystem },
+      { value: "reduce", label: text.motionReduced },
+    ],
+    [text.motionReduced, text.motionSystem],
+  );
+
+  const chatFontLabels = useMemo(
+    () => ({
+      default: text.anthropicSerif,
+      sans: text.anthropicSans,
+      system: text.matchSystem,
+      dyslexia: text.dyslexicFriendly,
+    }),
+    [text.anthropicSans, text.anthropicSerif, text.dyslexicFriendly, text.matchSystem],
+  );
+
   const instructionsPlaceholders = useMemo(
     () => [
       text.instructionsPlaceholder0,
@@ -174,7 +185,17 @@ export function GeneralSettings() {
 
   useEffect(() => {
     writeChatFontSetting(chatFont);
+    applyChatFontSetting(chatFont);
   }, [chatFont]);
+
+  useEffect(() => {
+    writeMotionMode(motion);
+    applyMotionMode(motion);
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => applyMotionMode(motion);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, [motion]);
 
   useEffect(() => {
     if (avatarDraft !== undefined && bootstrap.profile.avatar === avatarDraft) setAvatarDraft(undefined);
@@ -188,10 +209,6 @@ export function GeneralSettings() {
         setAvatarDraft(undefined);
         onProfileSaveError(error);
       });
-  };
-
-  const saveIdentity = (patch: { full_name?: string; display_name?: string }) => {
-    void updateIdentity(patch).then(onProfileSaved).catch(onProfileSaveError);
   };
 
   const saveProfile = (patch: {
@@ -233,30 +250,7 @@ export function GeneralSettings() {
             />
           }
         />
-        <SettingsRow
-          label={text.fullName}
-          control={
-            <TextInputControl
-              ariaLabel={text.fullName}
-              value={fullName}
-              onSave={(value) => {
-                saveIdentity({ full_name: value });
-              }}
-            />
-          }
-        />
-        <SettingsRow
-          label={text.whatShouldClaudeCallYou}
-          control={
-            <TextInputControl
-              ariaLabel={text.whatShouldClaudeCallYou}
-              value={displayName}
-              onSave={(value) => {
-                saveIdentity({ display_name: value });
-              }}
-            />
-          }
-        />
+        {/* Official Fn: Full name / What should Claude call you compiled to `!1` (not mounted). */}
         <SettingsRow
           label={text.whatBestDescribesWork}
           control={
@@ -288,10 +282,10 @@ export function GeneralSettings() {
       </SettingsSection>
       <SettingsSection title={text.preferences}>
         <SettingsRow
-          label={text.appearance}
+          label={text.theme}
           control={
             <SegmentedControl
-              ariaLabel={text.appearance}
+              ariaLabel={text.theme}
               value={appearance}
               options={appearanceOptions}
               onChange={(value) => setAppearance(value as ThemeMode)}
@@ -302,18 +296,24 @@ export function GeneralSettings() {
           label={text.chatFont}
           control={
             <ChatFontSelect
-              value={chatFont}
               labels={chatFontLabels}
-              onChange={(value) => setChatFont(value)}
+              onChange={setChatFont}
+              value={chatFont}
             />
           }
         />
-        {/*
-          Official ne Voice: C()?oe:null where C = Iyt() =
-            ud("claude_ai_voice_mode") && media support && !jd().
-          jd() ≈ isClaudeApp/desktop → Voice row is residual-correct OFF on desktop.
-          Do not invent a Voice control until residual shows it for this product surface.
-        */}
+        <SettingsRow
+          label={text.motion}
+          description={text.motionDescription}
+          control={
+            <SegmentedControl
+              ariaLabel={text.motion}
+              value={motion}
+              options={motionOptions}
+              onChange={(value) => setMotion(value as MotionMode)}
+            />
+          }
+        />
       </SettingsSection>
       <SettingsSection title={text.notifications}>
         {/* Official ie order: ce, e&&de, e&&fe, e&&ue, t&&ge, n&&pe */}
@@ -333,6 +333,25 @@ export function GeneralSettings() {
                   }
                   await updateResponseCompletionsPush(checked);
                   syncResponseCompletionsPrefMirror(checked);
+                });
+              }}
+            />
+          }
+        />
+        <SettingsRow
+          label={text.scheduledTasks}
+          description={text.scheduledTasksDescription}
+          control={
+            <Switch
+              checked={!!feature.routines?.enable_push}
+              disabled={pendingKey === "routines"}
+              onCheckedChange={(checked) => {
+                void runToggle("routines", async () => {
+                  if (checked) {
+                    const granted = await ensureDesktopNotificationPermission();
+                    if (!granted) throw new Error("browser-permission-denied");
+                  }
+                  await updateNotificationFeature("routines", { enable_push: checked });
                 });
               }}
             />

@@ -5,7 +5,7 @@ export const OFFICIAL_COWORK_RECENT_LIMIT = 20;
 export const COWORK_SIDEBAR_SECTION_ORDER = ["scheduled", "pinned", "recents"] as const;
 
 /**
- * Official r6 (index-BELzQL5P): hide sessionType agent | radar from Recents.
+ * Official r6 (c21f11e6d-CxD82rYo.js): hide sessionType agent | radar from Recents.
  * dispatch_child is product safety (not in official a6).
  */
 const COWORK_SIDEBAR_HIDDEN_SESSION_TYPES = new Set(["agent", "radar", "dispatch_child"]);

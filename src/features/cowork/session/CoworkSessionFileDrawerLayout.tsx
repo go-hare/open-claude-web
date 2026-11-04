@@ -1,8 +1,8 @@
 /**
- * Official yUt chat+drawer shell (index-BELzQL5P.pretty.js function yUt).
+ * Official yUt chat+drawer shell (c21f11e6d-CxD82rYo.js function yUt).
  * Flex model: bUt=100; drawer open flex ~50; resize aria "Resize file viewer".
  * Children order: main | resize handle | drawer | rightSidebar.
- * Source: index-BELzQL5P.pretty.js yUt / sUt / bUt / xUt / pa.
+ * Source: c21f11e6d-CxD82rYo.js yUt / sUt / bUt / xUt / pa.
  *
  * Official `pa` is framer-motion numeric animate. motion@12's number animate does not
  * fire onUpdate in this host shell, so we drive the same xUt spring with rAF while
@@ -250,12 +250,12 @@ export function CoworkSessionFileDrawerLayout({
   return (
     <div
       className={`flex flex-1 h-full w-full overflow-hidden max-md:relative md:-mt-[var(--df-header-h,0px)] md:h-[calc(100%+var(--df-header-h,0px))]${isResizing ? " select-none" : ""}`}
-      data-official-source="index-BELzQL5P.js:yUt outer flex shell"
+      data-official-source="c21f11e6d-CxD82rYo.js:yUt outer flex shell"
       ref={containerRef}
     >
       <div
         className="h-full min-h-0 flex flex-col overflow-hidden md:pt-[var(--df-header-h,0px)]"
-        data-official-source="index-BELzQL5P.js:yUt main column"
+        data-official-source="c21f11e6d-CxD82rYo.js:yUt main column"
         ref={mainRef}
       >
         {main}
@@ -269,7 +269,7 @@ export function CoworkSessionFileDrawerLayout({
       <div
         aria-hidden={!isDrawerOpen}
         className={`max-md:absolute top-0 right-0 bottom-0 left-0 z-20 draggable-none md:flex-grow-0 md:flex-shrink-0 md:basis-0 overflow-hidden h-full md:pt-[var(--df-header-h,0px)]${isDrawerOpen ? " max-md:flex-1" : " max-md:hidden"}${isResizing ? " pointer-events-none" : ""}`}
-        data-official-source="index-BELzQL5P.js:yUt drawer column"
+        data-official-source="c21f11e6d-CxD82rYo.js:yUt drawer column"
         inert={!isDrawerOpen || undefined}
         ref={drawerRef}
       >
@@ -278,7 +278,7 @@ export function CoworkSessionFileDrawerLayout({
             className="h-12 md:hidden bg-bg-000/30 backdrop-blur border-b-0.5 border-border-300"
             onClick={() => setIsDrawerExpanded(false)}
           />
-          <div className="flex-1 overflow-hidden h-full bg-bg-100" data-official-source="index-BELzQL5P.js:yUt drawer bg-bg-100">
+          <div className="flex-1 overflow-hidden h-full bg-bg-100" data-official-source="c21f11e6d-CxD82rYo.js:yUt drawer bg-bg-100">
             {drawer}
           </div>
         </div>
@@ -338,7 +338,7 @@ function CoworkFileViewerResizeHandle({
       aria-label="Resize file viewer"
       aria-orientation="vertical"
       className={`group/resize relative outline-none w-3 h-full cursor-col-resize max-md:hidden -mr-1.5 z-30${hidden ? " hidden" : ""}`}
-      data-official-source="index-BELzQL5P.js:sUt Resize file viewer"
+      data-official-source="c21f11e6d-CxD82rYo.js:sUt Resize file viewer"
       onKeyDown={(event) => {
         const step = event.shiftKey ? 32 : 8;
         let delta = 0;

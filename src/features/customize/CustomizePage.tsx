@@ -112,9 +112,9 @@ export function CustomizePage({ onNavigate }: RouteViewProps) {
 
   const showPluginWarning = pathname.startsWith("/customize/plugins") && !SKILLS_ENABLED && !pluginWarningDismissed;
 
-  // Official Xt (c63a78ed4): flex h-full w-full flex-col; qWt Mac spacer;
+  // Official Xt (c63a78ed4-DmFZsHvd): flex h-full w-full flex-col; qWt Mac spacer;
   // E7t nav + flex-1 overflow-y-auto bg-bg-100. Mounted under gos `_withSidebar`
-  // → Urs DesktopFrame (index-BELzQL5P jos), not a standalone shell.
+  // → Urs DesktopFrame (index-D35w9RK9 jos), not a standalone shell.
   return (
     <div className="flex h-full w-full flex-col">
       <div className="flex flex-1 min-h-0">

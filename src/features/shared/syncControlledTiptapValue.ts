@@ -1,7 +1,7 @@
 import type { Editor } from "@tiptap/core";
 
 /**
- * Official residual (index-BELzQL5P.js `vTt` + aYt CodeTipTapEditor + c119 Ye):
+ * Official residual (index-D35w9RK9.js `vTt` + aYt CodeTipTapEditor + c119 Ye):
  *
  *   onUpdate → k.current = true  (user has edited)
  *   hydrate setContent only while !k.current && empty editor

@@ -1,5 +1,5 @@
 /**
- * Official index-BELzQL5P kAt residual.
+ * Official c21f11e6d-CxD82rYo.js kAt residual.
  * Mount: sticky chat input, after t$t, wrapper `px-4 pb-2` (v$t ~228178).
  * connected → null; connecting → Reconnecting... + Wa spinner;
  * disconnected + countdown → qq7KTocoOK; else Disconnected + Reconnect/Retry now.
@@ -49,7 +49,7 @@ export function CoworkReconnectBanner({
   return (
     <div
       className="flex items-center justify-between gap-3 rounded-lg bg-bg-200 border border-border-300 px-3 py-2 text-sm text-text-200"
-      data-official-source="index-BELzQL5P.js:kAt"
+      data-official-source="c21f11e6d-CxD82rYo.js:kAt"
     >
       <div className="flex items-center gap-2">
         {isConnecting ? (

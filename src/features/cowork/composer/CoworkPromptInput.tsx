@@ -22,7 +22,7 @@ export type CoworkPromptInputHandle = {
   getEditor: () => Editor | null;
   insertSlashCommand: () => void;
   /**
-   * Official promptInputRef.setContent residual (index-BELzQL5P setPrompt forceUpdateTiptap):
+   * Official promptInputRef.setContent residual (c21f11e6d-CxD82rYo.js setPrompt forceUpdateTiptap):
    * imperative hydrate that bypasses controlled sync guards (empty trailingBreak / userEdited).
    */
   setContent: (text: string) => void;
@@ -36,7 +36,7 @@ type CoworkPromptInputProps = {
   /** Official static yYe fallback when not rotating. */
   placeholder: string;
   /**
-   * Official yAt carousel strings (He = XLcM6WHfQR + jGTFVKPV2+).
+   * Official onpage polish uses single tV2NkM49Bx (no XLc/jGT carousel).
    * When provided and empty, hides ProseMirror ::before and mounts RotatingPlaceholder.
    */
   rotatingPlaceholders?: string[];
@@ -187,7 +187,7 @@ function useCoworkPromptEditor(input: CoworkPromptEditorInput) {
 }
 
 /**
- * Official wTt onKeyDownCapture (index-BELzQL5P ~6746850):
+ * Official wTt onKeyDownCapture (c21f11e6d-CxD82rYo.js ~6746850):
  * Enter submits when slash menu idle, !shiftKey, !altKey, !isComposing.
  * On desktop (!Yh mobile) plain Enter submits; Shift+Enter inserts newline.
  * Meta/Ctrl+Enter also submits (mobile path when Yh()).

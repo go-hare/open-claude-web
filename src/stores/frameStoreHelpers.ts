@@ -17,8 +17,9 @@ type PersistedDFrameState = {
    */
   collapsedGroupsByMode?: unknown;
   customGroupAssignments?: unknown; customGroupOrder?: unknown; customGroups?: unknown;
-  darkerCode?: unknown; groupByByMode?: unknown; mode?: unknown; navPinnedIds?: unknown; pinnedOrder?: unknown; seenDragPinHint?: unknown;
+  darkerCode?: unknown; groupByByMode?: unknown; mode?: unknown; navPinnedIds?: unknown; navHasCodeRoutinesByOrg?: unknown; pinnedOrder?: unknown; seenDragPinHint?: unknown;
   sidebarWidth?: unknown; sortByByMode?: unknown; systemFont?: unknown;
+  showEmptyGroups?: unknown; showPrStatus?: unknown;
 };
 
 export function clampSidebarWidth(width: number): number {
@@ -54,6 +55,7 @@ export function createInitialFrameState(): FrameState {
     darkerCode: getBoolean(persisted.darkerCode),
     groupByByMode: getEnumByMode<DFrameGroupBy>(persisted.groupByByMode, GROUP_BY_VALUES),
     navPinnedIds: getNavPinnedIds(persisted.navPinnedIds),
+    navHasCodeRoutinesByOrg: officialNavHasCodeRoutinesByOrgFromPersist(persisted.navHasCodeRoutinesByOrg),
     pinnedOrder: getStringArray(persisted.pinnedOrder),
     seenDragPinHint: getBoolean(persisted.seenDragPinHint),
     sidebarCollapsed: getBoolean(persisted.collapsed),
@@ -64,6 +66,8 @@ export function createInitialFrameState(): FrameState {
     sortByByMode: getEnumByMode<DFrameSortBy>(persisted.sortByByMode, SORT_BY_VALUES),
     systemFont: getBoolean(persisted.systemFont),
     moreOpen: false,
+    showEmptyGroups: getBoolean(persisted.showEmptyGroups, false),
+    showPrStatus: getBoolean(persisted.showPrStatus, true),
   };
 }
 
@@ -179,7 +183,9 @@ function readPersistedDFrameState(): PersistedDFrameState {
   } catch { return {}; }
 }
 
-function getBoolean(value: unknown) { return typeof value === "boolean" ? value : false; }
+function getBoolean(value: unknown, fallback = false) {
+  return typeof value === "boolean" ? value : fallback;
+}
 function getStringArray(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }
 
 /**
@@ -220,6 +226,16 @@ function mapCollapsedGroupsByMode(
   return next;
 }
 function getNavPinnedIds(value: unknown): string[] | null { return value === null || !Array.isArray(value) ? null : getStringArray(value); }
+
+/** Official shared-50 merge: keep only `true` org flags. */
+export function officialNavHasCodeRoutinesByOrgFromPersist(value: unknown): Record<string, true> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, flag]) => flag === true)
+      .map(([key]) => [key, true as const]),
+  );
+}
 function getCustomGroups(value: unknown): DFrameCustomGroup[] {
   return Array.isArray(value) ? value.filter((item): item is DFrameCustomGroup => Boolean(item) && typeof item.id === "string" && typeof item.name === "string") : [];
 }

@@ -4,7 +4,7 @@ import type { RouteViewProps } from "../../app/routes";
 import { CoworkNewTaskPage } from "./newTask/CoworkNewTaskPage";
 
 /**
- * Official residual (index-BELzQL5P.js):
+ * Official residual (c62135ccf-Dn28vJ3V.js):
  *   path:"task/new" → Zb()? null : S6t
  *   Zb = account isLoading || onboarding gate
  *   _6t (inside S6t path): "loading"===e.kind || void 0===h → null

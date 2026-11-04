@@ -16,7 +16,7 @@ export function CoworkBrowserExtensionDetailPanel({ highlightId, onClose, resour
   const isSwitching = useCoworkBrowserSwitching();
   const toolCalls = useMemo(() => browserExtensionToolCalls(resources), [resources]);
   return (
-    <div className="flex h-full flex-col pb-1 pl-5 pt-3" data-official-source="index-BELzQL5P.js:RRt BrowserExtensionActivityDetailWrapper">
+    <div className="flex h-full flex-col pb-1 pl-5 pt-3" data-official-source="c21f11e6d-CxD82rYo.js:RRt BrowserExtensionActivityDetailWrapper">
       <div className="sticky flex items-center gap-2 pr-5">
         <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-bg-000 rounded-md border border-border-300 text-text-400">
           <Icon name="Globe" customSize={16} />
@@ -62,7 +62,7 @@ function CoworkConnectedBrowsersSummary({ interactive }: { interactive?: boolean
   if (!isSupported) return null;
   const countLabel = isLoading && browsers.length === 0 ? "Checking connected browsers…" : browserCountLabel(browsers.length);
   return (
-    <div className="flex flex-col gap-2" data-official-source="index-BELzQL5P.js:ERt ConnectedBrowsersSummary">
+    <div className="flex flex-col gap-2" data-official-source="c21f11e6d-CxD82rYo.js:ERt ConnectedBrowsersSummary">
       <div className="text-sm text-text-200">Connected browsers</div>
       <div className="text-sm text-text-400">Chrome instances signed in to your account that Claude can automate.</div>
       <div className="rounded-lg border border-border-300 bg-bg-100">

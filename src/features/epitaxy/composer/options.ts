@@ -3,6 +3,13 @@ import {
   formatCoworkModelDisplayName,
   normalizeSelectorModelValue,
 } from "../../cowork/composer/useCoworkModelOptions";
+import {
+  permissionModeLabel,
+  permissionModeOptions as officialPermissionModeOptions,
+} from "../session/officialComposerOptions";
+
+export { permissionModeLabel };
+export type { PermissionModeCatalogText } from "../session/officialComposerOptions";
 
 /**
  * @deprecated Hardcoded Sonnet/Opus invent — use useCodeModelOptions() (Ye("ccr_model")).
@@ -12,14 +19,8 @@ export const codeModelOptions: Array<{ label: string; value: string }> = [
   { label: "Default", value: "default" },
 ];
 
-export const permissionModeOptions: Array<{ label: string; value: PermissionMode }> = [
-  { label: "询问权限", value: "default" },
-  { label: "接受编辑", value: "acceptEdits" },
-  { label: "规划模式", value: "plan" },
-  // Official Os can include auto (settings permissions.defaultMode); label residual "Auto".
-  { label: "Auto", value: "auto" },
-  { label: "绕过权限", value: "bypassPermissions" },
-];
+export const permissionModeOptions: Array<{ label: string; value: PermissionMode }> =
+  officialPermissionModeOptions as Array<{ label: string; value: PermissionMode }>;
 
 export const effortOptions: Array<{ label: string; value: EffortLevel }> = [
   { label: "Low", value: "low" },
@@ -44,10 +45,6 @@ export function modelLabel(value: string, allowedValues: string[] = []) {
   const normalized = normalizeSelectorModelValue(value, allowedValues);
   if (normalized === "default") return "Default";
   return formatCoworkModelDisplayName(normalized);
-}
-
-export function permissionModeLabel(value: PermissionMode) {
-  return permissionModeOptions.find((option) => option.value === value)?.label ?? value;
 }
 
 export function effortLabel(value: EffortLevel) {

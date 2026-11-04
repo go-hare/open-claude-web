@@ -1,5 +1,5 @@
 /**
- * Official jue / N1e+E1e (index-BELzQL5P ~55406, ~113478): map SDK rate_limit_info → messageLimits entry.
+ * Official jue / N1e+E1e (c21f11e6d-CxD82rYo.js ~55406, ~113478): map SDK rate_limit_info → messageLimits entry.
  */
 
 const RATE_LIMIT_TYPE_KEY = {
@@ -174,7 +174,7 @@ export function extractRateLimitInfoFromMessageEvent(
 }
 
 /**
- * Official Tke.scanTranscript (index-BELzQL5P ~71042): walk transcript newest→oldest;
+ * Official Tke.scanTranscript (c21f11e6d-CxD82rYo.js ~71042): walk transcript newest→oldest;
  * first rate_limit_event wins. Apply only when mapped is not within_limit and
  * resetsAt is defined and still in the future (unix seconds).
  * Used by seedTranscript / reseedTranscript / appendTail / transcript case.

@@ -1,5 +1,5 @@
 /**
- * Official Kfe / Gfe inline alert (index-BELzQL5P.js).
+ * Official Kfe / Gfe inline alert (index-D35w9RK9.js).
  * Gfe: flex w-fit rounded-xl p-3 gap-3 items-start text-sm border-0.5 border-border-200
  *   main / warning / danger variants.
  */

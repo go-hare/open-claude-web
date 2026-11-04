@@ -9,6 +9,8 @@ import {
   type PaneSlot,
 } from "../../stores/paneStore";
 import { EpitaxyTileLayout } from "./EpitaxyFrameSurface";
+import { OfficialSplitSuggestionToast } from "./session/OfficialSplitSuggestionToast";
+import { OfficialPendingNavFrame } from "./session/OfficialPendingNavFrame";
 import {
   OfficialChatTileShell,
   type OfficialTranscriptMode,
@@ -22,15 +24,36 @@ import {
 } from "./session/officialCodeSessionStore";
 import { officialSideChatStore } from "./session/officialSideChatStore";
 import { setDraftPermissionMode } from "./codeDraftComposerStore";
+import { readComposerDraftAgent } from "./officialComposerDraftStore";
 import type { PermissionMode } from "../../adapters/desktopBridge";
 import {
+  officialTitlebarFilesAvailable,
   useOfficialFilesBrowserMenuGate,
 } from "./session/OfficialFilesBrowserPane";
 import { useOfficialFramebufferMenuGate } from "./session/OfficialFramebufferPane";
 import { sessionHasOfficialRuns } from "./session/OfficialRunsPane";
 import { type OfficialFileViewTarget as OfficialFileViewTargetImported } from "./session/OfficialFilePane";
 import { type OfficialPreviewTarget as OfficialPreviewTargetImported } from "./session/OfficialPreviewPane";
-import { EpitaxySidePaneColumn, chatDefaultFlex, defaultTerminalTabId, sidePaneMinWidth, terminalPtyKey } from "./session/EpitaxySidePanes";
+import {
+  isOfficialHtmlPreviewServerId,
+  isOfficialTtHtmlPreviewPath,
+  officialLoadHtmlPreview,
+  officialTtHtmlPreviewAbsPath,
+  useOfficialHtmlPreviewAutoOpen,
+} from "./session/officialHtmlPreviewAutoOpen";
+import { officialAgentFromSearch, replaceOfficialConsumedSearch, useOfficialPromptUrlSeed } from "./session/officialPromptUrl";
+import { useI18nText } from "../../i18n/footerMenuMessages";
+import { SESSION_LOAD_MESSAGES, SIDE_CHAT_MESSAGES } from "./officialCodeChromeMessages";
+import { EpitaxySidePaneColumn, chatDefaultFlex, sidePaneMinWidth } from "./session/EpitaxySidePanes";
+import {
+  officialAsciinemaPlayCommand,
+  officialEpitaxyShellRunStore,
+  officialFlushPendingShellCommand,
+} from "./session/officialEpitaxyShellRunStore";
+import {
+  OFFICIAL_DEFAULT_TERMINAL_TAB_ID,
+  officialTerminalPtyKey,
+} from "./session/officialEpitaxyTerminalTabsStore";
 import {
   EpitaxyTranscriptActionContext,
   type EpitaxySessionType,
@@ -38,6 +61,7 @@ import {
   type OfficialSubagentTarget,
 } from "./session/epitaxyTranscriptActionContext";
 import {
+  parseOfficialPlan,
   parseOfficialTasks,
 } from "./session/officialTasksAndPlan";
 import {
@@ -78,6 +102,12 @@ import {
   residualChatFlex,
   residualSideColumns,
 } from "./session/officialTileLayout";
+import {
+  isEpitaxyPopoutWindow,
+  officialViewPanePopoutTitle,
+  readEpitaxyPopoutHydration,
+  readEpitaxyPopoutPane,
+} from "./session/epitaxyPopoutWindow";
 import {
   ExistingSessionComposer,
   type OfficialComposerSurfaceApi,
@@ -133,7 +163,20 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
   useEffect(() => {
     void loadOfficialThinkingSparkAnimation();
   }, []);
+  // Official bE: session bound still strips Tb keys; skip folder/repos/environment.
+  useEffect(() => {
+    replaceOfficialConsumedSearch();
+  }, []);
   const sessionRef = useMemo(() => activeSessionId ? { id: activeSessionId, type: sessionType } : null, [activeSessionId, sessionType]);
+  const loadBucket = useOfficialCodeSessionBucket(activeSessionId);
+  const sessionLoadPending = Boolean(activeSessionId)
+    && loadBucket.messages.length === 0
+    && (loadBucket.isTranscriptPending || loadBucket.isMetaPending)
+    && loadBucket.compactionStatus !== "compacting";
+  const popoutPane = readEpitaxyPopoutPane();
+  const sidePanePersistKey = popoutPane
+    ? `${EPITAXY_SIDE_PANE_PERSIST_KEY}.popout.${popoutPane}`
+    : EPITAXY_SIDE_PANE_PERSIST_KEY;
 
   useFocusedSession(activeSessionId);
 
@@ -186,11 +229,16 @@ export function EpitaxyFramePage({ hideComposer, landingActions, landingBody, on
   // session switch re-inits workers (~1s longtask).
   // Residual kI(sidePanePersistKey=EPITAXY_SIDE_PANE_PERSIST_KEY): primary Nr store.
   return (
-    <OfficialSidePaneStoreProvider persistKey={EPITAXY_SIDE_PANE_PERSIST_KEY}>
+    <OfficialSidePaneStoreProvider persistKey={sidePanePersistKey}>
       <div className="epitaxy-root select-none h-full w-full flex flex-col">
-        <div className="flex-1 min-h-0">
+        <OfficialPendingNavFrame className="flex-1 min-h-0" pending={sessionLoadPending}>
           <EpitaxyTileLayout>{renderChatTile(undefined, true)}</EpitaxyTileLayout>
-        </div>
+        </OfficialPendingNavFrame>
+        <OfficialSplitSuggestionToast
+          enabled
+          pathname={typeof window === "undefined" ? "" : window.location.pathname}
+          sessionRef={sessionRef}
+        />
       </div>
     </OfficialSidePaneStoreProvider>
   );
@@ -245,10 +293,16 @@ function EpitaxySecondPane({ onClose, onNavigate, paneIndex, sessionId, slot }: 
     </OfficialChatTileShell>
   ), [onChatPanelBack, onClose, onNavigate, paneIndex, sessionId, sessionRef, sessionType]);
 
+  const loadBucket = useOfficialCodeSessionBucket(sessionId);
+  const sessionLoadPending = loadBucket.messages.length === 0
+    && (loadBucket.isTranscriptPending || loadBucket.isMetaPending)
+    && loadBucket.compactionStatus !== "compacting";
   return (
     <OfficialSidePaneStoreProvider persistKey={sidePanePersistKey}>
       <div className="epitaxy-root select-none flex-1 min-h-0 flex flex-col overflow-hidden">
-        <EpitaxyTileLayout>{renderChatTile()}</EpitaxyTileLayout>
+        <OfficialPendingNavFrame className="flex-1 min-h-0" pending={sessionLoadPending}>
+          <EpitaxyTileLayout>{renderChatTile()}</EpitaxyTileLayout>
+        </OfficialPendingNavFrame>
       </div>
     </OfficialSidePaneStoreProvider>
   );
@@ -272,6 +326,7 @@ type EpitaxyChatPanelProps = {
 };
 
 function EpitaxyChatPanel({
+  draftPersistKey,
   dragHandle,
   hideComposer = false,
   initialSessionId,
@@ -332,12 +387,31 @@ function EpitaxyChatPanel({
     rateLimitExceeded: residualGaFromMessageLimits(messageLimits),
     isRemoteUploading: false,
   });
+  /**
+   * Official vI `[E,P]=useState(()=>l??wr(a)?.agent)` — eI chip seed.
+   * Official remounts vI when `o` changes (`Q=V.current`). Product keeps this
+   * panel mounted A→B, so re-seed when persistKey changes. Falsy hides.
+   */
+  const persistAgentKeyRef = useRef(draftPersistKey);
+  const [agent, setAgent] = useState(() =>
+    officialAgentFromSearch(typeof window === "undefined" ? "" : window.location.search)
+    ?? readComposerDraftAgent(draftPersistKey),
+  );
+  let liveAgent = agent;
+  if (persistAgentKeyRef.current !== draftPersistKey) {
+    persistAgentKeyRef.current = draftPersistKey;
+    liveAgent =
+      officialAgentFromSearch(typeof window === "undefined" ? "" : window.location.search)
+      ?? readComposerDraftAgent(draftPersistKey);
+    setAgent(liveAgent);
+  }
   // Residual Ur / zr — this pane's Nr store (primary v1 or secondary v1.slot).
   const sidePaneStore = useOfficialSidePaneStoreApi();
   // Residual live tileLayout / sidePane / transcriptMode in Nr (not product useState flat sideTiles).
   const tileLayout = useOfficialSidePaneSessionStore((s) => s.tileLayout);
   const residualSidePane = useOfficialSidePaneSessionStore((s) => s.sidePane);
   const transcriptMode = useOfficialSidePaneSessionStore((s) => s.transcriptMode);
+  const previewServerId = useOfficialSidePaneSessionStore((s) => s.previewServerId);
   const sideTiles = useMemo(() => residualOfficialViewPanes(tileLayout), [tileLayout]);
   const sideColumns = useMemo(() => residualSideColumns(tileLayout), [tileLayout]);
   const chatFlex = useMemo(() => residualChatFlex(tileLayout), [tileLayout]);
@@ -345,8 +419,22 @@ function EpitaxyChatPanel({
   const activeView: OfficialViewPane | undefined =
     residualSidePane === "none" ? undefined : residualSidePane;
   // Residual Lr.fileView / subagentView live in Nr; product mirrors for render (previewTarget product-only).
-  const [fileView, setFileViewLocal] = useState<OfficialFileViewTarget | null>(null);
+  const hostedHydration = useMemo(() => readEpitaxyPopoutHydration(), []);
+  const [fileView, setFileViewLocal] = useState<OfficialFileViewTarget | null>(() => hostedHydration?.fileView ?? null);
+  const [fileTabs, setFileTabs] = useState<string[]>(() => hostedHydration?.fileTabs ?? []);
   const [previewTarget, setPreviewTarget] = useState<OfficialPreviewTarget | null>(null);
+  useOfficialHtmlPreviewAutoOpen({
+    enabled: isPanelActive,
+    sessionCwd: session?.cwd,
+    onOpen: ({ filePath, serverId }) => {
+      // Official Wu: bindPreviewServer + setSidePane("preview") + addHtmlFile(filePath).
+      setPreviewTarget({ path: filePath });
+      sidePaneStore.getState().addHtmlFile(filePath);
+      sidePaneStore.getState().bindPreviewServer(serverId);
+      sidePaneStore.getState().setSidePane("preview");
+    },
+    sessionId: initialSessionId,
+  });
   const [subagentView, setSubagentViewLocal] = useState<OfficialSubagentTarget | null>(null);
   const setFileView = useCallback((view: OfficialFileViewTarget | null) => {
     setFileViewLocal(view);
@@ -357,20 +445,73 @@ function EpitaxyChatPanel({
     sidePaneStore.getState().setSubagentView(view ?? undefined);
   }, [sidePaneStore]);
   const [sidePaneWidth, setSidePaneWidth] = useState<number | undefined>(undefined);
+  const [popoutAlwaysOnTop, setPopoutAlwaysOnTop] = useState(false);
   const title = officialSessionHeaderTitle(session, initialSessionId);
   const effectiveSessionRef = sessionRef ?? (initialSessionId ? { id: initialSessionId, type: sessionType } : null);
   const bridge = desktopBridge.LocalSessions;
   const tasks = useMemo(() => parseOfficialTasks(messages), [messages]);
   const hasRunningTasks = useMemo(() => tasks.some((task) => task.status === "running"), [tasks]);
+  const taskCount = tasks.length;
+  const hasPlan = useMemo(() => {
+    const plan = parseOfficialPlan(messages);
+    return Boolean(plan.content);
+  }, [messages]);
   // Official YR Screen: T && (A || u.has("framebuffer"))
   const framebufferPaneOpen = sideTiles.includes("framebuffer");
   const canOpenFramebuffer = useOfficialFramebufferMenuGate(session?.cwd, framebufferPaneOpen);
-  // Official VC(): el("ccd_file_browser") && listSessionDirectory && fetchMentionOptions
+  // Official VC(): el("ccd_file_browser") && listSessionDirectory && fetchMentionOptions — ⇧⌘F.
   const canOpenBrowser = useOfficialFilesBrowserMenuGate();
+  // Official p4 `A_`/`W`: Files overflow without ccd_file_browser.
+  const canOpenFiles = officialTitlebarFilesAvailable(effectiveSessionRef?.type);
   // Residual setSidePane(e): if tile already present only focus; else ur() insert.
   const openSidePane = useCallback((view: OfficialViewPane) => {
     sidePaneStore.getState().setSidePane(view);
   }, [sidePaneStore]);
+  const hostedPopoutPane = hostedHydration?.pane ?? readEpitaxyPopoutPane();
+  useEffect(() => {
+    if (!hostedPopoutPane) return;
+    sidePaneStore.getState().setSidePane(hostedPopoutPane);
+  }, [hostedPopoutPane, sidePaneStore]);
+  useEffect(() => {
+    if (!hostedPopoutPane) return;
+    void desktopBridge.Window.getAlwaysOnTop?.().then((on) => {
+      setPopoutAlwaysOnTop(on === true);
+    });
+  }, [hostedPopoutPane]);
+  const dockPopoutToMain = useCallback(() => {
+    void desktopBridge.Window.dockPopout?.();
+  }, []);
+  useEffect(() => {
+    const subscribe = desktopBridge.Window.onEpitaxyPopoutDocked;
+    if (!subscribe) return;
+    return subscribe((entry) => {
+      if (!entry.paneTileId) return;
+      if (entry.sessionId && initialSessionId && entry.sessionId !== initialSessionId) return;
+      if (hostedPopoutPane) return;
+      const pane = entry.paneTileId as OfficialViewPane;
+      sidePaneStore.getState().setSidePane(pane);
+      if (pane === "file") {
+        if (entry.fileView?.path) {
+          setFileView({ ...entry.fileView, scrollNonce: Date.now() });
+        }
+        if (Array.isArray(entry.fileTabs) && entry.fileTabs.length > 0) {
+          setFileTabs(entry.fileTabs);
+        }
+      }
+    });
+  }, [hostedPopoutPane, initialSessionId, setFileView, sidePaneStore]);
+  const togglePopoutAlwaysOnTop = useCallback(() => {
+    const next = !popoutAlwaysOnTop;
+    setPopoutAlwaysOnTop(next);
+    void desktopBridge.Window.setAlwaysOnTop?.(next)?.then((on) => {
+      if (typeof on === "boolean") setPopoutAlwaysOnTop(on);
+    });
+  }, [popoutAlwaysOnTop]);
+  useEffect(() => {
+    const path = fileView?.path;
+    if (!path) return;
+    setFileTabs((current) => (current.includes(path) ? current : [...current, path]));
+  }, [fileView?.path]);
   // Residual closeSidePane(e): Zs(tileLayout, e); clear sidePane if focused was that tile.
   const closeSidePane = useCallback((view: OfficialViewPane) => {
     sidePaneStore.getState().closeSidePane(view);
@@ -391,10 +532,28 @@ function EpitaxyChatPanel({
     const sid = sidePaneStore.getState().previewServerId;
     if (sid) sidePaneStore.getState().unbindPreviewServer(sid);
   }, [setFileView, setSubagentView, sidePaneStore]);
-  const openFile = useCallback((target: OfficialFileViewTarget) => {
-    setFileView({ ...target, scrollNonce: Date.now() });
-    openSidePane("file");
-  }, [openSidePane, setFileView]);
+  /** Official cccc `nT`: openPopout then closeSidePane. */
+  const popOutSidePane = useCallback((view: OfficialViewPane) => {
+    const sessionId = effectiveSessionRef?.id;
+    const openPopout = desktopBridge.Window.openPopout;
+    if (!sessionId) return;
+    if (typeof openPopout !== "function") return;
+    const tabs = fileView?.path && !fileTabs.includes(fileView.path)
+      ? [...fileTabs, fileView.path]
+      : fileTabs;
+    void openPopout({
+      type: "epitaxy-side-pane",
+      sessionId,
+      sessionType: effectiveSessionRef?.type,
+      paneTileId: view,
+      title: officialViewPanePopoutTitle(view, session),
+      entryPoint: "header",
+      fileTabs: view === "file" ? tabs : undefined,
+      fileView: view === "file" && fileView ? fileView : undefined,
+    }).then((opened) => {
+      if (opened && !hostedPopoutPane) closeSidePane(view);
+    });
+  }, [closeSidePane, effectiveSessionRef, fileTabs, fileView, hostedPopoutPane, session]);
   const openPreview = useCallback((target: OfficialPreviewTarget) => {
     setPreviewTarget(target);
     openSidePane("preview");
@@ -411,6 +570,66 @@ function EpitaxyChatPanel({
   const openTasks = useCallback(() => openSidePane("tasks"), [openSidePane]);
   // Official Wk onOpenPlan → qn("plan") / setSidePane("plan").
   const openPlan = useCallback(() => openSidePane("plan"), [openSidePane]);
+  const runInTerminal = useCallback((command: string, runId?: string) => {
+    if (!initialSessionId || !command) return;
+    const ready = officialEpitaxyShellRunStore.getState().defaultTabReadySessionId === initialSessionId;
+    if (runId) officialEpitaxyShellRunStore.getState().runInline(runId, initialSessionId, command);
+    else officialEpitaxyShellRunStore.getState().queueCommand(initialSessionId, command);
+    openSidePane("terminal");
+    if (ready) {
+      officialFlushPendingShellCommand(initialSessionId, (ptyKey, data) => {
+        void bridge.writeShellPty?.(ptyKey, data);
+      });
+    }
+  }, [bridge, initialSessionId, openSidePane]);
+  const cancelInTerminal = useCallback(() => {
+    if (!initialSessionId) return;
+    const pending = officialEpitaxyShellRunStore.getState().pendingCommand;
+    const alreadyFlushed = !(pending && pending.sessionId === initialSessionId);
+    if (alreadyFlushed) {
+      void bridge.writeShellPty?.(
+        officialTerminalPtyKey(initialSessionId, OFFICIAL_DEFAULT_TERMINAL_TAB_ID),
+        "",
+      );
+    }
+    officialEpitaxyShellRunStore.getState().cancelInlineRun();
+  }, [bridge, initialSessionId]);
+  const openFile = useCallback((target: OfficialFileViewTarget) => {
+    const local = effectiveSessionRef?.type !== "remote";
+    const cwd = session?.cwd;
+    if (/\.cast$/i.test(target.path) && initialSessionId && local) {
+      const abs = officialTtHtmlPreviewAbsPath(target.path, cwd);
+      runInTerminal(officialAsciinemaPlayCommand(abs));
+      return;
+    }
+    // Official c119 `tt` `a`: local html/svg/pdf/mp4… → loadHtmlPreview + Preview; miss → File.
+    if (local && isOfficialTtHtmlPreviewPath(target.path)) {
+      const abs = officialTtHtmlPreviewAbsPath(target.path, cwd);
+      const nonce = Date.now();
+      void officialLoadHtmlPreview(abs).then(
+        (loaded) => {
+          if (!loaded) {
+            setFileView({ ...target, path: abs, scrollNonce: nonce });
+            openSidePane("file");
+            return;
+          }
+          setPreviewTarget({ path: abs });
+          sidePaneStore.getState().addHtmlFile(abs);
+          if (typeof loaded === "string" && isOfficialHtmlPreviewServerId(loaded)) {
+            sidePaneStore.getState().bindPreviewServer(loaded);
+          }
+          sidePaneStore.getState().setSidePane("preview");
+        },
+        () => {
+          setFileView({ ...target, path: abs, scrollNonce: nonce });
+          openSidePane("file");
+        },
+      );
+      return;
+    }
+    setFileView({ ...target, scrollNonce: Date.now() });
+    openSidePane("file");
+  }, [effectiveSessionRef?.type, initialSessionId, openSidePane, runInTerminal, session?.cwd, setFileView, sidePaneStore]);
   const openDiff = useCallback(() => openSidePane("diff"), [openSidePane]);
   const transcriptRef = useRef<OfficialTranscriptHandle | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
@@ -441,6 +660,9 @@ function EpitaxyChatPanel({
   const attachAsContext = useCallback((text: string) => {
     composerApiRef.current?.attachAsContext(text)
       ?? composerAttachRef.current?.(text);
+  }, []);
+  const insertFileMention = useCallback((path: string) => {
+    composerApiRef.current?.insertFileMention(path);
   }, []);
   const setComposerText = useCallback((text: string) => {
     composerApiRef.current?.setComposerText(text);
@@ -491,6 +713,9 @@ function EpitaxyChatPanel({
   const transcriptActionContext = useMemo(() => ({
     attachAsContext,
     attachPreviewAnnotation,
+    insertFileMention,
+    runInTerminal,
+    cancelInTerminal,
     bridge,
     cancelQueuedMessage,
     isResponding,
@@ -509,6 +734,9 @@ function EpitaxyChatPanel({
   }), [
     attachAsContext,
     attachPreviewAnnotation,
+    insertFileMention,
+    runInTerminal,
+    cancelInTerminal,
     bridge,
     cancelQueuedMessage,
     effectiveSessionRef,
@@ -597,6 +825,15 @@ function EpitaxyChatPanel({
   const rewindTurns = useMemo(() => collectOfficialRewindTurns(entries), [entries]);
 
   const errors = useErrorsOptional();
+  const sessionLoadText = useI18nText(SESSION_LOAD_MESSAGES);
+  const sideChatText = useI18nText(SIDE_CHAT_MESSAGES);
+  useOfficialPromptUrlSeed({
+    addError: errors?.addError,
+    enabled: isPanelActive,
+    isComposerReady: () => composerApiRef.current !== null,
+    sessionBound: Boolean(initialSessionId),
+    setComposerText,
+  });
   const onRewindPickerSelect = useCallback(
     async (uuid: string, text: string) => {
       // Official $a from DM pick: null → can't-rewind toast; else truncate+xt(prompt||text).
@@ -604,7 +841,7 @@ function EpitaxyChatPanel({
       if ((effectiveSessionRef?.type ?? "local") !== "local") return;
       const prompt = await bridge.rewind(initialSessionId, uuid);
       if (prompt === null) {
-        errors?.addError("Can't rewind to this message.", {
+        errors?.addError(sessionLoadText.cantRewindToThisMessage, {
           messageForLogging: "epitaxy-rewind-not-possible",
         });
         return;
@@ -614,12 +851,12 @@ function EpitaxyChatPanel({
         typeof prompt === "string" && prompt.length > 0 ? prompt : text;
       composerApiRef.current?.setComposerText(prefill);
     },
-    [bridge, effectiveSessionRef?.type, errors, initialSessionId, reload],
+    [bridge, effectiveSessionRef?.type, errors, initialSessionId, reload, sessionLoadText.cantRewindToThisMessage],
   );
 
   // Official session lk + Esc Esc — only when this chat panel is the active primary.
   useEpitaxyViewShortcuts({
-    canOpenBrowser,
+    canOpenBrowser: canOpenBrowser || canOpenFiles,
     enabled: isPanelActive,
     onClosePane: closeLastSidePane,
     onCycleTranscriptMode: cycleTranscriptMode,
@@ -629,7 +866,7 @@ function EpitaxyChatPanel({
     onToggleSideChat: isPanelActive
       ? () => {
           if (!effectiveSessionRef || effectiveSessionRef.type !== "local") {
-            errors?.addError("Side chat is local-only — not available for remote sessions.", {
+            errors?.addError(sideChatText.sideChatLocalOnly, {
               messageForLogging: "epitaxy-side-chat-remote",
             });
             return;
@@ -719,26 +956,8 @@ function EpitaxyChatPanel({
     const subscribe = menuEvents.onOpenFile ?? menuEvents.openFile;
     return subscribe?.(pickAndOpen) ?? undefined;
   }, [bridge, effectiveSessionRef, isPanelActive, openFile, session?.cwd]);
-  // Official ab Play: open terminal pane and write command into default shell PTY.
-  useEffect(() => {
-    const onRunInline = (event: Event) => {
-      const command = (event as CustomEvent<{ command?: string }>).detail?.command;
-      if (!command || !initialSessionId) return;
-      openSidePane("terminal");
-      const ptyKey = terminalPtyKey(initialSessionId, defaultTerminalTabId);
-      void (async () => {
-        try {
-          // Ensure PTY exists; OfficialShellPtyPane will also start/fit when mounted.
-          await bridge.startShellPty?.(ptyKey);
-          await bridge.writeShellPty?.(ptyKey, `${command}\n`);
-        } catch {
-          // Ignore run failures; user can retry from terminal.
-        }
-      })();
-    };
-    window.addEventListener("epitaxy-run-inline", onRunInline as EventListener);
-    return () => window.removeEventListener("epitaxy-run-inline", onRunInline as EventListener);
-  }, [bridge, initialSessionId, openSidePane]);
+  // Official ab Play is vt.run → Grt.queueCommand + setSidePane("terminal") (runInTerminal).
+  // Default-tab BR writes pendingCommand after onPtyReady.
   /**
    * Residual ca0135 Nr.reset(sessionId) — not invent hard-clear.
    * Live tileLayout/transcriptMode already in Nr; reset saves prev tree via xr, restore strip.
@@ -748,15 +967,34 @@ function EpitaxyChatPanel({
   useEffect(() => {
     const restored = sidePaneStore.getState().reset(initialSessionId);
     // Residual same-session keeps Lr.fileView/subagentView; cross-session Lr clears → undefined.
-    // Mirror store result into local React state (do not invent hard-clear).
-    setFileViewLocal(restored.fileView ?? null);
+    // Official c563 `at`: reset then c73 `Ns`/`Oe` with XO payload (empty popout clears persisted fileView).
+    const applyPopoutHydration = () => {
+      if (!hostedHydration) return;
+      setFileViewLocal(hostedHydration.fileView);
+      setFileTabs(hostedHydration.fileTabs);
+      sidePaneStore.getState().setFileView(hostedHydration.fileView ?? undefined);
+    };
+    if (hostedHydration) applyPopoutHydration();
+    else {
+      setFileViewLocal(restored.fileView ?? null);
+      setFileTabs([]);
+    }
     setSubagentViewLocal(restored.subagentView ?? null);
     // Product-only previewTarget (not residual Lr field) — clear when preview tile not restored.
     if (!restored.sideTiles.includes("preview")) setPreviewTarget(null);
+    const persistApi = (
+      sidePaneStore as {
+        persist?: { onFinishHydration?: (cb: () => void) => () => void };
+      }
+    ).persist;
+    const unsubHydration = hostedHydration
+      ? persistApi?.onFinishHydration?.(applyPopoutHydration)
+      : undefined;
     return () => {
+      unsubHydration?.();
       sidePaneStore.getState().saveLive(initialSessionId);
     };
-  }, [initialSessionId, sidePaneStore]);
+  }, [hostedHydration, initialSessionId, sidePaneStore]);
   // Official R (c119 Ka): parent only mirrors onScrollState from Gb.
   // showBottomFade/showScrollButton false comes solely from Xb unmount cleanup
   // (empty/loading branch). No invent parent effect on sessionId/entries.
@@ -864,6 +1102,7 @@ function EpitaxyChatPanel({
                       <OfficialWorkingStatus
                         isWorking={sessionWorking && (!reviewProgress || reviewProgress.status === "running")}
                         sessionId={initialSessionId}
+                        tasks={tasks}
                       />
                     </div>
                   </div>
@@ -887,6 +1126,7 @@ function EpitaxyChatPanel({
                         entries={entries}
                         isResponding={busy}
                         sessionRef={effectiveSessionRef}
+                        tasks={tasks}
                       />
                     </div>
                   </div>
@@ -928,9 +1168,7 @@ function EpitaxyChatPanel({
             </div>
           ) : null}
           <ExistingSessionComposer
-            // Remount per session so Mode/model useState seed runs with openSession meta
-            // (official be(n.permissionMode) first paint — no invent default flash).
-            key={initialSessionId}
+            agent={liveAgent}
             attachRef={composerAttachRef}
             bridge={bridge}
             queuedEntries={queuedEntries}
@@ -944,6 +1182,7 @@ function EpitaxyChatPanel({
             isResponding={busy}
             promptSuggestion={promptSuggestion}
             onOpenDiff={openDiff}
+            persistKey={draftPersistKey}
             onOpenPlan={openPlan}
             onPermissionModeChange={async (mode) => {
               // Official Wk onModeChange after plan Accept — host Mode pill + CLI set_permission_mode.
@@ -981,7 +1220,7 @@ function EpitaxyChatPanel({
             onStop={stopLiveTurn}
             onSubmit={async (text, input) => {
               // Official Gr (ca0135): onMutate noteQueuedSend+beginPendingTurn; local Hb via CLI echo `d`.
-              // Stable uuid ties cancelQueued / CLI echo (index-BELzQL5P zke).
+              // Stable uuid ties cancelQueued / CLI echo (cd5a31703 zke).
               const messageUuid = input?.messageUuid ?? createMessageUuid();
               const { wasMidTurn, uuid } = beginLocalUserTurn(text, messageUuid);
               scrollTranscriptToBottom();
@@ -1030,21 +1269,25 @@ function EpitaxyChatPanel({
   // Pierre pool (`sg`) is provided by EpitaxyFramePage / outer shell (official kI), not here.
   // Official vI (c11959232) return is jsxs(Ek) filling iE isolate. KI stack wrap
   // (relative h-full min-w-0 flex + nE.gap=12) only when a side column exists.
+  // Product: keep the KI wrap always so opening Tasks/Files does not remount Ek/Fu
+  // (ternary `hasSidePanes ? wrap : chatColumn` unmounted the transcript → flash).
   const chatColumn = (
     <OfficialEpitaxyDropZone
       className="h-full min-w-0 flex flex-col"
+      tileHost="chat"
       onFilesDropped={(files) => dropHandlersRef.current?.onFilesDropped(files)}
       onFolderDropped={(folders) => dropHandlersRef.current?.onFolderDropped(folders)}
       onNonImageFilesDropped={(files) => dropHandlersRef.current?.onNonImageFilesDropped(files)}
-      // Official Ek has no style. YI flex lives on the KI wrap only when a side column exists.
-      style={hasSidePanes ? chatTileStyle : undefined}
+      style={chatTileStyle}
     >
       <EpitaxyChatHeader
         activeView={activeView}
-        canOpenBrowser={canOpenBrowser}
+        agent={liveAgent}
+        canOpenFiles={canOpenFiles}
         canOpenFramebuffer={canOpenFramebuffer}
         canOpenRuns={sessionHasOfficialRuns(session, effectiveSessionRef)}
         dragHandle={dragHandle}
+        hasPlan={hasPlan}
         hasRunningTasks={hasRunningTasks}
         isTitleLoading={isLoading && !session}
         isTopLeft={isTopLeft}
@@ -1053,8 +1296,10 @@ function EpitaxyChatPanel({
         onViewSelect={selectView}
         openViews={sideTiles}
         paneIndex={paneIndex}
+        previewServerId={previewServerId}
         session={session}
         sessionRef={effectiveSessionRef}
+        taskCount={taskCount}
         title={title}
         transcriptMode={transcriptMode}
       />
@@ -1063,9 +1308,42 @@ function EpitaxyChatPanel({
   );
   return (
     <EpitaxyTranscriptActionContext.Provider value={transcriptActionContext}>
-      {hasSidePanes ? (
-      <div className="relative h-full min-w-0 flex" style={{ gap: 12 }}>
-        {chatColumn}
+      <div
+        className="relative h-full min-w-0 flex"
+        style={{ gap: hostedPopoutPane || hasSidePanes ? (hostedPopoutPane ? 0 : 12) : 0 }}
+      >
+        {hostedPopoutPane ? null : chatColumn}
+        {hostedPopoutPane && sideTiles.length === 0 ? (
+            <EpitaxySidePaneColumn
+              key="popout-host"
+              fileView={fileView}
+              flex={1}
+              isTopLeft
+              messages={messages}
+              onCloseAll={() => { void desktopBridge.Window.close(); }}
+              onCloseTile={() => { void desktopBridge.Window.close(); }}
+              onFileViewChange={setFileView}
+              onDock={dockPopoutToMain}
+              popoutAlwaysOnTop={popoutAlwaysOnTop}
+              onTogglePopoutAlwaysOnTop={togglePopoutAlwaysOnTop}
+              hideCloseButton
+              fileTabs={fileTabs}
+              onFileTabsChange={setFileTabs}
+              onSidePaneWidthChange={setSidePaneWidth}
+              previewTarget={previewTarget}
+              renderSubagent={(view) => (
+                <OfficialSubagentPane
+                  messages={messages}
+                  onRefreshTranscript={refreshSubagentTranscript}
+                  subagentView={view}
+                />
+              )}
+              session={session}
+              sessionRef={effectiveSessionRef}
+              sideTiles={[hostedPopoutPane]}
+              subagentView={subagentView}
+            />
+        ) : null}
         {sideColumns.map((column, columnIndex) => {
           // Residual column tiles → OfficialViewPane ids (product supports these kinds only).
           const renderTiles = column.tiles.filter((id): id is OfficialViewPane =>
@@ -1076,10 +1354,20 @@ function EpitaxyChatPanel({
             <EpitaxySidePaneColumn
               key={`side-col-${columnIndex}-${renderTiles.join("|")}`}
               fileView={fileView}
-              isTopLeft={isTopLeft && columnIndex === 0}
+              flex={hostedPopoutPane ? 1 : column.flex}
+              isTopLeft={(hostedPopoutPane || isTopLeft) && columnIndex === 0}
               messages={messages}
-              onCloseAll={closeAllSidePanes}
-              onCloseTile={closeSidePane}
+              onCloseAll={hostedPopoutPane ? () => { void desktopBridge.Window.close(); } : closeAllSidePanes}
+              onCloseTile={hostedPopoutPane ? () => { void desktopBridge.Window.close(); } : closeSidePane}
+              onFileViewChange={setFileView}
+              onPopOut={hostedPopoutPane ? undefined : popOutSidePane}
+              onDock={hostedPopoutPane ? dockPopoutToMain : undefined}
+              popoutAlwaysOnTop={hostedPopoutPane ? popoutAlwaysOnTop : undefined}
+              onTogglePopoutAlwaysOnTop={hostedPopoutPane ? togglePopoutAlwaysOnTop : undefined}
+              showExpand={!hostedPopoutPane}
+              hideCloseButton={Boolean(hostedPopoutPane)}
+              fileTabs={fileTabs}
+              onFileTabsChange={setFileTabs}
               onSidePaneWidthChange={setSidePaneWidth}
               previewTarget={previewTarget}
               renderSubagent={(view) => (
@@ -1092,14 +1380,13 @@ function EpitaxyChatPanel({
               session={session}
               sessionRef={effectiveSessionRef}
               // First residual side column keeps product resize width; extra columns use residual flex.
-              sidePaneWidth={columnIndex === 0 ? sidePaneWidth : undefined}
+              sidePaneWidth={hostedPopoutPane ? undefined : columnIndex === 0 ? sidePaneWidth : undefined}
               sideTiles={renderTiles}
               subagentView={subagentView}
             />
           );
         })}
       </div>
-      ) : chatColumn}
       {/* Official DM rewind picker — Esc Esc / openRewindPicker residual. */}
       <OfficialRewindPicker
         isOpen={rewindPickerOpen}

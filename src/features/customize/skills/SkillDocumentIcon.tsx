@@ -1,7 +1,7 @@
 import type { ReactNode, SVGProps } from "react";
 
 /**
- * Official index-BELzQL5P Vv (exported as gO) — document glyph for Skills nav (E7t I7t size 16)
+ * Official index-D35w9RK9 Vv (exported as gO) — document glyph for Skills nav (E7t I7t size 16)
  * and Built-in skill rows (pb tile + Vv size 16). Paths from official Vv; master viewBox 0 0 20 20.
  * Must not use LightningBoltZap / spark — that is a different icon.
  */

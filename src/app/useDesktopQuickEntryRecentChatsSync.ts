@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { fetchBootstrapPayload } from "../features/settings/accountSettingsApi";
 
 /**
- * Official ion-dist residual (index-BELzQL5P.js):
+ * Official ion-dist residual (index-D35w9RK9.js):
  *
  *   const { data: d } = Ck({ limit: 5, starred: false });
  *   const u = d?.data;

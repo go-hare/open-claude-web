@@ -1,5 +1,5 @@
 /**
- * Official index-BELzQL5P `D_e` / `wZ` (c119 `xn`) — persist `epitaxy-unread-v1`.
+ * Official cd5a31703 `D_e` / `wZ` (c119 `xn`) — persist `epitaxy-unread-v1`.
  *
  *   unreadIds: string[]
  *   markUnread / markRead / clearAll  (no-op if unchanged)

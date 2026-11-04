@@ -20,6 +20,8 @@ export type OfficialBackgroundTask = {
   description: string;
   index: number;
   lastToolName?: string;
+  /** Official Jp L: `/tasks/${taskId}.output` from CLI timeout/background tool_result. */
+  outputFile?: string;
   prompt?: string;
   result?: string;
   startedAt?: number;
@@ -54,6 +56,13 @@ const taskSummaryPattern = /<summary>([^<]+)<\/summary>/;
 const taskResultPattern = /<result>([\s\S]*?)<\/result>/;
 const taskToolUseIdPattern = /<tool-use-id>([^<]+)<\/tool-use-id>/;
 const taskTypePattern = /<task-type>([^<]+)<\/task-type>/;
+const taskOutputFilePattern = /<output-file>([^<]+)<\/output-file>/;
+/** Official c62da `ze` — timeout / background bash writes an output file. */
+const bashMovedToBackgroundPattern = new RegExp(
+  "^[ \\t]*Command (?:(?:running in background|was manually backgrounded by user) with ID: ([^\\s.]+)|(?:did not complete within its \\d+s timeout and )?was moved to the background \\(ID: ([^\\s.)]+)\\)[^\\.\\n\\r\\u2028\\u2029]*)\\. Output is being written to: ([^\\n]+)",
+  "gm",
+);
+const officialTaskOutputFileIdPattern = /^[a-z0-9][a-z0-9_-]*$/;
 const taskDescriptionPattern =
   /^(Agent|Workflow|Background command|Monitor|Remote task) "(.+?)" (?:completed|failed|was|stopped|stream|script|appears)/;
 const taskTypeFromNotification: Record<string, string> = {
@@ -92,7 +101,10 @@ export function parseOfficialTasks(messages: ChatMessage[]): OfficialBackgroundT
         if (notification.toolUseId) task.toolUseId ??= notification.toolUseId;
         if (notification.taskType) task.taskType ??= notification.taskType;
         if (notification.description && task.description === task.taskId) task.description = notification.description;
-        if (task.completedAt === undefined && notification.status !== "running") task.completedAt = timestampFromRaw(raw, message);
+        if (notification.outputFile && isOfficialTaskOutputFile(notification.outputFile, notification.taskId)) {
+          task.outputFile = notification.outputFile;
+        }
+        if (task.completedAt === undefined && notification.status !== "running") task.completedAt = timestampFromRaw(raw);
       }
       if (raw.type === "user") {
         applyAgentAsyncLaunch(ensureTask, raw, message);
@@ -106,7 +118,7 @@ export function parseOfficialTasks(messages: ChatMessage[]): OfficialBackgroundT
     const taskId = stringValue(raw.task_id) ?? stringValue(raw.taskId);
     if (!taskId) continue;
     const task = ensureTask(taskId);
-    const timestamp = timestampFromRaw(raw, message);
+    const timestamp = timestampFromRaw(raw);
     const toolUseId = stringValue(raw.tool_use_id) ?? stringValue(raw.toolUseId);
     if (toolUseId) task.toolUseId = toolUseId;
 
@@ -118,6 +130,8 @@ export function parseOfficialTasks(messages: ChatMessage[]): OfficialBackgroundT
         task.taskType = stringValue(raw.task_type) ?? stringValue(raw.taskType) ?? task.taskType;
         task.prompt = stringValue(raw.prompt) ?? task.prompt;
         if (task.startedAt === undefined) task.startedAt = timestamp;
+        const startedOutput = stringValue(raw.output_file) ?? stringValue(raw.outputFile);
+        if (startedOutput && isOfficialTaskOutputFile(startedOutput, taskId)) task.outputFile = startedOutput;
         break;
       case "task_progress":
         if (task.startedAt === undefined) task.startedAt = timestamp;
@@ -133,10 +147,13 @@ export function parseOfficialTasks(messages: ChatMessage[]): OfficialBackgroundT
         if (task.completedAt === undefined) task.completedAt = timestamp;
         task.summary = stringValue(raw.summary) ?? task.summary;
         task.usage = normalizeTaskUsage(raw.usage) ?? task.usage;
+        const notifiedOutput = stringValue(raw.output_file) ?? stringValue(raw.outputFile);
+        if (notifiedOutput && isOfficialTaskOutputFile(notifiedOutput, taskId)) task.outputFile = notifiedOutput;
         break;
     }
   }
 
+  enrichOfficialBashTasks(tasks, messages);
   return Array.from(tasks.values());
 }
 
@@ -150,6 +167,7 @@ function parseTaskNotifications(raw: Record<string, unknown>, message: ChatMessa
   if (!text.includes("<task-notification>")) return [];
   const notifications: Array<{
     description?: string;
+    outputFile?: string;
     result?: string;
     status: OfficialTaskStatus;
     summary?: string;
@@ -164,8 +182,10 @@ function parseTaskNotifications(raw: Record<string, unknown>, message: ChatMessa
     if (!taskId || !rawStatus) continue;
     const summary = decodeTaskNotificationText(body.match(taskSummaryPattern)?.[1]);
     const descriptionMatch = summary?.match(taskDescriptionPattern);
+    const xmlOutput = body.match(taskOutputFilePattern)?.[1];
     notifications.push({
       description: descriptionMatch?.[2],
+      outputFile: xmlOutput && isOfficialTaskOutputFile(xmlOutput, taskId) ? xmlOutput : undefined,
       result: decodeTaskNotificationText(body.match(taskResultPattern)?.[1])?.trim(),
       status: normalizeTaskStatus(rawStatus),
       summary,
@@ -275,7 +295,7 @@ function applyAgentAsyncLaunch(
   }
   const prompt = stringValue(top.prompt);
   if (prompt) task.prompt ??= prompt;
-  if (task.startedAt === undefined) task.startedAt = timestampFromRaw(raw, message);
+  if (task.startedAt === undefined) task.startedAt = timestampFromRaw(raw);
 
   // Link Agent tool_use id when tool_result block is present.
   for (const item of rawMessageContent(raw)) {
@@ -345,13 +365,110 @@ function applyTaskOutputCompletions(
       }
     }
     if (existing.completedAt === undefined) {
-      existing.completedAt = timestampFromRaw(raw, message);
+      existing.completedAt = timestampFromRaw(raw);
     }
   }
 }
 
 export function isOfficialTaskEvent(raw: Record<string, unknown>) {
   return raw.type === "system" && (raw.subtype === "task_started" || raw.subtype === "task_progress" || raw.subtype === "task_notification");
+}
+
+/** Official cccc2cf0a `cC` — bash/monitor expand even without summary. */
+const officialExpandableTaskTypes = new Set(["local_bash", "monitor_mcp"]);
+
+/** Official RC `O=!T&&(E||D)`: expand when not subagent-open, and bash/monitor or summary≠description. */
+export function officialTaskRowCanExpand(task: Pick<OfficialBackgroundTask, "description" | "result" | "summary" | "taskType" | "workflowProgress">) {
+  if (officialExpandableTaskTypes.has(task.taskType ?? "")) return true;
+  if (task.workflowProgress && task.workflowProgress.length > 0) return true;
+  if (task.result) return true;
+  return Boolean(task.summary && task.summary !== task.description);
+}
+
+/** Official c62da `L` — output path must be `/tasks/${taskId}.output`. */
+export function isOfficialTaskOutputFile(path: string, taskId: string) {
+  if (!officialTaskOutputFileIdPattern.test(taskId)) return false;
+  if (path.includes("\0")) return false;
+  if (/^(?:[\\/]{2}|[\\/]\?\?[\\/])/.test(path)) return false;
+  if (!(path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path))) return false;
+  if (/(^|[\\/])\.\.([\\/]|$)/.test(path)) return false;
+  return path.endsWith(`/tasks/${taskId}.output`) || path.endsWith(`\\tasks\\${taskId}.output`);
+}
+
+function toolResultText(record: Record<string, unknown>) {
+  if (typeof record.content === "string") return record.content;
+  if (Array.isArray(record.content)) {
+    return record.content.map((part) => stringValue(asRecord(part).text) ?? "").join("\n");
+  }
+  return "";
+}
+
+function parseOfficialBashBackgroundOutput(text: string, taskId?: string) {
+  bashMovedToBackgroundPattern.lastIndex = 0;
+  const matches = Array.from(text.matchAll(bashMovedToBackgroundPattern));
+  const match = taskId
+    ? matches.findLast((item) => (item[1] ?? item[2]) === taskId)
+    : matches.find((item) => text.slice(0, item.index).trim() === "");
+  if (!match) return null;
+  let path = match[3] ?? "";
+  for (const suffix of [
+    ". You will be notified",
+    ". If it exits while",
+    ". If it is still running",
+    ". Its result is delivered",
+    ". When it finishes",
+    ". This session takes",
+    ". If you still need",
+  ]) {
+    const index = path.indexOf(suffix);
+    if (index !== -1) path = path.slice(0, index);
+  }
+  path = path.trimEnd();
+  if (path.endsWith(".")) path = path.slice(0, -1);
+  const id = match[1] ?? match[2];
+  if (!id) return null;
+  return { path, taskId: id };
+}
+
+/**
+ * Official Xe/Ke: bash tool_use command → prompt; timeout tool_result → outputFile.
+ * Does not invent Tasks rows — only enriches task_started local_bash.
+ */
+function enrichOfficialBashTasks(tasks: Map<string, OfficialBackgroundTask>, messages: ChatMessage[]) {
+  const bashByToolUseId = new Map<string, OfficialBackgroundTask>();
+  for (const task of tasks.values()) {
+    if (task.taskType === "local_bash" && task.toolUseId) bashByToolUseId.set(task.toolUseId, task);
+  }
+  if (bashByToolUseId.size === 0 && ![...tasks.values()].some((task) => task.taskType === "local_bash")) return;
+
+  for (const message of messages) {
+    const raw = asRecord(message.raw);
+    if (raw.type !== "assistant" && raw.type !== "user") continue;
+    for (const item of rawMessageContent(raw)) {
+      const record = asRecord(item);
+      if (stringValue(record.type) === "tool_use" && stringValue(record.name) === "Bash") {
+        const id = stringValue(record.id);
+        const task = id ? bashByToolUseId.get(id) : undefined;
+        if (!task) continue;
+        const input = asRecord(record.input);
+        const command = stringValue(input.command);
+        if (command) task.prompt ??= command;
+        continue;
+      }
+      if (stringValue(record.type) !== "tool_result") continue;
+      const toolUseId = stringValue(record.tool_use_id) ?? stringValue(record.toolUseId);
+      const linked = toolUseId ? bashByToolUseId.get(toolUseId) : undefined;
+      const blob = toolResultText(record);
+      if (!blob.includes("Output is being written to:")) continue;
+      const parsed = parseOfficialBashBackgroundOutput(blob, linked?.taskId);
+      if (!parsed) continue;
+      const task = linked ?? tasks.get(parsed.taskId);
+      if (!task || task.taskType !== "local_bash") continue;
+      if (isOfficialTaskOutputFile(parsed.path, parsed.taskId) || isOfficialTaskOutputFile(parsed.path, task.taskId)) {
+        task.outputFile ??= parsed.path;
+      }
+    }
+  }
 }
 
 export function officialTaskKind(taskType?: string) {
@@ -424,8 +541,10 @@ function normalizeWorkflowProgress(value: unknown): OfficialBackgroundTask["work
   });
 }
 
-function timestampFromRaw(raw: Record<string, unknown>, fallback?: ChatMessage) {
-  const value = stringValue(raw.timestamp) ?? stringValue(raw.createdAt) ?? fallback?.createdAt;
+function timestampFromRaw(raw: Record<string, unknown>) {
+  // Official Jp `Xp(e)`: `const t=e.timestamp;if(!t)return`. Host stamps
+  // missing SDK timestamps onto the event; do not invent from hydrate createdAt.
+  const value = stringValue(raw.timestamp);
   const parsed = value ? Date.parse(value) : NaN;
   return Number.isNaN(parsed) ? undefined : parsed;
 }

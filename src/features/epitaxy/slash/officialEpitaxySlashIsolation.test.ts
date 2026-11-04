@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * Official aRe (index-BELzQL5P): Cowork slash = getSupportedCommands filter scope==="cowork".
+ * Official aRe (cd5a31703): Cowork slash = getSupportedCommands filter scope==="cowork".
  * Code LocalSessions slash must not inject RT skills (schedule / setup-cowork).
  */
 const dir = dirname(fileURLToPath(import.meta.url));

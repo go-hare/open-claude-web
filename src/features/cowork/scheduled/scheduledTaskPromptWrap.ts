@@ -1,5 +1,5 @@
 /**
- * Official scheduled-task automated-run prompt residual (index-BELzQL5P Lwe/Fwe/Uwe/pYt).
+ * Official scheduled-task automated-run prompt residual (c21f11e6d-CxD82rYo.js Lwe/Fwe/Uwe/pYt).
  * Mirror of desktop host helper so Cowork / Code Run now wraps the same message shape.
  * Do not invent remote jEe or session_started host rewrite here — wrap only.
  */

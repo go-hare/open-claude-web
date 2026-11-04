@@ -4,7 +4,7 @@ import { GhostSelect } from "../SettingsControls";
 import { useSettingsBootstrap } from "../useSettingsBootstrap";
 
 /**
- * Official personal Chrome settings body Or (c94fbcf3e) mounted by ft (cc989143e):
+ * Official personal Chrome settings body Or (c94fbcf3e) mounted by ft (cf4f70727-a7CVSvFQ):
  * settings = account.settings.browser_extension_settings
  * onSave → mutate account settings { browser_extension_settings: { enabled, default_domain_policy, allowed_domains, blocked_domains } }
  * UI: Default for all sites (allow | block) + domain list (full modal later).

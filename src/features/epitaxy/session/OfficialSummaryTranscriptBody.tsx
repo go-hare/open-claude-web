@@ -31,6 +31,8 @@ import {
   type OfficialTranscriptMode,
 } from "../OfficialEpitaxyComponents";
 import { OfficialCodeMarkdown } from "../OfficialCodeMarkdown";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { SUMMARY_MODE_MESSAGES } from "../officialCodeChromeMessages";
 import { formatUsageTokenCount } from "../OfficialComposerContextUsage";
 import {
   CodeAssistantEntryMessage,
@@ -38,6 +40,7 @@ import {
 } from "./OfficialTranscript";
 import { OfficialWorkingStatus } from "./OfficialWorkingStatus";
 import { useOfficialSidePaneSessionStore } from "./officialSidePaneSessionStore";
+import type { OfficialBackgroundTask } from "./officialTasksAndPlan";
 import type { TranscriptEntry } from "./officialTranscriptParse";
 import { residualBuildSummaryTranscriptDump } from "./officialSummaryTranscriptDump";
 import { useOfficialCodeSessionContextTokens } from "./officialCodeSessionStore";
@@ -369,14 +372,15 @@ function SummarySkeleton() {
 
 /** Residual dC retry. */
 function SummaryRetry({ onRetry }: { onRetry: () => void }) {
+  const summaryText = useI18nText(SUMMARY_MODE_MESSAGES);
   return (
     <button
       type="button"
-      aria-label="Retry summary"
+      aria-label={summaryText.retrySummary}
       onClick={onRetry}
       className="self-start inline-flex items-center gap-g3 h-base px-p5 rounded-radius-full bg-t1 text-footnote text-[var(--core-red)] border-0 cursor-default outline-none hide-focus-ring ring-focus"
     >
-      <span>Couldn&apos;t generate summary — click to retry</span>
+      <span>{summaryText.couldntGenerateSummary}</span>
       <Icon name="ArrowUndoUp" size="m" className="shrink-0" />
     </button>
   );
@@ -387,10 +391,12 @@ const SummaryLastTurn = memo(function SummaryLastTurn({
   entries,
   isResponding,
   sessionId,
+  tasks = [],
 }: {
   entries: TranscriptEntry[];
   isResponding: boolean;
   sessionId: string;
+  tasks?: OfficialBackgroundTask[];
 }) {
   const slice = useMemo(() => {
     let lastUser = -1;
@@ -464,7 +470,7 @@ const SummaryLastTurn = memo(function SummaryLastTurn({
         </div>
       </div>
       <div className="shrink-0">
-        <OfficialWorkingStatus sessionId={sessionId} isWorking={isResponding} />
+        <OfficialWorkingStatus sessionId={sessionId} isWorking={isResponding} tasks={tasks} />
       </div>
     </div>
   );
@@ -474,6 +480,8 @@ export type OfficialSummaryTranscriptBodyProps = {
   sessionRef: OfficialSessionRef;
   entries: TranscriptEntry[];
   isResponding: boolean;
+  /** cd5a $8 trailing morphKey running-tasks — same tasks feed as Fu loader. */
+  tasks?: OfficialBackgroundTask[];
 };
 
 /**
@@ -484,6 +492,7 @@ export const OfficialSummaryTranscriptBody = memo(function OfficialSummaryTransc
   sessionRef,
   entries,
   isResponding,
+  tasks = [],
 }: OfficialSummaryTranscriptBodyProps) {
   const { summary, status, regenerate } = useOfficialSessionSummary(
     sessionRef,
@@ -517,6 +526,7 @@ export const OfficialSummaryTranscriptBody = memo(function OfficialSummaryTransc
         entries={entries}
         isResponding={isResponding}
         sessionId={sessionRef.id}
+        tasks={tasks}
       />
     </div>
   );

@@ -174,7 +174,7 @@ function OfficialUserInlineCode({
   return (
     <button
       className={`${OFFICIAL_USER_INLINE_CODE_LINK_CLASS} border-0 p-0 m-0 bg-transparent`}
-      data-official-source="c11959232-h_zsw3wI.js:Db+ru"
+      data-official-source="cd5a31703-B4nKQMBN.js:Db+ru"
       onClick={() => onOpenPath(text)}
       type="button"
     >
@@ -263,7 +263,7 @@ export const OfficialUserBashCommand = memo(function OfficialUserBashCommand({
     onPostRender: pierreTokenPaintOnPostRender,
   }), [theme]);
   return (
-    <div className="epitaxy-diff rounded-r6 overflow-clip" data-official-source="c11959232-h_zsw3wI.js:ib command">
+    <div className="epitaxy-diff rounded-r6 overflow-clip" data-official-source="cd5a31703-B4nKQMBN.js:ib command">
       {workerPool ? (
         <File file={file} options={options} />
       ) : (
@@ -364,8 +364,8 @@ export const OfficialUserCodeAttachment = memo(function OfficialUserCodeAttachme
     const pathButtonClass =
       "flex flex-1 min-w-0 text-left text-body text-assistant-secondary hover:underline underline-offset-[3px] outline-none hide-focus-ring ring-focus border-0 bg-transparent p-0 m-0 cursor-default";
     return (
-      <div className="group/body bg-t1 rounded-r6 overflow-clip flex flex-col w-full" data-official-source="c11959232-h_zsw3wI.js:Ob filePath">
-        <div className="flex items-center gap-g3 px-p6 py-p5">
+      <div className="group/body bg-t1 rounded-r6 overflow-clip flex flex-col w-full" data-official-source="cd5a31703-B4nKQMBN.js:Ob filePath">
+        <div className="flex items-center gap-0.75 px-p6 py-p5">
           {onOpenPath ? (
             <button className={pathButtonClass} onClick={() => onOpenPath(filePath)} type="button">
               <span className="truncate">{filePath}</span>
@@ -387,7 +387,7 @@ export const OfficialUserCodeAttachment = memo(function OfficialUserCodeAttachme
   }
 
   return (
-    <div className="epitaxy-diff rounded-r4 overflow-clip" data-official-source="c11959232-h_zsw3wI.js:Ob snippet">
+    <div className="epitaxy-diff rounded-r4 overflow-clip" data-official-source="cd5a31703-B4nKQMBN.js:Ob snippet">
       {workerPool ? (
         <File file={snippetFile} options={fileOptions} />
       ) : (

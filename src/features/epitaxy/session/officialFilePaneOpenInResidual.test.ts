@@ -21,7 +21,7 @@ describe("OfficialFilePane Open in residual (c9a yu)", () => {
 describe("OfficialFilePane Find / Pierre / copy residual (c119 vN)", () => {
   it("Find is always mounted (icon 搜索, ariaLabel Find in file, pressed=isOpen)", () => {
     expect(filePaneSource).toMatch(/icon="搜索"/);
-    expect(filePaneSource).toMatch(/ariaLabel="Find in file"/);
+    expect(filePaneSource).toMatch(/ariaLabel=\{chrome\.findInFile\}/);
     expect(filePaneSource).toMatch(/pressed=\{find\.isOpen\}/);
     expect(filePaneSource).toMatch(/if \(markdownPreview\) \{[\s\S]*setSourceMode\(true\);[\s\S]*find\.open\(\)/);
   });
@@ -35,18 +35,21 @@ describe("OfficialFilePane Find / Pierre / copy residual (c119 vN)", () => {
   it("Pierre FileContents cacheKey is file.hash ?? contents; Z has no onPostRender", () => {
     expect(filePaneSource).toMatch(/cacheKey: state\.hash \?\? state\.text/);
     expect(filePaneSource).toMatch(/disableFileHeader: true/);
-    expect(filePaneSource).toMatch(/overflow: "wrap"/);
+    // Official vN Z: overflow:"wrap" always.
+    expect(filePaneSource).toMatch(/overflow: "wrap" as const/);
+    expect(filePaneSource).toMatch(/h-full overflow-y-auto select-text/);
     expect(filePaneSource).not.toMatch(/onPostRender/);
     expect(filePaneSource).not.toMatch(/pierreTokenPaintOnPostRender/);
   });
 
   it("copyPath addSuccess Path copied to clipboard", () => {
-    expect(filePaneSource).toMatch(/errors\?\.addSuccess\("Path copied to clipboard\."\)/);
+    expect(filePaneSource).toMatch(/errors\?\.addSuccess\(chrome\.pathCopiedToClipboard\)/);
   });
 
   it("disabled Open-in shows for remote when no items (xN !$ && f)", () => {
     expect(filePaneSource).toMatch(/sessionRef\?\.type === "remote"/);
-    expect(filePaneSource).toMatch(/tooltip="Only available in local sessions"/);
-    expect(filePaneSource).toMatch(/ariaLabel="Open in…"/);
+    expect(filePaneSource).toMatch(/tooltipContent=\{chrome\.onlyAvailableInLocalSessions\}/);
+    expect(filePaneSource).toMatch(/tooltip=\{null\}/);
+    expect(filePaneSource).toMatch(/ariaLabel=\{chrome\.openInEllipsis\}/);
   });
 });

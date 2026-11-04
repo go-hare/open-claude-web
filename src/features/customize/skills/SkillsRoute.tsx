@@ -7,6 +7,7 @@ import { NewSkillModal } from "./NewSkillModal";
 import { UserSkillDetailPanel } from "./UserSkillDetailPanel";
 import { SkillsPageSidebar } from "./SkillsPageSidebar";
 import { UploadSkillModal } from "./UploadSkillModal";
+import { UploadSkillPage } from "./UploadSkillPage";
 import { WriteSkillInstructionsModal } from "./WriteSkillInstructionsModal";
 import type { SkillsSelection } from "./skillTypes";
 import { useBuiltInSkills } from "./useBuiltInSkills";
@@ -26,10 +27,16 @@ import {
  * Te: Enable + Try in chat / Edit / Replace / Uninstall.
  */
 export function SkillsRoute({
+  layout = "page",
   onBrowseSkills,
   onCreateWithClaude,
   onTryInCowork,
 }: {
+  /**
+   * Official overlay Ar (c5e558aae): single-column vt list + Your skills tab.
+   * Full customize `$l` keeps the dual-pane sidebar.
+   */
+  layout?: "page" | "overlay";
   onBrowseSkills: () => void;
   onCreateWithClaude?: () => void;
   onTryInCowork?: (skillName: string) => void;
@@ -132,6 +139,7 @@ export function SkillsRoute({
       <WriteSkillInstructionsModal
         isOpen={writeOpen}
         onClose={closeWrite}
+        variant={layout === "overlay" ? "overlay" : "page"}
         onCreate={async (value) => {
           const created = await upsertUserSkill({
             skillId: value.skillId,
@@ -144,6 +152,7 @@ export function SkillsRoute({
         }}
         skillToEdit={skillToEdit}
       />
+      {layout === "page" ? (
       <UploadSkillModal
         existingNames={existingNames}
         isOpen={uploadOpen}
@@ -160,6 +169,7 @@ export function SkillsRoute({
           });
         }}
       />
+      ) : null}
       <ConfirmDialog
         cancelText="Cancel"
         confirmText="Uninstall"
@@ -181,6 +191,97 @@ export function SkillsRoute({
       />
     </>
   );
+
+  const detail =
+    selectedBuiltIn ? (
+      <BuiltInSkillDetailPanel skill={selectedBuiltIn} onTryInCowork={onTryInCowork} />
+    ) : selectedUser ? (
+      <UserSkillDetailPanel
+        onEdit={() => {
+          const stored = findUserSkill(selectedUser.skillId);
+          if (!stored) return;
+          void loadUserSkillInstructions(stored.skillId).then((instructions) => {
+            setSkillToEdit({
+              skillId: stored.skillId,
+              skillName: stored.skillName,
+              description: stored.description ?? "",
+              instructions,
+            });
+            setWriteOpen(true);
+          });
+        }}
+        onEnabledChange={(enabled) => setUserSkillEnabled(selectedUser.skillId, enabled)}
+        onReplace={() => {
+          setReplaceSkillId(selectedUser.skillId);
+          setUploadOpen(true);
+        }}
+        onShowInFolder={() => {
+          void desktopBridge.LocalAgentModeSessions.revealLocalSkill?.(selectedUser.skillId);
+        }}
+        onTryInChat={() => onTryInCowork?.(selectedUser.skillName)}
+        onUninstall={() => setUninstallSkillId(selectedUser.skillId)}
+        skillId={selectedUser.skillId}
+        wiggleEnabled={wiggleEnabled}
+      />
+    ) : null;
+
+  if (layout === "overlay") {
+    if (uploadOpen) {
+      return (
+        <div className="flex h-full min-h-0 flex-1 flex-col">
+          {creationChrome}
+          <UploadSkillPage
+            existingNames={existingNames}
+            onBack={closeUpload}
+            onUploaded={(value) => {
+              void upsertUserSkill({
+                skillId: replaceSkillId ?? undefined,
+                skillName: value.name,
+                description: value.description,
+                instructions: value.instructions,
+              }).then((created) => {
+                closeUpload();
+                setSelection({ kind: "skill", skillId: created.skillId, filePath: null });
+              });
+            }}
+          />
+        </div>
+      );
+    }
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col">
+        {creationChrome}
+        {detail ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-lg">
+            <button
+              className="mb-md inline-flex w-fit items-center gap-1 text-body text-secondary hover:text-primary"
+              onClick={() => setSelection(null)}
+              type="button"
+            >
+              Your skills
+            </button>
+            {detail}
+          </div>
+        ) : (
+          <SkillsPageSidebar
+            builtInSkills={builtInSkills}
+            layout="overlay"
+            onAddSkill={openCreation}
+            onBrowseSkills={onBrowseSkills}
+            onBuiltInSelect={onBuiltInSelect}
+            onCreateWithClaude={onCreateWithClaude}
+            onUpload={onUploadFromModal}
+            onUserSelect={onUserSelect}
+            onWriteInstructions={onWriteFromModal}
+            selectedBuiltInName={selectedBuiltInName}
+            selectedUserSkillId={selection?.kind === "skill" ? selection.skillId : null}
+            userSkills={userSkills}
+            wiggleEnabled={wiggleEnabled}
+          />
+        )}
+      </div>
+    );
+  }
 
   if (isGlobalEmpty) {
     return (
@@ -230,37 +331,7 @@ export function SkillsRoute({
         wiggleEnabled={wiggleEnabled}
       />
       <div tabIndex={-1} className="flex-1 overflow-y-auto bg-bg-100 focus-visible:outline-none">
-        {selectedBuiltIn ? (
-          <BuiltInSkillDetailPanel skill={selectedBuiltIn} onTryInCowork={onTryInCowork} />
-        ) : selectedUser ? (
-          <UserSkillDetailPanel
-            onEdit={() => {
-              const stored = findUserSkill(selectedUser.skillId);
-              if (!stored) return;
-              void loadUserSkillInstructions(stored.skillId).then((instructions) => {
-                setSkillToEdit({
-                  skillId: stored.skillId,
-                  skillName: stored.skillName,
-                  description: stored.description ?? "",
-                  instructions,
-                });
-                setWriteOpen(true);
-              });
-            }}
-            onEnabledChange={(enabled) => setUserSkillEnabled(selectedUser.skillId, enabled)}
-            onReplace={() => {
-              setReplaceSkillId(selectedUser.skillId);
-              setUploadOpen(true);
-            }}
-            onShowInFolder={() => {
-              void desktopBridge.LocalAgentModeSessions.revealLocalSkill?.(selectedUser.skillId);
-            }}
-            onTryInChat={() => onTryInCowork?.(selectedUser.skillName)}
-            onUninstall={() => setUninstallSkillId(selectedUser.skillId)}
-            skillId={selectedUser.skillId}
-            wiggleEnabled={wiggleEnabled}
-          />
-        ) : (
+        {detail ?? (
           <div className="flex items-center justify-center h-full text-text-400">Select a skill to view details</div>
         )}
       </div>

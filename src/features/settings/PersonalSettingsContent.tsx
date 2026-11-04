@@ -16,7 +16,13 @@ import {
   ExtensionsOverview,
 } from "./sections/ExtensionsSettings";
 import { GeneralSettings } from "./sections/GeneralSettings";
+import { ImportExportSettings } from "./sections/ImportExportSettings";
 import { PrivacySettings } from "./sections/PrivacySettings";
+import { UsageSettings } from "./sections/UsageSettings";
+import { ConnectorsRoute } from "../customize/connectors/ConnectorsRoute";
+import { PluginsOverlayRoute } from "../customize/plugins/PluginsOverlayRoute";
+import { officialDirectoryStore } from "../customize/directory/officialDirectoryStore";
+import { SkillsRoute } from "../customize/skills/SkillsRoute";
 import { useSettingsNavText } from "./settingsMessages";
 import {
   useSettingsBootstrap,
@@ -24,7 +30,7 @@ import {
 } from "./useSettingsBootstrap";
 
 /**
- * Official Zn nav (cc989143e ~3081–3230 / settingsComponentsByPath):
+ * Official Zn nav (cf4f70727-a7CVSvFQ.js settingsComponentsByPath):
  * primary: general, data-privacy-controls?, members?, billing?, usage?, sys-prompt?,
  * capabilities, cardinal?, connectors?, claude-code?, cowork?, browser-extension?;
  * Desktop app group (when desktop): desktop, desktop/extensions, desktop/developer;
@@ -63,31 +69,87 @@ export function buildPersonalSettingsGroups(options: {
     developer: string;
     organization: string;
     organizationSettings: string;
+    usage?: string;
+    importExport?: string;
+    thisComputer?: string;
+    system?: string;
+    customize?: string;
+    skills?: string;
+    plugins?: string;
+    settingsGroup?: string;
   };
+  /**
+   * Official ZC `forModal` (shared-19): Settings / This computer / Customize.
+   * Full-page Zn keeps Desktop app + Capabilities/Connectors in primary.
+   */
+  forModal?: boolean;
 }): NavGroup[] {
   const { labels } = options;
+  const forModal = options.forModal === true;
   const primary = [
-    { id: "general", href: "/settings/general", label: labels.general },
+    { id: "general", href: "/settings/general", label: labels.general, icon: "Settings", testId: "general-settings" },
     ...(options.showPrivacy
-      ? [{ id: "data-privacy-controls", href: "/settings/data-privacy-controls", label: labels.privacy }]
+      ? [{
+          id: "data-privacy-controls",
+          href: "/settings/data-privacy-controls",
+          label: labels.privacy,
+          icon: "LockShield",
+          testId: "data-privacy-controls",
+        }]
       : []),
-    { id: "capabilities", href: "/settings/capabilities", label: labels.capabilities },
-    { id: "connectors", href: "/settings/connectors", label: labels.connectors },
-    { id: "claude-code", href: "/settings/claude-code", label: labels.claudeCode },
-    { id: "cowork", href: "/settings/cowork", label: labels.cowork },
+    ...(forModal
+      ? []
+      : [{ id: "capabilities", href: "/settings/capabilities", label: labels.capabilities, icon: "Tool" }]),
+    ...(forModal
+      ? [{ id: "usage", href: "/settings/usage", label: labels.usage ?? "Usage", icon: "Chart", testId: "usage-settings" }]
+      : []),
+    ...(forModal
+      ? []
+      : [{ id: "connectors", href: "/settings/connectors", label: labels.connectors, icon: "Connectors" }]),
+    { id: "claude-code", href: "/settings/claude-code", label: labels.claudeCode, icon: "Code", testId: "claude-code-settings" },
+    { id: "cowork", href: "/settings/cowork", label: labels.cowork, icon: "Tasks" },
+    ...(forModal
+      ? [{
+          id: "import",
+          href: "/settings/import",
+          label: labels.importExport ?? "Import & export",
+          icon: "Download",
+          testId: "settings-nav-import",
+        }]
+      : []),
   ];
 
   const groups: NavGroup[] = [
-    { sections: primary },
+    { title: forModal ? labels.settingsGroup : undefined, sections: primary },
     {
-      title: labels.desktopApp,
+      title: forModal ? (labels.thisComputer ?? labels.desktopApp) : labels.desktopApp,
       sections: [
-        { id: "desktop", href: "/settings/desktop", label: labels.desktopGeneral, exactMatch: true },
-        { id: "desktop/extensions", href: "/settings/desktop/extensions", label: labels.extensions },
-        { id: "desktop/developer", href: "/settings/desktop/developer", label: labels.developer },
+        {
+          id: "desktop",
+          href: "/settings/desktop",
+          label: forModal ? (labels.system ?? labels.desktopGeneral) : labels.desktopGeneral,
+          icon: "Computer",
+          exactMatch: true,
+          testId: "settings-nav-system",
+        },
+        ...(forModal
+          ? []
+          : [{ id: "desktop/extensions", href: "/settings/desktop/extensions", label: labels.extensions, icon: "Plugin" }]),
+        { id: "desktop/developer", href: "/settings/desktop/developer", label: labels.developer, icon: "Wrench" },
       ],
     },
   ];
+
+  if (forModal) {
+    groups.push({
+      title: labels.customize,
+      sections: [
+        { id: "customize-skills", href: "/settings/customize-skills", label: labels.skills ?? "Skills", icon: "File", testId: "customize-skills-settings" },
+        { id: "customize-connectors", href: "/settings/customize-connectors", label: labels.connectors, icon: "Connectors", testId: "customize-connectors-settings" },
+        { id: "customize-plugins", href: "/settings/customize-plugins", label: labels.plugins ?? "Plugins", icon: "Plugin", testId: "customize-plugins-settings" },
+      ],
+    });
+  }
 
   // Official adminLink:y?{...}:null — omit entire group when gate is false.
   if (options.showAdminLink) {
@@ -190,12 +252,13 @@ export function PersonalSettingsPage({ onNavigate, pathname }: Pick<RouteViewPro
 
   return (
     <PersonalSettingsLayout groups={groups} onNavigate={onNavigate} pathname={pathname}>
-      {renderPersonalContent(pathname, onNavigate)}
+      {renderSettingsSection(pathname, onNavigate)}
     </PersonalSettingsLayout>
   );
 }
 
-function renderPersonalContent(pathname: string, onNavigate: RouteViewProps["onNavigate"]) {
+/** Official S[t] section map used by SettingsModalContent P. */
+export function renderSettingsSection(pathname: string, onNavigate: RouteViewProps["onNavigate"]) {
   if (pathname === "/settings" || pathname === "/settings/general") return <GeneralSettings />;
   // Official route is /settings/data-privacy-controls (Zn id); accept legacy /settings/privacy alias.
   if (pathname === "/settings/data-privacy-controls" || pathname === "/settings/privacy") {
@@ -220,5 +283,37 @@ function renderPersonalContent(pathname: string, onNavigate: RouteViewProps["onN
     return <ExtensionDetail extensionId={extensionId} onNavigate={onNavigate} />;
   }
   if (pathname === "/settings/desktop/developer") return <DesktopDeveloper />;
+  if (pathname === "/settings/usage") return <UsageSettings />;
+  if (pathname === "/settings/import") return <ImportExportSettings />;
+  if (pathname === "/settings/customize-skills") {
+    return (
+      <SkillsRoute
+        layout="overlay"
+        onBrowseSkills={() => officialDirectoryStore.getState().open("plugins", { pluginSeed: {} })}
+        onCreateWithClaude={() => {
+          onNavigate(
+            "/task/new?q=" +
+              encodeURIComponent(
+                "Let's create a skill together using your skill-creator skill. First ask me what the skill should do.",
+              ),
+          );
+        }}
+        onTryInCowork={(skillName) => {
+          onNavigate("/task/new?q=" + encodeURIComponent(`/${skillName}`));
+        }}
+      />
+    );
+  }
+  if (pathname === "/settings/customize-connectors") return <ConnectorsRoute layout="overlay" />;
+  if (pathname === "/settings/customize-plugins") {
+    return (
+      <PluginsOverlayRoute
+        onCreateWithClaude={() => {
+          onNavigate("/task/new?q=" + encodeURIComponent("Help me create a new Cowork plugin"));
+        }}
+        onNavigate={onNavigate}
+      />
+    );
+  }
   return <p>Not Found</p>;
 }

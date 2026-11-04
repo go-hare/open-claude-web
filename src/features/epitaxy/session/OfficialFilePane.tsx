@@ -2,23 +2,37 @@
  * Official c11959232 `vN` side-pane file viewer (not the tool-row Read card).
  * Extracted from EpitaxySessionTile — behavior unchanged.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode } from "react";
 import { File as PierreFile, type FileContents } from "@pierre/diffs/react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
 import type { LocalSessionsBridge } from "../../../adapters/desktopBridge/types";
-import { Icon } from "../../../shell/icons";
+import {
+  BaseContextMenuItem,
+  BaseContextMenuPopup,
+  BaseContextMenuSeparator,
+  ContextMenu,
+} from "../../../shell/BaseMenu";
 import {
   OfficialButton,
   OfficialDropdownButton,
   type OfficialDropdownItem,
 } from "../OfficialEpitaxyComponents";
+import { OfficialTooltip } from "../../shared/OfficialTooltip";
 import { OfficialFileMarkdownContent } from "../OfficialCodeMarkdown";
 import { officialPierreLangFromPath } from "../diff/officialPierreLang";
 import { useOfficialPierreTheme, useWorkerPool } from "../diff/OfficialPierreWorkerPool";
+import "../diff/ensurePierreDiffsContainer";
 import { useErrorsOptional } from "../../settings/errorsToast";
 import { OfficialSpinner } from "./OfficialWorkingStatus";
+import { EpitaxyTranscriptActionContext } from "./epitaxyTranscriptActionContext";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { SHOW_IN_FOLDER_MESSAGES, SIDE_PANE_CHROME_MESSAGES } from "../officialCodeChromeMessages";
+import { formatOfficialIcu } from "../../../i18n/formatOfficialIcu";
 import {
-  OFFICIAL_FILE_UNREADABLE_MESSAGE,
+  officialFileInvalidUtf8,
+  officialFileLooksBinary,
+} from "./officialFileYu";
+import {
   OfficialPaneSubheader,
   isMarkdownPreviewPath,
   isPreviewImagePath,
@@ -28,6 +42,7 @@ import {
 } from "./officialFilePreviewUtils";
 
 export type OfficialFileViewTarget = {
+  column?: number;
   findQuery?: string;
   line?: number;
   path: string;
@@ -135,7 +150,11 @@ function OfficialFileFindBar({
     setQuery: (value: string) => void;
   };
 }) {
+  const chrome = useI18nText(SIDE_PANE_CHROME_MESSAGES);
   const hasMatches = find.matches.length > 0;
+  const matchCount = find.matches.length >= OFFICIAL_FILE_FIND_MATCH_CAP
+    ? "1000+"
+    : String(find.matches.length);
   const onKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLInputElement>) => {
       if (event.key === "Escape") {
@@ -162,24 +181,88 @@ function OfficialFileFindBar({
         spellCheck={false}
         autoComplete="off"
         autoFocus
-        aria-label="Find in file"
-        placeholder="Find in file…"
+        aria-label={chrome.findInFile}
+        placeholder={chrome.findInFilePlaceholder}
         className="flex-1 min-w-0 bg-transparent border-0 outline-none hide-focus-ring text-body text-t8 placeholder:text-t6"
       />
       <span aria-live="polite" className="text-footnote text-t6 tabular-nums">
         {find.query.length === 0
           ? ""
           : hasMatches
-            ? `${find.index >= 0 ? find.index + 1 : 0} of ${find.matches.length >= OFFICIAL_FILE_FIND_MATCH_CAP ? "1000+" : find.matches.length}`
-            : "No results"}
+            ? formatOfficialIcu(chrome.currentOfTotal, {
+                current: find.index >= 0 ? find.index + 1 : 0,
+                total: matchCount,
+              })
+            : chrome.noResults}
       </span>
-      <OfficialButton size="small" icon="ChevronUpSmall" ariaLabel="Previous match" onClick={find.prev} disabled={!hasMatches} />
-      <OfficialButton size="small" icon="ChevronDownSmall" ariaLabel="Next match" onClick={find.next} disabled={!hasMatches} />
-      <OfficialButton size="small" icon="XCrossCloseMedium" ariaLabel="Close find bar" onClick={find.close} />
+      <OfficialButton size="small" icon="ChevronUpSmall" ariaLabel={chrome.previousMatch} onClick={find.prev} disabled={!hasMatches} />
+      <OfficialButton size="small" icon="ChevronDownSmall" ariaLabel={chrome.nextMatch} onClick={find.next} disabled={!hasMatches} />
+      <OfficialButton size="small" icon="XCrossCloseMedium" ariaLabel={chrome.closeFindBar} onClick={find.close} />
     </OfficialPaneSubheader>
   );
 }
 
+/** Official vN `Cd.Popup` — Edit / Attach as context / Copy file contents / Copy path / Open in. */
+function OfficialFileBodyMenu({
+  attachPath,
+  canEdit,
+  children,
+  chrome,
+  extraItems,
+  editorItems,
+  onAttach,
+  onCopyContents,
+  onCopyPath,
+  onEdit,
+  openInHeader,
+}: {
+  attachPath: string;
+  canEdit: boolean;
+  children: ReactNode;
+  chrome: ReturnType<typeof useI18nText<typeof SIDE_PANE_CHROME_MESSAGES>>;
+  extraItems: OfficialDropdownItem[];
+  editorItems: OfficialDropdownItem[];
+  onAttach?: (path: string) => void;
+  onCopyContents: () => void;
+  onCopyPath: () => void;
+  onEdit: () => void;
+  openInHeader?: string;
+}) {
+  const hasOpenIn = editorItems.length > 0 || extraItems.length > 0;
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger
+        render={(props) => (
+          <div {...props} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {children}
+          </div>
+        )}
+      />
+      <BaseContextMenuPopup>
+        {canEdit ? <BaseContextMenuItem onClick={onEdit}>{chrome.edit}</BaseContextMenuItem> : null}
+        {onAttach ? (
+          <BaseContextMenuItem onClick={() => onAttach(attachPath)}>{chrome.attachAsContext}</BaseContextMenuItem>
+        ) : null}
+        <BaseContextMenuItem onClick={onCopyContents}>{chrome.copyFileContents}</BaseContextMenuItem>
+        <BaseContextMenuItem onClick={onCopyPath}>{chrome.copyPath}</BaseContextMenuItem>
+        {hasOpenIn ? <BaseContextMenuSeparator /> : null}
+        {openInHeader && editorItems.length > 0 ? (
+          <div className="px-md py-1 text-footnote text-muted select-none">{openInHeader}</div>
+        ) : null}
+        {editorItems.map((item, index) => (
+          <BaseContextMenuItem key={`editor-${index}`} onClick={item.onSelect}>
+            {item.label}
+          </BaseContextMenuItem>
+        ))}
+        {extraItems.map((item, index) => (
+          <BaseContextMenuItem key={`extra-${index}`} onClick={item.onSelect}>
+            {item.label}
+          </BaseContextMenuItem>
+        ))}
+      </BaseContextMenuPopup>
+    </ContextMenu.Root>
+  );
+}
 
 /**
  * Official c11959232 `vN` side-pane file viewer (not the tool-row Read card).
@@ -198,7 +281,32 @@ function OfficialFileFindBar({
  * Official vN always mounts Find (yd icon:"搜索", aria-pressed=K.isOpen).
  * Open-in: B ? Ou dropdown : !$ && f ? disabled Folder1Open : null.
  */
-export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: LocalSessionsBridge; fileView: OfficialFileViewTarget | null; sessionRef: EpitaxySessionRef | null }) {
+export function OfficialFilePane({
+  bridge,
+  fileView,
+  landingCwd,
+  sessionRef,
+  viewPrefs,
+  wordWrap: _wordWrap = true,
+}: {
+  bridge: LocalSessionsBridge;
+  fileView: OfficialFileViewTarget | null;
+  /** Official vN `landingCwd` — draft home `tt` / `readFileAtCwd(cwd, path)`. */
+  landingCwd?: string | null;
+  sessionRef: EpitaxySessionRef | null;
+  viewPrefs?: {
+    autoSave?: boolean;
+    indentGuides?: boolean;
+    scrollPastEnd?: boolean;
+    showWhitespace?: boolean;
+    tabIndents?: boolean;
+    tabSize?: number;
+  };
+  /** Official vN Z is overflow:"wrap" always. Prop kept so Files ⋯ Word wrap still compiles. */
+  wordWrap?: boolean;
+}) {
+  const chrome = useI18nText(SIDE_PANE_CHROME_MESSAGES);
+  const folderText = useI18nText(SHOW_IN_FOLDER_MESSAGES);
   const [state, setState] = useState<{
     absPath?: string;
     dataUrl?: string;
@@ -215,10 +323,15 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
   const [saveError, setSaveError] = useState<{ currentHash?: string; isDenied?: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   // Official: M = sourceMode for markdown; default true when line/findQuery present.
-  const [sourceMode, setSourceMode] = useState(() => Boolean(fileView?.line || fileView?.findQuery));
+  const [sourceMode, setSourceMode] = useState(() =>
+    isMarkdownPreviewPath(fileView?.path ?? "") && Boolean(fileView?.line || fileView?.findQuery),
+  );
   const [copiedContents, setCopiedContents] = useState(false);
+  const actions = useContext(EpitaxyTranscriptActionContext);
   const filePath = fileView?.path ?? "";
   const isMarkdown = isMarkdownPreviewPath(filePath);
+  const looksBinary = state.text !== undefined && officialFileLooksBinary(state.text);
+  const invalidUtf8 = state.text !== undefined && !looksBinary && officialFileInvalidUtf8(state.text);
   // Official S = k && !M && !b  → markdown rendered preview when not source and not editing.
   const markdownPreview = isMarkdown && !sourceMode && !editing && state.text !== undefined;
   const theme = useOfficialPierreTheme();
@@ -236,7 +349,7 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
       cacheKey: state.hash ?? state.text,
     };
   }, [editing, filePath, state.hash, state.text]);
-  // Official Z: { theme, disableFileHeader:true, overflow:"wrap" }
+  // Official vN Z: {theme, disableFileHeader:!0, overflow:"wrap"} only.
   const pierreOptions = useMemo(
     () => ({
       theme,
@@ -245,6 +358,9 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
     }),
     [theme],
   );
+  const pierreTabStyle = viewPrefs?.tabSize
+    ? ({ "--diffs-tab-size": viewPrefs.tabSize } as CSSProperties)
+    : undefined;
 
   // Official F: null!==t && remote!==type && writeSessionFile && hash defined.
   const canEdit =
@@ -262,9 +378,9 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
 
   useEffect(() => {
     // Official: k && C(void 0!==o||!!l) when path/line/find changes
-    if (isMarkdownPreviewPath(fileView?.path ?? "")) {
-      setSourceMode(Boolean(fileView?.line || fileView?.findQuery));
-    }
+    setSourceMode(
+      isMarkdownPreviewPath(fileView?.path ?? "") && Boolean(fileView?.line || fileView?.findQuery),
+    );
     setEditing(false);
     setDraft("");
     setEditBaseHash(undefined);
@@ -288,7 +404,7 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
 
   useEffect(() => {
     let alive = true;
-    if (!fileView || !sessionRef) {
+    if (!fileView) {
       setState({ isLoading: false });
       return () => {
         alive = false;
@@ -296,14 +412,15 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
     }
 
     setState({ isLoading: true });
+    const sessionId = sessionRef?.id ?? "";
     const load = isPreviewImagePath(fileView.path)
-      ? bridge.readSessionImageAsDataUrl
-        ? bridge.readSessionImageAsDataUrl(sessionRef.id, fileView.path).then((dataUrl) => {
+      ? sessionId && bridge.readSessionImageAsDataUrl
+        ? bridge.readSessionImageAsDataUrl(sessionId, fileView.path).then((dataUrl) => {
             if (!dataUrl) return { unreadable: true as const };
             return { dataUrl };
           })
         : Promise.resolve({ unreadable: true as const })
-      : readPreviewText(bridge, sessionRef.id, fileView.path);
+      : readPreviewText(bridge, sessionId, fileView.path, landingCwd);
     void load
       .then((result) => {
         if (!alive) return;
@@ -321,7 +438,7 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
     return () => {
       alive = false;
     };
-  }, [bridge, fileView, fileView?.scrollNonce, sessionRef]);
+  }, [bridge, fileView, fileView?.scrollNonce, landingCwd, sessionRef]);
 
   // Official ⌘/Ctrl+E → edit when F and not already editing.
   useEffect(() => {
@@ -425,7 +542,7 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
     void navigator.clipboard
       ?.writeText(filePath)
       .then(() => {
-        errors?.addSuccess("Path copied to clipboard.");
+        errors?.addSuccess(chrome.pathCopiedToClipboard);
       })
       .catch(() => undefined);
   };
@@ -442,21 +559,15 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
       .catch(() => undefined);
   };
 
-  if (!fileView) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-g5 px-p8 text-center text-body text-t6">
-        <Icon name="NoteSquareLines" size="lg" />
-        <div>Select a file from a tool result to view it here.</div>
-      </div>
-    );
-  }
+  // Official vN always has filePath. Empty Files chrome lives on XC / Files empty pane, not here.
+  if (!fileView) return null;
 
   // Official loading: before subheader chrome
   if (state.isLoading) {
     return (
       <div role="status" className="h-full flex items-center justify-center text-t5">
         <OfficialSpinner size="l" className="size-[24px]" />
-        <span className="sr-only">Loading file</span>
+        <span className="sr-only">{chrome.loadingFile}</span>
       </div>
     );
   }
@@ -465,7 +576,7 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
   if (state.unreadable || (state.text === undefined && !state.dataUrl && !state.error)) {
     return (
       <div className="h-full flex items-center justify-center px-p8 text-body text-t6 text-center text-balance select-text">
-        {OFFICIAL_FILE_UNREADABLE_MESSAGE}
+        {chrome.fileCouldNotBeRead}
       </div>
     );
   }
@@ -495,7 +606,7 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
   const extraItems: OfficialDropdownItem[] = canShowInFolder
     ? [
         {
-          label: officialShowInFolderLabel(),
+          label: officialShowInFolderLabel(folderText),
           onSelect: () => {
             void desktopBridge.FileSystem.showInFolder?.(openInPath)?.catch(() => undefined);
           },
@@ -503,16 +614,16 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
       ]
     : [];
   const hasOpenIn = editorItems.length > 0 || extraItems.length > 0;
-  const openInHeader = editorItems.length > 0 ? "Open in" : undefined;
+  const openInHeader = editorItems.length > 0 ? chrome.openIn : undefined;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       {/* Official lN — epitaxy-pane-subheader (not custom border-b dual-line header) */}
       <OfficialPaneSubheader>
         <button
           type="button"
           onClick={copyPath}
-          title="Copy path"
+          title={chrome.copyPath}
           // Official path control: no permanent fill (only hover:bg-t2). Without bg-transparent
           // UA/default button chrome can look like a search field next to the Search icon.
           className="bg-transparent border-0 text-code text-t6 truncate flex-1 min-w-0 text-left rounded-r2 px-p2 -mx-[var(--p2)] hover:bg-t2 cursor-default outline-none hide-focus-ring ring-focus"
@@ -522,17 +633,17 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
         {editing ? (
           <>
             <OfficialButton size="small" disabled={saving} onClick={cancelEdit}>
-              Cancel
+              {chrome.cancel}
             </OfficialButton>
             <OfficialButton
               size="small"
               variant="contained"
-              disabled={saving || draftUnchanged || Boolean(saveError)}
+              disabled={saving || draftUnchanged}
               onClick={() => {
                 void saveEdit(editBaseHash);
               }}
             >
-              Save
+              {chrome.save}
             </OfficialButton>
           </>
         ) : (
@@ -540,7 +651,7 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
             {isMarkdown ? (
               <OfficialButton
                 size="small"
-                ariaLabel={sourceMode ? "Preview markdown" : "View source"}
+                ariaLabel={sourceMode ? chrome.previewMarkdown : chrome.viewSource}
                 // Official vN: icon M?"Eye":"代码" (c119). 汉化 prop is 代码; path table only has Code.
                 icon={sourceMode ? "Eye" : "代码"}
                 onClick={() => setSourceMode((value) => !value)}
@@ -549,7 +660,7 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
             <OfficialButton
               size="small"
               icon="搜索"
-              ariaLabel="Find in file"
+              ariaLabel={chrome.findInFile}
               pressed={find.isOpen}
               onClick={() => {
                 // Official vN: if markdown preview S then C(true); K.open(); else toggle K.
@@ -564,32 +675,36 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
               }}
             />
             {canEdit ? (
-              <OfficialButton size="small" ariaLabel="Edit file" icon="Pencil" onClick={beginEdit} />
+              <OfficialButton size="small" ariaLabel={chrome.editFile} icon="Pencil" onClick={beginEdit} />
             ) : null}
             {hasOpenIn ? (
               <OfficialDropdownButton
                 size="small"
                 icon="Folder1Open"
                 revealChevron="never"
-                ariaLabel="Open in…"
+                ariaLabel={chrome.openInEllipsis}
                 align="end"
                 header={openInHeader}
                 items={editorItems}
                 extraSections={extraItems.length > 0 ? [{ items: extraItems }] : undefined}
               />
             ) : sessionRef?.type === "remote" ? (
-              // Official xN: disabled Open-in when !$ && f (remote, not local/bridge).
-              <OfficialButton
-                size="small"
-                icon="Folder1Open"
-                ariaLabel="Open in…"
-                tooltip="Only available in local sessions"
-                disabled
-              />
+              // Official xN: Md wraps disabled yd (tooltip:null) so hover still works.
+              <OfficialTooltip delayDuration={400} tooltipContent={chrome.onlyAvailableInLocalSessions}>
+                <span className="inline-flex shrink-0">
+                  <OfficialButton
+                    size="small"
+                    icon="Folder1Open"
+                    ariaLabel={chrome.openInEllipsis}
+                    tooltip={null}
+                    disabled
+                  />
+                </span>
+              </OfficialTooltip>
             ) : null}
             <OfficialButton
               size="small"
-              ariaLabel={copiedContents ? "Copied" : "Copy file contents"}
+              ariaLabel={copiedContents ? chrome.copied : chrome.copyFileContents}
               icon={copiedContents ? "CheckSelection" : "CopySquareBehind"}
               onClick={copyContents}
               disabled={state.text === undefined}
@@ -600,15 +715,21 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
 
       {!editing && !markdownPreview && find.isOpen ? <OfficialFileFindBar find={find} /> : null}
 
+      {!editing && invalidUtf8 ? (
+        <div role="status" className="shrink-0 px-md py-1.25 bg-alpha-2 text-body text-primary">
+          This file isn’t valid UTF-8. A save writes each � to the file, and the original characters are lost.
+        </div>
+      ) : null}
+
       {editing && saveError ? (
         <div role="alert" className="shrink-0 px-p6 py-p4 bg-t2 backdrop-blur-[20px] flex items-center gap-g3">
           <span className="flex-1 text-body text-t8">
             {saveError.isDenied
-              ? "This file can't be saved — its path is outside the session folder, or this is a remote session."
-              : "This file changed on disk since you started editing."}
+              ? chrome.fileCantBeSaved
+              : chrome.fileChangedOnDisk}
           </span>
           <OfficialButton variant="muted" size="small" onClick={cancelEdit} disabled={saving}>
-            Discard
+            {chrome.discard}
           </OfficialButton>
           {!saveError.isDenied ? (
             <OfficialButton
@@ -619,21 +740,17 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
                 void saveEdit(saveError.currentHash);
               }}
             >
-              Override
+              {chrome.override}
             </OfficialButton>
           ) : null}
         </div>
       ) : null}
 
-      {state.dataUrl ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center p-p8 overflow-auto">
-          <img alt={basename(filePath) ?? filePath} className="max-h-full max-w-full rounded-r4 object-contain" src={state.dataUrl} />
-        </div>
-      ) : editing ? (
-        // Official b: textarea flex-1 min-h-0 w-full resize-none p-p6 font-mono text-code …
+      {editing ? (
         <textarea
+          aria-label={chrome.editFileContents}
+          autoFocus
           className="flex-1 min-h-0 w-full resize-none p-p6 font-mono text-code text-t9 bg-transparent outline-none hide-focus-ring border-0 select-text whitespace-pre"
-          value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
             if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
@@ -647,9 +764,25 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
             }
           }}
           spellCheck={false}
-          autoFocus
-          aria-label="Edit file contents"
+          value={draft}
         />
+      ) : (
+      <OfficialFileBodyMenu
+        attachPath={filePath}
+        canEdit={canEdit}
+        chrome={chrome}
+        editorItems={editorItems}
+        extraItems={extraItems}
+        onAttach={actions?.insertFileMention ? (path) => actions.insertFileMention?.(path) : undefined}
+        onCopyContents={copyContents}
+        onCopyPath={copyPath}
+        onEdit={beginEdit}
+        openInHeader={openInHeader}
+      >
+      {state.dataUrl ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-p8 overflow-auto">
+          <img alt={basename(filePath) ?? filePath} className="max-h-full max-w-full rounded-r4 object-contain" src={state.dataUrl} />
+        </div>
       ) : markdownPreview ? (
         // Official S: data-file-viewer … > max-w-[72ch] > Sb (epitaxy-markdown epitaxy-file-prose + mb tables)
         <div data-file-viewer="" className="flex-1 min-h-0 overflow-y-auto select-text px-[24px] py-[16px]">
@@ -658,18 +791,24 @@ export function OfficialFilePane({ bridge, fileView, sessionRef }: { bridge: Loc
           </div>
         </div>
       ) : (
-        // Official: epitaxy-diff flex-1 min-h-0 (data-file-viewer) > eu scroll > iu File
-        <div ref={fileBodyRef} className="epitaxy-diff flex-1 min-h-0" data-file-viewer="">
+        <div
+          ref={fileBodyRef}
+          className="epitaxy-diff flex-1 min-h-0"
+          data-file-viewer=""
+          style={pierreTabStyle}
+        >
           {pierreFile ? (
             <div className="h-full overflow-y-auto select-text">
               <PierreFile
-                key={`sidefile:${workerPool ? "ready" : "pending"}:${filePath}:${fileView.scrollNonce ?? 0}`}
                 file={pierreFile}
+                key={`sidefile:${workerPool ? "ready" : "pending"}:${filePath}:${fileView.scrollNonce ?? 0}`}
                 options={pierreOptions}
               />
             </div>
           ) : null}
         </div>
+      )}
+      </OfficialFileBodyMenu>
       )}
     </div>
   );

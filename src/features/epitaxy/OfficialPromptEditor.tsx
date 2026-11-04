@@ -1,7 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import type { LocalSessionsBridge } from "../../adapters/desktopBridge/types";
 import {
@@ -12,7 +12,7 @@ import { officialTiptapEditorAttributes } from "../shared/officialTiptapEditorAt
 import { handleEmptyDocBeforeInput } from "../shared/tiptapEmptyDocBeforeInput";
 import { OfficialButton, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
 import { useI18nText } from "../../i18n/footerMenuMessages";
-import { COMPOSER_SEND_STOP_MESSAGES } from "./officialCodeChromeMessages";
+import { COMPOSER_BASH_PILL_MESSAGES, COMPOSER_CHAT_MODE_MESSAGES, COMPOSER_SEND_STOP_MESSAGES } from "./officialCodeChromeMessages";
 import {
   OfficialComposerStagedImages,
   type StagedComposerImage,
@@ -25,12 +25,22 @@ import { OfficialEpitaxySlashCommandMenu } from "./slash/OfficialEpitaxySlashCom
 import { OfficialSkillChip } from "./slash/OfficialSkillChip";
 import { OfficialSlashCommandSuggestion } from "./slash/OfficialSlashCommandSuggestion";
 import type { OfficialSlashCommandMenuProps } from "./slash/OfficialSlashTypes";
+import {
+  OfficialComposerMentionExtension,
+  OfficialComposerMentionNode,
+} from "./composer/OfficialComposerMentionExtension";
+import { OfficialEpitaxyMentionDropdown } from "./composer/OfficialEpitaxyMentionDropdown";
+import { useOfficialComposerMentions } from "./composer/useOfficialComposerMentions";
+import { officialInsertCcdFileMention } from "./composer/officialComposerMentionSelect";
+import type { OfficialSshConfigForMentions } from "./composer/officialComposerAgentMentions";
 
 export type OfficialPromptEditorHandle = {
   focus: () => void;
   /** Official aYt / c119 Ye residual — used by Ase type-to-composer. */
   getEditor: () => Editor | null;
   insertSlashCommand: () => void;
+  /** Official Qj `insertFileMention` / je — ccd-files chip. */
+  insertFileMention: (path: string) => void;
   /** Insert plain text at cursor and focus (Ase residual). */
   insertText: (text: string) => void;
   /** Official aYt setText / clear — imperative only, not continuous controlled value. */
@@ -78,6 +88,12 @@ type OfficialPromptEditorProps = {
   /** Official cn.images strip above the prompt (draft + existing share residual). */
   stagedImages?: StagedComposerImage[];
   stagedFileAttachments?: StagedComposerFileAttachment[];
+  /**
+   * Official Cv draft-only agent pill (`agent:"draft"===Os?E:void 0`).
+   * Falsy hides. Existing-session Qj does not pass agent to Cv.
+   */
+  agent?: string | null;
+  onRemoveAgent?: () => void;
   onRemoveStagedImage?: (id: string) => void;
   onRemoveStagedFile?: (id: string) => void;
   /**
@@ -89,6 +105,19 @@ type OfficialPromptEditorProps = {
    * Official Qj `C` promptSuggestion — `_e` ghost text when editor empty.
    */
   promptSuggestion?: string | null;
+  /**
+   * Official Qj `agentMentionsEnabled:"draft"===Os&&Us`.
+   * Existing session / side chat stay false.
+   */
+  agentMentionsEnabled?: boolean;
+  /** Official vm ccd-files. Side chat is not Qj — leave false. */
+  fileMentionsEnabled?: boolean;
+  /** Official local cwd for Le.setFocusedCwd. */
+  mentionCwd?: string | null;
+  /** Official Qj `sshConfigForMentions` / `$t`. */
+  sshConfigForMentions?: OfficialSshConfigForMentions | null;
+  /** Official Qj `onAgentMention:P` — setState for Cv draft agent. */
+  onAgentMention?: (name: string) => void;
 };
 
 /**
@@ -118,12 +147,21 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   onAddFileAttachments,
   stagedImages = [],
   stagedFileAttachments = [],
+  agent,
+  onRemoveAgent,
   onRemoveStagedImage,
   onRemoveStagedFile,
   hasAttachments = false,
   promptSuggestion = null,
+  agentMentionsEnabled = false,
+  fileMentionsEnabled = false,
+  mentionCwd = null,
+  sshConfigForMentions = null,
+  onAgentMention,
 }, ref) {
   const sendStopText = useI18nText(COMPOSER_SEND_STOP_MESSAGES);
+  const chatModeText = useI18nText(COMPOSER_CHAT_MODE_MESSAGES);
+  const bashPillText = useI18nText(COMPOSER_BASH_PILL_MESSAGES);
   const editorRef = useRef<Editor | null>(null);
   const submitRef = useRef(onSubmit);
   const onStopRef = useRef(onStop);
@@ -138,6 +176,8 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   const onAddFileAttachmentsRef = useRef(onAddFileAttachments);
   const bashModeRef = useRef(false);
   const slashMenuStateRef = useRef({ bridge, session, sessionRef, slashCwd });
+  const mentionDropdownOpenRef = useRef(false);
+  const pendingFileMentionsRef = useRef<string[]>([]);
   /** Official vTt `g` / `x.current` — live placeholder string for RNt. */
   const placeholderRef = useRef(placeholder);
   /** Official vTt `k.current` — user has edited; block hydrate overwrite. */
@@ -174,7 +214,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   bashModeRef.current = isBashMode;
   slashMenuStateRef.current = { bridge, session, sessionRef, slashCwd };
   // Official: bash → "Enter a shell command"; else prop placeholder.
-  placeholderRef.current = isBashMode ? "Enter a shell command" : placeholder;
+  placeholderRef.current = isBashMode ? sendStopText.enterAShellCommand : placeholder;
   hasTextRef.current = hasText;
 
   useEffect(() => {
@@ -225,6 +265,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
     const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
     if (event.key !== "Escape") return false;
     if (hasSlashMenu) return false;
+    if (mentionDropdownOpenRef.current) return false;
     if (event.defaultPrevented) return false;
     if (busyRef.current && !stopOnceRef.current) {
       event.preventDefault();
@@ -251,6 +292,28 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
     }
     return false;
   };
+
+  const getMentionEditor = useCallback(() => editorRef.current, []);
+  const mentions = useOfficialComposerMentions({
+    agentMentionsEnabled,
+    bridge,
+    fileMentionsEnabled,
+    focusedCwd: mentionCwd,
+    getEditor: getMentionEditor,
+    onAgentMention,
+    sshConfigForMentions,
+  });
+  mentionDropdownOpenRef.current = mentions.dropdownOpen;
+  const mentionsRef = useRef(mentions);
+  mentionsRef.current = mentions;
+
+  const mentionGetProviders = useCallback(() => mentionsRef.current.providers, []);
+  const mentionOnSelect = useCallback((id: string) => {
+    mentionsRef.current.handleMentionSelect(id);
+  }, []);
+  const mentionOnStateChange = useCallback((state: Parameters<typeof mentions.handleStateChange>[0]) => {
+    mentionsRef.current.handleStateChange(state);
+  }, []);
 
   const slashMenuComponent = useMemo(() => function OfficialComposerSlashCommandMenuRenderer(props: OfficialSlashCommandMenuProps) {
     const state = slashMenuStateRef.current;
@@ -285,7 +348,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
     editable: !disabled,
     editorProps: {
       attributes: officialTiptapEditorAttributes({
-        "aria-label": "Prompt",
+        "aria-label": sendStopText.prompt,
         // epitaxy-root is select-none; contenteditable must opt back into text selection.
         class: "tiptap select-text",
         enterkeyhint: "enter",
@@ -318,7 +381,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         blockquote: false,
         bulletList: false,
         code: false,
-        // Official Qj vTt: disableDropCursor:!0 → MEt dropcursor:false (index-BELzQL5P).
+        // Official Qj vTt: disableDropCursor:!0 → MEt dropcursor:false (cd5a31703).
         // Default TipTap dropCursor paints a full-width black line on file dragover.
         dropcursor: false,
         heading: false,
@@ -328,7 +391,7 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       }),
       // Official index vTt RNt (= INt) — simple decorations, NO TipTap 3.27 viewport plugin.
       OfficialRNtPlaceholder.configure({
-        emptyEditorClass: "is-editor-empty before:!text-text-500 before:whitespace-nowrap",
+        emptyEditorClass: "is-editor-empty",
         emptyNodeClass: "is-empty",
         placeholder: () => placeholderRef.current,
         showOnlyCurrent: true,
@@ -336,18 +399,29 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       }),
       OfficialSkillChip,
       OfficialSlashCommandSuggestion.configure({ placement: "onpage", menuComponent: slashMenuComponent }),
+      OfficialComposerMentionNode,
+      ...(mentions.mentionsEnabled
+        ? [
+            OfficialComposerMentionExtension.configure({
+              getProviders: mentionGetProviders,
+              onSelect: mentionOnSelect,
+              onStateChange: mentionOnStateChange,
+            }),
+          ]
+        : []),
     ],
-    onCreate: ({ editor }) => {
-      editorRef.current = editor;
+    onCreate: ({ editor: created }) => {
+      editorRef.current = created;
     },
     onDestroy: () => {
       editorRef.current = null;
     },
-    onUpdate: ({ editor }) => {
+    shouldRerenderOnTransaction: false,
+    onUpdate: ({ editor: updated }) => {
       // Official vTt: k.current = true; setTipTapEditorState(json); Qj: he from trim.
       userEditedRef.current = true;
       // Residual TipTap getText() default blockSeparator is "\n\n" — do not invent "\n" collapse.
-      const next = editor.getText();
+      const next = updated.getText();
       const nextHas = next.trim().length > 0;
       if (nextHas !== hasTextRef.current) {
         hasTextRef.current = nextHas;
@@ -356,8 +430,14 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       lastParentValueRef.current = next;
       onChangeRef.current(next);
     },
-    shouldRerenderOnTransaction: false,
-  }, [slashMenuComponent]);
+  }, [mentionGetProviders, mentionOnSelect, mentionOnStateChange, mentions.mentionsEnabled, slashMenuComponent]);
+
+  useEffect(() => {
+    if (!editor || pendingFileMentionsRef.current.length === 0) return;
+    const queued = pendingFileMentionsRef.current;
+    pendingFileMentionsRef.current = [];
+    for (const path of queued) officialInsertCcdFileMention(editor, path);
+  }, [editor]);
 
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -392,6 +472,14 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
       } catch {
         /* destroyed */
       }
+    },
+    insertFileMention: (path: string) => {
+      const ed = editor ?? editorRef.current;
+      if (!ed || ed.isDestroyed || !ed.view) {
+        pendingFileMentionsRef.current.push(path);
+        return;
+      }
+      officialInsertCcdFileMention(ed, path);
     },
     insertText: (text: string) => {
       const ed = editor ?? editorRef.current;
@@ -497,48 +585,50 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
   }, [editor, value]);
 
   return (
+    <>
     <div
       className={`epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300 ${isBashMode ? "[&_.tiptap]:font-mono [&_.tiptap]:text-[length:var(--text-code)]" : ""}`}
     >
       <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" data-surface="prompt" />
       {isBashMode ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-r7 shadow-[inset_0_0_0_1px_var(--extended-purple)]" /> : null}
-      <span className="sr-only" role="status">{isBashMode ? "Bash mode. Press Escape to return to chat." : "Chat mode"}</span>
+      <span className="sr-only" role="status">{isBashMode ? chatModeText.bashMode : chatModeText.chatMode}</span>
       <div aria-hidden="true" className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}>
         <div className="min-h-0 overflow-hidden" />
       </div>
-      {onRemoveStagedImage || onRemoveStagedFile ? (
+      {onRemoveStagedImage || onRemoveStagedFile || agent ? (
         <OfficialComposerStagedImages
+          agent={agent}
           fileAttachments={stagedFileAttachments}
           images={stagedImages}
           onRemove={onRemoveStagedImage ?? (() => {})}
+          onRemoveAgent={onRemoveAgent}
           onRemoveFile={onRemoveStagedFile}
         />
       ) : null}
       <div className="relative flex w-full">
-        {isBashMode ? <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
+        {isBashMode ? <span aria-hidden="true" title={bashPillText.runAsShellCommand} className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
         {/*
-          Official c119 Qj wa EditorContent className (exact residual string):
-            epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9
-            [&_.tiptap]:min-h-[var(--h8)] … [&_.tiptap_p]:m-0
-            + (_e ? "[&_.is-editor-empty]:before:!content-['']" : "")
-          _e = !(!C||he||W||m) — C=promptSuggestion.
-          float-left / pointer-events-none live in residual base CSS
-          (.ProseMirror p.is-editor-empty:first-child:before), NOT on Qj wa.
+          Official shared-9 ChatComposer: wrapper `relative font-large`;
+          empty `[&_.ProseMirror.is-editor-empty]:italic [&_.ProseMirror.is-editor-empty]:before:text-muted`.
+          Qj wa keeps epitaxy-prompt-input + tiptap min-h; not c119 `text-heading text-t9`.
         */}
+        <div className="relative font-large min-w-0 flex-1">
         <EditorContent
-          className={`epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0${showPromptSuggestion ? " [&_.is-editor-empty]:before:!content-['']" : ""}`}
+          className={`epitaxy-prompt-input flex-1 min-w-0 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0${showPromptSuggestion ? " [&_.is-editor-empty]:before:!content-['']" : " [&_.ProseMirror.is-editor-empty]:italic [&_.ProseMirror.is-editor-empty]:before:text-muted"}`}
           editor={editor}
           onKeyDownCapture={(event) => {
             if (handleQjKeyDown(event)) return;
             const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
             const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
             // Official Qj: Enter + !shift + !alt + !nativeEvent.isComposing (no keyCode 229 invent).
+            // Mention Hj open (de.current) also swallows Enter — Ljt onSelect, not submit.
             if (
               event.key !== "Enter"
               || event.shiftKey
               || event.altKey
               || event.nativeEvent.isComposing
               || hasSlashMenu
+              || mentionDropdownOpenRef.current
             ) {
               return;
             }
@@ -550,11 +640,12 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         {showPromptSuggestion ? (
           <span
             aria-hidden
-            className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5"
+            className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] italic text-muted"
           >
             {promptSuggestion}
           </span>
         ) : null}
+        </div>
         <div className="flex self-end p-p7 pl-p3">
           <OfficialButton
             ariaLabel={busy ? sendStopText.stop : sendStopText.send}
@@ -566,6 +657,17 @@ export const OfficialPromptEditor = forwardRef<OfficialPromptEditorHandle, Offic
         </div>
       </div>
     </div>
+    {mentions.dropdownOpen && mentions.mentionState.position ? (
+      <OfficialEpitaxyMentionDropdown
+        isLoading={Boolean(mentions.mentionState.isLoading)}
+        onClose={mentions.handleDropdownClose}
+        onSelect={mentions.handleMentionSelect}
+        options={mentions.mentionState.options}
+        position={mentions.mentionState.position}
+        selectedIndex={mentions.mentionState.selectedIndex}
+      />
+    ) : null}
+    </>
   );
 });
 

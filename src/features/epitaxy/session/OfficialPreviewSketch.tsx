@@ -26,6 +26,8 @@ import {
   OfficialDropdownButton,
   type OfficialDropdownItem,
 } from "../OfficialEpitaxyComponents";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { SKETCH_TOOLBAR_MESSAGES } from "../officialCodeChromeMessages";
 
 export type SketchTool = "pen" | "line" | "rect" | "ellipse" | "text";
 
@@ -466,6 +468,7 @@ export const OfficialSketchToolbar = memo(function OfficialSketchToolbar({
   actions?: ReactNode;
   className?: string;
 }) {
+  const sketchText = useI18nText(SKETCH_TOOLBAR_MESSAGES);
   const tools = Object.keys(TOOL_LABELS) as SketchTool[];
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [narrow, setNarrow] = useState(false);
@@ -515,7 +518,7 @@ export const OfficialSketchToolbar = memo(function OfficialSketchToolbar({
     <div
       ref={rootRef}
       className={["absolute inset-x-[var(--p7)] flex justify-center", className].filter(Boolean).join(" ")}
-      data-official-source="c11959232-yS-sketch-toolbar"
+      data-official-source="cd5a31703-B4nKQMBN.js:yS-sketch-toolbar"
       data-narrow={narrow ? "1" : "0"}
     >
       <div className="relative isolate w-max max-w-full rounded-r6 bg-bg-000/90 shadow-md border border-border-300">
@@ -585,7 +588,7 @@ export const OfficialSketchToolbar = memo(function OfficialSketchToolbar({
             type="button"
             disabled={!hasStrokes}
             onClick={onClear}
-            aria-label="Clear"
+            aria-label={sketchText.clear}
             className="flex h-7 w-7 items-center justify-center rounded-r4 text-t7 outline-none ring-focus enabled:hover:bg-t2 enabled:hover:text-t9 disabled:text-t4"
           >
             <Icon name="TrashCanRound" size="sm" />

@@ -38,7 +38,7 @@ function ConnectorCard({ items, keyword, loading }: { items: SuggestionItem[]; k
       </div>
       {loading ? <ConnectorSkeletonRows /> : items.length ? <div className="max-h-96 overflow-y-auto">{items.map((item) => <SuggestionRow icon="Connectors" item={item} key={item.name} />)}</div> : (
         <div className="px-4 py-3 text-sm text-text-400">
-          {/* Official index-BELzQL5P OBvNfVIt7i — <link> → DK=/customize/connectors */}
+          {/* Official c21f11e6d-CxD82rYo.js OBvNfVIt7i — <link> → DK=/customize/connectors */}
           I didn&apos;t find a matching connector, but you can{" "}
           <a
             className="underline underline-offset-2 hover:text-text-300"

@@ -1,6 +1,6 @@
 /**
  * Official rVe + NVe + pVe/hVe structure residual for Local Cowork
- * (index-BELzQL5P ~96073 / ~96524 / pVe·hVe).
+ * (c21f11e6d-CxD82rYo.js ~96073 / ~96524 / pVe·hVe).
  * Reads local coworkRateLimitStore messageLimits — not full account hc()/react-query bootstrap.
  *
  * 3p honesty wall (product choice): never invent Anthropic subscribe / AddCredits / contact-sales

@@ -1,5 +1,5 @@
 /**
- * Official pictogram Wa from c23fd7eb1-B0qByuxY.js (via Wq/Vq in index-BELzQL5P).
+ * Official pictogram Wa from c23fd7eb1-B0qByuxY.js (via Wq/Vq in index-D35w9RK9).
  */
 import type { SVGProps } from "react";
 

@@ -1,5 +1,5 @@
 /**
- * Official ImageBlockThumbnail residual (index-BELzQL5P UHe / OHe) for Cowork composer.
+ * Official ImageBlockThumbnail residual (c21f11e6d-CxD82rYo.js UHe / OHe) for Cowork composer.
  * 120×120 group/thumbnail strip + absolute remove control.
  * Loading pulse while FileReader finishes (product stage bridge; no invent spinner).
  */
@@ -17,7 +17,7 @@ export function CoworkStagedImageStrip({
   return (
     <div
       className="flex flex-wrap gap-2"
-      data-official-source="index-BELzQL5P:UHe/ImageBlockThumbnail"
+      data-official-source="c21f11e6d-CxD82rYo.js:UHe/ImageBlockThumbnail"
     >
       {images.map((image) => (
         <CoworkStagedImageThumbnail
@@ -61,7 +61,7 @@ function CoworkStagedImageThumbnail({
       <button
         aria-label={`Remove ${accessibleName}`}
         className="transition-all hover:bg-bg-000/50 text-text-500 hover:text-text-200 group-focus-within/thumbnail:opacity-100 group-hover/thumbnail:opacity-100 opacity-0 w-5 h-5 absolute -top-2 -left-2 rounded-full border-0.5 border-border-300/25 bg-bg-000/90 backdrop-blur-sm flex items-center justify-center"
-        data-official-source="index-BELzQL5P:OHe"
+        data-official-source="c21f11e6d-CxD82rYo.js:OHe"
         onClick={(event) => {
           event.stopPropagation();
           event.preventDefault();

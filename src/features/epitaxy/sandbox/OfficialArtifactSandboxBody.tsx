@@ -1,5 +1,5 @@
 /**
- * Official b6e residual (index-BELzQL5P):
+ * Official b6e residual (cd5a31703):
  *   rich (type ≠ Code/Markdown, content defined, !showRaw) → g6e RichSandbox
  *   Code || showRaw → code surface
  *   Markdown → markdown document surface
@@ -54,7 +54,7 @@ export const OfficialArtifactSandboxBody = memo(
             className ??
             "h-full w-full relative border-none ease-out duration-200"
           }
-          data-official-source="index-BELzQL5P.js:b6e rich→g6e"
+          data-official-source="cd5a31703-B4nKQMBN.js:b6e rich→g6e"
         >
           <OfficialRichSandbox
             ref={richSandboxRef}
@@ -78,7 +78,7 @@ export const OfficialArtifactSandboxBody = memo(
             className ??
             "relative flex w-full flex-1 overflow-x-auto overflow-y-scroll ease-out duration-200"
           }
-          data-official-source="index-BELzQL5P.js:b6e code/raw"
+          data-official-source="cd5a31703-B4nKQMBN.js:b6e code/raw"
         >
           <pre className="code-block__code !my-0 h-fit min-h-full w-fit min-w-full !rounded-none !text-sm !leading-relaxed p-3.5 m-0 whitespace-pre">
             {content}
@@ -98,7 +98,7 @@ export const OfficialArtifactSandboxBody = memo(
             className ??
             "relative flex w-full flex-1 overflow-x-auto overflow-y-scroll ease-out duration-200"
           }
-          data-official-source="index-BELzQL5P.js:b6e markdown"
+          data-official-source="cd5a31703-B4nKQMBN.js:b6e markdown"
         >
           <div
             id="markdown-artifact"

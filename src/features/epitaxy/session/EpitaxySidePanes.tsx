@@ -14,6 +14,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type Ref,
 } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { desktopBridge, type LocalSessionsBridge, type SessionSummary, type ChatMessage } from "../../../adapters/desktopBridge";
@@ -26,19 +27,47 @@ import {
   type OfficialViewPane,
 } from "../OfficialEpitaxyComponents";
 import {
+  PREVIEW_EMPTY_MESSAGES,
+  SESSION_LOAD_MESSAGES,
+  SHOW_IN_FOLDER_MESSAGES,
   SIDE_PANE_CHROME_MESSAGES,
   VIEWS_MENU_MESSAGES,
 } from "../officialCodeChromeMessages";
 import { OfficialDiffPane, type OfficialDiffCompareMeta } from "../OfficialDiffPane";
 import { OfficialFilePane, type OfficialFileViewTarget } from "./OfficialFilePane";
 import { OfficialFilesBrowserPane } from "./OfficialFilesBrowserPane";
+import { OfficialFilesHeaderTabs } from "./OfficialFilesHeaderTabs";
+import {
+  OFFICIAL_FILES_TAB_SIZES,
+  readOfficialFilesViewPrefs,
+  writeOfficialFilesViewPref,
+  type OfficialFilesViewPrefs,
+} from "./officialFilesPrefs";
 import { OfficialPlanPane } from "./OfficialPlanPane";
 import { OfficialPreviewPane, type OfficialPreviewTarget } from "./OfficialPreviewPane";
+import { isEpitaxyPopoutWindow } from "./epitaxyPopoutWindow";
+import {
+  OfficialPreviewAddressBar,
+  OfficialPreviewGlobeMenu,
+  OfficialPreviewTrailingChrome,
+} from "./OfficialPreviewHeaderChrome";
 import { OfficialFramebufferPane } from "./OfficialFramebufferPane";
 import { OfficialRunsPane } from "./OfficialRunsPane";
 import { OfficialShellPtyPane } from "./OfficialShellPtyPane";
 import { OfficialTasksPane } from "./OfficialTasksPane";
 import { useOfficialCodeSessionBucket } from "./officialCodeSessionStore";
+import {
+  officialEpitaxyTerminalTabsStore,
+  officialPtyCdCommand,
+  officialTerminalPtyKey,
+  officialTerminalTabsForSession,
+  OFFICIAL_DEFAULT_TERMINAL_TAB_ID,
+  useOfficialEpitaxyTerminalTabs,
+} from "./officialEpitaxyTerminalTabsStore";
+import {
+  officialEpitaxyShellRunStore,
+  officialFlushPendingShellCommand,
+} from "./officialEpitaxyShellRunStore";
 import { officialShowInFolderLabel } from "./officialFilePreviewUtils";
 import { parseOfficialPlan, resolvePlanOpenPath } from "./officialTasksAndPlan";
 import {
@@ -50,7 +79,7 @@ import {
 export const sidePaneMinWidth = 100;
 const sidePaneResizeStep = 24;
 const sidePaneResizeHandleSize = 12;
-/** Official ur: chat flex 2 vs side flex 1 → side ≈ 1/3 until resized. */
+/** Official ur fallback: chat flex 2 vs side flex 1. File/diff/preview first-open uses 3 (c039 `la`). */
 export const sidePaneDefaultFlex = 1;
 export const chatDefaultFlex = 2;
 
@@ -172,34 +201,65 @@ function useOfficialSideTileEnteringIds(sideTiles: readonly OfficialViewPane[]) 
 
 /**
  * Official YI on the side tile in the chat row (c11959232):
- * first open next to chat animates flexGrow 0 → side flex (1) with $I tween so chat is squeezed,
+ * first open next to chat animates flexGrow 0 → tile.flex (file=3, tasks=1) with $I tween so chat is squeezed,
  * not mounted full-width. Fixed-width (post-resize) skips flex enter.
  */
 export function EpitaxySidePaneColumn({
   fileView,
+  flex,
   isTopLeft,
+  landingCwd,
   messages,
   onCloseAll,
   onCloseTile,
+  onFileViewChange,
+  onPopOut,
+  onDock,
+  onTogglePopoutAlwaysOnTop,
+  popoutAlwaysOnTop = false,
   onSidePaneWidthChange,
   previewTarget,
   renderSubagent,
   session,
   sessionRef,
+  showExpand = true,
+  hideCloseButton = false,
+  fileTabs,
+  onFileTabsChange,
   sidePaneWidth,
   sideTiles,
   subagentView,
 }: {
   fileView: OfficialFileViewTarget | null;
+  /** Residual side column flex (c039 `la`: file/diff/preview = 3). */
+  flex?: number;
   isTopLeft?: boolean;
+  /** Official vN `landingCwd` — draft home file pane. */
+  landingCwd?: string | null;
   messages: ChatMessage[];
   onCloseAll: () => void;
   onCloseTile: (view: OfficialViewPane) => void;
+  /** Official cccc `Db` activateFileTab / closeFileTab. */
+  onFileViewChange?: (view: OfficialFileViewTarget | null) => void;
+  /** Official cccc `nT` — Files header WindowNew. */
+  onPopOut?: (view: OfficialViewPane) => void;
+  /** Official shared-18 `yx` — popout dock. */
+  onDock?: () => void;
+  /** Official shared-18 `hx` pin. */
+  onTogglePopoutAlwaysOnTop?: () => void;
+  popoutAlwaysOnTop?: boolean;
   onSidePaneWidthChange: (width: number) => void;
   previewTarget: OfficialPreviewTarget | null;
   renderSubagent?: (subagentView: OfficialSubagentTarget) => ReactNode;
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef | null;
+  /** Official ca5db `V` Expand — hidden in popout window. */
+  showExpand?: boolean;
+  /** Official c563 `hideCloseButton:!0` on popout host. */
+  hideCloseButton?: boolean;
+  /** Official cccc `Db` fileTabs — owned by session store / popout hydrate. */
+  fileTabs?: string[];
+  onFileTabsChange?: (tabs: string[]) => void;
   sidePaneWidth?: number;
   sideTiles: OfficialViewPane[];
   subagentView: OfficialSubagentTarget | null;
@@ -207,6 +267,9 @@ export function EpitaxySidePaneColumn({
   const columnRef = useRef<HTMLDivElement | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const [isResizingSidePane, setIsResizingSidePane] = useState(false);
+  /** Official ca5db `R`/`V` toggleExpandedTile — Files column fills remaining row. */
+  const [paneExpanded, setPaneExpanded] = useState(false);
+  const columnFlex = paneExpanded ? 100 : (flex ?? sidePaneDefaultFlex);
   const reduceMotion = useReducedMotion();
   // Official YI isEntering for the row side tile: one-shot on mount while flex mode (no fixed width).
   // Fixed width after user resize is flex:0 0 auto — no flexGrow enter.
@@ -233,7 +296,7 @@ export function EpitaxySidePaneColumn({
   // Column of FI tiles: official stack gap=12 between tasks/subagent (nE.gap).
   // flexGrow lives on motion animate when flex mode so initial 0 is not clobbered by style.flexGrow.
   const sidePaneStyle = useMemo<CSSProperties>(() => {
-    if (sidePaneWidth === undefined) {
+    if (sidePaneWidth === undefined || paneExpanded) {
       return {
         height: "100%",
         // Official YI: minSize 0 while entering so flex can grow from nothing.
@@ -259,7 +322,7 @@ export function EpitaxySidePaneColumn({
       minHeight: 0,
       position: "relative",
     };
-  }, [animateColumnEnter, sidePaneWidth]);
+  }, [animateColumnEnter, paneExpanded, sidePaneWidth]);
 
   // Official YI shell while entering: absolute fill of growing wrap (data-entering).
   const columnShellStyle = useMemo<CSSProperties | undefined>(() => {
@@ -357,8 +420,19 @@ export function EpitaxySidePaneColumn({
       fileView={fileView}
       isEntering={enteringIds.has(tile)}
       isTopLeft={isTopLeft && index === 0}
+      landingCwd={landingCwd}
       messages={messages}
       onClose={() => (sideTiles.length === 1 ? onCloseAll() : onCloseTile(tile))}
+      onFileViewChange={onFileViewChange}
+      onPopOut={onPopOut ? () => onPopOut(tile) : undefined}
+      onDock={onDock}
+      onToggleExpand={showExpand && !onDock ? () => setPaneExpanded((expanded) => !expanded) : undefined}
+      hideCloseButton={hideCloseButton}
+      popoutAlwaysOnTop={popoutAlwaysOnTop}
+      onTogglePopoutAlwaysOnTop={onTogglePopoutAlwaysOnTop}
+      fileTabs={fileTabs}
+      onFileTabsChange={onFileTabsChange}
+      paneExpanded={paneExpanded}
       previewTarget={previewTarget}
       renderSubagent={renderSubagent}
       session={session}
@@ -369,7 +443,7 @@ export function EpitaxySidePaneColumn({
 
   // Outer is the flex sibling of chat (parent gap:12). Resize handle overlays the gap, official-style.
   // Official YI: motion flexGrow 0→side flex ($I) on row enter; fixed-width path is plain div.
-  if (sidePaneWidth !== undefined) {
+  if (sidePaneWidth !== undefined && !paneExpanded) {
     return (
       <div ref={columnRef} className="min-w-0 min-h-0 relative" style={sidePaneStyle}>
         <div
@@ -398,7 +472,7 @@ export function EpitaxySidePaneColumn({
       className="min-w-0 min-h-0 relative"
       data-entering={animateColumnEnter || undefined}
       initial={animateColumnEnter ? { flexGrow: 0 } : false}
-      animate={{ flexGrow: sidePaneDefaultFlex }}
+      animate={{ flexGrow: columnFlex }}
       transition={animateColumnEnter ? officialTileEnterTransition : { duration: 0 }}
       style={sidePaneStyle}
     >
@@ -440,8 +514,19 @@ function EpitaxySidePaneTile({
   fileView,
   isEntering = false,
   isTopLeft,
+  landingCwd,
   messages,
   onClose,
+  onFileViewChange,
+  onPopOut,
+  onDock,
+  onToggleExpand,
+  hideCloseButton = false,
+  popoutAlwaysOnTop = false,
+  onTogglePopoutAlwaysOnTop,
+  fileTabs: fileTabsProp,
+  onFileTabsChange,
+  paneExpanded = false,
   previewTarget,
   renderSubagent,
   session,
@@ -453,9 +538,25 @@ function EpitaxySidePaneTile({
   /** Official qI enteringIds.has(tileId) — stack open under existing side tile. */
   isEntering?: boolean;
   isTopLeft?: boolean;
+  landingCwd?: string | null;
   /** Official oe(sessionId) — full hydrated transcript, not sparse session.messages. */
   messages: ChatMessage[];
   onClose: () => void;
+  onFileViewChange?: (view: OfficialFileViewTarget | null) => void;
+  /** Official cccc `nT` / ca5db `H` — session Files WindowNew. */
+  onPopOut?: () => void;
+  /** Official shared-18 `yx` — popout ArrowInSquare dock. */
+  onDock?: () => void;
+  /** Official ca5db `V` / `R` toggleExpandedTile. */
+  onToggleExpand?: () => void;
+  /** Official c563 `hideCloseButton:!0`. */
+  hideCloseButton?: boolean;
+  /** Official shared-18 `hx` pin. */
+  popoutAlwaysOnTop?: boolean;
+  onTogglePopoutAlwaysOnTop?: () => void;
+  fileTabs?: string[];
+  onFileTabsChange?: (tabs: string[]) => void;
+  paneExpanded?: boolean;
   previewTarget: OfficialPreviewTarget | null;
   renderSubagent?: (subagentView: OfficialSubagentTarget) => ReactNode;
   session: SessionSummary | null;
@@ -464,12 +565,44 @@ function EpitaxySidePaneTile({
 }) {
   const codeSurface = activeView === "terminal" || activeView === "diff" || activeView === "file";
   const bridge = desktopBridge.LocalSessions;
+  const viewsText = useI18nText(VIEWS_MENU_MESSAGES);
+  const chromeText = useI18nText(SIDE_PANE_CHROME_MESSAGES);
+  const previewChrome = useI18nText(PREVIEW_EMPTY_MESSAGES);
+  const sessionLoadText = useI18nText(SESSION_LOAD_MESSAGES);
   // Official Lr (ca0135bc5): diffShowTree:!1 — tree off until user clicks Show files.
   const [diffShowTree, setDiffShowTree] = useState(false);
   // Official oN: diffCanFitTree[repoKey] ?? true — Hide/Show files only when d (canFitTree).
   const [diffCanFitTree, setDiffCanFitTree] = useState(true);
   const [diffCompareMeta, setDiffCompareMeta] = useState<OfficialDiffCompareMeta | null>(null);
-  const [terminalTabs, setTerminalTabs] = useState<TerminalTabsState>(() => createDefaultTerminalTabs());
+  /** Official mb tree column — session default shown. c039 `Nn` popout reads `epitaxy-popout-files-tree-shown`. */
+  const [filesTreeShown, setFilesTreeShown] = useState(() => {
+    if (!isEpitaxyPopoutWindow()) return true;
+    try {
+      return window.localStorage.getItem("epitaxy-popout-files-tree-shown") === "true";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (!isEpitaxyPopoutWindow()) return;
+    try {
+      window.localStorage.setItem("epitaxy-popout-files-tree-shown", filesTreeShown ? "true" : "false");
+    } catch {
+      /* ignore quota */
+    }
+  }, [filesTreeShown]);
+  /** Official cccc `Db` `fileTabs` — session-owned when parent hydrates popout. */
+  const [fileTabsLocal, setFileTabsLocal] = useState<string[]>(() => fileTabsProp ?? []);
+  const fileTabs = fileTabsProp ?? fileTabsLocal;
+  const setFileTabs = useCallback((next: string[] | ((current: string[]) => string[])) => {
+    const resolved = typeof next === "function" ? next(fileTabs) : next;
+    if (!fileTabsProp) setFileTabsLocal(resolved);
+    onFileTabsChange?.(resolved);
+  }, [fileTabs, fileTabsProp, onFileTabsChange]);
+  /** Official cccc `jC` Files ⋯ prefs. */
+  const [filesPrefs, setFilesPrefs] = useState(readOfficialFilesViewPrefs);
+  const filesFilterRef = useRef<HTMLInputElement | null>(null);
+  const terminalTabs = useOfficialEpitaxyTerminalTabs(sessionRef?.id);
   // Official eR/XN: plan header actions read oe(sessionId) independently of prop identity.
   const planBucket = useOfficialCodeSessionBucket(sessionRef?.id);
   const planMessages = planBucket?.messages ?? messages;
@@ -481,45 +614,66 @@ function EpitaxySidePaneTile({
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
-    setTerminalTabs(createDefaultTerminalTabs());
     setDiffCompareMeta(null);
     setDiffCanFitTree(true);
-  }, [sessionRef?.id]);
+    if (!fileTabsProp) setFileTabsLocal([]);
+  }, [sessionRef?.id, fileTabsProp]);
+
+  useEffect(() => {
+    const path = fileView?.path;
+    if (!path) return;
+    setFileTabs((current) => (current.includes(path) ? current : [...current, path]));
+  }, [fileView?.path]);
+
+  const activateFileTab = useCallback((path: string) => {
+    onFileViewChange?.({ path, scrollNonce: Date.now() });
+  }, [onFileViewChange]);
+
+  const closeFileTab = useCallback((path: string) => {
+    setFileTabs((current) => {
+      const next = current.filter((item) => item !== path);
+      if (fileView?.path === path) {
+        const fallback = next.at(-1);
+        onFileViewChange?.(fallback ? { path: fallback, scrollNonce: Date.now() } : null);
+      }
+      return next;
+    });
+  }, [fileView?.path, onFileViewChange]);
+
+  const toggleFilesPref = useCallback((key: Exclude<keyof OfficialFilesViewPrefs, "tabSize">) => {
+    setFilesPrefs((current) => {
+      const nextValue = !current[key];
+      writeOfficialFilesViewPref(key, nextValue);
+      return { ...current, [key]: nextValue };
+    });
+  }, []);
+
+  const setFilesTabSize = useCallback((tabSize: number) => {
+    setFilesPrefs((current) => {
+      writeOfficialFilesViewPref("tabSize", tabSize);
+      return { ...current, tabSize };
+    });
+  }, []);
 
   const addTerminalTab = useCallback(() => {
-    setTerminalTabs((current) => {
-      const id = String(current.nextId);
-      const tab = { id, ordinal: current.nextId + 1 };
-      return {
-        activeId: id,
-        nextId: current.nextId + 1,
-        tabs: [...current.tabs, tab],
-      };
-    });
-  }, []);
+    if (!sessionRef) return;
+    officialEpitaxyTerminalTabsStore.getState().addTab(sessionRef.id);
+  }, [sessionRef]);
 
   const selectTerminalTab = useCallback((tabId: string) => {
-    setTerminalTabs((current) => current.activeId === tabId ? current : { ...current, activeId: tabId });
-  }, []);
+    if (!sessionRef) return;
+    officialEpitaxyTerminalTabsStore.getState().setActive(sessionRef.id, tabId);
+  }, [sessionRef]);
 
   const closeTerminalTab = useCallback((tabId: string) => {
-    if (sessionRef) void bridge.stopShellPty?.(terminalPtyKey(sessionRef.id, tabId));
-    setTerminalTabs((current) => {
-      const index = current.tabs.findIndex((tab) => tab.id === tabId);
-      if (index < 0) return current;
-      const tabs = current.tabs.filter((tab) => tab.id !== tabId);
-      if (tabs.length === 0) return createDefaultTerminalTabs();
-      const activeId = current.activeId === tabId ? tabs[Math.min(index, tabs.length - 1)]?.id ?? tabs[0].id : current.activeId;
-      return { ...current, activeId, tabs };
-    });
-  }, [bridge, sessionRef]);
+    if (!sessionRef) return;
+    officialEpitaxyTerminalTabsStore.getState().closeTab(sessionRef.id, tabId);
+  }, [sessionRef]);
 
   const renameTerminalTab = useCallback((tabId: string, name: string) => {
-    setTerminalTabs((current) => ({
-      ...current,
-      tabs: current.tabs.map((tab) => tab.id === tabId ? { ...tab, name: name || undefined } : tab),
-    }));
-  }, []);
+    if (!sessionRef) return;
+    officialEpitaxyTerminalTabsStore.getState().renameTab(sessionRef.id, tabId, name);
+  }, [sessionRef]);
 
   const activeTerminalTab = terminalTabs.tabs.find((tab) => tab.id === terminalTabs.activeId) ?? terminalTabs.tabs[0];
 
@@ -569,6 +723,7 @@ function EpitaxySidePaneTile({
       <div
         className="tiles-shell h-full w-full min-w-0 relative isolate rounded-r6"
         data-entering={isEntering || undefined}
+        data-tile-host={activeView}
         style={tileShellStyle}
       >
         {/* Official FI / DI + Nn sidebar elevation */}
@@ -580,9 +735,23 @@ function EpitaxySidePaneTile({
             className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated"
             data-surface="sidebar"
           />
-          <div data-top-left={isTopLeft || undefined} className="relative flex items-center justify-between gap-g6 h-[32px] pl-[8px] pr-[4px] shrink-0">
+          <div
+            data-top-left={isTopLeft || undefined}
+            className="relative flex items-center justify-between gap-g6 h-[32px] pl-[8px] pr-[4px] shrink-0"
+          >
             <div className="draggable absolute inset-0 -z-[1]" aria-hidden="true" />
             <OfficialSidePaneTitle
+              extraAfter={
+                activeView === "preview" ? (
+                  <>
+                    <OfficialPreviewAddressBar />
+                    <OfficialPreviewTrailingChrome
+                      chrome={previewChrome}
+                      paneSettings={chromeText.paneSettings.replace("{pane}", viewsText.preview)}
+                    />
+                  </>
+                ) : null
+              }
               activeView={activeView}
               session={session}
               sessionRef={sessionRef}
@@ -591,8 +760,17 @@ function EpitaxySidePaneTile({
                 diffCanFitTree,
                 diffCompareMeta,
                 diffShowTree,
+                fileTabs,
                 fileView,
+                filesTreeShown,
+                onActivateFileTab: activateFileTab,
+                onCloseFileTab: closeFileTab,
                 onDiffShowTreeChange: setDiffShowTree,
+                onFocusFilesFilter: () => {
+                  filesFilterRef.current?.focus();
+                  filesFilterRef.current?.select();
+                },
+                onToggleFilesTree: () => setFilesTreeShown((shown) => !shown),
                 onAddTab: addTerminalTab,
                 subagentView,
                 onCloseTab: closeTerminalTab,
@@ -602,6 +780,120 @@ function EpitaxySidePaneTile({
               }}
             />
             <div className="relative z-[1] flex items-center gap-g1 shrink-0 draggable-none">
+              {activeView === "file" && sessionRef ? (
+                <>
+                  <OfficialButton
+                    ariaLabel={chromeText.goToFileOrSearch}
+                    icon="Search"
+                    preferFont
+                    tooltip={null}
+                    onClick={() => {
+                      if (!filesTreeShown) setFilesTreeShown(true);
+                      const input = filesFilterRef.current;
+                      if (input) {
+                        input.focus();
+                        input.select();
+                      }
+                    }}
+                  />
+                  <OfficialDropdownButton
+                    align="end"
+                    ariaLabel={chromeText.paneSettings.replace("{pane}", viewsText.files)}
+                    tooltip={chromeText.paneSettings.replace("{pane}", viewsText.files)}
+                    extraSections={[
+                      {
+                        items: [
+                          { checked: filesPrefs.previewTabs, keepOpen: true, label: chromeText.previewTabs, onSelect: () => toggleFilesPref("previewTabs") },
+                          { checked: filesPrefs.autoSave, keepOpen: true, label: chromeText.autoSave, onSelect: () => toggleFilesPref("autoSave") },
+                          { checked: filesPrefs.tabIndents, keepOpen: true, label: chromeText.tabKeyIndents, onSelect: () => toggleFilesPref("tabIndents") },
+                        ],
+                      },
+                      {
+                        items: [
+                          { checked: filesPrefs.wordWrap, keepOpen: true, label: chromeText.wordWrap, onSelect: () => toggleFilesPref("wordWrap") },
+                          { checked: filesPrefs.indentGuides, keepOpen: true, label: chromeText.indentGuides, onSelect: () => toggleFilesPref("indentGuides") },
+                          { checked: filesPrefs.showWhitespace, keepOpen: true, label: chromeText.showWhitespace, onSelect: () => toggleFilesPref("showWhitespace") },
+                          { checked: filesPrefs.scrollPastEnd, keepOpen: true, label: chromeText.scrollPastEnd, onSelect: () => toggleFilesPref("scrollPastEnd") },
+                          {
+                            keepOpen: true,
+                            label: chromeText.tabSize,
+                            trailing: <span className="text-footnote text-t6 tabular-nums">{filesPrefs.tabSize}</span>,
+                            items: OFFICIAL_FILES_TAB_SIZES.map((size) => ({
+                              checked: filesPrefs.tabSize === size,
+                              keepOpen: true,
+                              label: String(size),
+                              onSelect: () => setFilesTabSize(size),
+                            })),
+                          },
+                        ],
+                      },
+                    ]}
+                    icon="DotsVertical"
+                    preferFont
+                    items={[
+                      {
+                        checked: filesTreeShown,
+                        keepOpen: true,
+                        label: chromeText.showFileTree,
+                        onSelect: () => setFilesTreeShown((shown) => !shown),
+                      },
+                    ]}
+                    revealChevron="never"
+                  />
+                  {/* Session: c4db Xe WindowNew + Expand. Popout: shared-18 yx ArrowInSquare + hx Pin. */}
+                  {onDock ? (
+                    <OfficialButton
+                      ariaLabel={chromeText.openInMainWindow}
+                      icon="ArrowInSquare"
+                      onClick={onDock}
+                      preferFont
+                      tooltipSide="bottom"
+                      variant="ghost"
+                    />
+                  ) : onPopOut ? (
+                    <OfficialButton
+                      ariaLabel={chromeText.openInNewWindow}
+                      icon="WindowNew"
+                      onClick={onPopOut}
+                      preferFont
+                      tooltipSide="bottom"
+                      variant="ghost"
+                    />
+                  ) : null}
+                  {onTogglePopoutAlwaysOnTop ? (
+                    <OfficialButton
+                      ariaLabel={popoutAlwaysOnTop ? chromeText.stopKeepingWindowOnTop : chromeText.keepWindowOnTop}
+                      icon={popoutAlwaysOnTop ? "PinFilled" : "Pin"}
+                      onClick={onTogglePopoutAlwaysOnTop}
+                      preferFont
+                      pressed={popoutAlwaysOnTop}
+                      tooltipSide="bottom"
+                      variant="ghost"
+                    />
+                  ) : onToggleExpand ? (
+                    <OfficialButton
+                      ariaLabel={paneExpanded ? chromeText.collapsePane : chromeText.expandPane}
+                      icon={paneExpanded ? "Collapse" : "Expand"}
+                      onClick={onToggleExpand}
+                      preferFont
+                      pressed={paneExpanded}
+                      tooltipSide="bottom"
+                      variant="ghost"
+                    />
+                  ) : null}
+                </>
+              ) : null}
+              {activeView === "preview" && onToggleExpand ? (
+                <OfficialButton
+                  ariaLabel={paneExpanded ? chromeText.collapsePane : chromeText.expandPane}
+                  icon={paneExpanded ? "Collapse" : "Expand"}
+                  onClick={onToggleExpand}
+                  preferFont
+                  pressed={paneExpanded}
+                  tooltipSide="bottom"
+                  variant="ghost"
+                />
+              ) : null}
               {activeView === "plan" ? (
                 <OfficialPlanHeaderActions
                   bridge={bridge}
@@ -610,17 +902,25 @@ function EpitaxySidePaneTile({
                   sessionRef={sessionRef}
                 />
               ) : null}
-              <OfficialButton ariaLabel="Close" icon="XCrossCloseMedium" onClick={onClose} />
+              {hideCloseButton ? null : (
+                <OfficialButton ariaLabel={sessionLoadText.close} icon="XCrossCloseMedium" onClick={onClose} />
+              )}
             </div>
           </div>
-          <div className="flex-1 min-h-0 overflow-hidden rounded-b-r6">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-r6">
             <ViewPaneBody
               activeTerminalTab={activeTerminalTab}
               activeView={activeView}
               bridge={bridge}
               diffShowTree={diffShowTree}
               fileView={fileView}
+              landingCwd={landingCwd}
+              filesFilterRef={filesFilterRef}
+              filesTreeShown={filesTreeShown}
+              filesWordWrap={filesPrefs.wordWrap}
+              filesViewPrefs={filesPrefs}
               messages={messages}
+              onClose={onClose}
               onDiffCanFitTreeChange={setDiffCanFitTree}
               onDiffCompareMetaChange={setDiffCompareMeta}
               previewTarget={previewTarget}
@@ -671,8 +971,15 @@ type TerminalTitleState = {
   /** Official oN: baseBranch → working tree / head */
   diffCompareMeta?: OfficialDiffCompareMeta | null;
   diffShowTree?: boolean;
+  fileTabs?: string[];
   fileView?: OfficialFileViewTarget | null;
+  /** Official mb `R` — files tree column visible. */
+  filesTreeShown?: boolean;
+  onActivateFileTab?: (path: string) => void;
+  onCloseFileTab?: (path: string) => void;
   onDiffShowTreeChange?: (showTree: boolean) => void;
+  onFocusFilesFilter?: () => void;
+  onToggleFilesTree?: () => void;
   onAddTab: () => void;
   onCloseTab: (tabId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
@@ -681,28 +988,25 @@ type TerminalTitleState = {
   tabs: TerminalTab[];
 };
 
-export const defaultTerminalTabId = "0";
-
-export function createDefaultTerminalTabs(): TerminalTabsState {
-  return { activeId: defaultTerminalTabId, nextId: 1, tabs: [{ id: defaultTerminalTabId, ordinal: 1 }] };
-}
+export const defaultTerminalTabId = OFFICIAL_DEFAULT_TERMINAL_TAB_ID;
 
 function terminalTabLabel(tab: TerminalTab | undefined, terminalWord: string, forceOrdinal = false) {
   if (!tab) return terminalWord;
   return tab.name ?? (forceOrdinal || tab.ordinal > 1 ? `${terminalWord} ${tab.ordinal}` : terminalWord);
 }
 
-export function terminalPtyKey(sessionId: string, tabId: string) {
-  return tabId === defaultTerminalTabId ? sessionId : `${sessionId}::${tabId}`;
-}
+export const terminalPtyKey = officialTerminalPtyKey;
+
 
 function OfficialSidePaneTitle({
   activeView,
+  extraAfter,
   session,
   sessionRef,
   terminalState,
 }: {
   activeView: OfficialViewPane;
+  extraAfter?: ReactNode;
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef | null;
   terminalState?: TerminalTitleState;
@@ -710,17 +1014,15 @@ function OfficialSidePaneTitle({
   const viewsText = useI18nText(VIEWS_MENU_MESSAGES);
   const chromeText = useI18nText(SIDE_PANE_CHROME_MESSAGES);
 
-  if (activeView === "preview" && sessionRef?.type === "local") {
+  const previewChrome = useI18nText(PREVIEW_EMPTY_MESSAGES);
+
+  if (activeView === "preview") {
+    // Official cf580 `Ko`: one flex-1 row — Globe `jr` + address `ta` + tools `gap-1 shrink-0`.
+    // FI trailing is only Close (`rbrahOGMC3`). Do not flatten Ko into the header flex.
     return (
-      <div className="relative z-[1] flex items-center gap-g3 min-w-0 draggable-none">
-        <OfficialDropdownButton
-          align="start"
-          className="-ml-[5px]"
-          header={chromeText.servers}
-          label={viewsText.preview}
-          mode="text"
-          side="bottom"
-        />
+      <div className="relative z-[1] flex min-w-0 flex-1 items-center overflow-hidden draggable-none">
+        <OfficialPreviewGlobeMenu chrome={previewChrome} />
+        {extraAfter}
       </div>
     );
   }
@@ -755,9 +1057,24 @@ function OfficialSidePaneTitle({
   }
 
   if (activeView === "file") {
-    // Official rE title for file: VR(m,"file") → formatMessage "File" (not basename + icon).
-    // Path lives in vN epitaxy-pane-subheader, not the 32px tile chrome.
-    return <span className="text-body text-t7 select-none truncate draggable-none pl-[1px] relative z-[1]">{viewsText.file}</span>;
+    // Official rE VR "File" when QR is vN-only (`m||h` draft). Db tabs need session tree.
+    if (!sessionRef) {
+      return <span className="text-body text-t7 select-none truncate draggable-none pl-[1px] relative z-[1]">{viewsText.file}</span>;
+    }
+    const treeShown = terminalState?.filesTreeShown !== false;
+    return (
+      <OfficialFilesHeaderTabs
+        activePath={terminalState?.fileView?.path}
+        closeFileLabel={chromeText.closeFile}
+        filesLabel={viewsText.files}
+        onActivate={(path) => terminalState?.onActivateFileTab?.(path)}
+        onClose={(path) => terminalState?.onCloseFileTab?.(path)}
+        onToggleTree={() => terminalState?.onToggleFilesTree?.()}
+        tabs={terminalState?.fileTabs ?? []}
+        treeShown={treeShown}
+        treeTooltip={treeShown ? chromeText.hideFileTree : chromeText.showFileTree}
+      />
+    );
   }
 
   if (activeView === "subagent" && terminalState?.subagentView) {
@@ -886,6 +1203,7 @@ function OfficialPlanHeaderActions({
   sessionRef?: EpitaxySessionRef | null;
 }) {
   const [copied, setCopied] = useState(false);
+  const folderText = useI18nText(SHOW_IN_FOLDER_MESSAGES);
   // Official Vf(sessionRef): only local sessions expose filesystem open path.
   const isLocal = sessionRef?.type === "local" || session?.kind === "code";
   const openPath = isLocal && plan.path ? resolvePlanOpenPath(plan.path, session) : undefined;
@@ -906,7 +1224,7 @@ function OfficialPlanHeaderActions({
   const extraItems: OfficialDropdownItem[] = canShowInFolder
     ? [
         {
-          label: officialShowInFolderLabel(),
+          label: officialShowInFolderLabel(folderText),
           onSelect: () => {
             if (openPath) void desktopBridge.FileSystem.showInFolder?.(openPath);
           },
@@ -944,15 +1262,116 @@ function OfficialPlanHeaderActions({
   );
 }
 
+/** Official ca80 `ES.DEFAULT` tree width; cccc `lb = _o.DEFAULT+160` can-fit. */
+const OFFICIAL_FILES_TREE_WIDTH = 240;
+const OFFICIAL_FILES_TREE_CAN_FIT = OFFICIAL_FILES_TREE_WIDTH + 160;
+
+function OfficialFilesSplitBody({
+  bridge,
+  fileView,
+  filesFilterRef,
+  filesTreeShown,
+  filesWordWrap,
+  filesViewPrefs,
+  session,
+  sessionRef,
+}: {
+  bridge: LocalSessionsBridge;
+  fileView: OfficialFileViewTarget | null;
+  filesFilterRef?: Ref<HTMLInputElement>;
+  filesTreeShown: boolean;
+  filesWordWrap: boolean;
+  filesViewPrefs?: OfficialFilesViewPrefs;
+  session: SessionSummary | null;
+  sessionRef: EpitaxySessionRef;
+}) {
+  const actions = useContext(EpitaxyTranscriptActionContext);
+  const chromeText = useI18nText(SIDE_PANE_CHROME_MESSAGES);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [filesTreeCanFit, setFilesTreeCanFit] = useState(true);
+  const hasOpenFile = Boolean(fileView?.path);
+  // Official mb: L = canFit && (no file || keep-tab). Empty+canFit → `db` 240 + Fl Od. Empty+!canFit → tree flex-1.
+  const treeFixed = filesTreeShown && filesTreeCanFit;
+  const showEmptyPane = !hasOpenFile && (!filesTreeShown || filesTreeCanFit);
+
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const measure = (width: number) => {
+      if (width <= 0) return;
+      setFilesTreeCanFit(width >= OFFICIAL_FILES_TREE_CAN_FIT);
+    };
+    measure(el.clientWidth);
+    const observer = new ResizeObserver((entries) => {
+      measure(entries[0]?.contentRect.width ?? 0);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={bodyRef} className="@container/files-body flex h-full min-h-0 flex-1">
+      {filesTreeShown ? (
+        <div
+          className={treeFixed
+            ? hasOpenFile
+              ? "relative flex min-h-0 shrink-0 flex-col border-r @max-[400px]/files-body:hidden"
+              : "relative flex min-h-0 shrink-0 flex-col border-r"
+            : "relative flex min-h-0 min-w-0 flex-1 flex-col"}
+          data-files-tree=""
+          data-pane-line=""
+          style={treeFixed ? { width: OFFICIAL_FILES_TREE_WIDTH, minWidth: 160, maxWidth: "50%" } : undefined}
+        >
+          <OfficialFilesBrowserPane
+            filterInputRef={filesFilterRef}
+            onOpenFile={(target) => actions?.openFile(target)}
+            session={session}
+            sessionRef={sessionRef}
+          />
+        </div>
+      ) : null}
+      {hasOpenFile || showEmptyPane ? (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {fileView?.path ? (
+          <OfficialFilePane
+            bridge={bridge}
+            fileView={fileView}
+            sessionRef={sessionRef}
+            viewPrefs={filesViewPrefs}
+            wordWrap={filesWordWrap}
+          />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-md px-lg py-lg text-center">
+            <Icon name="Folder" className="!size-7 text-muted" size="lg" />
+            <div className="flex flex-col items-center gap-1">
+              <p className="max-w-[36ch] text-pretty break-words text-body text-primary">{chromeText.openFilesAppearHere}</p>
+              <p className="max-w-[36ch] text-pretty break-words text-footnote text-muted">
+                {filesTreeShown ? chromeText.pickFileInTree : chromeText.clickFilePathInConversation}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ViewPaneBody({
   activeTerminalTab,
   activeView,
   bridge,
   diffShowTree,
   fileView,
+  landingCwd,
+  filesFilterRef,
+  filesTreeShown = true,
+  filesWordWrap = true,
+  filesViewPrefs,
   messages,
   onDiffCanFitTreeChange,
   onDiffCompareMetaChange,
+  onClose,
   previewTarget,
   renderSubagent,
   session,
@@ -964,8 +1383,14 @@ function ViewPaneBody({
   bridge: LocalSessionsBridge;
   diffShowTree: boolean;
   fileView: OfficialFileViewTarget | null;
+  landingCwd?: string | null;
+  filesFilterRef?: Ref<HTMLInputElement>;
+  filesTreeShown?: boolean;
+  filesWordWrap?: boolean;
+  filesViewPrefs?: OfficialFilesViewPrefs;
   /** Official oe(sessionId) message list for CR/Jp/plan. */
   messages: ChatMessage[];
+  onClose?: () => void;
   onDiffCanFitTreeChange?: (canFit: boolean) => void;
   onDiffCompareMetaChange?: (meta: OfficialDiffCompareMeta) => void;
   previewTarget: OfficialPreviewTarget | null;
@@ -977,9 +1402,33 @@ function ViewPaneBody({
   const actions = useContext(EpitaxyTranscriptActionContext);
   switch (activeView) {
     case "preview":
-      return <OfficialPreviewPane bridge={bridge} previewTarget={previewTarget} session={session} sessionRef={sessionRef} />;
+      return <OfficialPreviewPane bridge={bridge} landingCwd={landingCwd} previewTarget={previewTarget} session={session} sessionRef={sessionRef} />;
     case "file":
-      return <OfficialFilePane bridge={bridge} fileView={fileView} sessionRef={sessionRef} />;
+      // Official QR: "file"===e&&u&&(m||h) → vN({sessionRef:m,landingCwd:h}). Draft has no tree.
+      if (!sessionRef) {
+        return fileView ? (
+          <OfficialFilePane
+            bridge={bridge}
+            fileView={fileView}
+            landingCwd={landingCwd}
+            sessionRef={null}
+            viewPrefs={filesViewPrefs}
+            wordWrap={filesWordWrap}
+          />
+        ) : null;
+      }
+      return (
+        <OfficialFilesSplitBody
+          bridge={bridge}
+          fileView={fileView}
+          filesFilterRef={filesFilterRef}
+          filesTreeShown={filesTreeShown}
+          filesWordWrap={filesWordWrap}
+          filesViewPrefs={filesViewPrefs}
+          session={session}
+          sessionRef={sessionRef}
+        />
+      );
     case "diff":
       return sessionRef ? (
         <OfficialDiffPane
@@ -997,6 +1446,26 @@ function ViewPaneBody({
         <OfficialShellPtyPane
           bridge={bridge}
           onTerminalSelection={actions?.attachAsContext}
+          onPtyReady={() => {
+            // Official BR: read Ms.getState() here — ViewPaneBody must not close over
+            // the parent `terminalTabs` binding (that identifier is tile-local).
+            const tabId = activeTerminalTab?.id ?? defaultTerminalTabId;
+            const pendingCd = officialTerminalTabsForSession(sessionRef.id).tabs
+              .find((tab) => tab.id === tabId)?.pendingCd;
+            if (pendingCd) {
+              void bridge.writeShellPty?.(
+                terminalPtyKey(sessionRef.id, tabId),
+                officialPtyCdCommand(pendingCd),
+              );
+              officialEpitaxyTerminalTabsStore.getState().clearPendingCd(sessionRef.id, tabId);
+            }
+            if (tabId === defaultTerminalTabId) {
+              officialEpitaxyShellRunStore.getState().markDefaultTabReady(sessionRef.id);
+              officialFlushPendingShellCommand(sessionRef.id, (ptyKey, data) => {
+                void bridge.writeShellPty?.(ptyKey, data);
+              });
+            }
+          }}
           ptyKey={terminalPtyKey(sessionRef.id, activeTerminalTab?.id ?? defaultTerminalTabId)}
           sessionRef={sessionRef}
         />
@@ -1038,6 +1507,6 @@ function ViewPaneBody({
       ) : null;
     case "framebuffer":
       // Official AN EpitaxyFramebufferPane.
-      return <OfficialFramebufferPane session={session} sessionRef={sessionRef} />;
+      return <OfficialFramebufferPane landingCwd={landingCwd} session={session} sessionRef={sessionRef} />;
   }
 }

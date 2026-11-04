@@ -44,7 +44,7 @@ export function parseCoworkResourceActivity(
 }
 
 /**
- * Official activity merge (index-BELzQL5P ~60258): append fs_detected rows for host paths
+ * Official activity merge (c21f11e6d-CxD82rYo.js ~60258): append fs_detected rows for host paths
  * not already covered by write/edit/create (or memory non-read) tool activity.
  */
 export function mergeCoworkFsDetectedActivity(
@@ -109,7 +109,7 @@ export function coworkResourceOperationLabel(operation: CoworkResourceOperation)
 }
 
 /**
- * Official activity panel xQt (index-BELzQL5P) roots Browse files / Working folder
+ * Official activity panel xQt (c21f11e6d-CxD82rYo.js) roots Browse files / Working folder
  * on session.userSelectedFolders — real host paths the user attached.
  * `cwd` on LocalAgentMode sessions is virtual (`/sessions/<uuid>`) and must not be
  * treated as a listable host root (listFilesInFolder would return empty).

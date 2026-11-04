@@ -1,5 +1,5 @@
 /**
- * Official S7t PluginUploadModal (index-BELzQL5P.js) — uploadType:"local".
+ * Official S7t PluginUploadModal (index-D35w9RK9.js) — uploadType:"local".
  * Tm modalSize md, accept .zip/.plugin, uX → kT.uploadPlugin(filename, base64, replaceExisting).
  */
 import { useCallback, useRef, useState, type ChangeEvent, type DragEvent, type MouseEvent } from "react";

@@ -1,5 +1,5 @@
 /**
- * Official Gzt local_session load path (index-BELzQL5P.pretty.js):
+ * Official Gzt local_session load path (c21f11e6d-CxD82rYo.js):
  *   path = file.path.replace("computer://", "")
  *   result = FileSystem.readLocalFile(sessionId, encodeURIComponent(path))
  *   if (result.encoding === "base64") → binary/image branch; else text = result.content

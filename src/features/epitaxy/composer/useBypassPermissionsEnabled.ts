@@ -1,6 +1,8 @@
 import { useDesktopPreferences } from "../../settings/useDesktopPreferences";
 import type { PermissionMode } from "../../../adapters/desktopBridge";
-import { permissionModeOptions } from "./options";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { PERMISSION_MODE_MESSAGES } from "../officialCodeChromeMessages";
+import { permissionModeLabel, permissionModeOptions } from "./options";
 
 /**
  * Official te() residual (c3d5d2a6f):
@@ -29,18 +31,23 @@ export type CodePermissionModeOption = {
 /** Official Os + disabled bypass append for Code Mode menu. */
 export function useCodePermissionModeOptions(): CodePermissionModeOption[] {
   const bypassEnabled = useBypassPermissionsEnabled();
+  const text = useI18nText(PERMISSION_MODE_MESSAGES);
   const items: CodePermissionModeOption[] = permissionModeOptions
     .filter((option) => option.value !== "bypassPermissions")
-    .map((option) => ({ label: option.label, value: option.value }));
+    .map((option) => ({
+      label: permissionModeLabel(option.value, text),
+      value: option.value,
+    }));
   const bypass = permissionModeOptions.find((option) => option.value === "bypassPermissions");
   if (!bypass) return items;
+  const bypassLabel = permissionModeLabel(bypass.value, text);
   if (bypassEnabled) {
-    items.push({ label: bypass.label, value: bypass.value });
+    items.push({ label: bypassLabel, value: bypass.value });
   } else {
     items.push({
       disabled: true,
       hint: BYPASS_PERMISSIONS_SETTINGS_HINT,
-      label: bypass.label,
+      label: bypassLabel,
       value: bypass.value,
     });
   }

@@ -2,7 +2,7 @@
  * Official GenericToolUseCell approval residual (yue + nue + RTe).
  * Shell: xde expanded card (border-0.5, bg-bg-000 shadow-sm when expanded).
  * Footer: nue — risk notice only when coworkWriteToolWarning; CTA matrix residual-honest.
- * data-official-source: index-BELzQL5P:yue/nue/RTe/xde
+ * data-official-source: c21f11e6d-CxD82rYo.js:yue/nue/RTe/xde
  */
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -48,7 +48,7 @@ export function CoworkGenericPermissionApproval(props: GenericPermissionProps) {
       animate={{ opacity: 1 }}
       // Official xde expanded residual (approval force-expanded): border + bg-bg-000 shadow-sm.
       className="ease-out transition-all flex flex-col font-ui leading-normal my-3 min-h-[2.625rem] overflow-hidden border-0.5 border-border-300 rounded-lg mt-3 mb-3 bg-bg-000 shadow-sm"
-      data-official-source="index-BELzQL5P:yue/xde"
+      data-official-source="c21f11e6d-CxD82rYo.js:yue/xde"
       data-permission-kind="generic"
       initial={{ opacity: 1 }}
       transition={{ duration: 0.5, ease: "easeIn" }}
@@ -137,7 +137,7 @@ function CoworkPermissionScrollArea({ children, className, style }: {
 }
 
 /**
- * Official nue residual (index-BELzQL5P ~54625).
+ * Official nue residual (c21f11e6d-CxD82rYo ~54625).
  * Risk notice only when coworkWriteToolWarning.
  * Primary CTA matrix:
  *   write warning → Allow for this task (once residual) [+ Always allow in split when allowAlways]
@@ -149,7 +149,7 @@ function CoworkPermissionScrollArea({ children, className, style }: {
  */
 function GenericApprovalActions(props: ApprovalActionProps) {
   return (
-    <div className="flex flex-col gap-3 p-3 pt-0" data-official-source="index-BELzQL5P:nue">
+    <div className="flex flex-col gap-3 p-3 pt-0" data-official-source="c21f11e6d-CxD82rYo.js:nue">
       {props.coworkWriteToolWarning ? <CoworkWriteRiskNotice /> : null}
       <div className="flex gap-2">
         <PrimaryAllowControls {...props} />
@@ -166,7 +166,7 @@ function CoworkWriteRiskNotice() {
   return (
     <div
       className="flex gap-2 text-sm text-text-300"
-      data-official-source="index-BELzQL5P:ps3MQ4ugIl"
+      data-official-source="c21f11e6d-CxD82rYo.js:ps3MQ4ugIl"
       data-permission-risk-notice="cowork-write"
     >
       <Icon className="shrink-0 mt-0.5 text-text-300" customSize={16} name="Warning" />

@@ -208,16 +208,29 @@ export function officialProjectFilterLabel(project: OfficialDetectedProject): st
     : project.name;
 }
 
-/** Official ca0135 fl project buckets. */
+/**
+ * Official ca0135 fl project buckets.
+ * `keepEmpty` + `catalog` = T1 NgcLgMejq0: detect folders from the unfiltered
+ * recents map, then keep headers whose current filter bucket is empty.
+ */
 export function groupSessionsByOfficialProject(
   sessions: SessionSummary[],
   text?: ShellText,
+  options?: { keepEmpty?: boolean; catalog?: SessionSummary[] },
 ): OfficialProjectDisplayGroup[] {
+  const catalog = options?.catalog ?? sessions;
+  const catalogRows = catalog.map((session) => ({
+    session,
+    data: toOfficialCodeSessionData(session),
+  }));
   const rows = sessions.map((session) => ({
     session,
     data: toOfficialCodeSessionData(session),
   }));
-  const detected = detectOfficialProjects(rows.map((row) => row.data), "name");
+  // Official ca0135 fl: `_t(a, "name")` then walk detected order (Name).
+  // T1 Sort by Last activity / Date created only reorders *rows* (buildRecentsGroups
+  // sorterFor). Folder *headers* stay Name so claude-code-1 / minimind do not jump.
+  const detected = detectOfficialProjects(catalogRows.map((row) => row.data), "name");
   const buckets = new Map<string, SessionSummary[]>();
   for (const row of rows) {
     const key = officialProjectGroupKey(row.data) ?? NO_PROJECT_KEY;
@@ -225,19 +238,20 @@ export function groupSessionsByOfficialProject(
     if (bucket) bucket.push(row.session);
     else buckets.set(key, [row.session]);
   }
+  const catalogHasOther = catalogRows.some((row) => officialProjectGroupKey(row.data) === undefined);
 
   const groups: OfficialProjectDisplayGroup[] = [];
   for (const project of detected) {
-    const bucket = buckets.get(project.key);
-    if (!bucket) continue;
+    const bucket = buckets.get(project.key) ?? [];
+    if (!bucket.length && !options?.keepEmpty) continue;
     groups.push({
       key: `project-${project.key}`,
       label: officialProjectFilterLabel(project),
       sessions: bucket,
     });
   }
-  const other = buckets.get(NO_PROJECT_KEY);
-  if (other) {
+  const other = buckets.get(NO_PROJECT_KEY) ?? [];
+  if (other.length || (options?.keepEmpty && catalogHasOther)) {
     groups.push({
       key: `project-${NO_PROJECT_KEY}`,
       label: text?.other ?? "Other",

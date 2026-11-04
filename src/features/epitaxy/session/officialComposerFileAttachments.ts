@@ -1,5 +1,5 @@
 /**
- * Official Qj / uy / wv residual (c11959232 + index-BELzQL5P):
+ * Official Qj / uy / wv residual (c11959232 + cd5a31703):
  *   local (Ps) non-image drop → addFileAttachments(uy(files, io))
  *   io = r2 = window.claudeAppSettings.filePickers.getPathForFile
  *   uy: relativePath = io(file) ?? file.name  (native path as-is, no UM)

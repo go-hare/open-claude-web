@@ -1,5 +1,5 @@
 /**
- * Official D1e plugins_search reverse-RPC (index-BELzQL5P ~113756–113833):
+ * Official D1e plugins_search reverse-RPC (c21f11e6d-CxD82rYo.js ~113756–113833):
  * listInstalledOnly → map installedPlugins + optional fuse nZe/rZe
  * else org BFF list-plugins (honest residual: empty when no org/catalog)
  * respondPluginSearch(requestId, JSON.stringify({ results }))

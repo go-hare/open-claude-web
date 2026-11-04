@@ -1,6 +1,6 @@
 /**
  * Official _Be / wBe shell for Local Cowork rate_limit banner
- * (index-BELzQL5P EVe·IVe + pVe action slot).
+ * (c21f11e6d-CxD82rYo EVe·IVe + pVe action slot).
  * Driven by local messageLimits store.
  *
  * 3p honesty: action row matches official layout (actionButton slot) but CTAs are
@@ -108,7 +108,7 @@ function actionLabel(type: CoworkRateLimitActionType, resetState: string): strin
 
 /**
  * Official _Be shell: body row + optional actionButton column.
- * data-official-source: index-BELzQL5P:_Be
+ * data-official-source: c21f11e6d-CxD82rYo.js:_Be
  */
 function RateLimitBeShell({
   actionButton,
@@ -122,7 +122,7 @@ function RateLimitBeShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="w-full" data-official-source="index-BELzQL5P:_Be">
+    <div className="w-full" data-official-source="c21f11e6d-CxD82rYo.js:_Be">
       <div className="flex w-full flex-col items-center md:flex-row gap-2">
         <div
           className={
@@ -272,7 +272,7 @@ export function CoworkRateLimitBanner({
     return (
       <div className="ml-1 mb-1.5 w-full max-w-xl">
         <div
-          data-official-source="index-BELzQL5P:EVe/_Be/pVe"
+          data-official-source="c21f11e6d-CxD82rYo.js:EVe/_Be/pVe"
           data-rate-limit-kind="exceeded"
           role="status"
         >
@@ -293,7 +293,7 @@ export function CoworkRateLimitBanner({
     <div className="ml-1 mb-1.5 w-full max-w-xl">
       <div
         className="font-normal text-[0.65rem] sm:text-xs w-full flex gap-1.5 items-center justify-between"
-        data-official-source="index-BELzQL5P:IVe/wBe/pVe"
+        data-official-source="c21f11e6d-CxD82rYo.js:IVe/wBe/pVe"
         data-rate-limit-kind="approaching"
         role="status"
       >

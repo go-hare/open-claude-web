@@ -66,8 +66,8 @@ export function CoworkSessionActivityPanel({ bridge, fsDetectedFiles, messages, 
   const [foldersOpen, setFoldersOpen] = useState(() => hasFolderActivity(folders, resourceSections, connectedOfficeFiles));
   const [contextOpen, setContextOpen] = useState(true);
   const [officeFilesOpen, setOfficeFilesOpen] = useState(true);
-  // Official xQt (index-BELzQL5P): aside always mounts; Progress lQt always
-  // (todos → vZt else empty pQt); Working folder lQt always; Context lQt always.
+  // Official xQt (c21f11e6d): aside always mounts; Progress lQt always
+  // (todos → vZt else empty Nx/cKZ0dC17TM); Working folder lQt always; Context lQt always.
   // Do not hide the rail when todos/folders/resources are empty.
   const allTodosCompleted = useMemo(() => todos.length > 0 && todos.every((todo) => todo.status === "completed"), [todos]);
   const previousAllTodosCompletedRef = useRef(allTodosCompleted);
@@ -162,7 +162,7 @@ export function CoworkSessionActivityPanel({ bridge, fsDetectedFiles, messages, 
               : undefined;
 
   return (
-    <CoworkActivityPanelShell isFileDrawerOpen={isFileDrawerOpen} sessionId={sessionId}>
+    <CoworkActivityPanelShell headerHostedToggle isFileDrawerOpen={isFileDrawerOpen} sessionId={sessionId}>
       <CoworkActivityPanelBody
         allTodosCompleted={allTodosCompleted}
         connectedOfficeFiles={connectedOfficeFiles}

@@ -62,7 +62,7 @@ const noop = () => undefined;
 /**
  * Official new-task composer stack (w6t):
  * V4t risk banner → CAt ChatInput (surface + pwt plus) → $4t chin (Akt folder / nkt mode / B4t model).
- * Sources: index-BELzQL5P.js:w6t/$4t/pwt/nkt/V4t
+ * Sources: c62135ccf-Dn28vJ3V.js:w6t/$4t/pwt/nkt/V4t
  */
 export function CoworkPromptBox(props: CoworkPromptBoxProps) {
   const localInputRef = useRef<CoworkPromptInputHandle | null>(null);
@@ -77,7 +77,7 @@ export function CoworkPromptBox(props: CoworkPromptBoxProps) {
     }
   }, [inputRef, props.focusRequestKey]);
   return (
-    <div data-official-source="index-BELzQL5P.js:w6t/$4t CAt onpage">
+    <div data-official-source="c62135ccf-Dn28vJ3V.js:w6t/$4t CAt onpage">
       <CoworkDraftRiskBanner visible={state.permissionAvailable && isCoworkUnsupervisedPermissionMode(props.permissionMode)} />
       <CoworkPromptSurface inputRef={inputRef} props={props} toolbarItems={state.addMenuItems} />
       <CoworkPromptChin
@@ -126,7 +126,7 @@ function useCoworkPromptBoxState(props: CoworkPromptBoxProps) {
     const paths = await desktopBridge.Preferences.getDirectoryPath?.(true);
     if (paths?.length) updateFolders([...selectedFolders, ...paths]);
   }, [selectedFolders, updateFolders]);
-  // Official cwt on /task/new: isAgentNewRoute && considerEnabledForNonUI → hide project/Drive/GitHub + modes.
+  // Official CS/sx on /task/new: agentMode hides project/github + modes; addFolder kx-hidden.
   const addMenuLabels = useMemo(
     () => ({
       addFilesOrPhotos: chromeText.addFilesOrPhotos,
@@ -144,7 +144,9 @@ function useCoworkPromptBoxState(props: CoworkPromptBoxProps) {
       props.onAddFiles
         ? createCoworkAddMenuItems({
             isAgentRoute: true,
-            includeAddFolder: true,
+            // Official CS/sx/kx (shared-8): agent new-task hides plus Add folder;
+            // folder lives on $4t/Akt chin, not in c752 plus catalog.
+            includeAddFolder: false,
             labels: addMenuLabels,
             onAddFiles: props.onAddFiles,
             onAddFolder: addFolder,
@@ -200,18 +202,12 @@ function CoworkPromptSurface({
   props: CoworkPromptBoxProps;
   toolbarItems: CoworkDropdownItem[];
 }) {
-  // Official CAt: yYe static + yAt rotating He = [XLcM6WHfQR, jGTFVKPV2+]
+  // Official c621 onpage polish: single tV2NkM49Bx (no XLc/jGT carousel).
   // Official Bs (space page): single wLFo5icPEr, no carousel.
   const text = useCoworkNewTaskText();
   const spacePlaceholder = props.placeholder?.trim();
-  const rotatingPlaceholders = useMemo(
-    () =>
-      spacePlaceholder
-        ? [spacePlaceholder]
-        : [text.composerPlaceholder, text.composerPlaceholderSkills],
-    [spacePlaceholder, text.composerPlaceholder, text.composerPlaceholderSkills],
-  );
   const placeholder = spacePlaceholder || text.composerPlaceholder;
+  const rotatingPlaceholders = useMemo(() => [placeholder], [placeholder]);
   return (
     <fieldset className="flex w-full min-w-0 flex-col">
       <input aria-hidden="true" className="absolute -z-10 h-0 w-0 opacity-0" data-testid="file-upload" tabIndex={-1} type="file" />
@@ -258,7 +254,7 @@ function CoworkPromptToolbar({
   onSubmit: () => void;
   prompt: string;
 }) {
-  // Official pwt: Xp tooltip ITCmbu5TgN + keyboardShortcut="/"
+  // Official oC: tooltip OnsnuZtVJO + keyboardShortcut="/".
   // Official send (agent new): Dc variant="claude" size="icon_sm" aria-label 6Jb0AX1uQx
   const chromeText = useCoworkChromeText();
   const canSubmit = !busy && Boolean(prompt.trim());
@@ -331,7 +327,7 @@ function CoworkPromptChin({
   return (
     <div
       className="relative z-0 !box-content mx-2 -mt-5 rounded-b-[20px] border border-transparent bg-always-black/[0.01] shadow-[inset_0_0_0_0.5px_hsl(var(--bg-000)/0.8),0_0_0_0.5px_hsl(var(--border-300)/0.18)] backdrop-blur-[2px] md:mx-0 md:w-full"
-      data-official-source="index-BELzQL5P.js:$4t chin"
+      data-official-source="c62135ccf-Dn28vJ3V.js:$4t chin"
     >
       <div className="flex items-center gap-1 px-2 pb-2 pt-7">
         <div className="min-w-0">

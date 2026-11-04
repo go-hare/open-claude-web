@@ -90,6 +90,7 @@ describe("OfficialCodeMarkdown mb residual locks", () => {
     // Inline code must not spread react-markdown `node` onto DOM.
     expect(markdownSource).toMatch(/node\?: unknown/);
     expect(markdownSource).not.toMatch(/<code className=\{OFFICIAL_INLINE_CODE_CLASS\} \{\.\.\.rest\}/);
+    expect(markdownSource).toMatch(/OfficialEuFileRef/);
   });
 
   it("file pane uses official Sb residual (epitaxy-file-prose + jb, not alluvium)", () => {
@@ -97,7 +98,7 @@ describe("OfficialCodeMarkdown mb residual locks", () => {
     // Must not route file preview through kb/Alluvium (bb has no table case).
     expect(markdownSource).toMatch(/OfficialFileMarkdownContent/);
     expect(markdownSource).toMatch(/epitaxy-markdown epitaxy-file-prose/);
-    expect(markdownSource).toMatch(/c11959232-h_zsw3wI\.js:Sb/);
+    expect(markdownSource).toMatch(/cd5a31703-B4nKQMBN\.js:Sb/);
     expect(markdownSource).toMatch(/parseOfficialFileMarkdownFrontmatter/);
     const filePane = readFileSync(
       path.join(here, "session/OfficialFilePane.tsx"),
@@ -112,10 +113,15 @@ describe("OfficialCodeMarkdown mb residual locks", () => {
   });
 
   it("pb uses official border residual not effect-contrast-stroke", () => {
-    expect(markdownSource).toMatch(
+    expect(markdownSource).toMatch(/OfficialCodeMarkdownImage/);
+    expect(markdownSource).not.toMatch(/effect-contrast-stroke/);
+    const alluvium = readFileSync(
+      path.join(here, "../cowork/session/transcript/AlluviumMarkdown.tsx"),
+      "utf8",
+    );
+    expect(alluvium).toMatch(
       /block max-w-full h-auto rounded-r4 border border-\[var\(--border-default\)\]/,
     );
-    expect(markdownSource).not.toMatch(/effect-contrast-stroke/);
   });
 
   it("ab cacheKey is undefined while streaming", () => {

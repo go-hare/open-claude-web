@@ -4,6 +4,7 @@ import { AddCustomConnectorDialog } from "./AddCustomConnectorDialog";
 import { ConnectorDetailPanel } from "./ConnectorDetailPanel";
 import { ConnectorsEmptyState, ConnectorsLoadErrorState } from "./ConnectorsEmptyState";
 import { ConnectorsListSidebar } from "./ConnectorsListSidebar";
+import { ConnectorsOverlayList } from "./ConnectorsOverlayList";
 import {
   addCustomConnector,
   authorizeConnector,
@@ -25,17 +26,21 @@ import {
  * Rt header Bt: Browse + Add custom. Browse → pe("connectors") → $T plugins.
  * Detail is Ot, not a homemade URL/Remove card.
  */
-export function ConnectorsRoute() {
+export function ConnectorsRoute({
+  layout = "page",
+}: {
+  /** Official overlay Go (c40525e86): W list + table, not 280px dual-pane Ht. */
+  layout?: "page" | "overlay";
+}) {
   const items = useSyncExternalStore(subscribeConnectorItems, getConnectorItems, getConnectorItems);
   // Official Je()/remoteStream: remounting Ht does not reset f to loading when data exists.
   // Product ConnectorsRoute remounts on Skills ↔ Connectors — keep ready if App already hydrated.
   const [loadState, setLoadState] = useState<"ready" | "loading" | "error">(() =>
     isDirectMcpHydrated() ? "ready" : "loading",
   );
-  // Official h starts null then an effect picks F/T/first; remount with cached E
-  // would paint "Select a connector" for one frame. Seed from current list.
+  // Page Ht seeds first row. Overlay Go starts on the table ($n list), not a detail.
   const [selectedId, setSelectedId] = useState<string | null>(
-    () => getConnectorItems()[0]?.id ?? null,
+    () => (layout === "overlay" ? null : getConnectorItems()[0]?.id ?? null),
   );
   const [addOpen, setAddOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -76,17 +81,21 @@ export function ConnectorsRoute() {
       setSelectedId(null);
       return;
     }
+    if (layout === "overlay") {
+      if (selectedId && !items.some((item) => item.id === selectedId)) setSelectedId(null);
+      return;
+    }
     if (!selectedId || !items.some((item) => item.id === selectedId)) {
       setSelectedId(items[0]?.id ?? null);
     }
-  }, [items, selectedId]);
+  }, [items, selectedId, layout]);
 
   const selected = useMemo(() => items.find((item) => item.id === selectedId) ?? null, [items, selectedId]);
 
   const openBrowse = () => officialDirectoryStore.getState().open("connectors");
   const openAdd = () => setAddOpen(true);
 
-  if (loadState === "loading" && items.length === 0) {
+  if (loadState === "loading" && items.length === 0 && layout !== "overlay") {
     return <ConnectorsLoadingSkeleton />;
   }
 
@@ -103,7 +112,7 @@ export function ConnectorsRoute() {
     );
   }
 
-  if (items.length === 0) {
+  if (items.length === 0 && layout !== "overlay") {
     return (
       <>
         <div className="flex h-full">
@@ -121,6 +130,78 @@ export function ConnectorsRoute() {
             }}
           />
         ) : null}
+      </>
+    );
+  }
+
+  if (layout === "overlay") {
+    const overlayAdd = addOpen ? (
+      <AddCustomConnectorDialog
+        initialName={new URLSearchParams(window.location.search).get("connectorName") ?? ""}
+        initialUrl={new URLSearchParams(window.location.search).get("connectorUrl") ?? ""}
+        onClose={() => setAddOpen(false)}
+        onSubmit={(value) => {
+          const created = addCustomConnector(value);
+          setSelectedId(created.id);
+          setAddOpen(false);
+        }}
+      />
+    ) : null;
+    if (selected) {
+      return (
+        <>
+          <div className="flex h-full min-h-0 flex-1 flex-col">
+            <button
+              className="mb-md inline-flex w-fit items-center gap-1 text-body text-secondary hover:text-primary"
+              onClick={() => setSelectedId(null)}
+              type="button"
+            >
+              Connectors
+            </button>
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-lg">
+              <ConnectorDetailPanel
+                actionBusy={actionBusy}
+                actionError={actionError}
+                item={selected}
+                onAuthorize={async () => {
+                  setActionError(null);
+                  setActionBusy(true);
+                  try {
+                    const result = await authorizeConnector(selected.id);
+                    if (!result.ok && !result.cancelled) {
+                      setActionError(result.error ?? "Failed to authorize connector");
+                    }
+                  } finally {
+                    setActionBusy(false);
+                  }
+                }}
+                onDisconnect={async () => {
+                  setActionError(null);
+                  setActionBusy(true);
+                  try {
+                    const ok = await disconnectConnector(selected.id);
+                    if (!ok) setActionError("Failed to disconnect from server");
+                  } finally {
+                    setActionBusy(false);
+                  }
+                }}
+              />
+            </div>
+          </div>
+          {overlayAdd}
+        </>
+      );
+    }
+    return (
+      <>
+        <ConnectorsOverlayList
+          items={items}
+          listReady={loadState !== "loading"}
+          onAddCustomConnector={openAdd}
+          onBrowseConnectors={openBrowse}
+          onSelect={setSelectedId}
+        />
+        {overlayAdd}
       </>
     );
   }

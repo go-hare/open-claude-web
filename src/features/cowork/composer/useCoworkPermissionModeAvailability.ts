@@ -7,7 +7,7 @@ import {
 } from "./options";
 
 /**
- * Official skt/OZe/RZe (index-BELzQL5P ~131863 / ~218684):
+ * Official skt/OZe/RZe (c21f11e6d-CxD82rYo.js ~131863 / ~218684):
  * nkt chin selector only mounts when isAvailable === true.
  * isAvailable = Boolean(OZe()) for new-task (setPermissionMode always present on draft).
  * OZe: RZe feature arm (auto|bypassPermissions|null) AND org skip_approvals_enabled.

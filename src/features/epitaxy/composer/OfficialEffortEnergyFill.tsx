@@ -3,6 +3,7 @@
  * WebGL2 cell-field energy under Ine fillShader mask. No invented CSS.
  */
 import { useEffect, useRef, type MutableRefObject } from "react";
+import { isReducedMotionActive } from "../../settings/appearanceSettings";
 
 export type OfficialEffortEnergyActions = {
   pressStart: (gain: number) => void;
@@ -579,7 +580,11 @@ export function OfficialEffortEnergyFill({
           });
           ro.observe(canvas);
 
-          const reduceMotion = win.matchMedia("(prefers-reduced-motion: reduce)");
+          const reduceMotion = {
+            get matches() {
+              return isReducedMotionActive();
+            },
+          };
           const onVisibility = () => {
             if (doc.hidden) {
               resumePress = pressed;

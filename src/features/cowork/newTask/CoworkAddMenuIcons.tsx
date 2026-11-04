@@ -2,7 +2,7 @@ import type { ReactNode, SVGProps } from "react";
 
 /**
  * Official ion-dist icon primitives used by cwt/dwt add menu + composer plus.
- * Source: index-BELzQL5P / c5f4e1303 — gy / cv / Vv / Ky / Dv / sy (gc=Nx viewBox 0 0 20 20).
+ * Source: c62135ccf-Dn28vJ3V / c5f4e1303 — gy / cv / Vv / Ky / Dv / sy (gc=Nx viewBox 0 0 20 20).
  * Master art is 20×20; Nx size map: 12/14→16, 16→20, 20→20.
  */
 
@@ -75,7 +75,7 @@ function IonIcon({
 }
 
 /**
- * Official sy — composer / add-menu plus (index-BELzQL5P pwt → a.jsx(sy, {})).
+ * Official sy — composer / add-menu plus (c62135ccf-Dn28vJ3V pwt → a.jsx(sy, {})).
  * Path is the thin 20×20 plus used in cowork prompt toolbar.
  */
 export function CoworkComposerPlusIcon({ size = 20, ...props }: IconProps) {

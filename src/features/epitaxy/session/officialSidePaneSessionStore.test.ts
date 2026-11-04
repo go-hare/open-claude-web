@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   residualChatOnlyLayout,
@@ -28,6 +29,7 @@ function resetStore(store: OfficialSidePaneStore) {
     sidePane: "none",
     transcriptMode: "normal",
     previewServerId: undefined,
+    htmlFiles: [],
     fileView: undefined,
     subagentView: undefined,
     tileLayoutBySession: {},
@@ -272,6 +274,41 @@ describe("officialSidePaneSessionStore.reset", () => {
     expect(remount.sideTiles).toContain("tasks");
     expect(remount.sideTiles).toContain("file");
     expect(remount.fileView).toEqual({ path: "/tmp/a.ts" });
+  });
+});
+
+describe("addHtmlFile (c039 Nr htmlFiles, RAM-only)", () => {
+  beforeEach(() => {
+    resetStore(officialSidePaneSessionStore);
+  });
+
+  it("appends unique paths and is a no-op on duplicates", () => {
+    officialSidePaneSessionStore.getState().addHtmlFile("/tmp/a.html");
+    officialSidePaneSessionStore.getState().addHtmlFile("/tmp/b.html");
+    officialSidePaneSessionStore.getState().addHtmlFile("/tmp/a.html");
+    expect(officialSidePaneSessionStore.getState().htmlFiles).toEqual(["/tmp/a.html", "/tmp/b.html"]);
+  });
+
+  it("cross-session reset spreads Lr htmlFiles to []", () => {
+    officialSidePaneSessionStore.setState({ currentSessionId: "A" });
+    officialSidePaneSessionStore.getState().addHtmlFile("/tmp/a.html");
+    officialSidePaneSessionStore.getState().reset("B");
+    expect(officialSidePaneSessionStore.getState().htmlFiles).toEqual([]);
+  });
+
+  it("same-session reset keeps htmlFiles", () => {
+    officialSidePaneSessionStore.setState({ currentSessionId: "A" });
+    officialSidePaneSessionStore.getState().addHtmlFile("/tmp/a.html");
+    officialSidePaneSessionStore.getState().reset("A");
+    expect(officialSidePaneSessionStore.getState().htmlFiles).toEqual(["/tmp/a.html"]);
+  });
+
+  it("does not persist htmlFiles in partialize", () => {
+    const source = readFileSync(new URL("./officialSidePaneSessionStore.ts", import.meta.url), "utf8");
+    expect(source).toMatch(/htmlFiles: \[\]/);
+    expect(source).toMatch(/addHtmlFile: \(filePath\)/);
+    expect(source).toMatch(/Official c039 htmlFiles is RAM-only/);
+    expect(source).not.toMatch(/htmlFiles: state\.htmlFiles/);
   });
 });
 

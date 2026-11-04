@@ -115,7 +115,7 @@ function CoworkCreateFileToolCell(props: CoworkFileToolCellProps) {
     >
       <div
         className="flex flex-col gap-3 p-3 pt-1 max-h-[238px] overflow-y-scroll"
-        data-official-source="index-BELzQL5P.js:Wlt create_file expanded preview"
+        data-official-source="c21f11e6d-CxD82rYo.js:Wlt create_file expanded preview"
         data-testid="repl-output"
       >
         {isMarkdownPath(props.path) ? (

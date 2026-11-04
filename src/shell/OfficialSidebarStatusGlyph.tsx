@@ -5,7 +5,7 @@ import { useI18nText, type MessageDescriptors } from "../i18n/footerMenuMessages
 import { Icon } from "./icons";
 
 /**
- * Official CodeStatusGlyph (vje / u_e / pje / gje) from index-BELzQL5P:
+ * Official CodeStatusGlyph (vje / u_e / pje / gje) from cd5a31703:
  * awaiting → running → ready(unread) → archived → idle ring.
  * Code path does NOT use CheckCircle/Warning (those are cowork xje/mje).
  * Wrapper is official ije: span.flex.shrink-0 + tooltip delay 500 / sideOffset 4.
@@ -36,7 +36,7 @@ export type OfficialCodePrState =
   | "closed";
 
 /**
- * Official u_e (index-BELzQL5P):
+ * Official u_e (cd5a31703):
  *   pendingPermissions>0 → awaiting
  *   isRunning → running
  *   hasCompleted && isUnread → ready
@@ -69,7 +69,7 @@ const PR_STATE_ICON: Record<Exclude<OfficialCodePrState, "none">, { name: string
   closed: { name: "GitPullRequestClosed", className: "text-[var(--extended-pink)]" },
 };
 
-/** Official oje catalog (index-BELzQL5P). */
+/** Official oje catalog (cd5a31703). */
 const PR_STATE_LABEL: Record<Exclude<OfficialCodePrState, "none">, string> = {
   open: "Pull request open",
   approved: "Pull request approved",
@@ -135,7 +135,7 @@ export function OfficialSidebarStatusGlyph({ className = "", session }: { classN
   } else if (session.isArchived) {
     inner = <Icon name="Archive" size="sm" className={["text-text-500 opacity-80", className].filter(Boolean).join(" ")} />;
   } else {
-    // Official Code vje idle (index-BELzQL5P): `"idle"===b?ije(...,pje({}))`.
+    // Official Code vje idle (cd5a31703): `"idle"===b?ije(...,pje({}))`.
     // gje's idle fallback is uje (hs size 14); CodeStatusGlyph idle is pje ring, not uje.
     inner = (
       <span

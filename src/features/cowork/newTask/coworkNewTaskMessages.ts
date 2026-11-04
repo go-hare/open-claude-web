@@ -7,25 +7,33 @@ import {
 } from "../../../i18n/footerMenuMessages";
 
 /**
- * Official index-BELzQL5P message descriptors for /task/new:
- * y6t header variants, v6t safety/feedback, r6t/s6t suggestion catalog, XLcM6WHfQR placeholder.
+ * Official c62135ccf-Dn28vJ3V message descriptors for /task/new:
+ * ir/gn greeting (`cowork_home_greeting_polish`), safety/feedback, suggestion catalog,
+ * onpage placeholder `tV2NkM49Bx` (polish).
  */
 export const COWORK_NEW_TASK_MESSAGES = {
-  headerControl: { defaultMessage: "Let's knock something off your list", id: "CJsWpnmYD4" },
+  /** Official gn polish title (NUs72amU1j) — curly apostrophe + trailing period. */
+  headerPolish: {
+    defaultMessage: "Let’s knock something off your list.",
+    id: "NUs72amU1j",
+  },
+  /** Official ir non-polish title. */
   headerV1: { defaultMessage: "What can I take off your plate?", id: "mWPGSbK6BB" },
-  headerV2: { defaultMessage: "What's on your plate today?", id: "tO7KIDqgLQ" },
-  headerV3: { defaultMessage: "Let's tackle something together", id: "9B9oxKzS23" },
   learnSafely: { defaultMessage: "Learn how to use Cowork safely", id: "Cxr7ieOSct" },
   giveFeedback: { defaultMessage: "give us feedback", id: "ocNaWcgW5X" },
   safetyOrFeedback: { defaultMessage: "{learnSafely} or {giveFeedback}.", id: "e90tCrG7ls" },
+  /** Official LOH63KpAMC when consider/feedback path hidden. */
+  learnSafelyOnly: { defaultMessage: "{learnSafely}.", id: "LOH63KpAMC" },
   hideSuggestions: { defaultMessage: "Hide suggestions", id: "8/jokSbxkH" },
   customizeWithPlugins: { defaultMessage: "Customize with plugins", id: "i2yl4bVuRw" },
-  composerPlaceholder: { defaultMessage: "How can I help you today?", id: "XLcM6WHfQR" },
-  /** Official yAt second carousel string (jGTFVKPV2+). */
-  composerPlaceholderSkills: { defaultMessage: "Type / for skills", id: "jGTFVKPV2+" },
+  /** Official onpage polish placeholder (tV2NkM49Bx). */
+  composerPlaceholder: {
+    defaultMessage: "Describe a task, from a quick fix to a multi-step job.",
+    id: "tV2NkM49Bx",
+  },
   initialName: { defaultMessage: "Pick a task, any task", id: "OnaQpdV9zK" },
   organizeName: { defaultMessage: "Tidy up and get organized", id: "Wi8J5SkAVq" },
-  prepName: { defaultMessage: "Plan for what's ahead", id: "huISnRRpZW" },
+  prepName: { defaultMessage: "Plan for what’s ahead", id: "OSqbaQv7nr" },
   dataName: { defaultMessage: "Turn messy data into action", id: "CiHCdg7mGP" },
   label1: { defaultMessage: "Optimize my week", id: "ov1AuKcjep" },
   prompt1: {
@@ -102,10 +110,15 @@ export const COWORK_NEW_TASK_MESSAGES = {
 } as const satisfies Record<string, MessageDescriptor>;
 
 export type CoworkNewTaskText = Record<keyof typeof COWORK_NEW_TASK_MESSAGES, string>;
-export type CoworkHeaderVariant = "control" | "v1" | "v2" | "v3";
 
-/** Official Nd("cash-cowork_page_header", "variant", "control", h6t) default. */
-export const DEFAULT_COWORK_HEADER_VARIANT: CoworkHeaderVariant = "control";
+/**
+ * @deprecated 2.31226 uses `cowork_home_greeting_polish` (boolean), not cash-cowork_page_header variants.
+ * Kept as alias type for call sites during Wave 1.
+ */
+export type CoworkHeaderVariant = "polish" | "v1";
+
+/** @deprecated Prefer resolveCoworkHomeGreetingPolish(). */
+export const DEFAULT_COWORK_HEADER_VARIANT: CoworkHeaderVariant = "polish";
 
 export const COWORK_SUGGESTIONS_DISMISS_KEY = "cowork-suggestions";
 export const COWORK_SUPPORT_URL = "https://support.claude.com/en/articles/13364135-use-claude-cowork-safely";
@@ -126,21 +139,12 @@ export function buildCoworkNewTaskText(messages: I18nMessages): CoworkNewTaskTex
   ) as CoworkNewTaskText;
 }
 
+/** Official ir: polish → NUs72amU1j; else mWPGSbK6BB. */
 export function resolveCoworkHeaderTitle(
   text: CoworkNewTaskText,
-  variant: CoworkHeaderVariant = DEFAULT_COWORK_HEADER_VARIANT,
+  polish: boolean,
 ): string {
-  switch (variant) {
-    case "v1":
-      return text.headerV1;
-    case "v2":
-      return text.headerV2;
-    case "v3":
-      return text.headerV3;
-    case "control":
-    default:
-      return text.headerControl;
-  }
+  return polish ? text.headerPolish : text.headerV1;
 }
 
 export function isCoworkSuggestionsDismissed(): boolean {

@@ -4,12 +4,21 @@ import type { RawBrowserNavigationState } from "../adapters/desktopBridge/offici
 import { readResolvedColorMode, THEME_MODE_CHANGE_EVENT } from "../features/settings/appearanceSettings";
 import { useShellText } from "../i18n/shellMessages";
 import { FrameContext } from "../stores/frameContext";
-import { useFrameStore, type FrameStore } from "../stores/frameStore";
+import {
+  frameStore,
+  useFrameStore,
+  useFrameStoreSelector,
+  type FrameMode,
+  type FrameState,
+  type FrameStore,
+} from "../stores/frameStore";
 import { FrameSidebar } from "./FrameSidebar";
 import { PaneLayout } from "./PaneLayout";
 import { SearchCommandPalette } from "./SearchCommandPalette";
+import { SessionRowDragGhost } from "./SessionRowDragGhost";
 import { Icon } from "./icons";
 import { sessionHomePath, type SessionNavigationMode } from "./sessionPaths";
+import { isEpitaxyPopoutWindow } from "../features/epitaxy/session/epitaxyPopoutWindow";
 
 type DesktopFrameProps = {
   currentRoute: AppRoute;
@@ -17,8 +26,11 @@ type DesktopFrameProps = {
   onNavigate: (path: string) => void;
 };
 
+function selectFrameMode(state: FrameState): FrameMode {
+  return state.mode;
+}
+
 export function DesktopFrame({ children, currentRoute, onNavigate }: DesktopFrameProps) {
-  const frame = useFrameStore();
   const [searchOpen, setSearchOpen] = useState(false);
   const colorMode = useResolvedColorMode();
   const windowsFrame = isWindowsDesktopFrame();
@@ -29,27 +41,30 @@ export function DesktopFrame({ children, currentRoute, onNavigate }: DesktopFram
    * Sync frame.mode before child navigation paints.
    * Search / cross-mode open used to call onNavigate alone — mode only flipped in the
    * path effect after re-render, so sidebar could briefly show the wrong recents tree.
+   *
+   * Official H6t is a module store (shared-50). Read/write via frameStore — do not
+   * close over useFrameStore() here or toggleSidebar re-renders PaneLayout + Fu.
    */
   const navigateWithMode = useCallback((path: string) => {
     const nextMode = modeFromPath(path);
-    if (nextMode && frame.mode !== nextMode) frame.setMode(nextMode);
+    if (nextMode && frameStore.getState().mode !== nextMode) frameStore.setMode(nextMode);
     onNavigate(path);
-  }, [frame, onNavigate]);
+  }, [onNavigate]);
 
   useEffect(() => {
     const routeMode = modeFromPath(window.location.pathname);
-    if (routeMode && frame.mode !== routeMode) frame.setMode(routeMode);
-  }, [currentRoute.path, frame]);
+    if (routeMode && frameStore.getState().mode !== routeMode) frameStore.setMode(routeMode);
+  }, [currentRoute.path]);
+
+  const mode = useFrameStoreSelector(selectFrameMode);
 
   // Official ion-dist `q6t`: File→New Conversation / Cmd+N arrives as main→renderer
   // binding `cmdK` (asar `gKA` → webContents.send("cmdK")), then navigates mode home.
-  useOfficialNewConversationBinding(frame.mode, navigateWithMode);
+  useOfficialNewConversationBinding(mode, navigateWithMode);
 
-  const frameStyle = {
-    "--df-sidebar-width": `${frame.sidebarWidth}px`,
-  } as CSSProperties;
+  const popoutWindow = isEpitaxyPopoutWindow();
 
-  // Official Vrs (index-BELzQL5P): inner
+  // Official Vrs (index-D35w9RK9): inner
   //   `flex min-h-0 min-w-0 w-full overflow-x-clip relative overflow-y-clip`
   // when B4() (always true). Outer also `epitaxy-root bg-bg-100` when Prs
   // (`/code` | `/epitaxy`) so `.epitaxy-root .dframe-content-inner` zeros
@@ -68,30 +83,74 @@ export function DesktopFrame({ children, currentRoute, onNavigate }: DesktopFram
       data-theme="claude"
       data-mode={colorMode}
     >
-      <div
-        className="dframe-root draggable-none"
-        data-collapsed={frame.sidebarCollapsed || undefined}
-        data-frame-mode={frame.mode}
-        data-hovering={(frame.sidebarCollapsed && frame.sidebarHovering) || undefined}
-        data-peeked={(frame.sidebarCollapsed && frame.sidebarHovering) || undefined}
-        data-resizing={frame.sidebarResizing || undefined}
-        data-system-font={frame.systemFont || undefined}
-        data-darker-code={frame.darkerCode || undefined}
-        data-windows={windowsFrame || undefined}
-        data-web={!desktopFrame || undefined}
-        style={frameStyle}
+      <DesktopFrameRoot
+        currentRoute={currentRoute}
+        desktopFrame={desktopFrame}
+        onNavigate={navigateWithMode}
+        onSearch={openSearch}
+        popoutWindow={popoutWindow}
+        windowsFrame={windowsFrame}
       >
-        <FrameContext.Provider value={frame}>
-          {windowsFrame ? <WindowsChromeBar frame={frame} onSearch={openSearch} /> : null}
-          <FrameSidebar currentRoute={currentRoute} frame={frame} onNavigate={navigateWithMode} onSearch={openSearch} />
-          <main id="dframe-main" tabIndex={-1} className="dframe-content">
-            <div className="dframe-content-inner">
-              <PaneLayout currentRoute={currentRoute} mode={frame.mode} onNavigate={navigateWithMode}>{children}</PaneLayout>
-            </div>
-          </main>
-          <SearchCommandPalette isOpen={searchOpen} mode={frame.mode} onClose={() => setSearchOpen(false)} onNavigate={navigateWithMode} />
-        </FrameContext.Provider>
-      </div>
+        <main id="dframe-main" tabIndex={-1} className="dframe-content">
+          <div className="dframe-content-inner">
+            <PaneLayout currentRoute={currentRoute} mode={mode} onNavigate={navigateWithMode}>{children}</PaneLayout>
+          </div>
+        </main>
+        <SearchCommandPalette isOpen={searchOpen} mode={mode} onClose={() => setSearchOpen(false)} onNavigate={navigateWithMode} />
+        <SessionRowDragGhost />
+      </DesktopFrameRoot>
+    </div>
+  );
+}
+
+/**
+ * Official H6t subscriber (shared-50 `collapsed` / `toggleCollapsed`).
+ * Chrome + sidebar live here. PaneLayout is `{children}` from DesktopFrame so
+ * Cmd+B does not re-render Fu (session tiles do not subscribe to collapsed).
+ */
+function DesktopFrameRoot({
+  children,
+  currentRoute,
+  desktopFrame,
+  onNavigate,
+  onSearch,
+  popoutWindow,
+  windowsFrame,
+}: {
+  children: ReactNode;
+  currentRoute: AppRoute;
+  desktopFrame: boolean;
+  onNavigate: (path: string) => void;
+  onSearch: () => void;
+  popoutWindow: boolean;
+  windowsFrame: boolean;
+}) {
+  const frame = useFrameStore();
+  const frameStyle = {
+    "--df-sidebar-width": popoutWindow ? "0px" : `${frame.sidebarWidth}px`,
+  } as CSSProperties;
+
+  return (
+    <div
+      className="dframe-root draggable-none"
+      data-collapsed={(popoutWindow || frame.sidebarCollapsed) || undefined}
+      data-frame-mode={frame.mode}
+      data-hovering={(frame.sidebarCollapsed && frame.sidebarHovering) || undefined}
+      data-peeked={(frame.sidebarCollapsed && frame.sidebarHovering) || undefined}
+      data-resizing={frame.sidebarResizing || undefined}
+      data-system-font={frame.systemFont || undefined}
+      data-darker-code={frame.darkerCode || undefined}
+      data-windows={windowsFrame || undefined}
+      data-web={!desktopFrame || undefined}
+      style={frameStyle}
+    >
+      <FrameContext.Provider value={frame}>
+        {windowsFrame && !popoutWindow ? <WindowsChromeBar frame={frame} onSearch={onSearch} /> : null}
+        {popoutWindow ? null : (
+          <FrameSidebar currentRoute={currentRoute} frame={frame} onNavigate={onNavigate} onSearch={onSearch} />
+        )}
+        {children}
+      </FrameContext.Provider>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * Official AskUserQuestion state machine — index-BELzQL5P R2e residual.
+ * Official AskUserQuestion state machine — cd5a31703 R2e residual.
  * Code composer path always uses disableAutoSkip=true (c11959232 Ow).
  */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";

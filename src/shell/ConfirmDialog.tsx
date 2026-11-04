@@ -9,13 +9,21 @@ type ConfirmDialogProps = {
   children?: ReactNode;
   /** Official rp residual: disable confirm while async work runs (InstallGh Installing…). */
   closeOnConfirm?: boolean;
-  confirmText?: string;
+  confirmText?: ReactNode;
+  /**
+   * Official rp residual: disable the whole dialog (InstallGh Installing…).
+   * Overlay / Cancel / X / confirm all blocked.
+   */
   disabled?: boolean;
+  /**
+   * Official Bu `ml` — disable confirm only (`disabled:!r`). Cancel / X / overlay stay live.
+   */
+  confirmDisabled?: boolean;
   isOpen: boolean;
   message: ReactNode;
   onClose: () => void;
   onConfirm: () => void;
-  title: string;
+  title: ReactNode;
   /** Official residual also uses `warning` (xge computer-use enable). */
   variant?: "danger" | "default" | "warning";
 };
@@ -29,6 +37,7 @@ export function ConfirmDialog({
   children,
   closeOnConfirm = true,
   confirmText,
+  confirmDisabled = false,
   disabled = false,
   isOpen,
   message,
@@ -41,6 +50,7 @@ export function ConfirmDialog({
   if (!isOpen) return null;
   // warning residual uses primary confirm (not danger red).
   const confirmClassName = variant === "danger" ? `${primaryButtonClass} bg-danger-100 hover:bg-danger-200` : primaryButtonClass;
+  const confirmLocked = disabled || confirmDisabled;
   return createPortal(
     <div className="epitaxy-root">
       <div className={overlayClassName} onMouseDown={disabled ? undefined : onClose} role="presentation" style={modalVars}>
@@ -56,8 +66,8 @@ export function ConfirmDialog({
           <div className="mt-5 flex justify-end gap-2">
             <button className="inline-flex h-9 items-center justify-center rounded-lg px-4 text-sm hover:bg-bg-200" disabled={disabled} onClick={onClose} type="button">{cancelText ?? text.cancel}</button>
             <button
-              className={`${confirmClassName}${disabled ? " opacity-60 pointer-events-none" : ""}`}
-              disabled={disabled}
+              className={`${confirmClassName}${confirmLocked ? " opacity-60 pointer-events-none" : ""}`}
+              disabled={confirmLocked}
               onClick={() => {
                 onConfirm();
                 if (closeOnConfirm) onClose();

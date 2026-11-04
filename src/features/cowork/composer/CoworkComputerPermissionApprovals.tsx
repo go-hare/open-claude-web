@@ -18,7 +18,7 @@ type TccGrantState = "granted" | "denied" | "not-determined" | "not-supported";
 type TccState = { accessibility: TccGrantState; screenRecording: TccGrantState };
 
 /**
- * Official residual Uge ComputerUseEnablePanel (index-BELzQL5P):
+ * Official residual Uge ComputerUseEnablePanel (c21f11e6d-CxD82rYo):
  *   title “Claude wants to use your computer”
  *   row Computer use → Enable → xge confirm “Turn on computer use?” → setPreference chicagoEnabled true
  *   optional Accessibility / Screen recording rows when input.tccState present and chicago already on
@@ -92,7 +92,7 @@ export function CoworkComputerEnableApproval(props: ApprovalProps) {
       {reason ? <p className="text-text-100 mb-3">{reason}</p> : null}
       <div
         className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4"
-        data-official-source="index-BELzQL5P:Uge"
+        data-official-source="c21f11e6d-CxD82rYo.js:Uge"
         data-permission-kind="computer-enable"
       >
         <div className="p-3">
@@ -209,7 +209,7 @@ export function CoworkComputerTccApproval(props: ApprovalProps) {
     <div ref={rootRef}>
       <div
         className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4"
-        data-official-source="index-BELzQL5P:Fge"
+        data-official-source="c21f11e6d-CxD82rYo.js:Fge"
         data-permission-kind="computer-tcc"
       >
         <div className="p-3">
@@ -278,7 +278,7 @@ export function CoworkComputerAccessApproval(props: ApprovalProps) {
     <div ref={rootRef}>
       <div
         className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4"
-        data-official-source="index-BELzQL5P:Oge"
+        data-official-source="c21f11e6d-CxD82rYo.js:Oge"
         data-permission-kind="computer-access"
       >
         <div className="p-3">
@@ -305,7 +305,7 @@ export function CoworkComputerTeachApproval(props: ApprovalProps) {
     <div ref={rootRef}>
       <div
         className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4"
-        data-official-source="index-BELzQL5P:Vge"
+        data-official-source="c21f11e6d-CxD82rYo.js:Vge"
         data-permission-kind="computer-teach"
       >
         <div className="p-3">
@@ -326,7 +326,7 @@ export function CoworkComputerTeachApproval(props: ApprovalProps) {
 }
 
 /**
- * Official qge ComputerUseTccRow residual (index-BELzQL5P ~62141):
+ * Official qge ComputerUseTccRow residual (c21f11e6d-CxD82rYo ~62141):
  * label row + Granted/Not granted badge (Check / X icons), description, Enable/Request button when not granted.
  */
 function ComputerPermissionToggleRow({
@@ -344,7 +344,7 @@ function ComputerPermissionToggleRow({
   onRequest: () => void;
 }) {
   return (
-    <div className="p-3 flex items-start justify-between gap-3" data-official-source="index-BELzQL5P:qge">
+    <div className="p-3 flex items-start justify-between gap-3" data-official-source="c21f11e6d-CxD82rYo.js:qge">
       <div className="flex flex-col gap-0.5 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm text-text-200 font-medium">{label}</span>

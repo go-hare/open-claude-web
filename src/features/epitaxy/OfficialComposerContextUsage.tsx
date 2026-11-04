@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import type { ContextUsage } from "../../adapters/desktopBridge";
 import { Icon } from "../../shell/icons";
+import { useI18nText } from "../../i18n/footerMenuMessages";
+import { COMPOSER_CONTEXT_WINDOW_MESSAGES } from "./officialCodeChromeMessages";
 
 const composerUsageCircleSize = 12;
 export const composerUsageCircumference = 2 * Math.PI * 5;
@@ -21,6 +23,7 @@ export function OfficialContextWindowSummary({
   summary: string;
 }) {
   const canToggle = contextUsage !== null || isFetching;
+  const contextText = useI18nText(COMPOSER_CONTEXT_WINDOW_MESSAGES);
   return (
     <div className="flex flex-col gap-g2">
       <button
@@ -30,7 +33,7 @@ export function OfficialContextWindowSummary({
         onClick={canToggle ? onToggle : undefined}
         type="button"
       >
-        <span className="text-footnote text-t6">Context window</span>
+        <span className="text-footnote text-t6">{contextText.contextWindow}</span>
         <span className="text-footnote text-t6 tabular-nums ml-auto">{summary}</span>
         {canToggle ? (
           <Icon
@@ -46,7 +49,7 @@ export function OfficialContextWindowSummary({
       {canToggle && expanded && !contextUsage ? (
         <div className="px-p8 pb-p2 flex items-center gap-g4 text-footnote text-t7 min-h-[var(--h4)]">
           <OfficialInlineSpinner />
-          <span>Loading context breakdown…</span>
+          <span>{contextText.loadingBreakdown}</span>
         </div>
       ) : null}
     </div>

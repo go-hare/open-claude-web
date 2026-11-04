@@ -3,13 +3,13 @@ import { Icon } from "../../../shell/icons";
 import { COWORK_SUPPORT_URL } from "../newTask/coworkNewTaskMessages";
 
 /**
- * Official V4t / cKt (index-BELzQL5P ~308136 / ~285454):
+ * Official V4t / cKt (c21f11e6d-CxD82rYo.js ~308136 / ~285454):
  * Draft risk banner above new-task composer when unsupervised mode is on.
  * Class: rounded-t-[20px] bg-warning-900 text-warning-000, pb-8 underlaps chin.
  */
 export function CoworkDraftRiskBanner({ visible }: { visible: boolean }) {
   return (
-    <div aria-live="polite" data-official-source="index-BELzQL5P.js:V4t/cKt CoworkDraftRiskBanner" role="status">
+    <div aria-live="polite" data-official-source="c21f11e6d-CxD82rYo.js:V4t/cKt CoworkDraftRiskBanner" role="status">
       <AnimatePresence initial={false}>
         {visible ? (
           <motion.div
@@ -26,7 +26,7 @@ export function CoworkDraftRiskBanner({ visible }: { visible: boolean }) {
                   <Icon customSize={16} name="Warning" />
                 </div>
                 <p className="min-w-0 flex-1 text-xs">
-                  {/* Official index-BELzQL5P id 5j7bd5H/l2 */}
+                  {/* Official c21f11e6d-CxD82rYo.js id 5j7bd5H/l2 */}
                   <span className="font-bold">High risk:</span> Claude can act anywhere on the internet, which could put your data at risk.{" "}
                   <a className="underline-offset-2 hover:underline" href={COWORK_SUPPORT_URL} rel="noopener noreferrer" target="_blank">
                     See safe use tips

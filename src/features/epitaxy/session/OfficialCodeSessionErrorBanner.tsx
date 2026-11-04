@@ -3,15 +3,17 @@
  * Uses shared SAt/MAt category copy (coworkSessionErrorCopy); product has no
  * separate Code si map — same residual categories.
  *
- * github_auth → Reconnect GitHub when onReconnectGithub provided.
- * retryHelps + onRetry → Try again.
- * Details toggles raw error text (default open when unknown category).
+ * github_auth → Reconnect GitHub (GT4+roXeE1) when onReconnectGithub provided.
+ * retryHelps + onRetry → Try again (FazwRldA7z).
+ * Details (Lv0zJuL1jH) toggles raw error text (default open when unknown category).
  * Get logs ($h) residual Oh()→false — omit until enterprise residual on.
  */
 import { useMemo, useState } from "react";
 import { Icon } from "../../../shell/icons";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
 import { coworkSessionErrorCopy } from "../../cowork/session/activity/coworkSessionErrorCopy";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { SESSION_LOAD_MESSAGES } from "../officialCodeChromeMessages";
 
 export function OfficialCodeSessionErrorBanner({
   errorCategory,
@@ -26,6 +28,7 @@ export function OfficialCodeSessionErrorBanner({
   onRetry?: () => void;
   sessionId?: string;
 }) {
+  const text = useI18nText(SESSION_LOAD_MESSAGES);
   const copy = useMemo(() => coworkSessionErrorCopy(errorCategory), [errorCategory]);
   const [detailsOpen, setDetailsOpen] = useState(!copy.isKnownCategory);
   const showRetry = Boolean(onRetry) && copy.retryHelps;
@@ -34,9 +37,13 @@ export function OfficialCodeSessionErrorBanner({
   return (
     <div
       className="relative isolate flex flex-col gap-g3 rounded-r7 p-p6 select-text"
-      data-official-source="c11959232-h_zsw3wI.js:FM"
+      data-official-source="cd5a31703-B4nKQMBN.js:FM"
     >
-      <div className="absolute inset-0 rounded-r7 bg-sidebar -z-10" aria-hidden="true" />
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated"
+        data-surface="sidebar"
+      />
       <div className="flex items-center gap-g3">
         <Icon className="text-[var(--core-red)] shrink-0" name="XCrossCloseMedium" size="s" />
         <span className="text-body-semibold text-[var(--core-red)] min-w-0">{copy.title}</span>
@@ -50,12 +57,12 @@ export function OfficialCodeSessionErrorBanner({
       <div className="flex flex-wrap items-center gap-g3">
         {showGithub ? (
           <OfficialButton onClick={onReconnectGithub} size="small" variant="contained">
-            Reconnect GitHub
+            <span data-intl-id="GT4+roXeE1">{text.reconnectGithub}</span>
           </OfficialButton>
         ) : null}
         {showRetry ? (
           <OfficialButton onClick={onRetry} size="small" variant="contained">
-            Try again
+            <span data-intl-id="FazwRldA7z">{text.tryAgain}</span>
           </OfficialButton>
         ) : null}
         <button
@@ -65,7 +72,7 @@ export function OfficialCodeSessionErrorBanner({
           type="button"
         >
           <Icon name={detailsOpen ? "ChevronDownSmall" : "ChevronRightSmall"} size="s" />
-          Details
+          <span data-intl-id="Lv0zJuL1jH">{text.details}</span>
         </button>
       </div>
     </div>

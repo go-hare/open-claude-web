@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Tabs } from "@base-ui-components/react/tabs";
 import { Icon } from "../../../shell/icons";
 import { OfficialTextInput } from "../../shared/OfficialTextInput";
 import { ConnectorsPageSidebar } from "../connectors/ConnectorsPageSidebar";
 import { AddSkillDropdown } from "./AddSkillDropdown";
+import { ObjectPaperAirplane } from "./ObjectPaperAirplane";
 import { SkillDocumentIcon, SkillIconTile } from "./SkillDocumentIcon";
 import { SkillsCollapsibleSection } from "./SkillsCollapsibleSection";
 import { SkillsListItem } from "./SkillsListItem";
 import type { BuiltInSkill, UserSkill } from "./skillTypes";
+
+/**
+ * Official CDS Tabs.Tab Pt (shared-10): selected chip is fill-ghost-hover + rounded.
+ * Product CSS has `.bg-fill-ghost-hover` but not `data-[active]:before:bg-*`, so paint
+ * the selected fill on the tab itself (overlay mine is the only tab / always active).
+ */
+const OVERLAY_SKILLS_TAB_CLASS =
+  "inline-flex h-control shrink-0 items-center justify-center px-md rounded cds-reset whitespace-nowrap select-none outline-none text-body font-medium font-control text-primary bg-fill-ghost-hover";
 
 /**
  * Official c63a78ed4 Rl / SkillsPageSidebar + Bl / SkillsGroupedList.
@@ -14,6 +24,7 @@ import type { BuiltInSkill, UserSkill } from "./skillTypes";
 export function SkillsPageSidebar({
   userSkills,
   builtInSkills,
+  layout = "page",
   selectedBuiltInName,
   selectedUserSkillId,
   onBuiltInSelect,
@@ -27,6 +38,8 @@ export function SkillsPageSidebar({
 }: {
   userSkills: UserSkill[];
   builtInSkills: BuiltInSkill[];
+  /** Official overlay Ar uses a single-column vt list, not CustomizePageSidebar. */
+  layout?: "page" | "overlay";
   selectedBuiltInName: string | null;
   selectedUserSkillId?: string | null;
   onBuiltInSelect: (name: string) => void;
@@ -91,6 +104,8 @@ export function SkillsPageSidebar({
   const hasUserGroups = personalSkills.length > 0 || sharedSkills.length > 0 || orgSkills.length > 0;
   const hasBuiltIns = filteredBuiltIns.length > 0;
   const isEmpty = userSkills.length === 0 && builtInSkills.length === 0;
+  /** Official Ht = it.length===0 — overlay mine empty hides builtins (`Ht?$t`). */
+  const overlayMineEmpty = layout === "overlay" && userSkills.length === 0 && !isSearching;
 
   const title: ReactNode = isSearchOpen ? (
     <OfficialTextInput
@@ -139,9 +154,113 @@ export function SkillsPageSidebar({
     </div>
   );
 
-  return (
-    <ConnectorsPageSidebar title={title} headerAction={headerAction}>
-      {isEmpty ? (
+  const listBody = isEmpty ? (
+    <SkillsListEmptyState wiggleEnabled={wiggleEnabled} onAddSkill={onAddSkill ?? onBrowseSkills} />
+  ) : (
+    <div className="flex flex-col gap-px">
+      {personalSkills.length > 0 ? (
+        <SkillsCollapsibleSection title="Personal skills" forceExpanded={isSearching}>
+          <div className="flex flex-col gap-px">
+            {personalSkills.map((skill) => (
+              <SkillsListItem
+                key={skill.skillId}
+                id={skill.skillId}
+                name={skill.skillName}
+                icon={
+                  <SkillIconTile>
+                    <SkillDocumentIcon size={16} />
+                  </SkillIconTile>
+                }
+                isSelected={selectedUserSkillId === skill.skillId}
+                onSelect={onUserSelect ?? (() => undefined)}
+                isEnabled={skill.enabled}
+              />
+            ))}
+          </div>
+        </SkillsCollapsibleSection>
+      ) : null}
+
+      {sharedSkills.length > 0 ? (
+        <>
+          {personalSkills.length > 0 ? <SectionDivider /> : null}
+          <SkillsCollapsibleSection title="Shared skills" forceExpanded={isSearching}>
+            <div className="flex flex-col gap-px">
+              {sharedSkills.map((skill) => (
+                <SkillsListItem
+                  key={skill.skillId}
+                  id={skill.skillId}
+                  name={skill.skillName}
+                  icon={
+                    <SkillIconTile>
+                      <SkillDocumentIcon size={16} />
+                    </SkillIconTile>
+                  }
+                  isSelected={selectedUserSkillId === skill.skillId}
+                  onSelect={onUserSelect ?? (() => undefined)}
+                  isEnabled={skill.enabled}
+                />
+              ))}
+            </div>
+          </SkillsCollapsibleSection>
+        </>
+      ) : null}
+
+      {orgSkills.length > 0 ? (
+        <>
+          {personalSkills.length + sharedSkills.length > 0 ? <SectionDivider /> : null}
+          <SkillsCollapsibleSection title="Organization skills" forceExpanded={isSearching}>
+            <div className="flex flex-col gap-px">
+              {orgSkills.map((skill) => (
+                <SkillsListItem
+                  key={skill.skillId}
+                  id={skill.skillId}
+                  name={skill.skillName}
+                  icon={
+                    <SkillIconTile>
+                      <SkillDocumentIcon size={16} />
+                    </SkillIconTile>
+                  }
+                  isSelected={selectedUserSkillId === skill.skillId}
+                  onSelect={onUserSelect ?? (() => undefined)}
+                  isEnabled={skill.enabled}
+                />
+              ))}
+            </div>
+          </SkillsCollapsibleSection>
+        </>
+      ) : null}
+
+      {hasBuiltIns ? (
+        <>
+          {hasUserGroups ? <SectionDivider /> : null}
+          <SkillsCollapsibleSection title="Built-in skills" forceExpanded={isSearching}>
+            <div className="flex flex-col gap-px">
+              {filteredBuiltIns.map((skill) => (
+                <SkillsListItem
+                  key={skill.name}
+                  id={skill.name}
+                  name={skill.name}
+                  icon={
+                    <SkillIconTile>
+                      <SkillDocumentIcon size={16} />
+                    </SkillIconTile>
+                  }
+                  isSelected={skill.name === selectedBuiltInName}
+                  onSelect={onBuiltInSelect}
+                />
+              ))}
+            </div>
+          </SkillsCollapsibleSection>
+        </>
+      ) : null}
+    </div>
+  );
+
+  if (layout === "overlay") {
+    const overlayList =
+      overlayMineEmpty ? (
+        <SkillsOverlayFirstRun />
+      ) : isEmpty ? (
         <SkillsListEmptyState wiggleEnabled={wiggleEnabled} onAddSkill={onAddSkill ?? onBrowseSkills} />
       ) : (
         <div className="flex flex-col gap-px">
@@ -217,7 +336,7 @@ export function SkillsPageSidebar({
             </>
           ) : null}
 
-          {hasBuiltIns ? (
+          {hasBuiltIns && userSkills.length > 0 ? (
             <>
               {hasUserGroups ? <SectionDivider /> : null}
               <SkillsCollapsibleSection title="Built-in skills" forceExpanded={isSearching}>
@@ -241,13 +360,108 @@ export function SkillsPageSidebar({
             </>
           ) : null}
         </div>
-      )}
+      );
+
+    return (
+      <div
+        className="flex h-full min-h-0 flex-1 flex-col pt-1"
+        data-official-source="c5e558aae:Ar vt overlay"
+      >
+        <header className="flex min-w-0 shrink-0 items-center gap-x-sm">
+          <div className="flex min-w-0 flex-1 items-center">
+            <h2 className="min-w-0 truncate text-title font-semibold text-primary">Skills</h2>
+          </div>
+          <div className="flex w-full max-w-md shrink-0 justify-center px-md">
+            <OfficialTextInput
+              aria-label="Search skills and plugins"
+              className="w-full"
+              data-testid="customize-header-search"
+              onValueChange={setSearchQuery}
+              placeholder="Search skills and plugins"
+              prepend={<Icon className="text-muted" customSize={16} name="Search" />}
+              size="sm"
+              type="search"
+              value={searchQuery}
+            />
+          </div>
+          <div className="flex min-w-0 flex-1 items-center justify-end">
+            {wiggleEnabled ? (
+              <AddSkillDropdown
+                onBrowseSkills={onBrowseSkills}
+                onCreateWithClaude={onCreateWithClaude}
+                onWriteInstructions={onWriteInstructions}
+                onUpload={onUpload}
+                variant="overlay"
+              />
+            ) : null}
+          </div>
+        </header>
+        <div aria-hidden="true" className="h-4 shrink-0" />
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-sm">
+          <Tabs.Root value="mine">
+            <Tabs.List aria-label="Skills" className="flex items-center font-sans">
+              <Tabs.Tab
+                className={OVERLAY_SKILLS_TAB_CLASS}
+                data-testid="skills-tabbed-list-tab-mine"
+                value="mine"
+              >
+                Your skills
+              </Tabs.Tab>
+            </Tabs.List>
+          </Tabs.Root>
+        </div>
+        <div className="relative -mt-1 flex min-h-0 flex-1 flex-col overflow-y-auto pb-lg pt-1">
+          {overlayList}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ConnectorsPageSidebar title={title} headerAction={headerAction}>
+      {listBody}
     </ConnectorsPageSidebar>
   );
 }
 
 function SectionDivider() {
   return <hr className="border-t border-border-300 my-2" />;
+}
+
+/**
+ * Official $e (c27f32a39) first-run card — gcU7Ur/D71 / w39ST2SJHc / ObjectPaperAirplane.
+ * onBrowseShared is void in overlay Ar `$t`, so no Discover button (screenshot).
+ */
+function SkillsOverlayFirstRun() {
+  return (
+    <div
+      className="group/card relative isolate flex shrink-0 flex-col rounded-card after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-card-ring after:content-['']"
+      data-cds="Card"
+      data-official-source="c27f32a39:$e"
+      data-testid="tabbed-list-first-run"
+    >
+      <span
+        aria-hidden="true"
+        className="cds-card-fill pointer-events-none absolute inset-0 -z-[1] m-0 rounded-[inherit] bg-neutral"
+      />
+      <div
+        className="cds-card-body flex min-h-0 flex-1 flex-col self-stretch rounded-[inherit] p-lg [align-items:inherit] [gap:inherit] [justify-content:inherit]"
+        data-cds-card-body=""
+      >
+        <div className="flex items-center gap-lg">
+          <div className="flex min-w-0 flex-1 flex-col items-start gap-md">
+            <div className="flex flex-col gap-xs">
+              <h3 className="m-0 text-heading-semibold text-primary">Add your first skills</h3>
+              <p className="m-0 text-body text-secondary">Skills teach Claude how you work.</p>
+            </div>
+          </div>
+          <div aria-hidden="true" className="hidden shrink-0 pr-6 text-primary sm:block">
+            <ObjectPaperAirplane />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /** Official ql — empty only when both user + built-in lists are empty. */

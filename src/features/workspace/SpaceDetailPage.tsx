@@ -124,7 +124,7 @@ export function SpaceDetailPage({ onNavigate }: RouteViewProps) {
       setSessions([]);
       return;
     }
-    // Residual UZe/Ks (index-BELzQL5P t1): filter cowork sessions by spaceId only
+    // Residual UZe/Ks (index-D35w9RK9 t1): filter cowork sessions by spaceId only
     // (o6().filter(t => t.spaceId === e)), then sort by createdAt desc. cwd is
     // synthetic /sessions/<id> on host and must not be used for association.
     const allSessions = await desktopBridge.LocalAgentModeSessions.list().catch(() => []);

@@ -6,11 +6,26 @@
  * Views menu gate = official VC():
  *   el("ccd_file_browser") && fe?.listSessionDirectory && Le?.fetchMentionOptions
  */
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type Ref } from "react";
 import { desktopBridge, type LocalSessionsBridge, type SessionSummary } from "../../../adapters/desktopBridge";
 import { fetchBootstrapPayload } from "../../settings/accountSettingsApi";
+import {
+  BaseContextMenuPopup,
+  ContextMenu,
+} from "../../../shell/BaseMenu";
 import { Icon } from "../../../shell/icons";
 import { OfficialButton, type OfficialSessionRef } from "../OfficialEpitaxyComponents";
+import { OfficialFileTypeIcon } from "./OfficialFileTypeIcon";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { formatOfficialIcu } from "../../../i18n/formatOfficialIcu";
+import { SIDE_PANE_CHROME_MESSAGES, TERMINAL_PANE_MESSAGES } from "../officialCodeChromeMessages";
+import { EpitaxyTranscriptActionContext } from "./epitaxyTranscriptActionContext";
+import { officialSideChatStore } from "./officialSideChatStore";
+import {
+  OfficialKuContextMenuItems,
+  OfficialKuFileActionsOverflow,
+  useOfficialKuFileMenu,
+} from "./OfficialCcdFileContextMenu";
 import {
   bridgesSupportFilesBrowser,
   evaluateOfficialFilesBrowserGate,
@@ -159,6 +174,12 @@ function FileTreeRow({
 }) {
   const slash = entry.relativePath.lastIndexOf("/");
   const parentPath = showPath && slash > 0 ? entry.relativePath.slice(0, slash) : "";
+  const ku = useOfficialKuFileMenu({
+    absPath: entry.absPath,
+    isDirectory: entry.isDirectory,
+    mentionPath: entry.relativePath || entry.absPath,
+    relPath: entry.relativePath,
+  });
   const onPrimary = () => {
     if (entry.isDirectory) {
       if (onToggle) onToggle(entry.absPath);
@@ -167,41 +188,59 @@ function FileTreeRow({
     }
     onPreview(entry.absPath);
   };
-  const iconName = entry.isDirectory
-    ? onToggle
-      ? (expanded ? "ChevronDownSmall" : "ChevronRightSmall")
-      : "Folder1"
-    : "代码";
   return (
-    <div
-      aria-expanded={entry.isDirectory ? expanded : undefined}
-      aria-level={depth + 1}
-      className="group w-full outline-none ring-focus rounded-r2 flex items-center"
-      data-tree-row
-      role="treeitem"
-      style={{ paddingLeft: 16 * depth + 8 }}
-      tabIndex={-1}
-    >
-      <button
-        className="flex flex-1 min-w-0 items-baseline gap-g5 text-left bg-transparent border-0 outline-none hide-focus-ring rounded-r2 py-p2"
-        data-tree-primary
-        onClick={onPrimary}
-        tabIndex={-1}
-        type="button"
-      >
-        <span className="flex items-center justify-center size-[14px] shrink-0 text-t6">
-          <Icon name={iconName} size="sm" />
-        </span>
-        <span className="truncate text-t8">
-          <HighlightText offset={slash + 1} positions={entry.positions} text={entry.name} />
-        </span>
-        {showPath && parentPath ? (
-          <span className="truncate text-footnote text-t6">
-            <HighlightText offset={0} positions={entry.positions} text={parentPath} />
-          </span>
-        ) : null}
-      </button>
-    </div>
+    <ContextMenu.Root>
+      <ContextMenu.Trigger
+        render={(props) => (
+          <div
+            {...props}
+            aria-expanded={entry.isDirectory ? expanded : undefined}
+            aria-level={depth + 1}
+            className="group/file-tree relative flex items-center h-control py-0 w-full rounded text-body focus-visible:outline-hidden focus-visible:shadow-focus bg-alpha-0 text-primary hover:bg-fill-ghost-hover"
+            data-tree-row
+            role="treeitem"
+            style={{ paddingLeft: 8 + depth * 8 }}
+            tabIndex={-1}
+          >
+            <button
+              className="flex flex-1 min-w-0 items-center gap-1 text-left bg-transparent border-0 outline-none hide-focus-ring rounded-[3px] py-1.25 pr-md h-control"
+              data-tree-primary
+              onClick={onPrimary}
+              tabIndex={-1}
+              type="button"
+            >
+              {entry.isDirectory ? (
+                <Icon
+                  name="CaretRight"
+                  size="xs"
+                  className={`shrink-0 self-center text-muted ${expanded ? "rotate-90" : ""}`}
+                />
+              ) : (
+                <OfficialFileTypeIcon className="shrink-0 self-center text-muted" fileName={entry.name} size="xs" />
+              )}
+              <span className="truncate text-body text-primary">
+                <HighlightText offset={slash + 1} positions={entry.positions} text={entry.name} />
+              </span>
+              {showPath && parentPath ? (
+                <span className="truncate text-footnote text-muted">
+                  <HighlightText offset={0} positions={entry.positions} text={parentPath} />
+                </span>
+              ) : null}
+            </button>
+            <div
+              className="ml-auto opacity-0 group-hover/file-tree:opacity-100 group-focus-within:opacity-100 has-[button[aria-expanded=true]]:opacity-100 shrink-0"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <OfficialKuFileActionsOverflow extraSections={ku.extraSections} items={ku.items} />
+            </div>
+          </div>
+        )}
+      />
+      <BaseContextMenuPopup>
+        <OfficialKuContextMenuItems extraSections={ku.extraSections} items={ku.items} />
+      </BaseContextMenuPopup>
+    </ContextMenu.Root>
   );
 }
 
@@ -218,6 +257,7 @@ function DirectoryBranch({
   root: string;
   sessionId: string;
 }) {
+  const chromeText = useI18nText(SIDE_PANE_CHROME_MESSAGES);
   const bridge = desktopBridge.LocalSessions;
   const [expanded, setExpanded] = useState(() => new Set<string>());
   const [entries, setEntries] = useState<OfficialBrowserFileEntry[] | null>(null);
@@ -268,10 +308,10 @@ function DirectoryBranch({
     return <TreeEmpty><FilesPaneSpinner size="s" /></TreeEmpty>;
   }
   if (error) {
-    return depth === 0 ? <TreeEmpty>Couldn't read this folder.</TreeEmpty> : null;
+    return depth === 0 ? <TreeEmpty>{chromeText.couldntReadThisFolder}</TreeEmpty> : null;
   }
   if (!entries || entries.length === 0) {
-    return depth === 0 ? <TreeEmpty>Folder is empty</TreeEmpty> : null;
+    return depth === 0 ? <TreeEmpty>{chromeText.folderIsEmpty}</TreeEmpty> : null;
   }
 
   return (
@@ -314,8 +354,9 @@ function FuzzyResults({
   onPreview: (absPath: string, line?: number, findQuery?: string) => void;
   results: OfficialBrowserFileEntry[];
 }) {
+  const chromeText = useI18nText(SIDE_PANE_CHROME_MESSAGES);
   if (results.length === 0) {
-    return isFetching ? null : <TreeEmpty>No matching files</TreeEmpty>;
+    return isFetching ? null : <TreeEmpty>{chromeText.noMatchingFiles}</TreeEmpty>;
   }
   return (
     <>
@@ -346,9 +387,10 @@ function ContentResults({
   isFetching: boolean;
   onPreview: (absPath: string, line?: number, findQuery?: string) => void;
 }) {
-  if (!hasQuery) return <TreeEmpty>Type after ? to search file contents</TreeEmpty>;
+  const chromeText = useI18nText(SIDE_PANE_CHROME_MESSAGES);
+  if (!hasQuery) return <TreeEmpty>{chromeText.typeAfterQuestionToSearch}</TreeEmpty>;
   if (groups.length === 0) {
-    return isFetching ? null : <TreeEmpty>No matching files</TreeEmpty>;
+    return isFetching ? null : <TreeEmpty>{chromeText.noMatchesInFileContents}</TreeEmpty>;
   }
   return (
     <>
@@ -356,19 +398,91 @@ function ContentResults({
         <div className="flex flex-col" key={group.entry.absPath}>
           <FileTreeRow depth={0} entry={group.entry} onPreview={onPreview} showPath />
           {group.matches.slice(0, 5).map((match, index) => (
-            <button
-              className="text-left px-p8 py-p1 text-footnote text-t6 hover:text-t8 truncate outline-none hide-focus-ring"
+            <OfficialContentMatchRow
+              findQuery={findQuery}
+              group={group}
               key={`${group.entry.absPath}-${match.line ?? index}`}
+              match={match}
+              onPreview={onPreview}
+            />
+          ))}
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Official sS content-match row: click preview + Cd.Popup Ask about this. */
+function OfficialContentMatchRow({
+  findQuery,
+  group,
+  match,
+  onPreview,
+}: {
+  findQuery: string;
+  group: ContentGroup;
+  match: ContentMatch;
+  onPreview: (absPath: string, line?: number, findQuery?: string) => void;
+}) {
+  const chromeText = useI18nText(SIDE_PANE_CHROME_MESSAGES);
+  const askText = useI18nText(TERMINAL_PANE_MESSAGES);
+  const actions = useContext(EpitaxyTranscriptActionContext);
+  const onAskAbout = useCallback(() => {
+    const sessionId = actions?.sessionId;
+    if (!sessionId) return;
+    const prompt = formatOfficialIcu(chromeText.askAboutSnippet, {
+      path: group.entry.relativePath,
+      line: match.line ?? 1,
+      snippet: (match.preview ?? "").trim(),
+    });
+    // Official XC sS `j`: y.getState().openWith(t.id, n) — Side chat, not main composer.
+    officialSideChatStore.getState().openWith(sessionId, prompt);
+  }, [actions?.sessionId, chromeText.askAboutSnippet, group.entry.relativePath, match.line, match.preview]);
+  const ku = useOfficialKuFileMenu({
+    absPath: group.entry.absPath,
+    line: match.line,
+    mentionPath: group.entry.relativePath || group.entry.absPath,
+    relPath: group.entry.relativePath,
+  });
+  const leadingItems = [{ label: askText.askAboutThis, onSelect: onAskAbout }];
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger
+        render={(props) => (
+          <div
+            {...props}
+            className="group/file-tree relative flex items-center w-full"
+            data-tree-row
+            role="treeitem"
+            tabIndex={-1}
+          >
+            <button
+              className="text-left px-p8 py-p1 text-footnote text-t6 hover:text-t8 truncate outline-none hide-focus-ring flex-1 min-w-0"
+              data-tree-primary
               onClick={() => onPreview(group.entry.absPath, match.line, findQuery)}
               type="button"
             >
               {match.line != null ? <span className="text-t5 mr-g3">{match.line}</span> : null}
               <span className="truncate">{match.preview?.trim() || "…"}</span>
             </button>
-          ))}
-        </div>
-      ))}
-    </>
+            <div
+              className="ml-auto opacity-0 group-hover/file-tree:opacity-100 group-focus-within:opacity-100 has-[button[aria-expanded=true]]:opacity-100 shrink-0"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <OfficialKuFileActionsOverflow
+                ariaLabel={chromeText.matchActions}
+                extraSections={ku.extraSections}
+                items={[...leadingItems, ...ku.items]}
+              />
+            </div>
+          </div>
+        )}
+      />
+      <BaseContextMenuPopup>
+        <OfficialKuContextMenuItems extraSections={ku.extraSections} items={ku.items} leadingItems={leadingItems} />
+      </BaseContextMenuPopup>
+    </ContextMenu.Root>
   );
 }
 
@@ -385,14 +499,17 @@ function useDebouncedValue(value: string, delayMs: number) {
  * Official XC Files browser.
  */
 export function OfficialFilesBrowserPane({
+  filterInputRef,
   onOpenFile,
   session,
   sessionRef,
 }: {
+  filterInputRef?: Ref<HTMLInputElement>;
   onOpenFile: (target: { findQuery?: string; line?: number; path: string }) => void;
   session: SessionSummary | null;
   sessionRef: OfficialSessionRef;
 }) {
+  const chromeText = useI18nText(SIDE_PANE_CHROME_MESSAGES);
   const root = session?.repo?.name
     ? (session.cwd ?? "")
     : (session?.cwd ?? "");
@@ -578,30 +695,42 @@ export function OfficialFilesBrowserPane({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-g4 h-h5 mx-[var(--p6)] my-[2px] px-p6 rounded-r5 bg-fill-contained-default effect-contained-default shrink-0">
-        <Icon name="搜索" className="text-t6 shrink-0" size="sm" />
-        <input
-          aria-label="Filter files"
-          autoComplete="off"
-          autoFocus
-          className="flex-1 min-w-0 bg-transparent border-0 outline-none hide-focus-ring text-body text-t8 placeholder:text-t6"
-          onChange={(event) => setFilter(event.target.value)}
-          placeholder={canSearchContents ? "Filter files… (?text to search contents)" : "Filter files…"}
-          spellCheck={false}
-          value={filter}
-        />
-        {fetching ? <FilesPaneSpinner size="s" /> : null}
-        {filter ? (
-          <OfficialButton
-            ariaLabel="Clear filter"
-            icon="XCrossCloseMedium"
-            onClick={() => setFilter("")}
-            size="small"
+      <div className="flex h-8 w-full shrink-0 items-center px-md">
+        <div
+          className={`h-control pl-md rounded bg-fill-field shadow-field-ring font-sans text-body font-normal text-primary transition duration-fast w-full min-w-0 flex items-center gap-[var(--cds-pad-sm,6px)] cursor-text has-[:focus-visible]:shadow-focus [&:hover:not(:focus-visible):not(:has(:focus-visible)):not([data-invalid]):not([data-disabled])]:shadow-field-hover ${filter ? "pr-[calc((var(--cds-h-control)-var(--cds-h-control-nested))/2)]" : "pr-md"}`}
+          data-cds="TextInput"
+        >
+          <span className="flex shrink-0 items-center text-muted">
+            <span className="grid size-4 shrink-0 place-items-center">
+              {fetching ? <FilesPaneSpinner size="s" /> : <Icon name="Search" size="sm" />}
+            </span>
+          </span>
+          <input
+            aria-label={chromeText.filterFiles}
+            autoComplete="off"
+            className="cds-input cds-reset min-w-0 flex-1 h-full bg-transparent border-0 p-0 outline-none focus-visible:outline-hidden text-body font-normal text-primary focus-visible:shadow-none placeholder:text-muted"
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder={canSearchContents ? chromeText.filterFilesWithContents : chromeText.filterFilesEllipsis}
+            ref={filterInputRef}
+            spellCheck={false}
+            style={{ textOverflow: "ellipsis" }}
+            value={filter}
           />
-        ) : null}
+          {filter ? (
+            <span className="flex shrink-0 items-center gap-[var(--cds-pad-sm,6px)] text-muted" data-cds-end-slot="">
+              <OfficialButton
+                ariaLabel={chromeText.clearFilter}
+                icon="XCrossCloseMedium"
+                onClick={() => setFilter("")}
+                size="small"
+                tooltip={null}
+              />
+            </span>
+          ) : null}
+        </div>
       </div>
       <div
-        aria-label="Project files"
+        aria-label={chromeText.projectFiles}
         className="flex-1 min-h-0 overflow-y-auto px-p3 py-p4 outline-none hide-focus-ring"
         onKeyDown={onTreeKeyDown}
         ref={treeRef}
@@ -609,7 +738,7 @@ export function OfficialFilesBrowserPane({
         tabIndex={0}
       >
         {!treeRoot ? (
-          <TreeEmpty>No working directory for this session.</TreeEmpty>
+          <TreeEmpty>{chromeText.noWorkingDirectory}</TreeEmpty>
         ) : isContentSearch ? (
           <ContentResults
             findQuery={contentQuery}
@@ -669,6 +798,18 @@ export function canUseOfficialFilesBrowser(
     ...(options && "featureFlag" in options ? { featureFlag: options.featureFlag } : {}),
     loadBootstrap: options?.loadBootstrap ?? fetchBootstrapPayload,
   });
+}
+
+/**
+ * Official ca80 `p4` Files overflow gate `A_` = c0fbbe `W`:
+ *   listSessionDirectory && fetchMentionOptions && local (not ccd_file_browser).
+ * Distinct from VC() which still gates ⇧⌘F / XC pane chrome.
+ */
+export function officialTitlebarFilesAvailable(
+  sessionType: string | null | undefined,
+  bridge: LocalSessionsBridge = desktopBridge.LocalSessions,
+): boolean {
+  return sessionType === "local" && bridgesSupportFilesBrowser(bridge, desktopBridge.Resources);
 }
 
 /**

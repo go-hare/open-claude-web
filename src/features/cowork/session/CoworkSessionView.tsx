@@ -92,7 +92,7 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
     }
     scrollToBottom("auto");
   }, [scrollToBottom]);
-  // Official t$t (index-BELzQL5P ~226504): isSession path.
+  // Official t$t (c21f11e6d-CxD82rYo ~226504): isSession path.
   //   if streaming: isSession && !showScrollButton → setPinToBottom(true) + scrollToBottom("instant")
   //   else: !isSession → setPinToBottom(false)  (session path never unpins on stream end)
   // Cowork session is always isSession=true. showScrollButton is sentinel-only (official `l`).
@@ -109,7 +109,7 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
     handle.setPinToBottom(true);
     handle.scrollToBottom("instant");
   }, [conversationIsStreaming, scrollState.showScrollButton, sessionId]);
-  // Official z3t (index-BELzQL5P.pretty.js function z3t):
+  // Official z3t (c21f11e6d-CxD82rYo.js function z3t):
   // if (isLoading) return; if (!hasMessages) return; if (d.current === sessionId) return;
   // d.current = sessionId; single rAF → [data-autoscroll-container].scrollTop = scrollHeight.
   // Product: only commit d.current after the container exists (Conversation mounted). Marking
@@ -191,15 +191,15 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
   })();
   return (
     <CoworkTranscriptActions.Provider value={actions}>
-      {/* Official S3t (index-BELzQL5P): relative flex h-full → chat column | xQt sibling.
+      {/* Official S3t (c21f11e6d-CxD82rYo): relative flex h-full → chat column | xQt sibling.
           yUt (FileDrawerLayout) wraps v$t main+cFt drawer only — not the activity rail. */}
       <div
         className="relative flex h-full min-h-0"
-        data-official-source="index-BELzQL5P.js:S3t relative flex h-full"
+        data-official-source="c21f11e6d-CxD82rYo.js:S3t relative flex h-full"
       >
         <div
           className="relative flex-1 min-w-0 flex flex-col min-h-0"
-          data-official-source="index-BELzQL5P.js:S3t chat column relative flex-1 min-w-0 flex flex-col"
+          data-official-source="c21f11e6d-CxD82rYo.js:S3t chat column relative flex-1 min-w-0 flex flex-col"
         >
           <CoworkSessionFileDrawerLayout
             drawer={drawer}
@@ -380,7 +380,7 @@ function CoworkLoading() {
 }
 
 /**
- * Cowork missing-session residual (index-BELzQL5P bw / eePQiZiD6b).
+ * Cowork missing-session residual (c21f11e6d-CxD82rYo bw / eePQiZiD6b).
  * Structure mirrors Code SessionNotFound residual: centered gap + primary CTA to home.
  */
 function CoworkSessionMessage({
@@ -395,7 +395,7 @@ function CoworkSessionMessage({
   return (
     <div
       className="flex flex-1 flex-col items-center justify-center gap-g5 pt-14 text-t6"
-      data-official-source="index-BELzQL5P.js:bw-eePQiZiD6b"
+      data-official-source="c21f11e6d-CxD82rYo.js:bw-eePQiZiD6b"
     >
       <p className="text-sm text-text-300 m-0">{message}</p>
       <button

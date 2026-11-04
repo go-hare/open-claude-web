@@ -1,5 +1,5 @@
 /**
- * Official g6e RichSandbox (index-BELzQL5P.displayName="RichSandbox"):
+ * Official g6e RichSandbox (cd5a31703.displayName="RichSandbox"):
  * iframe → ReadyForContent → SetContent({ content, type, tailwindStylesEnabled, @type SandboxContent })
  *
  * Product: iframe src = local `/sandbox-runtime/frame.html` (residual A4e/p6e).
@@ -173,7 +173,7 @@ export const OfficialRichSandbox = memo(
       return (
         <div
           className={className ? `relative ${className}` : "relative"}
-          data-official-source="index-BELzQL5P.js:g6e RichSandbox"
+          data-official-source="cd5a31703-B4nKQMBN.js:g6e RichSandbox"
         >
           <iframe
             ref={iframeRef}

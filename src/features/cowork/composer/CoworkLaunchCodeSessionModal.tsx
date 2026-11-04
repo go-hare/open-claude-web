@@ -1,5 +1,5 @@
 /**
- * Official MTe LaunchCodeSessionModal residual (index-BELzQL5P ~79944).
+ * Official MTe LaunchCodeSessionModal residual (c21f11e6d-CxD82rYo ~79944).
  * 3p honesty: CCD (local LocalSessions.start) only — no CCR / Anthropic cloud environments.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -229,7 +229,7 @@ export function CoworkLaunchCodeSessionModal({
         </span>
       }
     >
-      <div className="flex flex-col gap-4 mt-2" data-official-source="index-BELzQL5P:MTe" data-launch-code-modal="true">
+      <div className="flex flex-col gap-4 mt-2" data-official-source="c21f11e6d-CxD82rYo.js:MTe" data-launch-code-modal="true">
         <div className="rounded-lg border border-border-300 bg-bg-100 p-3">
           <div className="text-xs font-semibold text-text-300 mb-2">Task</div>
           <pre

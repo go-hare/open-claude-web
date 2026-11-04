@@ -22,10 +22,13 @@ test("occlusion selector matches official vRt dialog/menu roles", () => {
 });
 
 test("Izt park path prefers host parkAndCapture and restores via showRef", () => {
-  assert.match(viewer, /parkApi\(COWORK_NATIVE_PREVIEW_PARKED_BOUNDS\)/);
+  assert.match(viewer, /parkApi\(captureBounds\)/);
   assert.match(viewer, /if \(!occluded\) \{\s*showRef\.current\?\.\(\);/s);
   // Official park effect only depends on occluded boolean.
   assert.match(viewer, /}, \[occluded\]\);/);
   // moreOpen (overflow menu) ORs with body-portal occlusion — official d || u.
   assert.match(viewer, /Boolean\(frame\?\.moreOpen\) \|\| overlayOccluded/);
+  // Official Izt C() always jkA — skipping 0×0 leaves WCV on stale bounds over chat.
+  assert.doesNotMatch(viewer, /zero-size:/);
+  assert.match(viewer, /ResizeObserver\(scheduleShow\)/);
 });

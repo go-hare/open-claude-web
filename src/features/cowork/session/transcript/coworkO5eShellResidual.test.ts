@@ -30,7 +30,7 @@ describe("O5e shell residual (permission null + inject)", () => {
   it("shell documents O5e residual not Local stand-in", () => {
     expect(rendererSource).not.toMatch(/Local stand-in/);
     expect(rendererSource).toMatch(/Official O5e ToolUse shell/);
-    expect(rendererSource).toMatch(/data-official-source="index-BELzQL5P\.js:O5e"/);
+    expect(rendererSource).toMatch(/data-official-source="c21f11e6d-CxD82rYo\.js:O5e"/);
     expect(rendererSource).toMatch(/renderCoworkToolUseCell/);
     expect(rendererSource).toMatch(/renderToolUseCell \?\? renderCoworkToolUseCell/);
   });

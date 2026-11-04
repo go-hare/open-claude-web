@@ -7,7 +7,7 @@ import {
 } from "../customize/directory/officialDirectoryStore";
 
 /**
- * Official gos directory / directory/$ (index-BELzQL5P.js als/rls):
+ * Official gos directory / directory/$ (index-D35w9RK9.js als/rls):
  *   /directory → /directory/plugins
  *   splat opens HT.openItem / navigate; unmount HT.close
  *   body is KWt (new chat) with globally mounted $8t overlay

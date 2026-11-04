@@ -22,10 +22,15 @@ import {
 } from "react";
 import { Tooltip } from "@base-ui-components/react/tooltip";
 import { OfficialTooltip } from "../../shared/OfficialTooltip";
+import { isReducedMotionActive } from "../../settings/appearanceSettings";
 import {
   OfficialEffortEnergyFill,
   type OfficialEffortEnergyActions,
 } from "./OfficialEffortEnergyFill";
+
+function prefersReducedMotion(win: Window): boolean {
+  return isReducedMotionActive() || win.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 const SLIDER_EASE =
   "400ms linear(0, 0.0497, 0.1647, 0.3069, 0.4517, 0.5848, 0.6991, 0.7923, 0.8647, 0.9186, 0.9571, 0.9831, 0.9996, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)";
@@ -520,7 +525,7 @@ export function OfficialEffortSlider({
       } else onEnd();
       return;
     }
-    if (Math.abs(frac - committed) * width < 0.5 || ownerWindow(root).matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (Math.abs(frac - committed) * width < 0.5 || prefersReducedMotion(ownerWindow(root))) {
       root.style.removeProperty("--slider-drag-pos");
       return;
     }
@@ -554,7 +559,7 @@ export function OfficialEffortSlider({
       thumb.removeEventListener("transitionend", transitionEndRef.current);
       transitionEndRef.current = null;
     }
-    const reduce = ownerWindow(root).matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduce = prefersReducedMotion(ownerWindow(root));
     if (reduce) {
       fill.style.transition = "";
       thumb.style.transition = "";
@@ -605,7 +610,7 @@ export function OfficialEffortSlider({
           // ignore
         }
         const width = root.getBoundingClientRect().width;
-        if (width > 0 && !ownerWindow(root).matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        if (width > 0 && !prefersReducedMotion(ownerWindow(root))) {
           const from = Math.min(Math.max(fill.getBoundingClientRect().width / width, 0), 1);
           root.style.setProperty("--slider-drag-pos", `${100 * from}%`);
           drag.catchUp = { fromFraction: from, startTime: performance.now() };

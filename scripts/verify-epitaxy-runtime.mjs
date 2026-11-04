@@ -325,7 +325,8 @@ async function run() {
     return true;
   });
   await waitFor(cdp, "协作新任务", "Cowork new task header follows official safe-use copy", () => {
-    const header = document.querySelector('[data-official-source="index-BELzQL5P.js:v6t/y6t Cowork page header"]');
+    const header = document.querySelector('[data-official-source="c62135ccf-Dn28vJ3V.js:ir/gn Cowork page header"]')
+      || document.querySelector('[data-official-source*="Cowork page header"]');
     const text = header?.textContent ?? "";
     return text.includes("Let's knock something off your list")
       && text.includes("Learn how to use Cowork safely")
@@ -465,7 +466,7 @@ async function run() {
   assertCheck("协作路由", "fake bridge creates a Cowork local_* session", coworkSession.id === coworkSession.requestedSessionId && coworkSession.id?.startsWith("local_") && coworkSession.kind === "epitaxy" && coworkSession.sessionKind === "cowork", JSON.stringify(coworkSession));
   await navigateInApp(cdp, `/local_sessions/${coworkSession.id}`);
   await waitFor(cdp, "协作路由", "Cowork canonical /local_sessions renders Cowork session", (id) => location.pathname === `/local_sessions/${id}`, 8_000, coworkSession.id);
-  await waitFor(cdp, "协作路由", "Cowork session renders official Cowork composer and long Add label", () => Boolean(document.querySelector('[data-official-source="index-BELzQL5P.js:CAt Cowork composer"]')) && Boolean(document.querySelector('[data-official-source="index-BELzQL5P.js:local_agent_mode Cowork session header"]')) && Boolean(document.querySelector('[contenteditable="true"][aria-label="Prompt"].tiptap')) && Boolean(document.querySelector('[aria-label="Add files, connectors, and more"]')) && document.body.innerText.includes("Write a message...") && !document.body.innerText.includes("找不到这个会话"));
+  await waitFor(cdp, "协作路由", "Cowork session renders official Cowork composer and long Add label", () => Boolean(document.querySelector('[data-official-source="c62135ccf-Dn28vJ3V.js:w6t/$4t CAt onpage"]')) && Boolean(document.querySelector('[data-testid="chat-header"]')) && Boolean(document.querySelector('[data-official-source="c21f11e6d-CxD82rYo.js:jD cowork-title-row-trailing"]')) && Boolean(document.querySelector('[contenteditable="true"][aria-label="Prompt"].tiptap')) && Boolean(document.querySelector('[aria-label="Add files, connectors, and more"]')) && document.body.innerText.includes("Write a message...") && !document.body.innerText.includes("找不到这个会话"));
   await waitFor(cdp, "协作活动面板", "Cowork Context shows official scheduled task link", () => document.body.innerText.includes("上下文") && document.body.innerText.includes("Nightly report"));
   const scheduledTaskClicked = await cdp.evaluate(clickElementByText, "button", "Nightly report");
   assertCheck("协作活动面板", "Cowork scheduled task link uses official /scheduled-task route", scheduledTaskClicked);
@@ -566,19 +567,19 @@ async function run() {
   const browserExtensionResourceClicked = await cdp.evaluate(clickElementByText, "[data-cowork-context-resource]", "Claude in Chrome");
   assertCheck("协作活动面板", "Cowork BrowserExtension resource is clickable", browserExtensionResourceClicked);
   await waitFor(cdp, "协作活动面板", "Cowork BrowserExtension detail panel opens", () => {
-    const detail = document.querySelector('[data-official-source="index-BELzQL5P.js:RRt BrowserExtensionActivityDetailWrapper"]');
+    const detail = document.querySelector('[data-official-source="c21f11e6d-CxD82rYo.js:RRt BrowserExtensionActivityDetailWrapper"]');
     const text = detail?.textContent ?? "";
     return Boolean(detail) && ["Claude in Chrome", "1 tool call", "Navigate"].every((value) => text.includes(value));
   });
   await waitFor(cdp, "协作活动面板", "Cowork BrowserExtension detail shows connected browsers summary", () => {
-    const detail = document.querySelector('[data-official-source="index-BELzQL5P.js:RRt BrowserExtensionActivityDetailWrapper"]');
+    const detail = document.querySelector('[data-official-source="c21f11e6d-CxD82rYo.js:RRt BrowserExtensionActivityDetailWrapper"]');
     const text = detail?.textContent ?? "";
     return ["Connected browsers", "Chrome instances signed in to your account that Claude can automate.", "Chrome · Work", "Device ID:"].every((value) => text.includes(value));
   });
   const browserExtensionDetailClosed = await cdp.evaluate(clickButtonByLabel, "Close panel");
   assertCheck("协作活动面板", "Cowork BrowserExtension detail close button is clickable", browserExtensionDetailClosed);
   await waitFor(cdp, "协作活动面板", "Cowork BrowserExtension detail closes back to Context", () => {
-    return !document.querySelector('[data-official-source="index-BELzQL5P.js:RRt BrowserExtensionActivityDetailWrapper"]')
+    return !document.querySelector('[data-official-source="c21f11e6d-CxD82rYo.js:RRt BrowserExtensionActivityDetailWrapper"]')
       && document.body.innerText.includes("上下文")
       && Boolean(document.querySelector('[data-cowork-context-resource="browser_extension://all"]'));
   });
@@ -619,10 +620,13 @@ async function run() {
   await waitFor(cdp, "协作活动面板", "Cowork multi-folder session renders Working folders", (id) => location.pathname === `/local_sessions/${id}` && document.body.innerText.includes("工作文件夹"), 8_000, coworkMultiFolderSession.id);
   await waitFor(cdp, "协作活动面板", "Cowork empty Context shows official Suggested connectors", () => {
     const text = document.body.innerText;
-    return ["上下文", "Suggested connectors", "Cowork uses connectors to browse websites, manage tasks, and more.", "Claude in Chrome", "Notion", "Linear", "Canva", "See all connectors"].every((value) => text.includes(value))
-      && Boolean(document.querySelector('button[aria-label="Dismiss suggested connectors"]'));
+    return ["上下文", "推荐连接器", "协作会使用连接器浏览网站、管理任务等。", "Claude in Chrome", "查看全部连接器"].every((value) => text.includes(value))
+      && Boolean(document.querySelector('button[aria-label="关闭推荐连接器"]'))
+      && !text.includes("Notion")
+      && !text.includes("Linear")
+      && !text.includes("Canva");
   });
-  const seeAllConnectorsClicked = await cdp.evaluate(clickElementByText, "button", "See all connectors");
+  const seeAllConnectorsClicked = await cdp.evaluate(clickElementByText, "button", "查看全部连接器");
   assertCheck("协作活动面板", "Cowork Suggested connectors See all is clickable", seeAllConnectorsClicked);
   await waitFor(cdp, "协作活动面板", "Cowork Suggested connectors See all opens connectors route", () => location.pathname === "/customize/connectors" && document.body.innerText.includes("Unlock more with Claude"));
   await navigateInApp(cdp, `/local_sessions/${coworkMultiFolderSession.id}`);
@@ -809,7 +813,7 @@ async function run() {
     return true;
   }, sessionId, streamText);
   await waitFor(cdp, "对话流渲染", "stream delta is rendered through smoother", () => window.__epitaxyRuntime.bodyIncludes("Runtime stream smoke phrase"));
-  await waitFor(cdp, "对话流渲染", "Code assistant awaiting dot uses official Kb/_h slot", () => Boolean(document.querySelector('[data-official-source="c11959232-h_zsw3wI.js:Kb showAwaitingDot _h"]')));
+  await waitFor(cdp, "对话流渲染", "Code assistant awaiting dot uses official Kb/_h slot", () => Boolean(document.querySelector('[data-official-source="cd5a31703-B4nKQMBN.js:Kb showAwaitingDot _h"]')));
   await cdp.evaluate(async (activeSessionId) => {
     const bridge = await import("/src/adapters/desktopBridge/fakeDesktopBridge.ts");
     const emit = (event) => bridge.emitFakeLocalSessionEvent({ sessionId: activeSessionId, type: "stream_event", uuid: "runtime-stream-smoke", event }, "code");

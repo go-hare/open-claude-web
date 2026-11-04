@@ -1,5 +1,5 @@
 /**
- * Official Kwe / lo(Xa, Va) + Gwe (index-BELzQL5P) — stream merge onto durable transcript.
+ * Official Kwe / lo(Xa, Va) + Gwe (cd5a31703) — stream merge onto durable transcript.
  * Extracted for unit tests; EpitaxySessionTile re-exports behavior via this module.
  */
 

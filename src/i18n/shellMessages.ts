@@ -29,7 +29,13 @@ const SHELL_MESSAGES = {
   custom: { defaultMessage: "Custom", id: "Sjo1P40Dgp", zhCN: "自定义" },
   customize: { defaultMessage: "Customize", id: "TXpOBiuxud", zhCN: "自定义" },
   customizeSidebar: { defaultMessage: "Customize sidebar", id: "2E00ityRqc", zhCN: "自定义侧边栏" },
+  /** Official k2 dialog title (`shared-21` `fT4qk5uaS4`). */
+  editSidebar: { defaultMessage: "Edit sidebar", id: "fT4qk5uaS4", zhCN: "编辑侧边栏" },
+  /** Official Dae More flyout item (`shared-21` `VsPyVYphMe`). */
+  editSidebarMenu: { defaultMessage: "Edit sidebar…", id: "VsPyVYphMe", zhCN: "编辑侧边栏…" },
   customizeSidebarDescription: { defaultMessage: "Choose which items appear in your sidebar.", id: "KTKw0eMHnY", zhCN: "选择哪些项目显示在侧边栏中。" },
+  /** Official `aY.routines` — Code overflow label when scheduled is not inline (`Dbc6XaCcol`). */
+  routines: { defaultMessage: "Routines", id: "Dbc6XaCcol", zhCN: "Routines" },
   date: { defaultMessage: "Date", id: "P7PLVjLe4f", zhCN: "日期" },
   delete: { defaultMessage: "Delete", id: "K3r6DQW7h+", zhCN: "删除" },
   /** Official VYt / $Yt — Delete anyway (9w/oawRjHR). */
@@ -73,13 +79,30 @@ const SHELL_MESSAGES = {
   newSessionIn: { defaultMessage: "New session in {label}", id: "__local.newSessionIn", zhCN: "在 {label} 中新建会话" },
   artifacts: { defaultMessage: "Artifacts", id: "eW5eoWkxy3", zhCN: "制品" },
   untitledProject: { defaultMessage: "Untitled project", id: "YuuESnYtfk", zhCN: "未命名项目" },
-  filter: { defaultMessage: "Filter", id: "__local.filter", zhCN: "筛选" },
-  filterActive: { defaultMessage: "Filter (active)", id: "__local.filterActive", zhCN: "筛选（已启用）" },
+  /** Official C1 classic (`shared-21` `9Obw6CDkje`). */
+  filter: { defaultMessage: "Filter", id: "9Obw6CDkje", zhCN: "筛选" },
+  /** Official C1 when S1 (`shared-21` `daydqAm7At`). */
+  filterActive: { defaultMessage: "Filter (active)", id: "daydqAm7At", zhCN: "筛选（已启用）" },
   group: { defaultMessage: "Group", id: "HpoDwkNFk+", zhCN: "分组" },
-  groupBy: { defaultMessage: "Group by", id: "__local.groupBy", zhCN: "分组方式" },
+  /** Official y1.groupBy (`shared-21` `MHeS4mgvyP`). */
+  groupBy: { defaultMessage: "Group by", id: "MHeS4mgvyP", zhCN: "分组方式" },
   groupName: { defaultMessage: "Group name", id: "gL86bv7Uv2", zhCN: "分组名称" },
   keyboardShortcuts: { defaultMessage: "Keyboard shortcuts", id: "vzYPVXl4by", zhCN: "键盘快捷键" },
-  lastActivity: { defaultMessage: "Last activity", id: "__local.lastActivity", zhCN: "最近活动" },
+  /** Official T1 / be recency (`shared-21` `pEcdNTP2U6`). */
+  lastActivity: { defaultMessage: "Last activity", id: "pEcdNTP2U6", zhCN: "最近活动" },
+  /**
+   * Official T1 Ce `{days}d` (`shared-21` `sSynIO3ThU`).
+   * Interpolate `{days}`.
+   */
+  lastActivityDays: { defaultMessage: "{days}d", id: "sSynIO3ThU", zhCN: "{days}天" },
+  /** Official fe Folder (`shared-21` `ukQpDs7M+0`) — Code group-by value stays `"project"`. */
+  folder: { defaultMessage: "Folder", id: "ukQpDs7M+0", zhCN: "文件夹" },
+  /** Official fe Custom groups (`shared-21` `yqhs/ALTJm`). */
+  customGroups: { defaultMessage: "Custom groups", id: "yqhs/ALTJm", zhCN: "自定义分组" },
+  /** Official T1 NgcLgMejq0. */
+  showEmptyGroups: { defaultMessage: "Show empty groups", id: "NgcLgMejq0", zhCN: "显示空分组" },
+  /** Official T1 tIBKrv7ywy. Wz default true. */
+  showPrStatus: { defaultMessage: "Show PR status", id: "tIBKrv7ywy", zhCN: "显示 PR 状态" },
   local: { defaultMessage: "Local", id: "W4SaxYXWRk", zhCN: "本地" },
   cloud: { defaultMessage: "Cloud", id: "fiPvwYljok", zhCN: "云端" },
   more: { defaultMessage: "More", id: "I5NMJ8llIi", zhCN: "更多" },
@@ -93,12 +116,17 @@ const SHELL_MESSAGES = {
   newTask: { defaultMessage: "New task", id: "K4O03zh0vo", zhCN: "新任务" },
   noFilteredSessions: { defaultMessage: "No sessions match these filters", id: "__local.noFilteredSessions", zhCN: "没有符合筛选的会话" },
   noSearchResults: { defaultMessage: "No matching sessions", id: "__local.noSearchResults", zhCN: "没有找到匹配会话" },
-  none: { defaultMessage: "None", id: "450Fty8ldn", zhCN: "无" },
+  /** Official fe None (`shared-21` `9/SKZH+1jy`). */
+  none: { defaultMessage: "None", id: "9/SKZH+1jy", zhCN: "无" },
   oneDay: { defaultMessage: "1 day", id: "__local.oneDay", zhCN: "1天" },
   threeDays: { defaultMessage: "3 days", id: "__local.threeDays", zhCN: "3天" },
   sevenDays: { defaultMessage: "7 days", id: "__local.sevenDays", zhCN: "7天" },
   thirtyDays: { defaultMessage: "30 days", id: "__local.thirtyDays", zhCN: "30天" },
   openInSplitView: { defaultMessage: "Open in split view", id: "8IBKnZa76A", zhCN: "在分屏中打开" },
+  /** Official qQ overlay (`shared-23` `Ag1TzTm++9`). */
+  splitView: { defaultMessage: "Split view", id: "Ag1TzTm++9", zhCN: "分屏" },
+  /** Official qQ when the cell already has a pane (`shared-23` `66f5bmLflK`). */
+  openHere: { defaultMessage: "Open here", id: "66f5bmLflK", zhCN: "在此打开" },
   other: { defaultMessage: "Other", id: "__local.other", zhCN: "其他" },
   pin: { defaultMessage: "Pin", id: "puLNUJezx6", zhCN: "固定" },
   pinned: { defaultMessage: "Pinned", id: "fWZYP5U4xZ", zhCN: "已固定" },
@@ -106,7 +134,6 @@ const SHELL_MESSAGES = {
   projects: { defaultMessage: "Projects", id: "UxTJRaKagI", zhCN: "项目" },
   recent: { defaultMessage: "Recent", id: "wA4FIMmtlS", zhCN: "最近" },
   viewAll: { defaultMessage: "View all", id: "pFK6bJU0EM", zhCN: "查看全部" },
-  recency: { defaultMessage: "Recent activity", id: "YsScAYZTjo", zhCN: "最近活动优先" },
   remoteControl: { defaultMessage: "Remote control", id: "4mv6Z9Tv+V", zhCN: "远程控制" },
   rename: { defaultMessage: "Rename", id: "iXNbPfQDIZ", zhCN: "重命名" },
   renameGroup: { defaultMessage: "Rename group", id: "aSBYhpo0v4", zhCN: "重命名分组" },
@@ -116,13 +143,19 @@ const SHELL_MESSAGES = {
   search: { defaultMessage: "Search", id: "xmcVZ0BU63", zhCN: "搜索" },
   searchChatsAndProjects: { defaultMessage: "Search chats and projects", id: "XF3P/8YpTI", zhCN: "搜索对话和项目" },
   searchResults: { defaultMessage: "Search results", id: "79lKyOa3xd", zhCN: "搜索结果" },
+  /** Official cbc59 skip link (`ZKtRoAtLSe`). Pin spa omits; product spa has the id. */
+  skipToContent: { defaultMessage: "Skip to content", id: "ZKtRoAtLSe", zhCN: "跳到内容" },
   selectedCount: { defaultMessage: "Selected", id: "__local.selectedCount", zhCN: "已选" },
   sessionName: { defaultMessage: "Session name", id: "mvdlXjfNEZ", zhCN: "会话名称" },
-  sortBy: { defaultMessage: "Sort by", id: "hDI+JMUhFd", zhCN: "排序方式" },
-  sortAlphabetical: { defaultMessage: "Alphabetical", id: "bF46uAWl+6", zhCN: "按字母排序" },
-  sortCreated: { defaultMessage: "Created", id: "__local.sortCreated", zhCN: "创建时间" },
+  /** Official k1 Sort by (`shared-21` `4WosAJhkMe`). */
+  sortBy: { defaultMessage: "Sort by", id: "4WosAJhkMe", zhCN: "排序方式" },
+  /** Official be Name (`shared-21` `HAlOn1ZsuY`). */
+  sortAlphabetical: { defaultMessage: "Name", id: "HAlOn1ZsuY", zhCN: "名称" },
+  /** Official be Date created (`shared-21` `ZRLnx2Phqf`). */
+  sortCreated: { defaultMessage: "Date created", id: "ZRLnx2Phqf", zhCN: "创建日期" },
   status: { defaultMessage: "Status", id: "tzMNF3jWoU", zhCN: "状态" },
-  state: { defaultMessage: "State", id: "__local.state", zhCN: "状态" },
+  /** Official fe State (`shared-21` `5knGgZnlRq`). */
+  state: { defaultMessage: "State", id: "5knGgZnlRq", zhCN: "状态" },
   active: { defaultMessage: "Active", id: "3a5wL8wo40", zhCN: "进行中" },
   switchPane: { defaultMessage: "Switch pane", id: "__local.switchPane", zhCN: "切换 Pane" },
   today: { defaultMessage: "Today", id: "__local.today", zhCN: "今天" },

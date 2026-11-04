@@ -18,6 +18,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { desktopBridge } from "../../../../adapters/desktopBridge";
+import { handleCoworkTranscriptLinkClick } from "../../../settings/coworkTranscriptLinks";
 import {
   BaseContextMenuItem,
   BaseContextMenuPopup,
@@ -29,7 +30,8 @@ import {
   type AlluviumInlineNode,
   type AlluviumSnapshot,
 } from "./alluviumEngine";
-import { parseOfficialFileRef } from "../../../epitaxy/officialMarkdownMbResidual";
+import { looksLikeOfficialLocalPathHref, parseOfficialFileRef } from "../../../epitaxy/officialMarkdownMbResidual";
+import { OfficialEuFileRef } from "../../../epitaxy/session/OfficialCcdFileContextMenu";
 
 export type AlluviumFenceBlock = Extract<AlluviumBlock, { kind: "fence" }>;
 
@@ -182,7 +184,7 @@ function OfficialCodeMarkdownImageFrame({ alt, src }: { alt: string; src: string
         <button
           aria-label={alt || "View image"}
           className="max-w-full cursor-zoom-in outline-none hide-focus-ring focus:ring-focus rounded-r3"
-          data-official-source="c11959232-h_zsw3wI.js:gx+og"
+          data-official-source="cd5a31703-B4nKQMBN.js:gx+og"
           onClick={() => setOpen(true)}
           type="button"
         >
@@ -215,7 +217,7 @@ function OfficialCodeMarkdownImageFrame({ alt, src }: { alt: string; src: string
           aria-label="Image preview"
           aria-modal="true"
           className="epitaxy-lightbox fixed inset-0 z-50 bg-always-black/80 backdrop-blur-[40px] flex flex-col overflow-hidden outline-none"
-          data-official-source="c11959232-h_zsw3wI.js:Rg"
+          data-official-source="cd5a31703-B4nKQMBN.js:Rg"
           onClick={() => setOpen(false)}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
@@ -275,16 +277,22 @@ export function OfficialCodeMarkdownImage({
 
   useEffect(() => {
     if (!src || !isLocal) return undefined;
+    const stream = desktopBridge.LocalSessions.getSessionImageStreamUrl;
     const read = desktopBridge.LocalSessions.readSessionImageAsDataUrl;
-    if (!sessionId || !read) {
+    if (!sessionId || (!stream && !read)) {
       setResolved(null);
       return undefined;
     }
     let alive = true;
     setResolved(undefined);
-    void read(sessionId, src)
-      .then((dataUrl) => {
-        if (alive) setResolved(dataUrl || null);
+    void (async () => {
+      const streamed = stream ? await stream(sessionId, src).catch(() => null) : null;
+      if (typeof streamed === "string" && streamed) return streamed;
+      if (!read) return null;
+      return read(sessionId, src);
+    })()
+      .then((url) => {
+        if (alive) setResolved(url || null);
       })
       .catch(() => {
         if (alive) setResolved(null);
@@ -304,6 +312,99 @@ export function OfficialCodeMarkdownImage({
   }
   if (shown === null) {
     return <span className="text-assistant-secondary">{alt || src}</span>;
+  }
+  return (
+    <span
+      aria-hidden
+      className="block h-[120px] w-full max-w-[320px] rounded-r4 bg-t1 animate-pulse"
+    />
+  );
+}
+
+/** Official BCHP `MEDIA_EXT_TO_MIME` — cc432 `wL` mediaLoader. */
+const CODE_MD_MEDIA_EXT = /\.(mp4|webm|mov|m4v|ogv|mp3|wav|m4a|aac|flac|opus|ogg|oga)(?:\?|#|$)/i;
+
+export function isOfficialSessionMediaPath(src: string | undefined): boolean {
+  if (!src) return false;
+  if (CODE_MD_IMG_DATA_OR_BLOB.test(src) || CODE_MD_IMG_REMOTE.test(src)) {
+    return /^(data:|blob:)(video|audio)\//i.test(src);
+  }
+  return CODE_MD_MEDIA_EXT.test(src);
+}
+
+function isOfficialSessionAudioPath(src: string): boolean {
+  if (/^(data:|blob:)audio\//i.test(src)) return true;
+  return /\.(mp3|wav|m4a|aac|flac|opus|ogg|oga)(?:\?|#|$)/i.test(src);
+}
+
+/**
+ * Official cc432 `wL` mediaLoaderValue: getSessionMediaStreamUrl || readSessionMediaAsDataUrl.
+ * Stream is Cyt2WTko `claude-media://v/` LRU (HMAC `/s/` is image mint, not invented).
+ */
+export function OfficialCodeMarkdownMedia({
+  sessionId,
+  src,
+}: {
+  sessionId?: string;
+  src?: string;
+}) {
+  const isData = Boolean(src && CODE_MD_IMG_DATA_OR_BLOB.test(src));
+  const isRemote = Boolean(src && !isData && CODE_MD_IMG_REMOTE.test(src));
+  const isLocal = Boolean(src && !isData && !isRemote);
+  const [resolved, setResolved] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!src || !isLocal) return undefined;
+    const stream = desktopBridge.LocalSessions.getSessionMediaStreamUrl;
+    const read = desktopBridge.LocalSessions.readSessionMediaAsDataUrl;
+    if (!sessionId || (!stream && !read)) {
+      setResolved(null);
+      return undefined;
+    }
+    let alive = true;
+    setResolved(undefined);
+    void (async () => {
+      const streamed = stream ? await stream(sessionId, src).catch(() => null) : null;
+      if (typeof streamed === "string" && streamed) return streamed;
+      if (!read) return null;
+      return read(sessionId, src);
+    })()
+      .then((url) => {
+        if (alive) setResolved(url || null);
+      })
+      .catch(() => {
+        if (alive) setResolved(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isLocal, sessionId, src]);
+
+  if (!src) return null;
+  const shown = isRemote || isData ? src : resolved;
+  if (shown) {
+    const audio = isOfficialSessionAudioPath(shown) || isOfficialSessionAudioPath(src);
+    if (audio) {
+      return (
+        <audio
+          className="max-w-full"
+          controls
+          data-official-source="cc43287c9-Bchz60VT.js:wL mediaLoader audio"
+          src={shown}
+        />
+      );
+    }
+    return (
+      <video
+        className="block max-w-full h-auto rounded-r4 border border-[var(--border-default)]"
+        controls
+        data-official-source="cc43287c9-Bchz60VT.js:wL mediaLoader video"
+        src={shown}
+      />
+    );
+  }
+  if (shown === null) {
+    return <span className="text-assistant-secondary">{src}</span>;
   }
   return (
     <span
@@ -374,20 +475,13 @@ function InlineNode({
         const fileRef = parseOfficialFileRef(node.value);
         if (fileRef) {
           return (
-            <button
+            <OfficialEuFileRef
               className={`${CODE_MD_INLINE_CODE_RING} border-0 p-0 m-0 bg-transparent cursor-pointer`}
-              data-official-source="c11959232-h_zsw3wI.js:ob+ru"
-              onClick={() => {
-                window.dispatchEvent(
-                  new CustomEvent("epitaxy-open-file", {
-                    detail: { path: fileRef.path, line: fileRef.line },
-                  }),
-                );
-              }}
-              type="button"
+              fileRef={fileRef}
+              source="cd5a31703-B4nKQMBN.js:ob+ru"
             >
               <code>{node.value}</code>
-            </button>
+            </OfficialEuFileRef>
           );
         }
         return <code className={CODE_MD_INLINE_CODE_RING}>{node.value}</code>;
@@ -395,13 +489,16 @@ function InlineNode({
       return <code>{node.value}</code>;
     case "image":
       if (handlers.variant === "code") {
-        // Official Code xb → pb. data/http render immediately; relative paths
-        // resolve through LocalSessions.readSessionImageAsDataUrl (cu).
+        // Official Code xb → pb / cc432 wL mediaLoader for video/audio.
+        const src = node.url || undefined;
+        if (isOfficialSessionMediaPath(src)) {
+          return <OfficialCodeMarkdownMedia sessionId={handlers.sessionId} src={src} />;
+        }
         return (
           <OfficialCodeMarkdownImage
             alt={node.alt ?? ""}
             sessionId={handlers.sessionId}
-            src={node.url || undefined}
+            src={src}
           />
         );
       }
@@ -412,6 +509,18 @@ function InlineNode({
         queueMicrotask(() => handlers.onLinkDetected?.());
       }
       const href = sanitizeHref(node.url);
+      if (handlers.variant === "code" && href && looksLikeOfficialLocalPathHref(href)) {
+        const fileRef = parseOfficialFileRef(href) ?? { path: href };
+        return (
+          <OfficialEuFileRef
+            className={CODE_MD_LINK_CLASS}
+            fileRef={fileRef}
+            source="cd5a31703-B4nKQMBN.js:db file"
+          >
+            <InlineNodes handlers={handlers} nodes={node.children} />
+          </OfficialEuFileRef>
+        );
+      }
       // Code bb → xb/db residual classes; local path open is product bridge on mb path.
       return (
         <a
@@ -421,12 +530,17 @@ function InlineNode({
               : "underline underline-offset-2 decoration-1 decoration-current/40 hover:decoration-current focus:decoration-current"
           }
           data-official-source={
-            handlers.variant === "code" ? "c11959232-h_zsw3wI.js:db" : undefined
+            handlers.variant === "code" ? "cd5a31703-B4nKQMBN.js:db" : undefined
           }
           href={href}
           onClick={
-            href && handlers.onLinkClick
-              ? (event) => handlers.onLinkClick?.(event, href)
+            href
+              ? (event) => {
+                  handlers.onLinkClick?.(event, href);
+                  if (!event.defaultPrevented) {
+                    handleCoworkTranscriptLinkClick(event, href);
+                  }
+                }
               : undefined
           }
           rel="noopener noreferrer"
@@ -513,7 +627,7 @@ function CodeAlluviumBlockView({
     case "fence":
       // Official bb: !langSettled → <pre />; else search_tree Ex / ab Pierre fence.
       if (!block.langSettled) {
-        return <pre data-official-source="c11959232-h_zsw3wI.js:bb.pre empty" />;
+        return <pre data-official-source="cd5a31703-B4nKQMBN.js:bb.pre empty" />;
       }
       if (renderFence) return <>{renderFence(block)}</>;
       // Fallback if inject missing (should not happen on Code path).
@@ -717,7 +831,7 @@ export function AlluviumMarkdown({
       data-alluvium={dataAlluvium ? true : undefined}
       data-official-source={
         dataAlluvium
-          ? "c11959232-h_zsw3wI.js:wb+bb"
+          ? "cd5a31703-B4nKQMBN.js:wb+bb"
           : "c93fb40ec-C-L_NkHO.js:AlluviumMarkDown"
       }
     >

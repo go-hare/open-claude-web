@@ -15,9 +15,22 @@ import { handleEmptyDocBeforeInput } from "../../shared/tiptapEmptyDocBeforeInpu
 import { useOfficialTypeToComposer } from "../../shared/useOfficialTypeToComposer";
 import { Icon } from "../../../shell/icons";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
+import { OfficialSwitch } from "../../shared/OfficialSwitch";
 import { useI18nText } from "../../../i18n/footerMenuMessages";
-import { COMPOSER_SEND_STOP_MESSAGES } from "../officialCodeChromeMessages";
-import { OfficialComposerFooter } from "../OfficialComposerFooter";
+import { useErrorsOptional } from "../../settings/errorsToast";
+import {
+  COMPOSER_BASH_PILL_MESSAGES,
+  COMPOSER_CHAT_MODE_MESSAGES,
+  COMPOSER_FAST_MODE_MESSAGES,
+  COMPOSER_GIT_MESSAGES,
+  COMPOSER_PLUS_MENU_MESSAGES,
+  COMPOSER_SEND_STOP_MESSAGES,
+  EFFORT_CONTROL_MESSAGES,
+  EFFORT_LEVEL_MESSAGES,
+  PERMISSION_MODE_MESSAGES,
+} from "../officialCodeChromeMessages";
+import { OfficialComposerFooter, parseOfficialComposerLoops } from "../OfficialComposerFooter";
+import { useOfficialCodeComposerHideDictation } from "./officialCodeComposerDictation";
 import { OfficialEpitaxyBranchRows } from "../OfficialEpitaxyBranchRows";
 import { EpitaxyPermissionModeModal } from "../composer/EpitaxyPermissionModeModal";
 import { usePermissionModeConfirm } from "../composer/usePermissionModeConfirm";
@@ -25,6 +38,14 @@ import { OfficialEpitaxySlashCommandMenu } from "../slash/OfficialEpitaxySlashCo
 import { OfficialSkillChip } from "../slash/OfficialSkillChip";
 import { OfficialSlashCommandSuggestion } from "../slash/OfficialSlashCommandSuggestion";
 import type { OfficialSlashCommandMenuProps } from "../slash/OfficialSlashTypes";
+import {
+  OfficialComposerMentionExtension,
+  OfficialComposerMentionNode,
+} from "../composer/OfficialComposerMentionExtension";
+import { OfficialEpitaxyMentionDropdown } from "../composer/OfficialEpitaxyMentionDropdown";
+import { useOfficialComposerMentions } from "../composer/useOfficialComposerMentions";
+import { officialInsertCcdFileMention } from "../composer/officialComposerMentionSelect";
+import { officialSshConfigForMentions } from "../composer/officialComposerAgentMentions";
 import type { EpitaxySessionRef } from "./epitaxyTranscriptActionContext";
 import { officialCodeSessionStore } from "./officialCodeSessionStore";
 import { InlineToolPermissionApprovals } from "./OfficialToolPermissionApprovals";
@@ -38,6 +59,7 @@ import {
   clampEffortToCatalog,
   cliEffortLevelsForModel,
   normalizeEffortValue,
+  officialFastModeModelSupported,
   permissionModeLabel,
   type OfficialEffortLevel,
 } from "./officialComposerOptions";
@@ -66,6 +88,7 @@ import {
 import { resolveDraftPermissionMode, setDraftPermissionMode } from "../codeDraftComposerStore";
 import type { PermissionMode } from "../../../adapters/desktopBridge";
 import { residualQjSubmitDisabled } from "./officialQjComposerGate";
+import { readComposerDraft, useOfficialComposerDraftPersist } from "../officialComposerDraftStore";
 import { OfficialSideChatOverlay } from "./OfficialSideChatOverlay";
 import { officialSideChatStore } from "./officialSideChatStore";
 import {
@@ -92,6 +115,45 @@ function tiptapDocFromPlainText(value: string) {
 }
 
 /** Stable ladder identity so setEffortLevels does not thrash when content is equal. */
+function seedComposerModel(session: SessionSummary | null, sessionId?: string | null) {
+  const liveModel = sessionId
+    ? officialCodeSessionStore.getState().buckets[sessionId]?.liveMeta?.model
+    : undefined;
+  const raw = session?.model ?? liveModel;
+  if (typeof raw === "string" && raw.length > 0 && raw !== "<synthetic>") return raw;
+  return "default";
+}
+
+function seedComposerPermissionMode(session: SessionSummary | null, sessionId?: string | null) {
+  const bucket = sessionId ? officialCodeSessionStore.getState().buckets[sessionId] : undefined;
+  const hostMode =
+    (typeof session?.permissionMode === "string" && session.permissionMode.length > 0
+      ? session.permissionMode
+      : undefined)
+    ?? (typeof bucket?.session?.permissionMode === "string" && bucket.session.permissionMode.length > 0
+      ? bucket.session.permissionMode
+      : undefined);
+  const liveMode =
+    typeof bucket?.liveMeta?.permissionMode === "string" && bucket.liveMeta.permissionMode.length > 0
+      ? bucket.liveMeta.permissionMode
+      : undefined;
+  const seeded = hostMode ?? liveMode;
+  if (typeof seeded === "string" && seeded.length > 0) return seeded;
+  return resolveDraftPermissionMode({
+    cwd: session?.cwd ?? bucket?.session?.cwd,
+    preferOverride: true,
+  });
+}
+
+function seedComposerEffortLadder(session: SessionSummary | null, sessionId?: string | null) {
+  return cliEffortLevelsForModel(
+    session?.model
+    ?? (sessionId
+      ? officialCodeSessionStore.getState().buckets[sessionId]?.liveMeta?.model
+      : undefined),
+  );
+}
+
 function sameEffortLevels(a: readonly string[] | null | undefined, b: readonly string[] | null | undefined): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -110,12 +172,15 @@ export type OfficialComposerSurfaceApi = {
   attachAsContext: (text: string) => void;
   focus: () => void;
   getText: () => string;
+  /** Official Qj insertFileMention / pendingFileMention. */
+  insertFileMention: (path: string) => void;
   setComposerText: (text: string) => void;
   /** Official requestComposerAction("submit") — `_c` Enter+mod. */
   submit: () => void;
 };
 
 export function ExistingSessionComposer({
+  agent,
   attachRef,
   bridge,
   composerApiRef,
@@ -130,6 +195,7 @@ export function ExistingSessionComposer({
   onCancelQueued,
   onStop,
   onSubmit,
+  persistKey,
   promptSuggestion = null,
   queuedEntries,
   reload,
@@ -137,6 +203,11 @@ export function ExistingSessionComposer({
   sessionRef,
   showScrollButton,
 }: {
+  /**
+   * Official vI `E` — persist `agent` onto `composer-draft:` (OYt).
+   * Chip seed is wr()?.agent; do not invent a name here.
+   */
+  agent?: string;
   /** @deprecated prefer composerApiRef.attachAsContext — kept for attach-as-context only. */
   attachRef?: MutableRefObject<((text: string) => void) | null>;
   bridge: LocalSessionsBridge;
@@ -167,6 +238,8 @@ export function ExistingSessionComposer({
   onScrollToBottom: () => void;
   onStop?: () => void | Promise<void>;
   onSubmit: (text: string, input?: SendMessageInput) => Promise<void>;
+  /** Official vI `draftPersistKey` — `epitaxy-${id}` / `epitaxy-pane-${id}` / `epitaxy-draft`. */
+  persistKey?: string;
   /** Official Qj `C` from tm i_e — bucket.promptSuggestion. */
   promptSuggestion?: string | null;
   reload: (options?: { silent?: boolean }) => Promise<void>;
@@ -175,12 +248,20 @@ export function ExistingSessionComposer({
   showScrollButton: boolean;
 }) {
   const sendStopText = useI18nText(COMPOSER_SEND_STOP_MESSAGES);
+  const chatModeText = useI18nText(COMPOSER_CHAT_MODE_MESSAGES);
+  const bashPillText = useI18nText(COMPOSER_BASH_PILL_MESSAGES);
+  const plusMenuText = useI18nText(COMPOSER_PLUS_MENU_MESSAGES);
+  const gitText = useI18nText(COMPOSER_GIT_MESSAGES);
+  const fastModeText = useI18nText(COMPOSER_FAST_MODE_MESSAGES);
+  const errors = useErrorsOptional();
+  const hideDictation = useOfficialCodeComposerHideDictation();
+  const sessionLoops = parseOfficialComposerLoops(session?.loops);
   const codeModelOptions = useCodeModelOptions();
   const allowedModelValues = useMemo(
     () => codeModelOptions.items.map((item) => item.value),
     [codeModelOptions.items],
   );
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => readComposerDraft(persistKey)?.text ?? "");
   const [isSubmitting, setSubmitting] = useState(false);
   /**
    * Residual jR model seed: keep host/live session model id as-is.
@@ -188,14 +269,7 @@ export function ExistingSessionComposer({
    * to "default" and the follow-up effect even wrote setModel("default") to host
    * (switch-back footer → Default). Residual never auto-setModel("default").
    */
-  const [model, setModel] = useState(() => {
-    const liveModel = sessionRef?.id
-      ? officialCodeSessionStore.getState().buckets[sessionRef.id]?.liveMeta?.model
-      : undefined;
-    const raw = session?.model ?? liveModel;
-    if (typeof raw === "string" && raw.length > 0 && raw !== "<synthetic>") return raw;
-    return "default";
-  });
+  const [model, setModel] = useState(() => seedComposerModel(session, sessionRef?.id));
   /**
    * Residual Mode seed (`be(n.permissionMode)`):
    * 1. host session prop / bucket.session (openSession after start already filled this)
@@ -203,55 +277,24 @@ export function ExistingSessionComposer({
    * 3. draft sticky (folder/landing) when meta not yet painted — same rn as Code home
    * Never invent bare "default" (询问权限) when draft already shows bypass/accept.
    */
-  const [permissionMode, setPermissionMode] = useState(() => {
-    const id = sessionRef?.id;
-    const bucket = id ? officialCodeSessionStore.getState().buckets[id] : undefined;
-    const hostMode =
-      (typeof session?.permissionMode === "string" && session.permissionMode.length > 0
-        ? session.permissionMode
-        : undefined)
-      ?? (typeof bucket?.session?.permissionMode === "string" && bucket.session.permissionMode.length > 0
-        ? bucket.session.permissionMode
-        : undefined);
-    const liveMode =
-      typeof bucket?.liveMeta?.permissionMode === "string" && bucket.liveMeta.permissionMode.length > 0
-        ? bucket.liveMeta.permissionMode
-        : undefined;
-    const seeded = hostMode ?? liveMode;
-    if (typeof seeded === "string" && seeded.length > 0) return seeded;
-    // Meta still empty on first paint (create→detail race / cold open): keep draft rn.
-    return resolveDraftPermissionMode({
-      cwd: session?.cwd ?? bucket?.session?.cwd,
-      preferOverride: true,
-    });
-  });
+  const [permissionMode, setPermissionMode] = useState(() => seedComposerPermissionMode(session, sessionRef?.id));
   const [effort, setEffort] = useState(() =>
     clampEffortToCatalog(
       session?.effort === "ultracode" ? catalogTopEffort(null) : session?.effort,
-      // Seed ladder from session model (not empty → invent grok 3-stop) so switch-back
-      // does not clamp real effort off the wrong provisional catalog.
-      cliEffortLevelsForModel(
-        session?.model
-        ?? (sessionRef?.id
-          ? officialCodeSessionStore.getState().buckets[sessionRef.id]?.liveMeta?.model
-          : undefined),
-      ),
+      seedComposerEffortLadder(session, sessionRef?.id),
     ),
   );
   /** Official yR session ultracode map — session-only; new chats start without it. */
   const [ultracode, setUltracode] = useState(() => session?.effort === "ultracode");
+  /** Official c119 Re — optimistic Fast until session id changes / host D.fastMode. */
+  const [fastModeLocal, setFastModeLocal] = useState<boolean | null>(null);
   /**
    * Official get_settings.applied (CLI 2.7.16+): per-model catalog ladder + Ultracode gate.
    * null/empty → buildOfficialEffortMenuItems keeps full residual ladder (5f75ff4);
    * never lock to a single stop (106e129 regression). Catalog present → filter only.
    */
   const [effortLevels, setEffortLevels] = useState<string[] | null>(() =>
-    cliEffortLevelsForModel(
-      session?.model
-      ?? (sessionRef?.id
-        ? officialCodeSessionStore.getState().buckets[sessionRef.id]?.liveMeta?.model
-        : undefined),
-    ),
+    seedComposerEffortLadder(session, sessionRef?.id),
   );
   const [ultracodeOfferable, setUltracodeOfferable] = useState<boolean | null>(null);
   /**
@@ -297,6 +340,28 @@ export function ExistingSessionComposer({
     const state = slashMenuStateRef.current;
     return <OfficialEpitaxySlashCommandMenu {...props} bridge={state.bridge} session={state.session} sessionRef={state.sessionRef} />;
   }, []);
+  const mentionDropdownOpenRef = useRef(false);
+  const pendingFileMentionsRef = useRef<string[]>([]);
+  const getMentionEditor = useCallback(() => tiptapEditorRef.current, []);
+  const sshMentions = officialSshConfigForMentions(session?.sshConfig, session?.cwd);
+  const mentions = useOfficialComposerMentions({
+    agentMentionsEnabled: false,
+    bridge,
+    fileMentionsEnabled: sessionRef?.type === "local" || Boolean(sshMentions),
+    focusedCwd: sessionRef?.type === "local" && !sshMentions ? (session?.cwd ?? null) : null,
+    getEditor: getMentionEditor,
+    sshConfigForMentions: sshMentions,
+  });
+  mentionDropdownOpenRef.current = mentions.dropdownOpen;
+  const mentionsRef = useRef(mentions);
+  mentionsRef.current = mentions;
+  const mentionGetProviders = useCallback(() => mentionsRef.current.providers, []);
+  const mentionOnSelect = useCallback((id: string) => {
+    mentionsRef.current.handleMentionSelect(id);
+  }, []);
+  const mentionOnStateChange = useCallback((state: Parameters<typeof mentions.handleStateChange>[0]) => {
+    mentionsRef.current.handleStateChange(state);
+  }, []);
   const bashModeRef = useRef(false);
   const respondingRef = useRef(isResponding);
   /**
@@ -310,12 +375,44 @@ export function ExistingSessionComposer({
   const stopResponseRef = useRef<() => void | Promise<void>>(async () => {});
   const isBashMode = text.trimStart().startsWith("!");
   // Official Qj: bash → shell placeholder; else chat. Ref-backed for RNt without remount.
-  const placeholderRef = useRef("Type / for commands");
-  placeholderRef.current = isBashMode ? "Enter a shell command" : "Type / for commands";
+  const placeholderRef = useRef(sendStopText.typeForCommands);
+  placeholderRef.current = isBashMode ? sendStopText.enterAShellCommand : sendStopText.typeForCommands;
   const canStop = isResponding && Boolean(onStop || (sessionRef && (bridge.interrupt || bridge.stop)));
-  const [stagedFiles, setStagedFiles] = useState<StagedComposerFileAttachment[]>([]);
+  const [stagedFiles, setStagedFiles] = useState<StagedComposerFileAttachment[]>(
+    () => readComposerDraft(persistKey)?.files ?? [],
+  );
   const stagedFilesRef = useRef(stagedFiles);
   stagedFilesRef.current = stagedFiles;
+  // Official Qj is not keyed on sessionId. Product `key={sessionId}` remounted TipTap
+  // with Xb/Fu (~350ms empty transcript). Keep the editor; seed Mode/model/effort here.
+  // persistKey tracks official vI remount (`epitaxy-${id}` / `epitaxy-pane-${id}`).
+  const composerSessionIdRef = useRef(sessionRef?.id);
+  const composerPersistKeyRef = useRef(persistKey);
+  if (composerSessionIdRef.current !== sessionRef?.id || composerPersistKeyRef.current !== persistKey) {
+    composerSessionIdRef.current = sessionRef?.id;
+    composerPersistKeyRef.current = persistKey;
+    const ladder = seedComposerEffortLadder(session, sessionRef?.id);
+    const restored = readComposerDraft(persistKey);
+    setText(restored?.text ?? "");
+    setSubmitting(false);
+    setModel(seedComposerModel(session, sessionRef?.id));
+    setPermissionMode(seedComposerPermissionMode(session, sessionRef?.id));
+    setEffort(clampEffortToCatalog(
+      session?.effort === "ultracode" ? catalogTopEffort(ladder) : session?.effort,
+      ladder,
+    ));
+    setUltracode(session?.effort === "ultracode");
+    setEffortLevels(ladder);
+    setUltracodeOfferable(null);
+    for (const image of stagedImagesRef.current) {
+      if (image.previewUrl.startsWith("blob:")) URL.revokeObjectURL(image.previewUrl);
+    }
+    setStagedImages([]);
+    setStagedFiles(restored?.files ?? []);
+    setConfigBusy(false);
+    effortLocalLockRef.current = null;
+    contextNotesRef.current.clear();
+  }
   const readyImageCount = stagedImages.filter((image) => image.status === "ready" && image.base64).length;
   // Residual Qj submitDisabled: cn.isProcessingImages || mn.isUploading || bi
   // Product: staged image status==="loading" ≡ isProcessingImages; remote mn N/A local-first.
@@ -372,6 +469,7 @@ export function ExistingSessionComposer({
     const slashStorage = (tiptapEditorRef.current?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
     const hasSlashMenu = Boolean(slashStorage?.isActive && slashStorage?.hasVisibleItems);
     if (hasSlashMenu) return false;
+    if (mentionDropdownOpenRef.current) return false;
     if (event.defaultPrevented) return false;
     if (respondingRef.current && !stopOnceRef.current) {
       event.preventDefault();
@@ -398,12 +496,12 @@ export function ExistingSessionComposer({
   const editor = useEditor({
     // Official vTt: immediatelyRender when document exists (Electron renderer).
     immediatelyRender: typeof document !== "undefined",
-    content: "",
+    content: tiptapDocFromPlainText(text),
     // Official c119 Qj: setEditable(!disabled) only. busy/isResponding → Stop, not lock typing.
     editable: !disabled,
     editorProps: {
       attributes: officialTiptapEditorAttributes({
-        "aria-label": "Prompt",
+        "aria-label": sendStopText.prompt,
         class: "tiptap select-text",
         enterkeyhint: "enter",
       }),
@@ -462,7 +560,7 @@ export function ExistingSessionComposer({
         blockquote: false,
         bulletList: false,
         code: false,
-        // Official Qj vTt: disableDropCursor:!0 → MEt dropcursor:false (index-BELzQL5P).
+        // Official Qj vTt: disableDropCursor:!0 → MEt dropcursor:false (cd5a31703).
         dropcursor: false,
         heading: false,
         horizontalRule: false,
@@ -471,7 +569,7 @@ export function ExistingSessionComposer({
       }),
       // Official index vTt RNt (= INt) — simple decorations, no TipTap 3.27 viewport.
       OfficialRNtPlaceholder.configure({
-        emptyEditorClass: "is-editor-empty before:!text-text-500 before:whitespace-nowrap",
+        emptyEditorClass: "is-editor-empty",
         emptyNodeClass: "is-empty",
         placeholder: () => placeholderRef.current,
         showOnlyCurrent: true,
@@ -479,6 +577,16 @@ export function ExistingSessionComposer({
       }),
       OfficialSkillChip,
       OfficialSlashCommandSuggestion.configure({ placement: "onpage", menuComponent: slashMenuComponent }),
+      OfficialComposerMentionNode,
+      ...(mentions.mentionsEnabled
+        ? [
+            OfficialComposerMentionExtension.configure({
+              getProviders: mentionGetProviders,
+              onSelect: mentionOnSelect,
+              onStateChange: mentionOnStateChange,
+            }),
+          ]
+        : []),
     ],
     onUpdate: ({ editor: nextEditor }) => {
       // Official TipTap getText() default blockSeparator is "\n\n" (paragraph breaks).
@@ -486,7 +594,24 @@ export function ExistingSessionComposer({
       setText(nextEditor.getText());
     },
     shouldRerenderOnTransaction: false,
-  }, [slashMenuComponent]);
+  }, [mentionGetProviders, mentionOnSelect, mentionOnStateChange, mentions.mentionsEnabled, slashMenuComponent]);
+
+  useEffect(() => {
+    if (!editor || pendingFileMentionsRef.current.length === 0) return;
+    const queued = pendingFileMentionsRef.current;
+    pendingFileMentionsRef.current = [];
+    for (const path of queued) officialInsertCcdFileMention(editor, path);
+  }, [editor]);
+
+  const insertFileMention = useCallback((path: string) => {
+    const ed = tiptapEditorRef.current ?? editor;
+    if (!ed || ed.isDestroyed || !ed.view) {
+      pendingFileMentionsRef.current.push(path);
+      return;
+    }
+    officialInsertCcdFileMention(ed, path);
+    setText(ed.getText());
+  }, [editor]);
 
   /**
    * Official Pe / Ye.current?.focus after ka drop — not queueMicrotask after shelf layout.
@@ -566,6 +691,18 @@ export function ExistingSessionComposer({
     if (!editor || editor.isDestroyed) return;
     editor.view.dispatch(editor.state.tr.setMeta("addToHistory", false));
   }, [editor, isBashMode]);
+
+  // Official Qj keeps the same TipTap instance across A→B. Restore wr(persistKey).text
+  // (or empty) instead of always wiping — product used to remount via key=sessionId.
+  useLayoutEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    const next = readComposerDraft(persistKey)?.text ?? "";
+    if (!next) {
+      if (!editor.isEmpty) editor.commands.clearContent(true);
+      return;
+    }
+    editor.commands.setContent(tiptapDocFromPlainText(next), { emitUpdate: false });
+  }, [editor, persistKey, sessionRef?.id]);
 
   // Official c119: Ye.current?.focus() once — never re-focus storm mid-IME.
   const sessionAutofocusedRef = useRef(false);
@@ -944,6 +1081,14 @@ export function ExistingSessionComposer({
     return editor.getText();
   }, [editor, text]);
 
+  useOfficialComposerDraftPersist({
+    agent,
+    files: stagedFiles,
+    getText: getComposerText,
+    persistKey,
+    text,
+  });
+
   const focusComposer = useCallback(() => {
     focusComposerEnd();
   }, [focusComposerEnd]);
@@ -1020,6 +1165,7 @@ export function ExistingSessionComposer({
       await onSubmit(textWithFiles.trim() || " ", {
         ...(images ? { images } : {}),
         permissionMode,
+        ...(agent ? { agent } : {}),
       });
       if (sessionRef?.id && stagedPr.length > 0) {
         officialDiffAnnotationsApi.markPrCommentsSent(sessionRef.id, stagedPr);
@@ -1031,7 +1177,7 @@ export function ExistingSessionComposer({
     } finally {
       setSubmitting(false);
     }
-  }, [bridge, canSubmit, clearComposer, isSubmitting, onSubmit, permissionMode, sessionRef, text]);
+  }, [agent, bridge, canSubmit, clearComposer, isSubmitting, onSubmit, permissionMode, sessionRef, text]);
 
   useEffect(() => {
     submitRef.current = submit;
@@ -1052,6 +1198,7 @@ export function ExistingSessionComposer({
       attachAsContext: attachTextAsContext,
       focus: focusComposer,
       getText: getComposerText,
+      insertFileMention,
       setComposerText,
       submit: () => {
         void submitRef.current();
@@ -1061,7 +1208,7 @@ export function ExistingSessionComposer({
     return () => {
       if (composerApiRef.current === api) composerApiRef.current = null;
     };
-  }, [attachTextAsContext, composerApiRef, focusComposer, getComposerText, setComposerText]);
+  }, [attachTextAsContext, composerApiRef, focusComposer, getComposerText, insertFileMention, setComposerText]);
 
   const stopResponse = async () => {
     if (!sessionRef || !(bridge.interrupt || bridge.stop)) return;
@@ -1084,6 +1231,28 @@ export function ExistingSessionComposer({
       setConfigBusy(false);
     }
   };
+
+  // Official c119 `t||Ie(null)` — drop optimistic Fast when the session changes.
+  useEffect(() => {
+    setFastModeLocal(null);
+  }, [sessionRef?.id]);
+
+  const fastModeOn = fastModeLocal ?? Boolean(session?.fastMode);
+  const applyFastMode = useCallback((enabled: boolean) => {
+    if (enabled === fastModeOn) return;
+    setFastModeLocal(enabled);
+    if (sessionRef?.type !== "local" || !sessionRef.id || !bridge.setFastMode) return;
+    void Promise.resolve(bridge.setFastMode(sessionRef.id, enabled)).then((ok) => {
+      if (ok) void reload({ silent: true });
+    }).catch((error) => {
+      errors?.addError(fastModeText.applyFailed, {
+        error,
+        errorContext: { tags: { source: "epitaxy_set_fast_mode" } },
+        messageForLogging: "Fast mode couldn't be applied. You can try again.",
+      });
+    });
+  }, [bridge, errors, fastModeOn, fastModeText.applyFailed, reload, sessionRef]);
+
 
   const applyPermissionMode = useCallback(async (nextMode: string) => {
     if (!sessionRef || nextMode === permissionMode) return;
@@ -1183,8 +1352,10 @@ export function ExistingSessionComposer({
 
   const addFolder = async () => {
     if (!sessionRef) return;
-    const paths = await desktopBridge.Preferences.getDirectoryPath?.(false);
-    const folder = paths?.[0];
+    const browse = desktopBridge.FileSystem.browseFolder;
+    const folder = browse
+      ? await browse(gitText.addFolderToSession)
+      : (await desktopBridge.Preferences.getDirectoryPath?.(false))?.[0];
     if (!folder) return;
     setConfigBusy(true);
     try {
@@ -1202,6 +1373,9 @@ export function ExistingSessionComposer({
   }));
   // Official Sn: Os.map then disabled bypass row (hint 9aM6b8EJG/) when pref off.
   const codePermissionModeOptions = useCodePermissionModeOptions();
+  const permissionModeText = useI18nText(PERMISSION_MODE_MESSAGES);
+  const effortLevelText = useI18nText(EFFORT_LEVEL_MESSAGES);
+  const effortControlText = useI18nText(EFFORT_CONTROL_MESSAGES);
   const permissionItems = codePermissionModeOptions.map((option) => ({
     label: option.label,
     checked: option.value === permissionMode,
@@ -1216,11 +1390,51 @@ export function ExistingSessionComposer({
     // (model catalog / workflows latch off). null (not reported) → keep residual default on.
     showUltracode: Boolean(bridge.setEffort) && ultracodeOfferable !== false,
     effortLevels,
+    labels: effortLevelText,
     model: selectedModel,
     onSelect: (level, nextUltracode) => void applyEffort(level, nextUltracode),
   });
-  const modelExtraSections = bridge.setEffort ? [{ key: "effort", header: "Effort", items: effortItems }] : undefined;
-  const plusMenuItems = [{ icon: "Folder1", label: "Add folder", onSelect: () => void addFolder() }];
+  // Official c119 xs: effort extraSection still feeds Tne; Fast stays on Models (nonEffortSections).
+  // ls = setFastMode present. Do not invent GrowthBook / org-admin / settings opt-in gates.
+  const fastModeSectionVisible = Boolean(bridge.setFastMode);
+  const fastModeDisabledReason = !fastModeSectionVisible
+    ? null
+    : sessionRef && sessionRef.type !== "local"
+      ? fastModeText.disabledLocalOnly
+      : officialFastModeModelSupported(selectedModel)
+        ? null
+        : fastModeText.disabledModel;
+  const fastModeDisabled = fastModeDisabledReason != null;
+  const modelExtraSections = [
+    ...(bridge.setEffort
+      ? [{ key: "effort", header: effortControlText.effort, items: effortItems }]
+      : []),
+    ...(fastModeSectionVisible
+      ? [{
+          key: "fastMode",
+          header: fastModeText.header,
+          items: [{
+            disabled: fastModeDisabled,
+            keepOpen: true,
+            label: fastModeText.enable,
+            onSelect: fastModeDisabled ? undefined : () => applyFastMode(!fastModeOn),
+            tooltip: fastModeDisabledReason ?? fastModeText.hint,
+            trailing: (
+              <span inert>
+                <OfficialSwitch
+                  aria-hidden
+                  checked={!fastModeDisabled && fastModeOn}
+                  disabled={fastModeDisabled}
+                  size="xs"
+                  tabIndex={-1}
+                />
+              </span>
+            ),
+          }],
+        }]
+      : []),
+  ];
+  const plusMenuItems = [{ icon: "Folder", label: plusMenuText.addFolder, onSelect: () => void addFolder() }];
 
   const onFolderDropped = useCallback((folders: File[]) => {
     const first = folders[0];
@@ -1266,7 +1480,7 @@ export function ExistingSessionComposer({
       </div>
       <button
         aria-hidden={!showScrollButton}
-        aria-label="Scroll to bottom"
+        aria-label={sendStopText.scrollToBottom}
         className={`inline-flex items-center h-[24px] px-p3 rounded-r5 bg-fill-contained-default text-contained-default effect-contained-default hover:bg-fill-contained-hover hover:text-contained-hover cursor-default border-0 outline-none hide-focus-ring ring-focus absolute -top-[32px] left-1/2 -translate-x-1/2 z-[1] transition-opacity duration-150 ${showScrollButton ? "opacity-100" : "opacity-0 pointer-events-none"}`}
         onClick={onScrollToBottom}
         tabIndex={showScrollButton ? 0 : -1}
@@ -1277,8 +1491,8 @@ export function ExistingSessionComposer({
       <OfficialEpitaxyBranchRows bridge={bridge} onOpenDiff={onOpenDiff} session={session} sessionRef={sessionRef} />
       {queuedEntries && queuedEntries.length > 0 ? (
         <div
-          className="flex flex-col gap-[var(--chat-item-gap)]"
-          data-official-source="c11959232-h_zsw3wI.js:Xb ge isQueued Hb"
+          className="flex flex-col gap-[var(--chat-item-gap)] px-3.5"
+          data-official-source="c10f0af0c-D80FYKHo.js:composer isQueued Hb"
         >
           {queuedEntries.map((entry) => (
             <CodeUserEntryMessage
@@ -1301,7 +1515,7 @@ export function ExistingSessionComposer({
       >
         <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" data-surface="prompt" />
         {isBashMode ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-r7 shadow-[inset_0_0_0_1px_var(--extended-purple)]" /> : null}
-        <span className="sr-only" role="status">{isBashMode ? "Bash mode. Press Escape to return to chat." : "Chat mode"}</span>
+        <span className="sr-only" role="status">{isBashMode ? chatModeText.bashMode : chatModeText.chatMode}</span>
         <div aria-hidden="true" className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}><div className="min-h-0 overflow-hidden" /></div>
         <OfficialComposerStagedImages
           fileAttachments={stagedFiles}
@@ -1310,7 +1524,7 @@ export function ExistingSessionComposer({
           onRemoveFile={removeStagedFile}
         />
         <div className="relative flex w-full">
-          {isBashMode ? <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
+          {isBashMode ? <span aria-hidden="true" title={bashPillText.runAsShellCommand} className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">bash</span> : null}
           {/*
             Official c119 Qj wa EditorContent className (exact residual):
               epitaxy-prompt-input … [&_.tiptap_p]:m-0
@@ -1318,8 +1532,9 @@ export function ExistingSessionComposer({
               _e = !(!C||he||W||m).
               float-left/height:0 from residual base CSS, not Qj class invent.
           */}
+          <div className="relative font-large min-w-0 flex-1">
           <EditorContent
-            className={`epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0${showPromptSuggestion ? " [&_.is-editor-empty]:before:!content-['']" : ""}`}
+            className={`epitaxy-prompt-input flex-1 min-w-0 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0${showPromptSuggestion ? " [&_.is-editor-empty]:before:!content-['']" : " [&_.ProseMirror.is-editor-empty]:italic [&_.ProseMirror.is-editor-empty]:before:text-muted"}`}
             editor={editor}
             onKeyDownCapture={(event) => {
               const slashStorage = (editor?.storage as unknown as Record<string, unknown> | undefined)?.["slash-command-suggestion"] as { hasVisibleItems?: boolean; isActive?: boolean } | undefined;
@@ -1336,6 +1551,7 @@ export function ExistingSessionComposer({
                 || event.altKey
                 || event.nativeEvent.isComposing
                 || hasSlashMenu
+                || mentionDropdownOpenRef.current
               ) {
                 return;
               }
@@ -1348,11 +1564,12 @@ export function ExistingSessionComposer({
           {showPromptSuggestion ? (
             <span
               aria-hidden
-              className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] text-heading text-t5"
+              className="pointer-events-none absolute inset-y-0 left-0 right-[var(--h8)] truncate pl-p7 pt-[13px] italic text-muted"
             >
               {promptSuggestion}
             </span>
           ) : null}
+          </div>
           <div className="flex self-end p-p7 pl-p3">
             {/* Official Qj (c119): yd icon Stop | ReturnArrowCornerDownLeft; aria Stop | Send. */}
             <OfficialButton
@@ -1365,15 +1582,25 @@ export function ExistingSessionComposer({
           </div>
         </div>
       </div>
+      {mentions.dropdownOpen && mentions.mentionState.position ? (
+        <OfficialEpitaxyMentionDropdown
+          isLoading={Boolean(mentions.mentionState.isLoading)}
+          onClose={mentions.handleDropdownClose}
+          onSelect={mentions.handleMentionSelect}
+          options={mentions.mentionState.options}
+          position={mentions.mentionState.position}
+          selectedIndex={mentions.mentionState.selectedIndex}
+        />
+      ) : null}
       <OfficialComposerFooter
         bridge={bridge}
         // Official existing-session xk: onCoordinatorModeChange:void 0 (spawn-only toggle).
-        // fastModeOn / loops from session meta when bridge provides them; dictation via hideDictation:!In.
+        // fastModeOn from D.fastMode; loops/dictation stay gated on bridge data (do not invent).
         coordinatorMode={false}
-        fastModeOn={false}
-        hideDictation
+        fastModeOn={fastModeOn}
+        hideDictation={hideDictation}
         isPanelActive={isPanelActive}
-        loops={undefined}
+        loops={sessionLoops}
         modelExtraSections={modelExtraSections}
         modelItems={modelItems}
         modelLabel={codeModelOptions.labelFor(selectedModel)}
@@ -1381,7 +1608,7 @@ export function ExistingSessionComposer({
         onCoordinatorModeChange={undefined}
         permissionDanger={permissionMode === "bypassPermissions"}
         permissionItems={permissionItems}
-        permissionLabel={permissionModeLabel(permissionMode)}
+        permissionLabel={permissionModeLabel(permissionMode, permissionModeText)}
         plusMenuItems={plusMenuItems}
         session={session}
         sessionRef={sessionRef}

@@ -9,7 +9,7 @@ type CoworkStatusSession = Pick<
 export type CoworkSidebarGlyphKind = "error" | "completed" | "awaiting" | "running" | "ready" | "done" | "idle";
 
 /**
- * Official xje CoworkStatusGlyph (index-BELzQL5P ~88083) + u_e (~2734040):
+ * Official xje CoworkStatusGlyph (c21f11e6d-CxD82rYo.js ~88083) + u_e (~2734040):
  *   1. hasError → mje Warning
  *   2. sY() (markTaskComplete supported) && isAgentCompleted && !pending && !running
  *      → hje Check (Tbe) + check-spin-in

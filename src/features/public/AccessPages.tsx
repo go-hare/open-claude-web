@@ -87,7 +87,7 @@ export function ServiceStatusPage({ route }: RouteViewProps) {
 }
 
 /**
- * Official ion-dist residual Yrs (index-BELzQL5P bootstrapFailed):
+ * Official ion-dist residual Yrs (index-D35w9RK9 bootstrapFailed):
  *   testId bootstrap-connection-error
  *   headline "Can't reach Claude" / "Claude is temporarily unavailable" (5xx)
  *   subheading "Check your connection." / status link
@@ -137,7 +137,7 @@ export function OAuthDevicePage() {
 
 /**
  * Official ion-dist residual:
- *   path:"login" LoginRoute (index-BELzQL5P.js uls) + c19e49841 login form
+ *   path:"login" LoginRoute (index-D35w9RK9.js uls) + c19e49841 login form
  *   `/` beforeLoad: isLoggedOut && !bootstrapFailed → /login
  *   Copy: "Enter your email" / "Continue with email" / "Continue with SSO"
  *

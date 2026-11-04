@@ -25,7 +25,7 @@ export function CoworkDirectoryApproval({ busy, disableKeyboardShortcuts, isSche
   return (
     <div
       className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden p-3"
-      data-official-source="index-BELzQL5P:Yge"
+      data-official-source="c21f11e6d-CxD82rYo.js:Yge"
       data-permission-kind="directory"
     >
       <div className="flex flex-col gap-2">
@@ -59,7 +59,7 @@ export function CoworkFileDeleteApproval({ busy, disableKeyboardShortcuts, onDec
   return (
     <div
       className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden p-3"
-      data-official-source="index-BELzQL5P:Zge"
+      data-official-source="c21f11e6d-CxD82rYo.js:Zge"
       data-permission-kind="file-delete"
     >
       <div className="flex flex-col gap-2">
@@ -85,7 +85,7 @@ export function CoworkWebFetchApproval({ busy, disableKeyboardShortcuts, onDecid
   return (
     <div
       className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4"
-      data-official-source="index-BELzQL5P:TTe"
+      data-official-source="c21f11e6d-CxD82rYo.js:TTe"
       data-permission-kind="web-fetch"
     >
       <div className="p-3">
@@ -131,7 +131,7 @@ export function CoworkBrowserApproval({ busy, disableKeyboardShortcuts, duplicat
   return (
     <div
       className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden mb-4"
-      data-official-source="index-BELzQL5P:Pfe"
+      data-official-source="c21f11e6d-CxD82rYo.js:Pfe"
       data-permission-kind="browser"
     >
       <div className="p-3">
@@ -226,7 +226,7 @@ export function CoworkLaunchCodeApproval({ busy, disableKeyboardShortcuts, onDec
     <>
       <div
         className="bg-bg-000 rounded-xl border border-border-300 shadow-lg overflow-hidden p-3"
-        data-official-source="index-BELzQL5P:NTe"
+        data-official-source="c21f11e6d-CxD82rYo.js:NTe"
         data-permission-kind="launch-code"
       >
         <div className="flex items-center justify-between gap-4">

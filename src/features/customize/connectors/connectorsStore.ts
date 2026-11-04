@@ -1,7 +1,7 @@
 /**
  * Connectors store — residual Direct MCP status bag (mQe).
  *
- * Residual ion (index-BELzQL5P.js):
+ * Residual ion (index-D35w9RK9.js):
  *   cQe = uuid→name, dQe = name→uuid; mQe(statuses) upserts remoteServers;
  *   hQe(uuid) → authorizeDirectMcpServer(name); disconnect by name.
  *

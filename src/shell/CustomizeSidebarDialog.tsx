@@ -57,7 +57,7 @@ export function CustomizeSidebarDialog({ isOpen, isPinned, items, onClose, onTog
           <div className="min-h-full flex flex-col">
             <div className="flex items-center gap-4 justify-between">
               <h2 className="font-xl-bold text-text-100 flex w-full min-w-0 items-center leading-6 break-words" id="customize-sidebar-title">
-                <span className="[overflow-wrap:anywhere]">{text.customizeSidebar}</span>
+                <span className="[overflow-wrap:anywhere]">{text.editSidebar}</span>
               </h2>
               <div className="flex items-center gap-2">
                 <button aria-label="Close" className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border-0 bg-transparent !text-text-500 hover:bg-bg-200 hover:!text-text-400 -mx-2" onClick={onClose} type="button"><Icon name="X" size="sm" /></button>
@@ -98,7 +98,7 @@ function SidebarCheckbox({ checked, item, onChange, text }: { checked: boolean; 
 
 function sidebarDialogItemLabel(item: SidebarNavItem, text: ShellText) {
   if (item.key === "projects") return text.projects;
-  if (item.key === "scheduled") return text.scheduledTasks;
+  if (item.key === "scheduled") return item.href.startsWith("/code/") ? text.routines : text.scheduledTasks;
   if (item.key === "customize") return text.customize;
   return item.label;
 }

@@ -1,5 +1,5 @@
 /**
- * Official M4t / bF empty state (index-BELzQL5P), variant="projects" → Kq pictogram.
+ * Official M4t / bF empty state (index-D35w9RK9), variant="projects" → Kq pictogram.
  * Cowork description branch from c1b9abf13 _Component32 (C=true).
  * Copy is passed from ProjectsPage via residual PROJECTS_MESSAGES (no EN defaults here).
  */
@@ -28,7 +28,7 @@ export function ProjectsEmptyState({
       className={["flex flex-col items-center justify-center text-center py-12 px-4 text-md", className]
         .filter(Boolean)
         .join(" ")}
-      data-official-source="index-BELzQL5P.js:M4t"
+      data-official-source="index-D35w9RK9.js:M4t"
     >
       <ProjectsEmptyPictogram size="medium" />
       {headline ? <h3 className="text-text-200 font-medium mb-2 mt-4">{headline}</h3> : null}

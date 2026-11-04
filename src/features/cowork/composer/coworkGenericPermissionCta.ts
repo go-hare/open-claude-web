@@ -1,6 +1,6 @@
 /**
  * Official nue CTA matrix residual (pure, testable).
- * data-official-source: index-BELzQL5P:nue
+ * data-official-source: c21f11e6d-CxD82rYo.js:nue
  */
 
 export type CoworkGenericPermissionCtaMode =

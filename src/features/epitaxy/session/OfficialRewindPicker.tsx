@@ -5,6 +5,8 @@
 import { Dialog } from "@base-ui-components/react/dialog";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { SESSION_LOAD_MESSAGES } from "../officialCodeChromeMessages";
 
 export type OfficialRewindTurn = {
   text: string;
@@ -22,6 +24,7 @@ export function OfficialRewindPicker({
   onSelect: (uuid: string, text: string) => void;
   turns: readonly OfficialRewindTurn[];
 }) {
+  const text = useI18nText(SESSION_LOAD_MESSAGES);
   const lastIndex = Math.max(turns.length - 1, 0);
   const [selectedIndex, setSelectedIndex] = useState(lastIndex);
   const listRef = useRef<HTMLUListElement | null>(null);
@@ -91,7 +94,8 @@ export function OfficialRewindPicker({
           className="fixed inset-0 z-50 bg-always-black/50 backdrop-blur-[2px] draggable-none"
         />
         <Dialog.Popup
-          aria-label="Rewind conversation"
+          aria-label={text.rewindConversation}
+          data-intl-id="zx89NyX5Qb"
           className="epitaxy-root fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[32rem] max-w-[calc(100vw-2rem)] draggable-none outline-none"
           initialFocus={listRef}
           onKeyDown={onKeyDown}
@@ -103,17 +107,19 @@ export function OfficialRewindPicker({
               data-surface="popover"
             />
             <div className="flex items-start justify-between gap-g4">
-              <Dialog.Title className="text-heading-semibold text-t9">Rewind</Dialog.Title>
+              <Dialog.Title className="text-heading-semibold text-t9">
+                <span data-intl-id="O8rEfJhp62">{text.rewind}</span>
+              </Dialog.Title>
               <OfficialButton
-                ariaLabel="Close"
+                ariaLabel={text.close}
                 icon="XCrossCloseMedium"
                 onClick={onClose}
                 size="small"
                 variant="muted"
               />
             </div>
-            <p className="text-footnote text-t6">
-              Restore the conversation to a previous message
+            <p className="text-footnote text-t6" data-intl-id="Qb9vtk6zQz">
+              {text.restoreConversationToPrevious}
             </p>
             <ul
               aria-activedescendant={turns.length ? `rewind-opt-${selectedIndex}` : undefined}
@@ -124,7 +130,7 @@ export function OfficialRewindPicker({
             >
               {turns.length === 0 ? (
                 <li className="text-body text-t6 italic px-p5 py-p4" role="presentation">
-                  Nothing to rewind to yet.
+                  <span data-intl-id="SMUCnWmt/M">{text.nothingToRewindToYet}</span>
                 </li>
               ) : (
                 turns.map((turn, index) => (

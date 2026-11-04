@@ -131,7 +131,7 @@ export function CoworkSessionComposerSurface(props: CoworkSessionComposerSurface
         </fieldset>
       </div>
       {/*
-        Official index-BELzQL5P disclaimer residual (data-disclaimer):
+        Official c21f11e6d-CxD82rYo.js disclaimer residual (data-disclaimer):
         Hz3uf5n9Ga base; JyEEg0ExZX + Give us feedback when xT.openFeedbackWindow present.
       */}
       <CoworkDisclaimer />
@@ -140,7 +140,7 @@ export function CoworkSessionComposerSurface(props: CoworkSessionComposerSurface
 }
 
 /**
- * Official disclaimer residual (index-BELzQL5P data-disclaimer):
+ * Official disclaimer residual (c21f11e6d-CxD82rYo.js data-disclaimer):
  * openFeedbackWindow present → JyEEg0ExZX + aQPexOUJ+Y CTA
  * else → Hz3uf5n9Ga base string only.
  * Copy from spa /i18n catalog (locale-aware); never hardcode EN.
@@ -157,8 +157,8 @@ function CoworkDisclaimer() {
       data-disclaimer
       data-official-source={
         showFeedback
-          ? "index-BELzQL5P.js:JyEEg0ExZX"
-          : "index-BELzQL5P.js:Hz3uf5n9Ga"
+          ? "c21f11e6d-CxD82rYo.js:JyEEg0ExZX"
+          : "c21f11e6d-CxD82rYo.js:Hz3uf5n9Ga"
       }
       role="note"
     >
@@ -255,7 +255,7 @@ function ComposerActions({ canStop, disabled, isSubmitting, onStop, onSubmit }: 
       {canStop ? (
         <motion.div animate={{ opacity: 1, scale: 1 }} className="flex items-center gap-1" initial={{ opacity: 0, scale: 0.3 }} key="sampling">
           <CoworkComposerButton ariaLabel={chromeText.stopResponse} className="!rounded-lg" onClick={onStop} size="icon-sm" variant="secondary"><Icon bold customSize={16} name="Stop" /></CoworkComposerButton>
-          <CoworkComposerButton ariaLabel={chromeText.queueMessage} className="!rounded-lg gap-1.5" disabled={disabled} onClick={onSubmit} size="sm" variant="claude"><Icon bold customSize={16} name="ArrowUp" />{isSubmitting ? <Icon className="animate-spin" customSize={14} name="Spinner" /> : <span>{chromeText.queue}</span>}</CoworkComposerButton>
+          <CoworkComposerButton ariaLabel={chromeText.queue} className="!rounded-lg gap-1.5" disabled={disabled} onClick={onSubmit} size="sm" variant="claude"><Icon bold customSize={16} name="ArrowUp" />{isSubmitting ? <Icon className="animate-spin" customSize={14} name="Spinner" /> : <span>{chromeText.queue}</span>}</CoworkComposerButton>
         </motion.div>
       ) : (
         <motion.div animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.3 }} initial={{ opacity: 0, scale: 0.3 }} key="send" transition={{ delay: 0.15, opacity: { duration: 0.1 }, scale: { damping: 30, stiffness: 600, type: "spring" } }}>
@@ -267,7 +267,7 @@ function ComposerActions({ canStop, disabled, isSubmitting, onStop, onSubmit }: 
 }
 
 /**
- * Official index-BELzQL5P `t$t` scroll-to-bottom control (cowork / chat path).
+ * Official c21f11e6d-CxD82rYo.js `t$t` scroll-to-bottom control (cowork / chat path).
  * Circular size-9 + Ace blur (state=avatarState) + ArrowDown `ly`.
  * NOT the code-path (c119) contained pill + ChevronDownSmall.
  */

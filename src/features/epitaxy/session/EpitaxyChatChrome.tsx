@@ -8,7 +8,6 @@ import type { SessionSummary } from "../../../adapters/desktopBridge";
 import type { ChatMessage } from "../../../adapters/desktopBridge/types";
 import {
   OfficialSessionHeader,
-  OfficialSessionSource,
   type OfficialTranscriptMode,
   type OfficialViewPane,
 } from "../OfficialEpitaxyComponents";
@@ -22,16 +21,20 @@ import { parseOfficialSubagentTranscriptEntries } from "./officialTranscriptPars
 import { CodeAssistantEntryMessage, CodeUserEntryMessage } from "./OfficialTranscript";
 export { officialSessionHeaderTitle } from "./officialSessionTitle";
 
-export function EpitaxyChatHeader({ activeView, canOpenBrowser = false, canOpenFramebuffer = false, canOpenRuns = false, dragHandle, hasRunningTasks, hideViews = false, isTitleLoading, isTopLeft, onSessionRemoved, onTranscriptModeChange, onViewSelect, openViews, paneIndex, session, sessionRef, title, transcriptMode = "normal" }: {
+export function EpitaxyChatHeader({ activeView, agent, canOpenFiles = false, canOpenFramebuffer = false, canOpenRuns = false, dragHandle, hasPlan = false, hasRunningTasks, hideViews = false, isTitleLoading, isTopLeft, onSessionRemoved, onTranscriptModeChange, onViewSelect, openViews, paneIndex, previewServerId, session, sessionRef, taskCount = 0, title, transcriptMode = "normal" }: {
   activeView?: OfficialViewPane;
-  /** Official VC — Files (browser) Views item. */
-  canOpenBrowser?: boolean;
+  /** Official eI `agent` — chip hidden when falsy. */
+  agent?: string | null;
+  /** Official p4 `A_` — Files overflow item (not VC ccd_file_browser). */
+  canOpenFiles?: boolean;
   /** Official YR Screen (framebuffer) Views item. */
   canOpenFramebuffer?: boolean;
   /** Official ES — Runs Views item. */
   canOpenRuns?: boolean;
   dragHandle?: ReactNode;
+  hasPlan?: boolean;
   hasRunningTasks?: boolean;
+  taskCount?: number;
   hideViews?: boolean;
   isTitleLoading: boolean;
   isTopLeft?: boolean;
@@ -45,6 +48,7 @@ export function EpitaxyChatHeader({ activeView, canOpenBrowser = false, canOpenF
   onViewSelect?: (view: OfficialViewPane) => void;
   openViews?: readonly OfficialViewPane[];
   paneIndex: number;
+  previewServerId?: string | null;
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef | null;
   title: string;
@@ -53,19 +57,23 @@ export function EpitaxyChatHeader({ activeView, canOpenBrowser = false, canOpenF
   return (
     <OfficialSessionHeader
       activeView={activeView}
-      canOpenBrowser={canOpenBrowser}
+      agent={agent}
+      canOpenFiles={canOpenFiles}
       canOpenFramebuffer={canOpenFramebuffer}
       canOpenRuns={canOpenRuns}
       openViews={openViews}
       dragHandle={dragHandle}
+      hasPlan={hasPlan}
       hasRunningTasks={hasRunningTasks}
       hideViews={hideViews}
+      taskCount={taskCount}
       isTitleLoading={isTitleLoading}
       isTopLeft={isTopLeft}
       onSessionRemoved={onSessionRemoved}
       onTranscriptModeChange={onTranscriptModeChange}
       onViewSelect={onViewSelect}
       paneIndex={paneIndex}
+      previewServerId={previewServerId}
       session={session}
       sessionRef={sessionRef}
       title={title}
@@ -146,6 +154,10 @@ export function useEpitaxyViewShortcuts({
       }
 
       if (event.defaultPrevented) return;
+      const tileHost = event.target instanceof Element
+        ? event.target.closest("[data-tile-host]")?.getAttribute("data-tile-host")
+        : null;
+      if (tileHost && tileHost !== "chat") return;
       const command = matchOfficialSessionShortcut(event);
       if (!command) return;
       switch (command) {
@@ -177,9 +189,10 @@ export function useEpitaxyViewShortcuts({
           onTogglePane("diff");
           return;
         case "toggleBrowser":
+          // Official p4 shortcut Rn("toggleBrowser") still `l("file")` — tree+tabs pane.
           if (!canOpenBrowser) return;
           event.preventDefault();
-          onTogglePane("browser");
+          onTogglePane("file");
           return;
         default:
           // openMode/Model/Effort + toggleSelectionMode handled elsewhere (footer / preview).

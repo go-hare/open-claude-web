@@ -81,10 +81,10 @@ export function BaseContextMenuPopup({ align, children, className, side, sideOff
   );
 }
 
-export function BaseMenuItem({ children, checked, checkedRole = "checkbox", className, danger, description, disabled, icon, keepOpen, lang, onClick, trailing }: { children: ReactNode; checked?: boolean; checkedRole?: "checkbox" | "radio"; className?: string; /** Official A `danger` — Uninstall / destructive. */ danger?: boolean; /** Official SIe `description` — second line under the item label. */ description?: string; disabled?: boolean; /** Official residual accepts string icon-font name or ReactNode SVG glyph (`icon:a.jsx(Lv,{})`). */ icon?: string | ReactNode; keepOpen?: boolean; lang?: string; onClick?: () => void; trailing?: ReactNode }) {
+export function BaseMenuItem({ children, checked, checkedRole = "checkbox", className, danger, description, disabled, icon, keepOpen, lang, onClick, trailing, "data-testid": dataTestId }: { children: ReactNode; checked?: boolean; checkedRole?: "checkbox" | "radio"; className?: string; /** Official A `danger` — Uninstall / destructive. */ danger?: boolean; /** Official SIe `description` — second line under the item label. */ description?: string; disabled?: boolean; /** Official residual accepts string icon-font name or ReactNode SVG glyph (`icon:a.jsx(Lv,{})`). */ icon?: string | ReactNode; keepOpen?: boolean; lang?: string; onClick?: () => void; trailing?: ReactNode; "data-testid"?: string }) {
   const checkedProps = checked === undefined ? {} : { "aria-checked": checked, role: checkedRole === "radio" ? "menuitemradio" : "menuitemcheckbox" };
   return (
-    <Menu.Item {...checkedProps} className={`${itemClassName} ${danger ? "text-danger-000" : ""} ${className ?? ""}`} closeOnClick={keepOpen ? false : undefined} disabled={disabled} lang={lang} onClick={onClick}>
+    <Menu.Item {...checkedProps} className={`${itemClassName} ${danger ? "text-danger-000" : ""} ${className ?? ""}`} closeOnClick={keepOpen ? false : undefined} data-testid={dataTestId} disabled={disabled} lang={lang} onClick={onClick}>
       {icon ? (
         <span className="flex size-icon shrink-0 items-center justify-center">
           {typeof icon === "string" ? <Icon name={icon} /> : icon}
@@ -127,6 +127,33 @@ export function BaseMenuGroupLabel({ children }: { children: ReactNode }) {
 
 export function BaseMenuHeader({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={`px-md py-1 text-footnote font-medium text-muted ${className ?? ""}`} role="presentation">{children}</div>;
+}
+
+/** Official X.SubmenuRoot path for ContextMenu (c9a Su Open in). */
+export function BaseContextMenuSubmenu({
+  children,
+  label,
+  popupAlign = "start",
+  popupSide = "right",
+  popupSideOffset = -4,
+}: {
+  children: ReactNode;
+  label: ReactNode;
+  popupAlign?: Align;
+  popupSide?: Side;
+  popupSideOffset?: number;
+}) {
+  return (
+    <ContextMenu.SubmenuRoot>
+      <ContextMenu.SubmenuTrigger className={submenuTriggerClassName}>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <Icon name="CaretRight" size="sm" className="shrink-0 text-muted" />
+      </ContextMenu.SubmenuTrigger>
+      <BaseContextMenuPopup align={popupAlign} side={popupSide} sideOffset={popupSideOffset}>
+        {children}
+      </BaseContextMenuPopup>
+    </ContextMenu.SubmenuRoot>
+  );
 }
 
 export function BaseSubmenu({

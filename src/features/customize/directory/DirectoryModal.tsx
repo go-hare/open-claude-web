@@ -1,8 +1,10 @@
 /**
- * Official B8t / $8t DirectoryModal (index-BELzQL5P.js).
- * Tm: modalSize 2xl, fullHeight, hasCloseButton, overlayClassName grid-rows-1.
- * This ion-dist: PT/EI false → only Plugins I7t.
- * Body: official `d ? R8t : P8t` (pluginSeed ? BrowsePluginsContent : LocalOrgPluginsContent).
+ * Official Directory overlay (shared-19 PH + c99ed1520 Qi).
+ * CDS Dialog.Popup vg size 2xl (`max-w-[1024px]`) + MH height
+ * `h-[calc(100vh-5rem)] !max-h-[min(56rem,calc(100vh-5rem))]`.
+ * Header CH: Title wraps `font-ui-serif font-medium` Directory + Close.
+ * Not OfficialModal Tm (font-xl-bold / max-w-5xl / bg-bg-100).
+ * Body: pluginSeed ? BrowsePluginsContent : LocalOrgPluginsContent.
  */
 import {
   memo,
@@ -15,9 +17,11 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { Dialog } from "@base-ui-components/react/dialog";
 import { Icon } from "../../../shell/icons";
 import { useCustomizeText } from "../customizeMessages";
-import { OfficialModal } from "../../shared/OfficialModal";
+import { readResolvedColorMode, THEME_MODE_CHANGE_EVENT } from "../../settings/appearanceSettings";
+import { CdsDialogBackdrop, CdsDialogCloseButton } from "../../settings/CdsDialog";
 import { OfficialTextInput } from "../../shared/OfficialTextInput";
 import { BrowsePluginsContent } from "./BrowsePluginsContent";
 import { LocalOrgPluginsContent } from "./LocalOrgPluginsContent";
@@ -26,6 +30,41 @@ import {
   officialDirectoryStore,
   useOfficialDirectoryStore,
 } from "./officialDirectoryStore";
+
+/** Official shared-frame vg Uh + popover Vh + size 2xl + shared-19 MH. */
+const DIRECTORY_POPUP_CLASS = [
+  "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
+  "flex flex-col w-[calc(100vw-2rem)] max-w-[1024px]",
+  "h-[calc(100vh-5rem)] !max-h-[min(56rem,calc(100vh-5rem))]",
+  "rounded-card bg-surface-3 shadow-panel shadow-panel-lg",
+  "cds-reset text-body font-normal text-primary outline-none",
+  "transition-[opacity,scale] duration-base ease-out",
+  "data-[starting-style]:opacity-0 data-[starting-style]:scale-[0.98]",
+  "data-[ending-style]:opacity-0 data-[ending-style]:scale-[0.98]",
+  "draggable-none z-modal",
+].join(" ");
+
+/** Official shared-frame Wh inner of vg Popup. */
+const DIRECTORY_BODY_CLASS =
+  "isolate flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[inherit] p-xl";
+
+function useColorMode(): "light" | "dark" {
+  const [mode, setMode] = useState<"light" | "dark">(() => readResolvedColorMode());
+  useEffect(() => {
+    const sync = () => setMode(readResolvedColorMode());
+    sync();
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    media.addEventListener("change", sync);
+    window.addEventListener("storage", sync);
+    window.addEventListener(THEME_MODE_CHANGE_EVENT, sync);
+    return () => {
+      media.removeEventListener("change", sync);
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(THEME_MODE_CHANGE_EVENT, sync);
+    };
+  }, []);
+  return mode;
+}
 
 function DirectoryModalInner() {
   const isOpen = useOfficialDirectoryStore((state) => state.isOpen);
@@ -37,6 +76,8 @@ function DirectoryModalInner() {
   const openCount = useOfficialDirectoryStore((state) => state.openCount);
   const close = useOfficialDirectoryStore((state) => state.close);
   const text = useCustomizeText();
+  const colorMode = useColorMode();
+  const mode = colorMode === "dark" ? "dark" : "light";
 
   const [search, setSearch] = useState("");
   const drilledIn = itemId != null;
@@ -128,92 +169,99 @@ function DirectoryModalInner() {
   }, [section, text]);
 
   return (
-    <OfficialModal
-      ariaLabel={text.directory}
-      className="!min-h-0 max-h-[min(56rem,100%)]"
-      fullHeight
-      hasCloseButton
-      isOpen={isOpen}
-      modalSize="2xl"
-      onClose={onClose}
-      overlayClassName="grid-rows-1 !overflow-hidden"
-      title={
-        <span className="font-ui-serif font-medium text-2xl text-text-100">{text.directory}</span>
-      }
+    <Dialog.Root
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      open={isOpen}
     >
-      <div className="flex h-full min-h-0 gap-8" onKeyDown={onBodyKeyDown}>
-        <aside className="w-[200px] shrink-0 pt-3">
-          <nav aria-label={text.directorySections} className="flex flex-col gap-1">
-            <DirectorySectionNavItem
-              icon={<Icon customSize={16} name="plugin" />}
-              isActive={section === "plugins"}
-              onClick={() => onSectionClick("plugins")}
-            >
-              {text.plugins}
-            </DirectorySectionNavItem>
-          </nav>
-        </aside>
-        <div className="flex flex-1 flex-col gap-4 min-w-0 pt-2.5">
-          {!drilledIn ? (
-            <OfficialTextInput
-              aria-label={text.searchDirectory}
-              className="!py-0"
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape" && search) {
-                  event.stopPropagation();
-                  setSearch("");
-                }
-              }}
-              placeholder={searchPlaceholder}
-              prepend={<Icon className="text-text-500" customSize={16} name="Search" />}
-              value={search}
-            />
-          ) : null}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            {section === "plugins" ? (
-              pluginSeed ? (
-                <BrowsePluginsContent
-                  drillDownPluginId={itemId}
-                  initialConfig={pluginSeed}
-                  isOpen={isOpen}
-                  onClose={close}
-                  onDrillDownChange={(id) => navigateToItem("plugins", id)}
-                  searchQuery={search}
-                />
-              ) : (
-                <LocalOrgPluginsContent
-                  externalSearchQuery={search}
-                  isOpen={isOpen}
-                  onClose={close}
-                />
-              )
-            ) : null}
-          </div>
+      <Dialog.Portal>
+        <div className="cds-root" data-density="comfortable" data-mode={mode} data-official-source="shared-19:PH c99ed1520:Qi" data-platform="desktop">
+          <CdsDialogBackdrop />
+          <Dialog.Popup className={DIRECTORY_POPUP_CLASS} data-cds="Dialog" initialFocus={false}>
+            <div className={DIRECTORY_BODY_CLASS}>
+              <div className="mb-pad-md flex items-start gap-2">
+                <div className="-mt-1 flex min-w-0 flex-1 flex-col gap-1">
+                  <Dialog.Title className="break-words text-title font-semibold text-primary">
+                    <span className="font-ui-serif font-medium">{text.directory}</span>
+                  </Dialog.Title>
+                </div>
+                <CdsDialogCloseButton aria-label="Close" className="-me-pad-sm -mt-pad-sm" />
+              </div>
+              <div className="flex min-h-0 flex-1 gap-8" onKeyDown={onBodyKeyDown}>
+                <aside className="w-[200px] shrink-0 pt-3">
+                  <nav aria-label={text.directorySections} className="flex flex-col gap-1">
+                    <DirectorySectionNavItem
+                      icon={<Icon name="Plugin" size="md" />}
+                      isActive={section === "plugins"}
+                      onClick={() => onSectionClick("plugins")}
+                    >
+                      {text.plugins}
+                    </DirectorySectionNavItem>
+                  </nav>
+                </aside>
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 pt-2.5">
+                  {!drilledIn ? (
+                    <OfficialTextInput
+                      aria-label={text.searchDirectory}
+                      className="!py-0"
+                      onChange={(event) => setSearch(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape" && search) {
+                          event.stopPropagation();
+                          setSearch("");
+                        }
+                      }}
+                      placeholder={searchPlaceholder}
+                      prepend={<Icon className="text-text-500" customSize={16} name="Search" />}
+                      value={search}
+                    />
+                  ) : null}
+                  <div className="-mx-6 -my-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-2">
+                    {section === "plugins" ? (
+                      pluginSeed ? (
+                        <BrowsePluginsContent
+                          drillDownPluginId={itemId}
+                          initialConfig={pluginSeed}
+                          isOpen={isOpen}
+                          onClose={close}
+                          onDrillDownChange={(id) => navigateToItem("plugins", id)}
+                          searchQuery={search}
+                        />
+                      ) : (
+                        <LocalOrgPluginsContent
+                          externalSearchQuery={search}
+                          isOpen={isOpen}
+                          onClose={close}
+                        />
+                      )
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Dialog.Popup>
         </div>
-      </div>
-    </OfficialModal>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
-/** Official I7t. */
+/** Official c99ed1520 Ki. */
 function DirectorySectionNavItem({
   children,
   icon,
-  iconOnly = false,
   isActive,
   onClick,
 }: {
   children: ReactNode;
   icon: ReactNode;
-  iconOnly?: boolean;
   isActive?: boolean;
   onClick?: () => void;
 }) {
   const className = [
-    "flex items-center rounded-lg text-sm transition-all",
-    iconOnly ? "justify-center p-2" : "gap-3 px-4 py-1.5",
-    isActive ? "bg-bg-300 text-text-100 font-semibold" : "text-text-100 hover:bg-bg-300",
+    "flex items-center gap-3 rounded-lg px-4 py-1.5 text-sm",
+    isActive ? "bg-fill-ghost-selected text-primary font-semibold" : "text-primary hover:bg-fill-ghost-hover",
   ].join(" ");
   return (
     <button
@@ -223,7 +271,7 @@ function DirectorySectionNavItem({
       type="button"
     >
       <span className="flex size-5 items-center justify-center">{icon}</span>
-      <span className={iconOnly ? "sr-only" : undefined}>{children}</span>
+      <span>{children}</span>
     </button>
   );
 }

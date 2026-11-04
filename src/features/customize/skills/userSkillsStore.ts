@@ -1,5 +1,5 @@
 /**
- * Official index-BELzQL5P PLe / HLe / BLe / KLe / YLe — LocalAgentModeSessions
+ * Official index-D35w9RK9 PLe / HLe / BLe / KLe / YLe — LocalAgentModeSessions
  * listLocalSkills / saveLocalSkill / setLocalSkillEnabled / deleteLocalSkill /
  * getLocalSkillFiles.
  * Host writes userData/local-agent-mode-sessions/skills-plugin (CUi), not ~/.claude/skills.

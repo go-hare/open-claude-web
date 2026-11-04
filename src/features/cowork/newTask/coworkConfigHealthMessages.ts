@@ -7,7 +7,7 @@ import {
 } from "../../../i18n/footerMenuMessages";
 
 /**
- * Official index-BELzQL5P TQt / AQt / IQt copy for ConfigHealth banner.
+ * Official c62135ccf-Dn28vJ3V TQt / AQt / IQt copy for ConfigHealth banner.
  */
 export const COWORK_CONFIG_HEALTH_MESSAGES = {
   configuredModelNotAvailable: {

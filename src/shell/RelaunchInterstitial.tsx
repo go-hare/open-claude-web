@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { CoworkClaudeAvatar } from "../features/cowork/session/transcript/CoworkClaudeAvatar";
 
 /**
- * Official ion-dist residual (index-BELzQL5P.js):
+ * Official ion-dist residual (index-D35w9RK9.js):
  *   c2t messages + d2t countdown UI + m2t/h2t fullscreen Zh overlay
  *
  * Sign out (Gns):

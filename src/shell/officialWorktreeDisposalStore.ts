@@ -1,5 +1,5 @@
 /**
- * Official index-BELzQL5P UYt / $Yt residual.
+ * Official cd5a31703 UYt / $Yt residual.
  *
  *   UYt = zustand({ pending, open, close })
  *   $Yt(sessionId, action) → getUncommittedChanges; empty → true;

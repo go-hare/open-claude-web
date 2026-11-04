@@ -13,6 +13,7 @@ export function WriteSkillInstructionsModal({
   onClose,
   onCreate,
   skillToEdit,
+  variant = "page",
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -23,6 +24,8 @@ export function WriteSkillInstructionsModal({
     skillId?: string;
   }) => void | Promise<void>;
   skillToEdit?: { description: string; instructions: string; skillId: string; skillName: string } | null;
+  /** Overlay Ar W (c0659e756 Sn): title Create a skill / Edit skill. Page Ol keeps Write skill instructions. */
+  variant?: "page" | "overlay";
 }) {
   const nameId = useId();
   const descriptionId = useId();
@@ -90,7 +93,15 @@ export function WriteSkillInstructionsModal({
       isOpen={isOpen}
       modalSize="2lg"
       onClose={onClose}
-      title={editing ? "Edit skill instructions" : "Write skill instructions"}
+      title={
+        variant === "overlay"
+          ? editing
+            ? "Edit skill"
+            : "Create a skill"
+          : editing
+            ? "Edit skill instructions"
+            : "Write skill instructions"
+      }
     >
       <div className="flex flex-col gap-4 mt-3">
         {submitError ? (
@@ -110,7 +121,7 @@ export function WriteSkillInstructionsModal({
             id={nameId}
             maxLength={64}
             onChange={onNameChange}
-            placeholder="weekly-status-report"
+            placeholder={variant === "overlay" ? "Weekly status report" : "weekly-status-report"}
             ref={nameRef}
             value={name}
           />

@@ -1,5 +1,5 @@
 /**
- * Official customize feature gates (index-BELzQL5P / c63a78ed4).
+ * Official customize feature gates (index-D35w9RK9 / c63a78ed4).
  *
  * - Skills nav + index card: E7t `s = QZ()` / el `u = fs()` where
  *   QZ = KZ() && YZ() = gA("wiggle").isAvailable && gA("skills").isAvailable.
@@ -36,3 +36,9 @@ export const PLUGINS_SECTION_ENABLED = true;
  * When true, Add skill menu shows Create skill submenu.
  */
 export const SKILL_CREATION_ENABLED = true;
+
+/**
+ * Official overlay ar mn() Y("create_skill_with_claude").available.
+ * Product 3p desktop always has Cowork /task/new — same prompt En.
+ */
+export const CREATE_SKILL_WITH_CLAUDE_ENABLED = true;

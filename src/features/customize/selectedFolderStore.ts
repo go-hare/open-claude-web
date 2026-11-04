@@ -1,5 +1,5 @@
 /**
- * Official vK selectedFolder store (index-BELzQL5P ~30705).
+ * Official vK selectedFolder store (index-D35w9RK9 ~30705).
  * E7t Code/epitaxy customize sidebar reads selectedFolder for V6t FolderPill.
  * Minimal local subset: selectedFolder + setSelectedFolder (no multi-host map yet).
  */

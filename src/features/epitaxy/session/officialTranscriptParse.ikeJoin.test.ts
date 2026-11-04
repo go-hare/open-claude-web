@@ -3,7 +3,7 @@ import type { ChatMessage } from "../../../adapters/desktopBridge/types";
 import { parseOfficialTranscriptEntries } from "./officialTranscriptParse";
 
 /**
- * Residual Ike (index-BELzQL5P): array content collects plain text into `l`,
+ * Residual Ike (cd5a31703): array content collects plain text into `l`,
  * then one `{ kind: "text", text: l.join("\\n") }` — not N text items.
  * Product invent of per-block items stacked multi-send CLI rows into one Hb
  * pill with N gap-g4 <p> (looked "glued" when user sent digits separately).

@@ -1,5 +1,5 @@
 /**
- * Official hYt Keep awake control (index-BELzQL5P).
+ * Official hYt Keep awake control (c21f11e6d-CxD82rYo.js).
  * mYt size md: font-base + icon 20 + default switch size.
  * Prefs: TW=claude.settings.AppPreferences keepAwakeEnabled via desktopBridge.Preferences.
  * Hover (non-controlOnly): pge/Xp side bottom — pkPdf3LvZO.
@@ -34,7 +34,7 @@ const sizeChrome = {
 };
 
 /**
- * Official hYt (index-BELzQL5P):
+ * Official hYt (c21f11e6d-CxD82rYo.js):
  * - controlOnly: only the switch (Desktop General c71860c77 uses size=md controlOnly)
  * - otherwise: icon + "Keep awake" label + switch in bottom tooltip
  */
@@ -98,7 +98,7 @@ export function KeepAwakeControl({
    */
   if (controlOnly) {
     return (
-      <span data-official-source="index-BELzQL5P.js:hYt/lge→iP">
+      <span data-official-source="c21f11e6d-CxD82rYo.js:hYt/lge→iP">
         <CdsSettingsSwitch
           aria-label={ariaLabelledby ? undefined : keepAwakeText.label}
           aria-labelledby={ariaLabelledby}
@@ -128,7 +128,7 @@ export function KeepAwakeControl({
     <OfficialTooltip side="bottom" tooltipContent={keepAwakeText.tooltip}>
       <span
         className={fullWidth ? "block w-full" : undefined}
-        data-official-source="index-BELzQL5P.js:hYt"
+        data-official-source="c21f11e6d-CxD82rYo.js:hYt"
       >
         <span
           className={[

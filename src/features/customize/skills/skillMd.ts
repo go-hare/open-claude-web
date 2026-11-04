@@ -155,7 +155,14 @@ async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-async function extractSkillMdFromZip(buf: Uint8Array): Promise<string | null> {
+export type SkillArchiveFile = {
+  content: string;
+  path: string;
+};
+
+async function extractZipEntries(buf: Uint8Array): Promise<SkillArchiveFile[]> {
+  const decoder = new TextDecoder();
+  const files: SkillArchiveFile[] = [];
   let offset = 0;
   while (offset + 30 <= buf.length) {
     if (buf[offset] !== 0x50 || buf[offset + 1] !== 0x4b) break;
@@ -168,32 +175,48 @@ async function extractSkillMdFromZip(buf: Uint8Array): Promise<string | null> {
     const nameLen = readU16(buf, offset + 26);
     const extraLen = readU16(buf, offset + 28);
     const nameStart = offset + 30;
-    const name = new TextDecoder().decode(buf.subarray(nameStart, nameStart + nameLen));
+    const name = decoder.decode(buf.subarray(nameStart, nameStart + nameLen)).replace(/\\/g, "/");
     const dataStart = nameStart + nameLen + extraLen;
     const data = buf.subarray(dataStart, dataStart + compSize);
-    const isSkillMd = name === "SKILL.md" || name.endsWith("/SKILL.md");
-    if (isSkillMd) {
-      if (method === 0) return new TextDecoder().decode(data);
-      if (method === 8) return new TextDecoder().decode(await inflateRaw(data));
-      return null;
-    }
     offset = dataStart + compSize;
+    if (!name || name.endsWith("/")) continue;
+    let bytes: Uint8Array | null = null;
+    if (method === 0) bytes = data;
+    else if (method === 8) bytes = await inflateRaw(data);
+    if (!bytes) continue;
+    files.push({ path: name.replace(/^\.\//, ""), content: decoder.decode(bytes) });
   }
-  return null;
+  return files;
 }
 
-export async function parseSkillUploadFile(file: File): Promise<ParsedSkillMd | { error: string }> {
+/** Official overlay Jn/qn (c5e558aae): unzip then preview files before Add to library. */
+export async function extractSkillArchiveFiles(file: File): Promise<SkillArchiveFile[] | { error: string }> {
   if (!isSkillUploadName(file.name)) {
     return { error: "Skill files must have a .skill, .zip, or .md file extension." };
   }
   const lower = file.name.toLowerCase();
   if (lower.endsWith(".md")) {
     const text = await file.text();
-    const fallback = file.name.replace(/\.md$/i, "");
-    return parseSkillMarkdown(text, fallback);
+    const parsed = parseSkillMarkdown(text, file.name.replace(/\.md$/i, ""));
+    if ("error" in parsed) return parsed;
+    return [{ path: "SKILL.md", content: text }];
   }
-  const buf = new Uint8Array(await file.arrayBuffer());
-  const md = await extractSkillMdFromZip(buf);
+  const files = await extractZipEntries(new Uint8Array(await file.arrayBuffer()));
+  if (!files.some((entry) => entry.path === "SKILL.md" || entry.path.endsWith("/SKILL.md"))) {
+    return { error: ".zip or .skill file must include a SKILL.md file" };
+  }
+  return files;
+}
+
+export function skillMdFromArchive(files: SkillArchiveFile[]): string | null {
+  const skillMd = files.find((entry) => entry.path === "SKILL.md") ?? files.find((entry) => entry.path.endsWith("/SKILL.md"));
+  return skillMd?.content ?? null;
+}
+
+export async function parseSkillUploadFile(file: File): Promise<ParsedSkillMd | { error: string }> {
+  const files = await extractSkillArchiveFiles(file);
+  if ("error" in files) return files;
+  const md = skillMdFromArchive(files);
   if (!md) return { error: ".zip or .skill file must include a SKILL.md file" };
-  return parseSkillMarkdown(md, file.name.replace(/\.(zip|skill)$/i, ""));
+  return parseSkillMarkdown(md, file.name.replace(/\.(zip|skill|md)$/i, ""));
 }

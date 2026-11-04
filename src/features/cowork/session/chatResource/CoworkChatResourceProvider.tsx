@@ -1,6 +1,6 @@
 /**
  * Official wle/Cle + mle/hle providers for local_session cFt drawer
- * (index-BELzQL5P.pretty.js ~51808–51949).
+ * (c21f11e6d-CxD82rYo.js ~51808–51949).
  */
 
 import {
@@ -262,7 +262,7 @@ export function useCoworkOpenSkill() {
 }
 
 /**
- * Official conversation path residual (index-BELzQL5P):
+ * Official conversation path residual (c21f11e6d-CxD82rYo):
  * `onOpenArtifact: showArtifacts ? gt : void 0` where
  * `showArtifacts = Boolean(ve?.preview_feature_uses_artifacts || ue)`.
  * Opens cFt drawer with SELECT_ARTIFACT (chat g6e) / SELECT_COWORK_ARTIFACT (host disk).

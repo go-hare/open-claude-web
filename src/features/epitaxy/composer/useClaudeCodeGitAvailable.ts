@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 /**
- * Official index-BELzQL5P `s7t` residual (exported as `qU` / c119 `Xr`):
+ * Official cd5a31703 `s7t` residual (exported as `qU` / c119 `Xr`):
  * cT = globalThis["claude.web"]?.ClaudeCode
  * checkGitAvailable().then(s => s.available) → boolean | null while unknown.
  * null = probe missing or pending (do not show bi gate).

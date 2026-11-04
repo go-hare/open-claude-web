@@ -1,5 +1,5 @@
 /**
- * Official index-BELzQL5P mergeMessage vs Ive (list store) event split.
+ * Official cd5a31703 mergeMessage vs Ive (list store) event split.
  *
  * mergeMessage handles: transcript / connection / reconnected / cleared / done / error.
  * close / stopped are Ive list-store metadata only — they must NOT dump queuedMessages

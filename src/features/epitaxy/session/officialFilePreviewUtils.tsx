@@ -36,6 +36,7 @@ export async function readPreviewText(
   bridge: LocalSessionsBridge,
   sessionId: string,
   filePath: string,
+  landingCwd?: string | null,
 ): Promise<{ absPath?: string; hash?: string; text?: string; unreadable?: boolean }> {
   const withHash = async (parsed: { absPath?: string; hash?: string; text: string | null }) => {
     if (parsed.text === null) return null;
@@ -43,16 +44,39 @@ export async function readPreviewText(
     return { text: parsed.text, hash, absPath: parsed.absPath };
   };
 
-  try {
-    const sessionValue = await bridge.readSessionFile?.(sessionId, filePath);
-    const sessionParsed = previewPayloadFromBridgeValue(sessionValue);
-    const sessionOk = await withHash(sessionParsed);
-    if (sessionOk) return sessionOk;
-    if (isUnreadableFilePayload(sessionValue)) return { unreadable: true };
-  } catch (error) {
-    const normalized = previewReadError(error, filePath);
-    if (normalized.unreadable) return { unreadable: true };
-    throw new Error(normalized.message);
+  // Official vN: session → readSessionFile; else landingCwd → readFileAtCwd(cwd, path).
+  if (sessionId) {
+    try {
+      const sessionValue = await bridge.readSessionFile?.(sessionId, filePath);
+      const sessionParsed = previewPayloadFromBridgeValue(sessionValue);
+      const sessionOk = await withHash(sessionParsed);
+      if (sessionOk) return sessionOk;
+      if (isUnreadableFilePayload(sessionValue)) return { unreadable: true };
+    } catch (error) {
+      const normalized = previewReadError(error, filePath);
+      if (normalized.unreadable) return { unreadable: true };
+      throw new Error(normalized.message);
+    }
+  }
+
+  if (!sessionId && landingCwd && bridge.readFileAtCwd) {
+    try {
+      const cwdResult = await bridge.readFileAtCwd(landingCwd, filePath);
+      const cwdParsed = previewPayloadFromBridgeValue(cwdResult);
+      const cwdOk = await withHash(cwdParsed);
+      if (cwdOk) return cwdOk;
+      if (isUnreadableFilePayload(cwdResult)) return { unreadable: true };
+      const raw = asRecord(cwdResult);
+      if (raw.ok === false) {
+        const err = stringValue(raw.error) ?? stringValue(raw.stderr) ?? "Failed to read file";
+        if (isSoftUnreadableMessage(err)) return { unreadable: true };
+        throw new Error(err);
+      }
+    } catch (error) {
+      const normalized = previewReadError(error, filePath);
+      if (normalized.unreadable) return { unreadable: true };
+      throw new Error(normalized.message);
+    }
   }
 
   try {
@@ -67,22 +91,24 @@ export async function readPreviewText(
     throw new Error(normalized.message);
   }
 
-  try {
-    const cwdResult = await bridge.readFileAtCwd?.(sessionId, filePath);
-    const cwdParsed = previewPayloadFromBridgeValue(cwdResult);
-    const cwdOk = await withHash(cwdParsed);
-    if (cwdOk) return cwdOk;
-    if (isUnreadableFilePayload(cwdResult)) return { unreadable: true };
-    const raw = asRecord(cwdResult);
-    if (raw.ok === false) {
-      const err = stringValue(raw.error) ?? stringValue(raw.stderr) ?? "Failed to read file";
-      if (isSoftUnreadableMessage(err)) return { unreadable: true };
-      throw new Error(err);
+  if (sessionId) {
+    try {
+      const cwdResult = await bridge.readFileAtCwd?.(sessionId, filePath);
+      const cwdParsed = previewPayloadFromBridgeValue(cwdResult);
+      const cwdOk = await withHash(cwdParsed);
+      if (cwdOk) return cwdOk;
+      if (isUnreadableFilePayload(cwdResult)) return { unreadable: true };
+      const raw = asRecord(cwdResult);
+      if (raw.ok === false) {
+        const err = stringValue(raw.error) ?? stringValue(raw.stderr) ?? "Failed to read file";
+        if (isSoftUnreadableMessage(err)) return { unreadable: true };
+        throw new Error(err);
+      }
+    } catch (error) {
+      const normalized = previewReadError(error, filePath);
+      if (normalized.unreadable) return { unreadable: true };
+      throw new Error(normalized.message);
     }
-  } catch (error) {
-    const normalized = previewReadError(error, filePath);
-    if (normalized.unreadable) return { unreadable: true };
-    throw new Error(normalized.message);
   }
 
   return { unreadable: true };
@@ -168,13 +194,16 @@ export function isMarkdownPreviewPath(filePath: string) {
   return /\.(?:md|mdx|markdown)$/i.test(filePath);
 }
 
-/** Official platform label for reveal-in-folder actions (Show in Finder / Explorer / file manager). */
-export function officialShowInFolderLabel() {
-  if (typeof navigator === "undefined") return "Show in file manager";
-  const ua = navigator.userAgent;
-  if (/\bMac OS X\b|\bMacintosh\b/.test(ua)) return "Show in Finder";
-  if (/\bWindows\b/.test(ua)) return "Show in Explorer";
-  return "Show in file manager";
+/** Official platform label — mac `LVY6c4L1SF`, Windows `ySAk9qhogV`, else `47h7Fdurec`. */
+export function officialShowInFolderLabel(text?: {
+  showInExplorer: string;
+  showInFinder: string;
+  showInFolder: string;
+}) {
+  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  if (/\bMac OS X\b|\bMacintosh\b/.test(ua)) return text?.showInFinder ?? "Show in Finder";
+  if (/\bWindows\b/.test(ua)) return text?.showInExplorer ?? "Show in Explorer";
+  return text?.showInFolder ?? "Show in folder";
 }
 
 function stringValue(value: unknown): string | undefined {

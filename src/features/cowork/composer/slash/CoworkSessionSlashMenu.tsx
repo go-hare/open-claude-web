@@ -33,7 +33,7 @@ function useCoworkSupportedCommands(bridge: CoworkSlashBridge, sessionId: string
       return;
     }
     setLoading(true);
-    // Official aRe (index-BELzQL5P ~84153): hT.getSupportedCommands() then filter scope=cowork.
+    // Official aRe (c21f11e6d-CxD82rYo.js ~84153): hT.getSupportedCommands() then filter scope=cowork.
     // Desktop getCoworkSupportedCommands(sessionId) is session-scoped skills; virtual cwd is unused.
     void bridge.getSupportedCommands(sessionId ? { sessionId } : undefined).then((items) => {
       if (alive) setCommands(Array.isArray(items) ? items : []);

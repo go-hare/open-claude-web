@@ -17,6 +17,7 @@ function baseState(partial: Partial<FrameState> = {}): FrameState {
     groupByByMode: { code: "none", cowork: "none" },
     mode: "code",
     navPinnedIds: null,
+    navHasCodeRoutinesByOrg: {},
     pinnedOrder: [],
     showDragPinHint: false,
     sidebarCollapsed: false,

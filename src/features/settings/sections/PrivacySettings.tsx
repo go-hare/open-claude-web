@@ -8,7 +8,7 @@ import {
 } from "../settingsMessages";
 
 /**
- * Official Privacy personal page (cc989143e cn/rn / _Component16 ln):
+ * Official Privacy personal page (cf4f70727-a7CVSvFQ cn/rn / _Component16 ln):
  * - Gate dn() = !raven (nav already); body is gateway provider card for custom3p.
  * - Copy via official message ids (tgkg69DKCl / ULnTQCHxiV / MYYAX2WEkL + list ids).
  * Anthropic-hosted privacy toggles need GrowthBook arms — do not invent them here.
@@ -32,33 +32,33 @@ export function PrivacySettings() {
           <div className="border-t border-alpha-1 pt-sm">
             <div className="flex flex-col gap-md pt-xs">
               <div>
-                <p className="text-body text-primary">{text.whatAnthropicDoesNotSee}</p>
+                <p className="text-body text-secondary">{text.whatAnthropicDoesNotSee}</p>
                 <ul className="list-disc pl-6 pt-1 space-y-1">
                   <li>
-                    <p className="text-body text-primary">{text.promptsResponsesContent}</p>
+                    <p className="text-body text-secondary">{text.promptsResponsesContent}</p>
                   </li>
                   <li>
-                    <p className="text-body text-primary">{text.filesCodeWorkspace}</p>
+                    <p className="text-body text-secondary">{text.filesCodeWorkspace}</p>
                   </li>
                   <li>
-                    <p className="text-body text-primary">{text.identityAccountDetails}</p>
+                    <p className="text-body text-secondary">{text.identityAccountDetails}</p>
                   </li>
                 </ul>
               </div>
               <div>
-                <p className="text-body text-primary">{text.whatAnthropicMayReceive}</p>
+                <p className="text-body text-secondary">{text.whatAnthropicMayReceive}</p>
                 <ul className="list-disc pl-6 pt-1 space-y-1">
                   <li>
-                    <p className="text-body text-primary">{text.crashReports}</p>
+                    <p className="text-body text-secondary">{text.crashReports}</p>
                   </li>
                   <li>
-                    <p className="text-body text-primary">{text.anonymousUsageMetrics}</p>
+                    <p className="text-body text-secondary">{text.anonymousUsageMetrics}</p>
                   </li>
                   <li>
-                    <p className="text-body text-primary">{text.updateCheckRequests}</p>
+                    <p className="text-body text-secondary">{text.updateCheckRequests}</p>
                   </li>
                   <li>
-                    <p className="text-body text-primary">{text.diagnosticReport}</p>
+                    <p className="text-body text-secondary">{text.diagnosticReport}</p>
                   </li>
                 </ul>
               </div>

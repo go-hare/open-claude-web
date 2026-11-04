@@ -1,5 +1,5 @@
 /**
- * Official O5e ToolUse shell + residual tct dispatch subset (index-BELzQL5P).
+ * Official O5e ToolUse shell + residual tct dispatch subset (c21f11e6d-CxD82rYo.js).
  *
  * O5e residual (portable):
  * 1. permission null for pending non-AskUserQuestion tools
@@ -30,9 +30,18 @@ import { CoworkTaskToolCell } from "./CoworkTaskToolCell";
 import { CoworkSaveSkillResultCard, CoworkScheduledTaskResultCard } from "./CoworkStandaloneResultCards";
 import { CoworkToolCodeBlock } from "./CoworkToolPresentation";
 import { CoworkWebFetchToolCell, CoworkWebSearchToolCell } from "./CoworkWebToolCells";
-import { basename, coworkCreateFileBltTarget, coworkFileAction, coworkFileDisplayName, coworkFileStatusText, isMemoryFileWithoutMarkdown, isMemoryPath } from "./coworkFileToolModel";
+import { basename, coworkCreateFileBltTarget, coworkFileAction, coworkFileDisplayName, coworkFileStatusText, isMemoryFileWithoutMarkdown, isMemoryPath, type CoworkClaudeMdLabels } from "./coworkFileToolModel";
 import { coworkToolActivityLabel } from "./coworkToolActivityLabel";
 import { useCoworkTranscriptActions } from "./CoworkTranscriptActions";
+import { useCoworkActivityChromeText } from "../activity/coworkActivityChromeMessages";
+
+function useCoworkClaudeMdLabels(): CoworkClaudeMdLabels {
+  const chromeText = useCoworkActivityChromeText();
+  return {
+    folderInstructions: chromeText.folderInstructions,
+    globalInstructions: chromeText.globalInstructions,
+  };
+}
 
 export type CoworkOfficialToolRendererProps = {
   block: CoworkContentBlock;
@@ -59,7 +68,7 @@ export const CoworkOfficialToolRenderer = memo(function CoworkOfficialToolRender
   // Official: AskUserQuestion stays visible while pending (permission null excludes it).
   if (props.block.name === "AskUserQuestion") {
     return (
-      <div data-official-source="index-BELzQL5P.js:O5e+AskUserQuestion">
+      <div data-official-source="c21f11e6d-CxD82rYo.js:O5e+AskUserQuestion">
         <CoworkAskUserQuestionWidget input={asRecord(props.block.input)} result={props.toolResult} />
       </div>
     );
@@ -83,7 +92,7 @@ export const CoworkOfficialToolRenderer = memo(function CoworkOfficialToolRender
 
   const render = renderToolUseCell ?? renderCoworkToolUseCell;
   return (
-    <div data-official-source="index-BELzQL5P.js:O5e" className="contents">
+    <div data-official-source="c21f11e6d-CxD82rYo.js:O5e" className="contents">
       {render(cellProps)}
     </div>
   );
@@ -115,6 +124,7 @@ export function renderCoworkToolUseCell(props: CoworkRenderToolUseCellProps): Re
 }
 
 function CoworkFileTool(props: CoworkRenderToolUseCellProps) {
+  const labels = useCoworkClaudeMdLabels();
   const input = asRecord(props.block.input);
   const path = stringValue(input.file_path) ?? stringValue(input.path) ?? "";
   const action = coworkFileAction(props.normalizedName, path);
@@ -123,6 +133,7 @@ function CoworkFileTool(props: CoworkRenderToolUseCellProps) {
   const fileText = stringValue(input.content) ?? stringValue(input.file_text) ?? "";
   const isError = props.toolResult?.is_error === true;
   const actions = useCoworkTranscriptActions();
+  const displayName = coworkFileDisplayName(path, labels);
   // Official Wlt A: !is_error && path && message.uuid (P5e share gate N/A for local).
   // Klt/present and read still open on success; memory non-md has no click.
   const handleClick = action !== "edit" && isMemoryFileWithoutMarkdown(path)
@@ -135,7 +146,7 @@ function CoworkFileTool(props: CoworkRenderToolUseCellProps) {
         toolType: props.normalizedName === "write" || action === "create" ? "create_file" : props.normalizedName,
       })
       : undefined;
-  const displayText = coworkFileStatusText({ action, description, isError, normalizedName: props.normalizedName, path, streaming: props.isStreaming });
+  const displayText = coworkFileStatusText({ action, description, isError, labels, normalizedName: props.normalizedName, path, streaming: props.isStreaming });
   if (action === "edit") return <CoworkFileEdit {...props} description={description} handleClick={handleClick} input={input} path={path} />;
   return (
     <CoworkFileToolCell
@@ -144,8 +155,8 @@ function CoworkFileTool(props: CoworkRenderToolUseCellProps) {
       description={description}
       displayFileName={
         action === "create"
-          ? (coworkFileDisplayName(path) || coworkCreateFileBltTarget(path) || undefined)
-          : (coworkFileDisplayName(path) || basename(path) || undefined)
+          ? (displayName || coworkCreateFileBltTarget(path, labels) || undefined)
+          : (displayName || basename(path) || undefined)
       }
       displayText={displayText}
       fileText={fileText}
@@ -159,10 +170,11 @@ function CoworkFileTool(props: CoworkRenderToolUseCellProps) {
 }
 
 function CoworkFileEdit(props: CoworkRenderToolUseCellProps & { description?: string; handleClick?: () => void; input: Record<string, unknown>; path: string }) {
+  const labels = useCoworkClaudeMdLabels();
   const isError = props.toolResult?.is_error === true;
   const complete = Boolean(props.toolResult);
-  const displayName = coworkFileDisplayName(props.path);
-  const text = coworkFileStatusText({ action: "edit", description: props.description, isError, normalizedName: "edit", path: props.path, streaming: props.isStreaming });
+  const displayName = coworkFileDisplayName(props.path, labels);
+  const text = coworkFileStatusText({ action: "edit", description: props.description, isError, labels, normalizedName: "edit", path: props.path, streaming: props.isStreaming });
   return (
     <CoworkFileEditToolRow
       {...groupProps(props)}
@@ -240,7 +252,7 @@ function renderSubagentBlock(block: CoworkContentBlock, blocks: CoworkContentBlo
 }
 
 function CoworkPresentFilesTool(props: CoworkRenderToolUseCellProps) {
-  // Official Klt (index-BELzQL5P.pretty.js): path from toolResult.content local_resource.file_path → SELECT_FILE.
+  // Official Klt (c21f11e6d-CxD82rYo.js): path from toolResult.content local_resource.file_path → SELECT_FILE.
   const actions = useCoworkTranscriptActions();
   const path = presentFilesPath(props.toolResult);
   const complete = Boolean(props.toolResult) || !props.isStreaming;

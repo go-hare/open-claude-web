@@ -92,7 +92,7 @@ export const OfficialComputerUseWkApprovalCard = memo(function OfficialComputerU
   }, [busy, isPanelActive, onAllow, onDeny]);
 
   return (
-    <div className="epitaxy-approval-card" data-official-source="c11959232:wk">
+    <div className="epitaxy-approval-card" data-official-source="cd5a31703-B4nKQMBN.js:wk">
       {Array.from({ length: ghostCount }, (_, index) => {
         const layer = index + 1;
         return (
@@ -193,7 +193,7 @@ export const OfficialComputerUseAgeApproval = memo(function OfficialComputerUseA
 
 /**
  * Official Vge / ho → $ge for computer:request_teach_access.
- * Residual (index-BELzQL5P): tccState → Fge else Wge.
+ * Residual (cd5a31703): tccState → Fge else Wge.
  */
 export const OfficialComputerUseTeachApproval = memo(function OfficialComputerUseTeachApproval({
   busy,

@@ -18,6 +18,8 @@ export type CoworkDropdownItem = {
   submenuFooterItems?: CoworkDropdownItem[];
   subtitle?: ReactNode;
   suffix?: ReactNode;
+  /** Official c752 `Ci` plus-menu test ids (`add-menu-upload-file` …). */
+  testId?: string;
   trailing?: ReactNode;
   type?: "button" | "checkbox" | "loading" | "section-header" | "separator" | "submenu";
 };

@@ -3,7 +3,6 @@
  * Extracted from EpitaxySessionTile — behavior unchanged.
  */
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { motion } from "motion/react";
 import type { LocalSessionsBridge, SessionSummary } from "../../../adapters/desktopBridge";
 import { Icon } from "../../../shell/icons";
 import { useErrorsOptional } from "../../settings/errorsToast";
@@ -15,11 +14,15 @@ import {
 import { OfficialSpinner } from "./OfficialWorkingStatus";
 import {
   officialTaskKind,
+  officialTaskRowCanExpand,
   parseOfficialTasks,
   resolveOfficialTaskUsageParts,
   type OfficialBackgroundTask,
   type OfficialTaskStatus,
 } from "./officialTasksAndPlan";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { SIDE_PANE_EMPTY_MESSAGES } from "../officialCodeChromeMessages";
+import { useOfficialTaskRowExpanded } from "./officialToolGroupExpandedStore";
 
 /** Host openSubagent callback lives on EpitaxyTranscriptActionContext in the tile. */
 export type OfficialTasksPaneActions = {
@@ -31,7 +34,6 @@ type EpitaxySessionRef = {
   type: "local" | "remote" | "bridge";
 };
 
-const officialTaskLayoutTransition = { type: "spring", stiffness: 500, damping: 40 } as const;
 const officialTaskSeparator = " · ";
 
 export function OfficialTasksPane({
@@ -45,6 +47,7 @@ export function OfficialTasksPane({
   session: SessionSummary | null;
   sessionRef: EpitaxySessionRef;
 }) {
+  const emptyText = useI18nText(SIDE_PANE_EMPTY_MESSAGES);
   // Official Jp(sessionId) / zR: oe(sessionId) full hydrated transcript (c11959232).
   const bucket = useOfficialCodeSessionBucket(sessionRef.id);
   const errors = useErrorsOptional();
@@ -150,8 +153,8 @@ export function OfficialTasksPane({
           <OfficialTasksEmpty />
         ) : (
           <>
-            <OfficialTaskSection actions={actions} heading="Running" nowMs={nowMs} onStop={bridge.stopTask ? stopTask : undefined} tasks={running} />
-            <OfficialTaskSection actions={actions} heading="Completed" nowMs={nowMs} tasks={finished} />
+            <OfficialTaskSection actions={actions} heading={emptyText.running} nowMs={nowMs} onStop={bridge.stopTask ? stopTask : undefined} sessionId={sessionRef.id} tasks={running} />
+            <OfficialTaskSection actions={actions} heading={emptyText.completed} nowMs={nowMs} sessionId={sessionRef.id} tasks={finished} />
           </>
         )}
       </div>
@@ -160,10 +163,11 @@ export function OfficialTasksPane({
 }
 
 function OfficialTasksEmpty() {
+  const emptyText = useI18nText(SIDE_PANE_EMPTY_MESSAGES);
   return (
     <div className="flex flex-col items-center justify-center gap-g4 py-[64px] text-body text-t5">
       <Icon name="Blocks" size="lg" />
-      <span>No tasks.</span>
+      <span>{emptyText.noTasks}</span>
     </div>
   );
 }
@@ -173,24 +177,26 @@ const OfficialTaskSection = memo(function OfficialTaskSection({
   heading,
   nowMs,
   onStop,
+  sessionId,
   tasks,
 }: {
   actions?: OfficialTasksPaneActions | null;
   heading: string;
   nowMs: number;
   onStop?: (taskId: string) => void;
+  sessionId: string;
   tasks: OfficialBackgroundTask[];
 }) {
   if (tasks.length === 0) return null;
   return (
-    <motion.section className="flex flex-col gap-g3" layout="position" transition={officialTaskLayoutTransition}>
+    <section className="flex flex-col gap-g3">
       <h3 className="text-footnote text-t6">{heading}</h3>
       {tasks.map((task) => (
-        <motion.div key={task.taskId} layout="position" transition={officialTaskLayoutTransition}>
-          <OfficialTaskCard actions={actions} nowMs={nowMs} onStop={onStop} task={task} />
-        </motion.div>
+        <div key={task.taskId}>
+          <OfficialTaskCard actions={actions} nowMs={nowMs} onStop={onStop} sessionId={sessionId} task={task} />
+        </div>
       ))}
-    </motion.section>
+    </section>
   );
 });
 
@@ -198,24 +204,24 @@ const OfficialTaskCard = memo(function OfficialTaskCard({
   actions,
   nowMs,
   onStop,
+  sessionId,
   task,
 }: {
   actions?: OfficialTasksPaneActions | null;
   nowMs: number;
   onStop?: (taskId: string) => void;
+  sessionId: string;
   task: OfficialBackgroundTask;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // Official cccc2cf0a QC `Vu` / `setTaskRowsOpen` — Map keyed by taskId, not per-card useState.
+  const [expanded, setExpanded] = useOfficialTaskRowExpanded(sessionId, task.taskId);
   const kind = officialTaskKind(task.taskType);
   // Official zR: usage.duration_ms or bookend startedAt/completedAt (running elapsed).
   const usageParts = resolveOfficialTaskUsageParts(task, nowMs);
   const usage = usageParts.length > 0 ? usageParts.join(officialTaskSeparator) : null;
   const canOpenSubagent = kind.kind === "agent" && Boolean(task.toolUseId && actions?.openSubagent);
-  // Official AR: expand when not subagent/remote open — summary / workflowProgress.
-  // Also allow expand for result-only residual (TaskOutput) when toolUseId missing.
-  const canExpand =
-    !canOpenSubagent
-    && Boolean(task.summary || task.workflowProgress?.length || task.result);
+  // Official RC `O=!T&&(E||D)` (cccc2cf0a): bash/monitor always expand; else summary≠description.
+  const canExpand = !canOpenSubagent && officialTaskRowCanExpand(task);
   const canActivate = canOpenSubagent || canExpand;
   const canStop = task.status === "running" && Boolean(onStop);
   const activate = () => {
@@ -223,7 +229,7 @@ const OfficialTaskCard = memo(function OfficialTaskCard({
       actions.openSubagent({ description: task.description, toolUseId: task.toolUseId });
       return;
     }
-    if (canExpand) setExpanded((value) => !value);
+    if (canExpand) setExpanded(!expanded);
   };
   return (
     <div className={`group flex flex-col rounded-r6 bg-t1 ${canActivate ? "hover:bg-t2 focus-within:bg-t2" : ""}`}>
@@ -264,17 +270,58 @@ const OfficialTaskCard = memo(function OfficialTaskCard({
         ) : null}
       </div>
       {expanded && canExpand ? (
-        <div className="flex flex-col gap-g4 pl-[calc(var(--p6)+20px+var(--g6))] pr-p8 pb-[16px] select-text">
-          {task.summary ? <div className="text-footnote text-t7 whitespace-pre-wrap break-words">{task.summary}</div> : null}
-          {!task.summary && task.result ? (
-            <div className="text-footnote text-t7 whitespace-pre-wrap break-words">{task.result}</div>
-          ) : null}
-          {task.workflowProgress?.length ? <OfficialWorkflowProgress progress={task.workflowProgress} /> : null}
-        </div>
+        <OfficialTaskExpandedBody task={task} />
       ) : null}
     </div>
   );
 });
+
+function OfficialTaskExpandedBody({ task }: { task: OfficialBackgroundTask }) {
+  const isBash = task.taskType === "local_bash" || task.taskType === "monitor_mcp";
+  const commandLabel = `Command for ${task.description}`;
+  const outputLabel = `Output for ${task.description}`;
+  const output = task.result;
+  const summary = task.summary && task.summary !== task.description ? task.summary : undefined;
+  const settled = task.status !== "running";
+  return (
+    <div className="flex flex-col gap-g4 pl-[calc(var(--p6)+20px+var(--g6))] pr-p8 pb-[16px] select-text">
+      {isBash && task.prompt ? (
+        <pre
+          tabIndex={0}
+          role="region"
+          aria-label={commandLabel}
+          className="rounded-lg text-code max-h-[200px] overflow-y-auto focus-visible:outline-hidden focus-visible:shadow-focus bg-alpha-2 px-md py-1.25 text-primary whitespace-pre-wrap break-all"
+          data-official-source="cccc2cf0a-DHtZKTKW.js:_C"
+        >
+          {task.prompt}
+        </pre>
+      ) : null}
+      {output ? (
+        <pre
+          tabIndex={0}
+          role="region"
+          aria-label={outputLabel}
+          className="rounded-lg text-code max-h-[200px] overflow-y-auto focus-visible:outline-hidden focus-visible:shadow-focus bg-alpha-2 px-md py-1.25 text-primary whitespace-pre-wrap break-all"
+        >
+          {output}
+        </pre>
+      ) : null}
+      {!output && summary ? (
+        <div className="text-footnote text-t7 whitespace-pre-wrap break-words">{summary}</div>
+      ) : null}
+      {!output && !summary && isBash && task.outputFile ? (
+        <div className="text-footnote text-muted">Output unavailable</div>
+      ) : null}
+      {!output && !summary && isBash && !task.outputFile && task.status === "running" ? (
+        <div className="text-footnote text-muted">No output yet</div>
+      ) : null}
+      {!output && !summary && isBash && !task.outputFile && settled ? (
+        <div className="text-footnote text-muted">No output captured.</div>
+      ) : null}
+      {task.workflowProgress?.length ? <OfficialWorkflowProgress progress={task.workflowProgress} /> : null}
+    </div>
+  );
+}
 
 function OfficialTaskStatusIcon({ status }: { status: OfficialTaskStatus }) {
   if (status === "completed") return <Icon name="CircleCheck" size="md" className="text-t6" />;

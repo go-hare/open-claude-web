@@ -7,6 +7,8 @@ import {
   OfficialModal,
   officialComposerPillClass,
 } from "../OfficialEpitaxyComponents";
+import { COMPOSER_ORIGIN_MESSAGES } from "../officialCodeChromeMessages";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
 import {
   formatLocalEnvironmentEnv,
   LOCAL_ENV_PLACEHOLDER,
@@ -39,6 +41,7 @@ export function LocalEnvironmentPill({
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sshConfigs, setSshConfigs] = useState<WorkspaceSshConfig[]>([]);
+  const origin = useI18nText(COMPOSER_ORIGIN_MESSAGES);
 
   useEffect(() => {
     let alive = true;
@@ -63,13 +66,14 @@ export function LocalEnvironmentPill({
   const isSsh = workspace?.mode === "ssh" && Boolean(workspace.sshConfig);
   const envLabel = isSsh
     ? (workspace.sshConfig?.name || workspace.sshConfig?.host || workspace.sshConfig?.sshHost || "SSH")
-    : "本地";
+    : origin.local;
+  // Official tC: local SystemComputerLaptopMacbook, ssh ConsoleTerminal. Do not invent Cursor/bridge/pool.
   const envIcon = isSsh ? "ConsoleTerminal" : "SystemComputerLaptopMacbook";
 
   return (
     <>
       <Menu.Root open={menuOpen} onOpenChange={setMenuOpen}>
-        <Menu.Trigger aria-label="Where Claude runs" className={officialComposerPillClass} disabled={disabled}>
+        <Menu.Trigger aria-label={origin.whereClaudeRuns} className={officialComposerPillClass} data-testid="epitaxy-env-pill" disabled={disabled}>
           <Icon name={envIcon} size="s" />
           <span className="truncate max-w-[200px]">{envLabel}</span>
         </Menu.Trigger>
@@ -80,15 +84,17 @@ export function LocalEnvironmentPill({
               <div className={menuScrollClass}>
                 <LocalEnvironmentMenuItem
                   checked={!isSsh}
+                  label={origin.local}
                   onOpenSettings={() => openLocalEnvironmentSettings(setMenuOpen, setSettingsOpen)}
                   onSelect={() => {
                     setMenuOpen(false);
                     onSelectLocal?.();
                   }}
+                  settingsHint={origin.envSettingsRightArrow}
                 />
                 {sshConfigs.length > 0 ? (
                   <>
-                    <div className={menuHeaderClass} role="presentation">SSH</div>
+                    <div className={menuHeaderClass} role="presentation">{origin.ssh}</div>
                     {sshConfigs.map((config) => {
                       const key = config.id || config.host || config.sshHost || config.name || "";
                       const label = config.name || config.host || config.sshHost || "SSH";
@@ -165,12 +171,16 @@ function normalizeWorkspaceSshConfig(value: unknown): WorkspaceSshConfig | null 
 
 function LocalEnvironmentMenuItem({
   checked = true,
+  label,
   onOpenSettings,
   onSelect,
+  settingsHint,
 }: {
   checked?: boolean;
+  label: string;
   onOpenSettings: () => void;
   onSelect?: () => void;
+  settingsHint: string;
 }) {
   return (
     <Menu.Item
@@ -181,7 +191,7 @@ function LocalEnvironmentMenuItem({
       role="menuitemradio"
     >
       <Icon name="SystemComputerLaptopMacbook" size="s" />
-      <span className="flex-1 min-w-0 truncate pr-[16px]">本地<span className="sr-only">，环境设置，右箭头</span></span>
+      <span className="flex-1 min-w-0 truncate pr-[16px]">{label}<span className="sr-only">{settingsHint}</span></span>
       <span className="flex items-center justify-center size-[16px] shrink-0 ml-[6px] text-[var(--accent)]" style={menuIconStyle}>
         {checked ? <Icon name="CheckSelection" size="sm" /> : null}
       </span>

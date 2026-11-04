@@ -32,7 +32,7 @@ const chevronRightPath = "M6.134 3.16a.5.5 0 0 1 .626-.088l.08.062 7 6.5a.5.5 0 
 const chevronRightSmallPath = "M7.128 5.165a.5.5 0 0 1 .625-.097l.082.06 5 4.5a.5.5 0 0 1 .07.666l-.07.078-5 4.5a.501.501 0 0 1-.67-.744L11.752 10 7.165 5.872l-.068-.075a.5.5 0 0 1 .03-.632";
 const chevronLeftSmallPath = "M12.247 5.068a.501.501 0 0 1 .655.729l-.067.075L8.248 10l4.587 4.128a.501.501 0 0 1-.67.744l-5-4.5-.07-.078a.5.5 0 0 1 .07-.666l5-4.5z";
 const arrowRightPath = "M11.147 4.646a.5.5 0 0 1 .707 0l5 5 .062.077a.5.5 0 0 1-.062.63l-5 5a.5.5 0 0 1-.707-.707l4.146-4.146H3.5a.5.5 0 0 1 0-1h11.793l-4.146-4.146a.5.5 0 0 1 0-.708";
-// Official index-BELzQL5P `ly` (scroll-to-bottom t$t child). Full arrow-down, 20×20 viewBox.
+// Official c21f11e6d-CxD82rYo.js `ly` (scroll-to-bottom t$t child). Full arrow-down, 20×20 viewBox.
 const arrowDownPath = "M10 3a.5.5 0 0 1 .5.5v11.793l4.147-4.146a.5.5 0 0 1 .707.707l-5 5a.5.5 0 0 1-.631.062l-.076-.062-5-5a.5.5 0 0 1 .707-.707L9.5 15.293V3.5A.5.5 0 0 1 10 3";
 const arrowUpPath = "M10 3a.5.5 0 0 1 .354.146l5 5a.5.5 0 0 1-.707.708L10.5 4.707V16.5a.5.5 0 0 1-1 0V4.707L5.354 8.854a.5.5 0 0 1-.708-.708l5-5 .077-.062A.5.5 0 0 1 10 3";
 const collapsePath = "M9.647 12.147a.5.5 0 0 1 .628-.065l.079.064 4 4a.5.5 0 1 1-.707.708L10 13.207l-3.646 3.647a.5.5 0 0 1-.707-.707zm4-9a.5.5 0 1 1 .707.707l-4 4-.079.064a.5.5 0 0 1-.628-.064l-4-4a.5.5 0 1 1 .707-.707L10 6.793z";
@@ -53,7 +53,7 @@ const terminalPaths: CoworkGlyphPath[] = [
 const searchPath = "M8.5 2a6.5 6.5 0 0 1 4.935 10.728l4.419 4.419.064.078a.5.5 0 0 1-.693.693l-.079-.064-4.419-4.42A6.5 6.5 0 1 1 8.5 2m0 1a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11";
 const todoPath = "M6 13.5a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1zm-2 3h2v-2H4zM16.5 15a.5.5 0 0 1 0 1h-7a.5.5 0 1 1 0-1zM6 8a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zm-2 3h2V9H4zm12.5-1.5a.5.5 0 0 1 0 1h-7a.5.5 0 1 1 0-1zM6.126 2.918a.5.5 0 0 1 .748.664l-2.218 2.5a.5.5 0 0 1-.744.004L2.88 4.947l-.06-.082a.5.5 0 0 1 .725-.658l.075.068.657.725zM16.5 4a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1z";
 const editPath = "M9.728 2.88a1.5 1.5 0 0 1 1.946-.847l2.792 1.1a1.5 1.5 0 0 1 .845 1.945l-3.92 9.953a1.5 1.5 0 0 1-.452.615l-.088.066-3.143 2.186a.75.75 0 0 1-1.135-.362l-.026-.095-.81-3.742a1.5 1.5 0 0 1 .071-.867zm-2.99 10.319a.5.5 0 0 0-.023.288l.73 3.376 2.835-1.971.058-.047a.5.5 0 0 0 .122-.18l2.637-6.698-3.721-1.466zm4.57-10.236a.5.5 0 0 0-.65.283L9.743 5.57l3.722 1.467.917-2.327a.5.5 0 0 0-.283-.648z";
-// Official index-BELzQL5P `Lv` (pin) / `Rv` (unpin) — desktop B4() path in hUt.
+// Official c21f11e6d-CxD82rYo.js `Lv` (pin) / `Rv` (unpin) — desktop B4() path in hUt.
 const pinPath = "M13 4.5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0-.5.5v3.528c0 .388-.09.77-.264 1.118L5.31 12h9.382l-1.428-2.854A2.5 2.5 0 0 1 13 8.028zm1 3.528c0 .233.054.462.158.67l1.428 2.855A1 1 0 0 1 14.69 13H10.5v3.5a.5.5 0 0 1-1 0V13H5.31a1 1 0 0 1-.895-1.447l1.427-2.855A1.5 1.5 0 0 0 6 8.028V4.5A1.5 1.5 0 0 1 7.5 3h5A1.5 1.5 0 0 1 14 4.5z";
 const unpinPath = "M14 8.028c0 .233.054.462.158.67l1.428 2.855A1 1 0 0 1 14.69 13H10.5v3.5a.5.5 0 0 1-1 0V13H5.31a1 1 0 0 1-.895-1.447l1.427-2.855A1.5 1.5 0 0 0 6 8.028V4.5A1.5 1.5 0 0 1 7.5 3h5A1.5 1.5 0 0 1 14 4.5z";
 // Official `oy` archive (dual path).
@@ -67,7 +67,7 @@ const archivePaths: CoworkGlyphPath[] = [
 ];
 // Official `mC` delete/trash.
 const trashPath = "M11.323 1.5a1.5 1.5 0 0 1 1.393.943L13.338 4H17.5l.1.01a.5.5 0 0 1 0 .98l-.1.01h-1.537l-.894 11.615A1.5 1.5 0 0 1 13.574 18H6.426a1.5 1.5 0 0 1-1.478-1.24l-.017-.145L4.037 5H2.5a.5.5 0 0 1 0-1h4.162l.622-1.557.047-.104A1.5 1.5 0 0 1 8.677 1.5zM5.928 16.538a.5.5 0 0 0 .498.462h7.148a.5.5 0 0 0 .498-.462L14.961 5H5.039zM8.5 8a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 .5-.5m3 0a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 .5-.5M8.677 2.5a.5.5 0 0 0-.43.246l-.034.068L7.738 4h4.524l-.475-1.186a.5.5 0 0 0-.464-.314z";
-// Official index-BELzQL5P `Ov` — play triangle (rKt Run now prepend).
+// Official c21f11e6d-CxD82rYo.js `Ov` — play triangle (rKt Run now prepend).
 const playPath = "M4 4.047A1.5 1.5 0 0 1 6.29 2.77l9.603 5.954a1.5 1.5 0 0 1 0 2.55L6.29 17.227a1.5 1.5 0 0 1-2.275-1.06L4 15.953zm1.764-.425A.5.5 0 0 0 5 4.047v11.906l.005.072a.5.5 0 0 0 .759.353l9.601-5.953a.5.5 0 0 0 0-.85z";
 // Official c5f4e1303 `Rx` exported as `im` — plain check used by hUt Mark done.
 const markDonePath = "M15.188 5.11a.5.5 0 0 1 .752.626l-.056.084-7.5 9a.5.5 0 0 1-.738.033l-3.5-3.5-.064-.078a.501.501 0 0 1 .693-.693l.078.064 3.113 3.113 7.15-8.58z";
@@ -111,7 +111,7 @@ export function CoworkArrowRightGlyph(props: CoworkOfficialGlyphProps) {
   return <CoworkOfficialGlyph {...props} path={arrowRightPath} />;
 }
 
-/** Official index-BELzQL5P `ly` used by scroll-to-bottom `t$t`. */
+/** Official c21f11e6d-CxD82rYo.js `ly` used by scroll-to-bottom `t$t`. */
 export function CoworkArrowDownGlyph(props: CoworkOfficialGlyphProps) {
   return <CoworkOfficialGlyph {...props} path={arrowDownPath} />;
 }
@@ -172,27 +172,27 @@ export function CoworkEditGlyph(props: CoworkOfficialGlyphProps) {
   return <CoworkOfficialGlyph {...props} path={editPath} />;
 }
 
-/** Official index-BELzQL5P `Lv` — Pin (desktop hUt). */
+/** Official c21f11e6d-CxD82rYo.js `Lv` — Pin (desktop hUt). */
 export function CoworkPinGlyph(props: CoworkOfficialGlyphProps) {
   return <CoworkOfficialGlyph {...props} path={pinPath} />;
 }
 
-/** Official index-BELzQL5P `Rv` — Unpin (desktop hUt). */
+/** Official c21f11e6d-CxD82rYo.js `Rv` — Unpin (desktop hUt). */
 export function CoworkUnpinGlyph(props: CoworkOfficialGlyphProps) {
   return <CoworkOfficialGlyph {...props} path={unpinPath} />;
 }
 
-/** Official index-BELzQL5P `oy` — Archive. */
+/** Official c21f11e6d-CxD82rYo.js `oy` — Archive. */
 export function CoworkArchiveGlyph(props: CoworkOfficialGlyphProps) {
   return <CoworkOfficialGlyph {...props} path={archivePaths} />;
 }
 
-/** Official index-BELzQL5P `mC` — Delete/trash. */
+/** Official c21f11e6d-CxD82rYo.js `mC` — Delete/trash. */
 export function CoworkTrashGlyph(props: CoworkOfficialGlyphProps) {
   return <CoworkOfficialGlyph {...props} path={trashPath} />;
 }
 
-/** Official index-BELzQL5P `Ov` — Play (rKt Run now). */
+/** Official c21f11e6d-CxD82rYo.js `Ov` — Play (rKt Run now). */
 export function CoworkPlayGlyph(props: CoworkOfficialGlyphProps) {
   return <CoworkOfficialGlyph {...props} path={playPath} />;
 }

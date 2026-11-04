@@ -2,7 +2,7 @@ import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type { InstalledExtensionState } from "../settingsDesktopBridge";
 
 /**
- * Official ExtensionIcon residual (index-BELzQL5P):
+ * Official ExtensionIcon residual (index-D35w9RK9):
  * - LJ({ extension, size }) → AJ({ icon: manifest.icon, name, path, size })
  * - OJ resolve: data: passthrough; https→claude-image://; other schemes empty;
  *   relative + path → file://${path}/${icon}

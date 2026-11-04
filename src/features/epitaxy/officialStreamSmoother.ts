@@ -21,7 +21,7 @@ type OfficialSmootherBlockOps<TBlock> = {
   stopBlockEvent: (event: Record<string, unknown>, block: TBlock) => TBlock;
 };
 
-/** Residual PE = 1e3/60 (index-BELzQL5P zE). */
+/** Residual PE = 1e3/60 (cd5a31703 zE). */
 const PE = 1000 / 60;
 
 function delay(ms: number) {
@@ -34,7 +34,7 @@ function delay(ms: number) {
 }
 
 /**
- * Residual zE.task tick (index-BELzQL5P):
+ * Residual zE.task tick (cd5a31703):
  *   const s = checkVisibility ? PE : 100;
  *   await new Promise(e => setTimeout(e, s));
  * Visible → PE (1000/60); not visible (checkVisibility false) → 100.
@@ -176,7 +176,7 @@ class OfficialCompletionSmoother<TBlock> {
         break;
     }
 
-    // Residual zE.onMessage (index-BELzQL5P): always stamp start on first message,
+    // Residual zE.onMessage (cd5a31703): always stamp start on first message,
     // always set totalCompletionLength + push arrivals — even when blockSize sum is 0
     // (e.g. thinking-only; Lke thinking size = 0).
     //   0===this.start&&(this.start=Date.now());
@@ -190,7 +190,7 @@ class OfficialCompletionSmoother<TBlock> {
   }
 
   async task(deliver: (blocks: TBlock[]) => void, signal: AbortSignal) {
-    // Official zE.task (index-BELzQL5P): 60fps reveal loop; document.hidden short-circuits;
+    // Official zE.task (cd5a31703): 60fps reveal loop; document.hidden short-circuits;
     // result → Pke.clear aborts/restarts — no settleAfterReveal invent after the loop.
     const generation = this.generation;
     while (this.generation === generation && !this.smootherDone && !signal.aborted) {
@@ -249,7 +249,7 @@ class OfficialCompletionSmoother<TBlock> {
       return sliceBlocks(this.blockOperations, this.blocksList, this.totalCompletionLength);
     }
 
-    // Official zE._get_smoothed_completion (index-BELzQL5P) — byte-match residual.
+    // Official zE._get_smoothed_completion (cd5a31703) — byte-match residual.
     // Do NOT invent an early-return when minChars===maxChars / elapsed<=t / bisect throws:
     // 3p burst puts every arrival behind the 0.9*e-0.3 deadline, so min===max while the
     // model is still "not done". Official bisectLower(t===s) returns that length and
@@ -326,7 +326,7 @@ export class OfficialSessionStreamSmoother {
   private smoother = new OfficialCompletionSmoother(officialBlockOps);
 
   clear() {
-    // Official Pke.clear (index-BELzQL5P): dont_smooth/on_completion reset + restart + Oke(null).
+    // Official Pke.clear (cd5a31703): dont_smooth/on_completion reset + restart + Oke(null).
     // No settleAfterReveal / notifySettled invent — result path clears Va immediately.
     this.cleared = true;
     this.smoother.dontSmooth = false;
@@ -353,7 +353,7 @@ export class OfficialSessionStreamSmoother {
     const event = asRecord(streamMessage.event);
     const eventType = stringValue(event.type);
     if (eventType === "message_start") {
-      // Official Pke (index-BELzQL5P): n.messageId = t.message.id ONLY.
+      // Official Pke (cd5a31703): n.messageId = t.message.id ONLY.
       // Outer stream_event.uuid is per-NDJSON identity — never use it as streamingMessageId
       // or eke suppress / Kwe ownership miss the Anthropic message.id and paint durable dumps.
       const message = asRecord(event.message);

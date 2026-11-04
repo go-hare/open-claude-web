@@ -10,7 +10,7 @@
  * Does NOT navigate or mutate sidebar list order —
  * those stay in the caller's UI context (sidebar de next/prev/home).
  *
- * Official index-BELzQL5P:
+ * Official cd5a31703:
  *   archiveLocalSession: $Yt → CT.archive(id,{cleanupWorktree:!0})
  *   deleteLocalSession:  $Yt → CT.delete → Lve
  *   Dve archived/deleted: Eve + clearSession($5) + removePrsForSession(H5)
@@ -25,6 +25,7 @@ import { confirmOfficialWorktreeDisposal } from "../../../shell/officialWorktree
 import { sessionHomePath, sessionPath } from "../../../shell/sessionPaths";
 import { officialCodeSessionStore } from "./officialCodeSessionStore";
 import { officialPlanCommentsApi } from "./officialPlanCommentsStore";
+import { officialEpitaxyTerminalTabsStore } from "./officialEpitaxyTerminalTabsStore";
 import { officialEvictSidePaneSession } from "./officialSidePaneSessionStore";
 import {
   officialClearTurnStarted,
@@ -81,6 +82,8 @@ export function clearCodeSessionCaches(sessionId: string) {
   removeCodeSidebarPrStateForSession(sessionId);
   // Residual ca0135 Kr: for (const t of Ar) t.getState().evictSession(e) + yr localStorage scrub.
   officialEvictSidePaneSession(sessionId);
+  // Official Kr: Ms.evictSession(e) — epitaxy.terminalTabs.v1 + stopShellPty per tab.
+  officialEpitaxyTerminalTabsStore.getState().evictSession(sessionId);
 }
 
 function emitSessionIdEvent(eventName: string, sessionId: string) {

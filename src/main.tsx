@@ -4,11 +4,13 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./app/App";
 import { queryClient } from "./app/queryClient";
 import { bootstrapAppearanceFromStorage } from "./features/settings/appearanceSettings";
+import { bootstrapEpitaxyEditorPrefsFromStorage } from "./features/epitaxy/diff/officialEpitaxyEditorPrefs";
 import { ErrorsProvider, ErrorsToastHost } from "./features/settings/errorsToast";
 import { getInitialLocale, loadI18nResource } from "./i18n/footerMenuMessages";
 import "./styles/global.css";
 
 bootstrapAppearanceFromStorage();
+bootstrapEpitaxyEditorPrefsFromStorage();
 
 const root = document.getElementById("root");
 

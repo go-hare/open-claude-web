@@ -1,5 +1,5 @@
 /**
- * Official residual cowork scheduled-task detail body (index-BELzQL5P function rKt + aKt + iKt).
+ * Official residual cowork scheduled-task detail body (c21f11e6d-CxD82rYo.js function rKt + aKt + iKt).
  * Layout: back link → title/description/status + actions → hr → grid lg:[2fr_3fr]
  *   left (order-2): History
  *   right (order-1): Instructions, Project, Folder, Folders(+from project), Repeats, Always allowed
@@ -48,7 +48,7 @@ export function DetailActions({
   const text = useI18nText(SCHEDULED_DETAIL_MESSAGES);
   // Residual rKt: Dc icon ghost + ev/mC size 20 (Nx viewBox 0 0 20 20), not Anthropicons Pencil/TrashCanRound.
   return (
-    <div className="flex items-center gap-1" data-official-source="index-BELzQL5P.js:rKt actions">
+    <div className="flex items-center gap-1" data-official-source="c21f11e6d-CxD82rYo.js:rKt actions">
       <OfficialButton
         aria-label={text.edit}
         className="!min-w-0"
@@ -96,7 +96,7 @@ export function DetailHero({
   const title = taskDisplayName(task);
   const nextRunLabel = enabled ? detailNextRunLabel(task, text) : null;
   return (
-    <div data-official-source="index-BELzQL5P.js:rKt hero">
+    <div data-official-source="c21f11e6d-CxD82rYo.js:rKt hero">
       <h1 className="font-heading font-bold text-text-100">{title}</h1>
       {task.description ? <p className="text-text-300 mt-2">{task.description}</p> : null}
       {/* Residual rKt hero status row: flex items-center gap-2 mt-4 */}
@@ -148,7 +148,7 @@ export function DetailMetaColumn({
   return (
     <div
       className="flex flex-col gap-8 min-w-0 order-1 lg:order-2"
-      data-official-source="index-BELzQL5P.js:rKt meta column"
+      data-official-source="c21f11e6d-CxD82rYo.js:rKt meta column"
     >
       <section>
         <h2 className="font-base text-text-500 mb-3">{text.instructions}</h2>
@@ -255,7 +255,7 @@ export function DetailHistoryColumn({
   return (
     <div
       className="flex flex-col gap-8 min-w-0 order-2 lg:order-1"
-      data-official-source="index-BELzQL5P.js:rKt history"
+      data-official-source="c21f11e6d-CxD82rYo.js:rKt history"
     >
       <section>
         <h2 className="font-base text-text-500">{text.history}</h2>
@@ -310,7 +310,7 @@ function FoldersSection({
   const spaceSet = new Set(spaceFolders);
   if (all.length === 0) return null;
   return (
-    <section data-official-source="index-BELzQL5P.js:iKt">
+    <section data-official-source="c21f11e6d-CxD82rYo.js:iKt">
       <h2 className="font-base text-text-500 mb-2">{text.folders}</h2>
       <div className="flex flex-col gap-1">
         {all.map((folderPath) => (
@@ -356,7 +356,7 @@ function AlwaysAllowedSection({
   const canRemoveTool = typeof onRemoveApprovedPermission === "function";
   const canClearChrome = typeof onClearChromePermissions === "function";
   return (
-    <section data-official-source="index-BELzQL5P.js:rKt always allowed">
+    <section data-official-source="c21f11e6d-CxD82rYo.js:rKt always allowed">
       <h2 className="flex items-center gap-1.5 font-base text-text-500 mb-3">
         <span>{text.alwaysAllowed}</span>
       </h2>

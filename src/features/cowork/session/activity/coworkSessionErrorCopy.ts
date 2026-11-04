@@ -1,5 +1,5 @@
 /**
- * Official index-BELzQL5P MAt / SAt residual (Cowork session error banner).
+ * Official c21f11e6d-CxD82rYo.js MAt / SAt residual (Cowork session error banner).
  * retryHelps gates Try again — product banner should honor it even if some
  * call sites always pass onTryAgain.
  */

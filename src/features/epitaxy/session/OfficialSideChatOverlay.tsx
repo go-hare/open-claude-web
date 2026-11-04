@@ -9,6 +9,8 @@ import { OfficialPromptEditor, type OfficialPromptEditorHandle } from "../Offici
 import { OfficialButton, type OfficialSessionRef } from "../OfficialEpitaxyComponents";
 import { OfficialCodeMarkdown } from "../OfficialCodeMarkdown";
 import { OfficialSparkSpinner } from "./OfficialWorkingStatus";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { SIDE_CHAT_MESSAGES } from "../officialCodeChromeMessages";
 import {
   officialSideChatStore,
   useOfficialSideChatError,
@@ -188,21 +190,23 @@ export function OfficialSideChatOverlay({
     });
   }, [bridge]);
 
+  const text = useI18nText(SIDE_CHAT_MESSAGES);
   const noSession = !localId;
   const hasMessages = messages.length > 0;
   const busy = status === "starting" || status === "thinking";
   const placeholder = isRemote
-    ? "Side chat is local-only — not available for remote sessions."
+    ? text.sideChatLocalOnly
     : noSession
-      ? "Open a session to use side chat"
+      ? text.openASessionToUseSideChat
       : hasMessages
-        ? "Follow up…"
-        : "Ask a quick question…";
+        ? text.followUp
+        : text.askAQuickQuestion;
 
   return (
     <aside
       aria-hidden={!open || undefined}
-      aria-label="Side chat"
+      aria-label={text.sideChat}
+      data-intl-id="0MBP0bdWwx"
       className={`epitaxy-side-chat absolute bottom-2 right-0 z-[10000] w-[380px] max-w-full max-h-[60vh] isolate rounded-r6 flex flex-col ${open ? "draggable-none" : "pointer-events-none"}`}
       data-open={open || undefined}
       inert={!open || undefined}
@@ -219,11 +223,13 @@ export function OfficialSideChatOverlay({
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden rounded-[inherit] p-[12px] gap-g6">
         <div className="flex items-center shrink-0 -mt-1 -mr-1 gap-g2">
           <span className="flex-1 px-p4 text-caption text-t6 truncate">
-            {status === "starting" ? "Forking…" : "Side chat"}
+            {status === "starting"
+              ? <span data-intl-id="53IDLZxVdE">{text.forking}</span>
+              : <span data-intl-id="0MBP0bdWwx">{text.sideChat}</span>}
           </span>
           {hasMessages ? (
             <OfficialButton
-              ariaLabel="Clear side chat"
+              ariaLabel={text.clearSideChat}
               icon="TrashCanRound"
               onClick={() => {
                 if (!localId) return;
@@ -239,7 +245,7 @@ export function OfficialSideChatOverlay({
             />
           ) : null}
           <OfficialButton
-            ariaLabel="Close side chat"
+            ariaLabel={text.closeSideChat}
             icon="XCrossCloseMedium"
             onClick={close}
             size="small"
@@ -267,13 +273,15 @@ export function OfficialSideChatOverlay({
             {busy ? (
               <div className="flex items-center gap-g4 text-caption text-t6" role="status">
                 <OfficialSparkSpinner isWorking size="s" />
-                <span>{status === "starting" ? "Forking session…" : "Thinking…"}</span>
+                <span data-intl-id={status === "starting" ? "VT/e+bRysY" : "P1QHV0AhYD"}>
+                  {status === "starting" ? text.forkingSession : text.thinking}
+                </span>
               </div>
             ) : null}
           </div>
         ) : (
-          <div className="px-p4 pb-p4 text-caption text-t6 select-text">
-            Chat about this session without touching the main thread. Claude sees the full context, and nothing here is added to the conversation.
+          <div className="px-p4 pb-p4 text-caption text-t6 select-text" data-intl-id="WleHxnItUz">
+            {text.emptyDescription}
           </div>
         )}
         {error ? (

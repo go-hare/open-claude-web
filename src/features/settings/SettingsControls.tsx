@@ -129,7 +129,7 @@ export function TextInputControl({
 }
 
 /**
- * Official XD SegmentedControl (index-BELzQL5P / c0db37792 Appearance):
+ * Official XD SegmentedControl (index-D35w9RK9 / c0db37792 Appearance):
  * - contained: h-control + rounded bg-segment-track p-px
  * - thumb left/width from ResizeObserver on [data-checked] (not h-control math)
  * - icon-only segments: icon set && label undefined → aspect-square px-0 + tooltip
@@ -349,6 +349,7 @@ function CdsPortalRoot({ children }: { children: ReactNode }) {
 
 export function GhostSelect({
   align = "end",
+  "aria-label": ariaLabel,
   fullWidth = false,
   options,
   placeholder,
@@ -358,6 +359,7 @@ export function GhostSelect({
   onChange,
 }: {
   align?: "start" | "center" | "end";
+  "aria-label"?: string;
   fullWidth?: boolean;
   options: SelectOption[];
   placeholder?: string;
@@ -443,6 +445,7 @@ export function GhostSelect({
         data-official-source="c43c5949a:$a select"
       >
         <Combobox.Trigger
+          aria-label={ariaLabel}
           className="cds-reset flex min-w-0 flex-1 items-center gap-1.5 self-stretch pl-sm text-left border-0 bg-transparent p-0 outline-none"
           type="button"
         >
@@ -682,7 +685,7 @@ export function ChatFontSelect({
  * autosize textarea min-h-[5.5rem] max-h-40; rotating placeholders when empty.
  */
 /**
- * Official RIe rotating placeholders (index-BELzQL5P):
+ * Official RIe rotating placeholders (index-D35w9RK9):
  *   interval default 6000; AnimatePresence + motion.p
  *   initial { opacity:0, y:4 } → animate { opacity:1, y:0, transition:{ delay:0.3 } }
  *   exit { opacity:0, y:-4 }
@@ -723,7 +726,7 @@ function SettingsRotatingPlaceholders({
       ]
         .filter(Boolean)
         .join(" ")}
-      data-official-source="index-BELzQL5P:RIe"
+      data-official-source="index-D35w9RK9:RIe"
     >
       {isShown ? (
         <AnimatePresence mode="wait">
@@ -830,7 +833,7 @@ export function InstructionsPreferencesField({
   return field;
 }
 
-/** Official cc989143e yt — Worktree location $a items. */
+/** Official cf4f70727-a7CVSvFQ yt — Worktree location $a items. */
 const WORKTREE_SELECT_ITEMS = [
   { value: "default", label: "Inside project (.claude/worktrees)" },
   { value: "custom", label: "Custom..." },
@@ -1108,3 +1111,34 @@ export const QUICK_ENTRY_DICTATION_PRESETS: Array<{
     match: (value) => value === "off",
   },
 ];
+
+/** Official Xn in-chat dictationShortcut presets (c71860c77-C_7Gqn1u). */
+export type InChatDictationValue = "default" | "off" | { accelerator: string };
+
+export function inChatDictationPresets(darwin: boolean): Array<{
+  id: string;
+  label: string;
+  value: InChatDictationValue;
+  match: (value: unknown) => boolean;
+}> {
+  return [
+    {
+      id: "default",
+      label: darwin ? "Command+D" : "Ctrl+D",
+      value: "default",
+      match: (value) => value === "default",
+    },
+    {
+      id: "custom",
+      label: "Custom…",
+      value: { accelerator: darwin ? "Cmd+D" : "Ctrl+D" },
+      match: (value) => typeof value === "object" && value !== null,
+    },
+    {
+      id: "off",
+      label: "No shortcut",
+      value: "off",
+      match: (value) => value === "off",
+    },
+  ];
+}

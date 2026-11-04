@@ -1,6 +1,6 @@
 /**
  * Residual: official Pke.feed parent gate — only strict null feeds main Va.
- * index-BELzQL5P: if (null !== parent) return;
+ * cd5a31703: if (null !== parent) return;
  */
 import { afterEach, describe, expect, it } from "vitest";
 import {

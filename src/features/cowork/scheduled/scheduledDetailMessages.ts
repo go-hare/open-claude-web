@@ -1,7 +1,7 @@
 import type { MessageDescriptors } from "../../../i18n/footerMenuMessages";
 
 /**
- * Official residual cowork scheduled-task detail copy (index-BELzQL5P function rKt):
+ * Official residual cowork scheduled-task detail copy (c21f11e6d-CxD82rYo.js function rKt):
  * back QnVP0todrs, Run now +ZAG46kixX, status pill 3a5wL8wo40 / +CuLVSpi4n / C2iTEHtK//,
  * next qeLO6CTuEV, Instructions sV2v5LjRpX, Repeats H0RbcUK573, Always allowed xqCjQKdyAK,
  * Delete scheduled task IYLPrk/B9n, body 3TwpgrVm36, Project k36uSwr4q5, …

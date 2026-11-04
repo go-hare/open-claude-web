@@ -58,7 +58,7 @@ export function parseHumanContent(message: Record<string, unknown>) {
   const text = content.find((block) => block.type === "text")?.text ?? "";
   const files = parseUploadedFiles(text);
   const syncSources = parseSyncSources(text);
-  // Official The (index-BELzQL5P Nhe/The): strip system-reminder / task-notification / …
+  // Official The (c21f11e6d-CxD82rYo.js Nhe/The): strip system-reminder / task-notification / …
   // before human paint. Meta-only tails (e.g. <task-notification>) must not become a
   // path-store human chain — empty shells steal Cat lastHuman/lastAssistant refs and
   // LUt measures H≈60 A=0 → full-viewport spacer → pin parks star mid-empty.

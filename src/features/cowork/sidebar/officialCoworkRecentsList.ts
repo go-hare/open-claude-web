@@ -1,5 +1,5 @@
 /**
- * Official index-BELzQL5P Cowork session list residual (Q5 / X5 / e6 / t6 / n6).
+ * Official c21f11e6d-CxD82rYo.js Cowork session list residual (Q5 / X5 / e6 / t6 / n6).
  *
  *   Q5  — Zustand {sessions, isInitialized} from hT = LocalAgentModeSessions
  *   t6  — hT.getAll → set sessions; catch sets isInitialized only (keep previous)

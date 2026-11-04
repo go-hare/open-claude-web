@@ -29,6 +29,16 @@ export type PreviewAnnotationAttach = {
 export type EpitaxyTranscriptActionContextValue = {
   /** Official onAttachAsContext: insert message/selection text into the session composer. */
   attachAsContext?: (text: string) => void;
+  /** Official attachFileToChat / insertFileMention — ccd-files chip, not quote. */
+  insertFileMention?: (path: string) => void;
+  /**
+   * Official ab Play `vt.run(id, cmd)` — Grt.runInline then setSidePane("terminal").
+   * Default-tab BR writes pendingCommand after onPtyReady (same path as pendingCd).
+   * `.cast` / queueCommand-only callers omit runId.
+   */
+  runInTerminal?: (command: string, runId?: string) => void;
+  /** Official vt.cancel — Ctrl-C if already flushed, then cancelInlineRun. */
+  cancelInTerminal?: () => void;
   /**
    * Official qy.push residual for preview-annotation.png.
    * Stages into the session composer (ExistingSessionComposer drains → cn.images);

@@ -1,6 +1,7 @@
 /**
- * Official composer footer residual (c360a9e1c `Dne`).
- * Models dropdown + separate Effort chip (`Ene` slider); Effort is not nested under Models.
+ * Official composer footer residual (c11959232 Dne).
+ * `w-full flex items-center gap-g5 py-[4px]`; Effort is a sibling chip, not nested under Models.
+ * Pin Fast is visible `· Fast` (`tf+yHLZoYV`) on the Models label — not 4.29 Chin sr-only.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import type { SessionSummary } from "../../adapters/desktopBridge";
@@ -8,6 +9,9 @@ import type { LocalSessionsBridge } from "../../adapters/desktopBridge/types";
 import { OfficialButton, OfficialDropdownButton, type OfficialDropdownItem, type OfficialSessionRef } from "./OfficialEpitaxyComponents";
 import { OfficialComposerUsageIndicator } from "./OfficialComposerUsageIndicator";
 import { OfficialEffortControl, type OfficialEffortItem } from "./composer/OfficialEffortControl";
+import { officialDirectoryStore } from "../customize/directory/officialDirectoryStore";
+import { useI18nText } from "../../i18n/footerMenuMessages";
+import { COMPOSER_DICTATION_MESSAGES, COMPOSER_FAST_MODE_MESSAGES, COMPOSER_LOOP_MESSAGES, COMPOSER_MODELS_HEADER_MESSAGES, COMPOSER_PLUS_MENU_MESSAGES, COMPOSER_PLUS_MESSAGES, PERMISSION_MODE_MESSAGES } from "./officialCodeChromeMessages";
 import {
   getOfficialSessionShortcutContext,
   matchOfficialSessionShortcut,
@@ -96,6 +100,11 @@ export function OfficialComposerFooter({
   showDictationButton = false,
   supportsFileAttachments = false,
 }: OfficialComposerFooterProps) {
+  const modeText = useI18nText(PERMISSION_MODE_MESSAGES);
+  const modelsText = useI18nText(COMPOSER_MODELS_HEADER_MESSAGES);
+  const plusText = useI18nText(COMPOSER_PLUS_MESSAGES);
+  const plusMenuText = useI18nText(COMPOSER_PLUS_MENU_MESSAGES);
+  const fastModeText = useI18nText(COMPOSER_FAST_MODE_MESSAGES);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const effortSection = modelExtraSections?.find((section) => section.key === "effort");
   const effortItems = effortSection?.items ?? emptyComposerMenuItems;
@@ -112,11 +121,10 @@ export function OfficialComposerFooter({
     modelPickerDisabled,
     shortcutContext,
   });
-  const fastModeLabel = fastModeOn ? "Fast" : null;
   const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
   const footerPlusItems = useMemo(
-    () => composeOfficialPlusItems(onInsertSlashCommand, onAddFiles ? openFilePicker : undefined, supportsFileAttachments, plusMenuItems),
-    [onAddFiles, onInsertSlashCommand, openFilePicker, plusMenuItems, supportsFileAttachments],
+    () => composeOfficialPlusItems(onInsertSlashCommand, onAddFiles ? openFilePicker : undefined, supportsFileAttachments, plusMenuItems, plusMenuText),
+    [onAddFiles, onInsertSlashCommand, openFilePicker, plusMenuItems, plusMenuText, supportsFileAttachments],
   );
   const onFileInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
@@ -138,12 +146,20 @@ export function OfficialComposerFooter({
     [effortItems],
   );
 
+  // Official c119 Dne: `className:"w-full flex items-center gap-g5 py-[4px]"` — not 4.29 Chin overflow-clip.
+  const modelTriggerLabel = fastModeOn ? (
+    <span className="flex items-baseline gap-g3 min-w-0">
+      <span className="truncate">{modelLabel}</span>
+      <span className="text-t6 shrink-0">{`· ${fastModeText.fast}`}</span>
+    </span>
+  ) : modelLabel;
+
   return (
     <div className="w-full flex items-center gap-g5 py-[4px]">
       <div className="flex items-center gap-g5 min-w-0">
         <OfficialDropdownButton
           align="start"
-          header="Mode"
+          header={modeText.mode}
           items={menu.numberedModeItems}
           label={permissionDanger ? <span className="text-extended-yellow">{permissionLabel}</span> : permissionLabel}
           onOpenChange={menu.onModeOpenChange}
@@ -154,7 +170,7 @@ export function OfficialComposerFooter({
           triggerKey={composerShortcutForCommand("openModeMenu", shortcutContext)}
         />
         {onCoordinatorModeChange ? <OfficialCoordinatorModeToggle onChange={onCoordinatorModeChange} value={coordinatorMode} /> : null}
-        <OfficialDropdownButton align="start" ariaLabel="Add" className="shrink-0" disabled={footerPlusItems.length === 0} icon="PlusLarge" items={footerPlusItems} revealChevron="never" side="top" size="small" />
+        <OfficialDropdownButton align="start" ariaLabel={plusText.add} className="shrink-0" disabled={footerPlusItems.length === 0} dsTrigger icon="Add" items={footerPlusItems} preferFont revealChevron="never" side="top" size="small" variant="ghost" />
         <input ref={fileInputRef} type="file" multiple accept={supportsFileAttachments ? undefined : "image/png,image/jpeg,image/gif,image/webp"} className="hidden" onChange={onFileInputChange} />
         {hideDictation ? null : <OfficialDictationSlot disabledReason={dictationDisabledReason} showButton={showDictationButton} />}
         {loops?.length && onStopLoop ? <OfficialLoopIndicator loops={loops} onStopLoop={onStopLoop} /> : null}
@@ -164,9 +180,9 @@ export function OfficialComposerFooter({
           align="end"
           disabled={modelItems.length === 0 || modelPickerDisabled}
           extraSections={nonEffortSections}
-          header="Models"
+          header={modelsText.models}
           items={menu.numberedModelItems}
-          label={<OfficialModelFooterLabel fastModeLabel={fastModeLabel} modelLabel={modelLabel} />}
+          label={modelTriggerLabel}
           onOpenChange={menu.onModelOpenChange}
           open={menu.modelOpen}
           revealChevron="never"
@@ -188,49 +204,214 @@ export function OfficialComposerFooter({
   );
 }
 
-/** Official model chip: model name + optional Fast only (effort is separate Ene chip). */
-function OfficialModelFooterLabel({ fastModeLabel, modelLabel }: { fastModeLabel?: ReactNode; modelLabel: ReactNode }) {
-  if (!fastModeLabel) return <>{modelLabel}</>;
+function OfficialCoordinatorModeToggle({ onChange, value }: { onChange: (value: boolean) => void; value: boolean }) {
+  // Official ca80 `E$`: C$/w$/T$ are JS literals, not catalog ids.
   return (
-    <span className="flex items-baseline gap-g3 min-w-0">
-      <span className="truncate">{modelLabel}</span>
-      <span className="text-t6 shrink-0">· {fastModeLabel}</span>
-    </span>
+    <OfficialButton
+      ariaLabel="Toggle coordinator mode"
+      icon="Agent"
+      onClick={() => onChange(!value)}
+      pressed={value}
+      size="small"
+      tooltip={value ? "Turn off coordinator mode" : "Delegate work across parallel agents"}
+      variant="toggle"
+    />
   );
 }
 
-function OfficialCoordinatorModeToggle({ onChange, value }: { onChange: (value: boolean) => void; value: boolean }) {
-  return <OfficialButton ariaLabel="Toggle coordinator mode" icon="AgentPlanPath" onClick={() => onChange(!value)} pressed={value} size="small" variant="toggle" />;
-}
-
 function OfficialDictationSlot({ disabledReason, showButton }: { disabledReason?: ReactNode; showButton: boolean }) {
-  const ariaLabel = disabledReason ? String(disabledReason) : "Dictate";
-  return showButton ? <OfficialButton ariaLabel="Dictate" disabled icon="MicrophoneDictation" size="small" /> : <OfficialButton ariaLabel={ariaLabel} disabled icon="MicrophoneDictation" size="small" />;
+  const dictationText = useI18nText(COMPOSER_DICTATION_MESSAGES);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<{ abort?: () => void; start?: () => void; stop?: () => void } | null>(null);
+  const [shortcut, setShortcut] = useState<"default" | "off" | { accelerator?: string }>("default");
+
+  useEffect(() => {
+    let alive = true;
+    const prefs = (window as Window & {
+      "claude.settings"?: { AppPreferences?: { getPreferences?: () => Promise<{ dictationShortcut?: unknown }> } };
+    })["claude.settings"]?.AppPreferences;
+    void prefs?.getPreferences?.().then((bag) => {
+      if (!alive) return;
+      const value = bag?.dictationShortcut;
+      if (value === "off" || value === "default" || (value && typeof value === "object")) {
+        setShortcut(value as "default" | "off" | { accelerator?: string });
+      }
+    });
+    return () => {
+      alive = false;
+      recognitionRef.current?.abort?.();
+    };
+  }, []);
+
+  const disabled = Boolean(disabledReason) || shortcut === "off";
+  const ariaLabel = disabledReason ? String(disabledReason) : listening ? dictationText.stopDictation : dictationText.dictate;
+
+  const toggle = useCallback(() => {
+    if (disabled) return;
+    const SpeechRecognitionCtor =
+      (window as Window & {
+        SpeechRecognition?: new () => {
+          continuous: boolean;
+          interimResults: boolean;
+          lang: string;
+          onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
+          onend: (() => void) | null;
+          abort: () => void;
+          start: () => void;
+          stop: () => void;
+        };
+        webkitSpeechRecognition?: new () => {
+          continuous: boolean;
+          interimResults: boolean;
+          lang: string;
+          onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
+          onend: (() => void) | null;
+          abort: () => void;
+          start: () => void;
+          stop: () => void;
+        };
+      }).SpeechRecognition
+      ?? (window as Window & { webkitSpeechRecognition?: new () => never }).webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) return;
+    if (listening) {
+      recognitionRef.current?.stop?.();
+      setListening(false);
+      return;
+    }
+    const recognition = new SpeechRecognitionCtor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = document.documentElement.lang || "en-US";
+    recognition.onresult = (event) => {
+      const last = event.results[event.results.length - 1];
+      const transcript = last?.[0]?.transcript;
+      if (!transcript) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active && ("value" in active || active.isContentEditable)) {
+        document.execCommand("insertText", false, transcript);
+      }
+    };
+    recognition.onend = () => setListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  }, [disabled, listening]);
+
+  useEffect(() => {
+    if (shortcut === "off") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (shortcut === "default") {
+        if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "d") return;
+        event.preventDefault();
+        toggle();
+        return;
+      }
+      if (typeof shortcut !== "object" || !shortcut.accelerator) return;
+      const parts = shortcut.accelerator.toLowerCase().split("+");
+      const key = parts.at(-1);
+      if (!key || event.key.toLowerCase() !== key) return;
+      const needMeta = parts.includes("cmd") || parts.includes("command") || parts.includes("super") || parts.includes("meta");
+      const needCtrl = parts.includes("ctrl") || parts.includes("control");
+      const needAlt = parts.includes("alt") || parts.includes("option");
+      const needShift = parts.includes("shift");
+      if (needMeta !== event.metaKey || needCtrl !== event.ctrlKey || needAlt !== event.altKey || needShift !== event.shiftKey) {
+        return;
+      }
+      event.preventDefault();
+      toggle();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [shortcut, toggle]);
+
+  if (!showButton && disabled) {
+    return <OfficialButton ariaLabel={ariaLabel} disabled icon="MicrophoneDictation" size="small" />;
+  }
+  return (
+    <OfficialButton
+      ariaLabel={ariaLabel}
+      disabled={disabled}
+      icon="MicrophoneDictation"
+      onClick={toggle}
+      pressed={listening}
+      size="small"
+    />
+  );
 }
 
 function OfficialLoopIndicator({ loops, onStopLoop }: { loops: OfficialComposerLoop[]; onStopLoop: (loop: OfficialComposerLoop) => void }) {
-  const label = loops.length > 1 ? `${loops.length} loops` : "Loop";
-  const items = loops.map((loop) => ({ icon: "XCrossCloseMedium", label: loop.prompt || "Recurring loop", onSelect: () => onStopLoop(loop) }));
-  return <OfficialDropdownButton className="shrink-0" header="Active loops" items={items} label={label} revealChevron="never" side="top" size="small" />;
+  const loopText = useI18nText(COMPOSER_LOOP_MESSAGES);
+  const label = loops.length > 1 ? `${loops.length} ${loopText.loop}` : loopText.loop;
+  const items = loops.map((loop) => ({ icon: "XCrossCloseMedium", label: loop.prompt || loopText.recurringLoop, onSelect: () => onStopLoop(loop) }));
+  return <OfficialDropdownButton className="shrink-0" items={items} label={label} revealChevron="never" side="top" size="small" />;
 }
 
-function composeOfficialPlusItems(onInsertSlashCommand: (() => void) | undefined, openFilePicker: (() => void) | undefined, supportsFileAttachments: boolean, plusMenuItems?: OfficialComposerDropdownItem[]) {
+/** Official c119 `O?.loops` → Dne chip. Missing / empty → undefined (no invent). */
+export function parseOfficialComposerLoops(value: SessionSummary["loops"] | undefined): OfficialComposerLoop[] | undefined {
+  if (!value?.length) return undefined;
+  const loops = value.flatMap((item) => {
+    const id = typeof item.id === "string" && item.id.length > 0 ? item.id : "";
+    if (!id) return [];
+    return [{
+      id,
+      createdAt: typeof item.createdAt === "number" ? item.createdAt : 0,
+      cron: item.cron,
+      humanSchedule: item.humanSchedule,
+      nextRunAt: item.nextRunAt,
+      prompt: item.prompt,
+    }];
+  });
+  return loops.length > 0 ? loops : undefined;
+}
+
+function composeOfficialPlusItems(
+  onInsertSlashCommand: (() => void) | undefined,
+  openFilePicker: (() => void) | undefined,
+  supportsFileAttachments: boolean,
+  plusMenuItems: OfficialComposerDropdownItem[] | undefined,
+  plusMenuText: {
+    addFilesOrPhotos: string;
+    addImage: string;
+    addPlugins: string;
+    manageConnectors: string;
+    slashCommands: string;
+  },
+) {
   const items: OfficialComposerDropdownItem[] = [];
-  if (onInsertSlashCommand) {
-    items.push({
-      icon: "SlashShortcutCommand",
-      label: "Slash commands",
-      onSelect: onInsertSlashCommand,
-    });
-  }
+  // Official ca80 `KN` then `zN`/`jN`: attach, extra (folder), slash, empty-catalog manageConnectors / addPlugins.
+  // Do not invent Notion/Linear/Canva or GH/Linear import without `aae()` / githubIssue.available.
   if (openFilePicker) {
     items.push({
-      icon: "PaperclipAttach",
-      label: supportsFileAttachments ? "Add files or photos" : "Add image",
+      icon: "Attachment",
+      label: supportsFileAttachments ? plusMenuText.addFilesOrPhotos : plusMenuText.addImage,
       onSelect: openFilePicker,
     });
   }
   if (plusMenuItems?.length) items.push(...plusMenuItems);
+  if (onInsertSlashCommand) {
+    items.push({
+      icon: "SlashShortcutCommand",
+      label: plusMenuText.slashCommands,
+      onSelect: onInsertSlashCommand,
+    });
+  }
+  // Official ca80 `jN` empty `!i`: Manage connectors → `R`/`Tb` (directory connectors overlay).
+  // Do not invent Notion/Linear/Canva rows. `cqx+RdJnHp` is the empty-catalog top row in pin ca80.
+  items.push({
+    icon: "Connectors",
+    label: plusMenuText.manageConnectors,
+    onSelect: () => {
+      const next = "/customize/connectors";
+      if (`${window.location.pathname}${window.location.search}` === next) return;
+      window.history.pushState({}, "", next);
+      window.dispatchEvent(new Event("app:navigation"));
+    },
+  });
+  items.push({
+    icon: "Plugin",
+    label: plusMenuText.addPlugins,
+    onSelect: () => officialDirectoryStore.getState().open("plugins", { pluginSeed: {} }),
+  });
   return items.length > 0 ? items : emptyComposerMenuItems;
 }
 

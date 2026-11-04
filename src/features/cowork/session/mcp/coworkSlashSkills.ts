@@ -1,5 +1,5 @@
 /**
- * Official D1e slash skills reverse-RPC (index-BELzQL5P ~113738–113754):
+ * Official D1e slash skills reverse-RPC (c21f11e6d-CxD82rYo.js ~113738–113754):
  * addable_skills_search → vZe(v.current, void 0, keywords)
  * slash_menu_skills_resolve → vZe(b.current, skillNames, keywords)
  * respondSlashMenuSkills(requestId, JSON.stringify(skills[]))

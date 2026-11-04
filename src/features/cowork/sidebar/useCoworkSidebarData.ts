@@ -27,7 +27,7 @@ export function useCoworkSidebarData() {
   }, []);
 
   /**
-   * Official t6 (index-BELzQL5P ~45495): hT.getAll → set sessions.
+   * Official t6 (c21f11e6d-CxD82rYo.js ~45495): hT.getAll → set sessions.
    * catch only sets isInitialized — do not wipe previous sessions.
    */
   const reloadSessions = useCallback(async () => {

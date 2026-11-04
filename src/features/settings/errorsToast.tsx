@@ -1,5 +1,5 @@
 /**
- * Official ErrorsProvider residual (index-BELzQL5P DC/PC + tXt/XQt/QQt/ZQt):
+ * Official ErrorsProvider residual (index-D35w9RK9 DC/PC + tXt/XQt/QQt/ZQt):
  * - DC: toasts state + addError / addApiError / addSuccess / clearToast
  * - PC: useContext(RC) — must be under provider
  * - tXt: group by uniqueKey/message, map → XQt, viewport QQt

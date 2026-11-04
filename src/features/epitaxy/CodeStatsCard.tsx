@@ -8,10 +8,13 @@ import {
   buildHeatmapDates,
   formatNumber,
   tokenReferenceFor,
+  EMPTY_CODE_STATS,
   type CodeStatsDisplay,
   type CodeStatsRange,
   type ModelUsageDisplay,
 } from "./codeStatsDisplay";
+import { useI18nText } from "../../i18n/footerMenuMessages";
+import { CODE_STATS_MESSAGES } from "./officialCodeChromeMessages";
 
 /**
  * Official $x residual (c11959232):
@@ -27,23 +30,29 @@ export function CodeStatsCard({ stats: statsProp }: { stats?: CodeStats | null }
   const statsQuery = useQuery({
     queryKey: ["epitaxy", "code-stats"],
     queryFn: async () => {
+      // Official Yit always returns a payload (empty dailyActivity is valid $x).
+      // Throwing on null keeps greetEmpty on the pulse skeleton forever.
       const next = await desktopBridge.LocalSessions.getCodeStats?.();
-      if (!next) throw new Error("getCodeStats returned null");
-      return next;
+      return next ?? EMPTY_CODE_STATS;
     },
     enabled: !useProp && hasHost,
     staleTime: 300_000,
     gcTime: Number.POSITIVE_INFINITY,
   });
-  const stats = useProp ? statsProp : (statsQuery.data ?? null);
-  // Official: if host missing, or (error && no cached data) → skeleton; cached data skips skeleton.
+  const stats = useProp
+    ? (statsProp ?? EMPTY_CODE_STATS)
+    : hasHost
+      ? (statsQuery.data ?? null)
+      : EMPTY_CODE_STATS;
+  // Official: skeleton only on cold miss / error-without-data. Empty payload paints $x zeros.
   const isLoading = !useProp && hasHost && statsQuery.isPending && !statsQuery.data;
+  const showSkeleton = isLoading || (!useProp && hasHost && statsQuery.isError && !statsQuery.data);
 
   const display = useMemo(() => buildCodeStatsDisplay(stats, range), [range, stats]);
-  if (isLoading || !stats) return <CodeStatsSkeletonCard />;
+  if (showSkeleton || !stats) return <CodeStatsSkeletonCard />;
 
   return (
-    <div className="flex flex-col gap-[20px] p-[12px] pt-[8px] rounded-r6 bg-t1 max-w-[480px]" data-official-source="c11959232-h_zsw3wI.js:$x/qx">
+    <div className="flex flex-col gap-[20px] p-[12px] pt-[8px] rounded-r6 bg-t1 max-w-[480px]" data-official-source="cd5a31703-B4nKQMBN.js:$x/qx">
       <div className="flex items-center gap-g4 min-w-0">
         <SegmentedTabs items={[{ label: "概览", value: "overview" }, { label: "模型", value: "models" }]} onValueChange={(value) => setView(value === "models" ? "models" : "overview")} value={view} />
         <span className="flex-1" />
@@ -101,11 +110,12 @@ function StatTile({ label, value, small }: { label: string; value: string; small
 }
 
 function Heatmap({ dailyActivity }: { dailyActivity: CodeStats["dailyActivity"] }) {
+  const statsText = useI18nText(CODE_STATS_MESSAGES);
   const activityByDate = useMemo(() => new Map(dailyActivity.map((entry) => [entry.date, entry.messageCount])), [dailyActivity]);
   const maxActivity = Math.max(0, ...activityByDate.values());
   const weeks = useMemo(() => buildHeatmapDates(), []);
   return (
-    <div role="img" aria-label="Daily activity heatmap" className="flex gap-[3px] w-full">
+    <div role="img" aria-label={statsText.dailyActivityHeatmap} className="flex gap-[3px] w-full">
       {weeks.map((week, weekIndex) => <div className="flex flex-col gap-[3px] flex-1 min-w-0" key={weekIndex}>{week.map(({ date, future }) => {
         if (future) return <div className="aspect-square rounded-r1" key={date} />;
         const activity = activityByDate.get(date) ?? 0;

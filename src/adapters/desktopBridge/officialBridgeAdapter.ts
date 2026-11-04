@@ -19,6 +19,7 @@ import type {
   OfficialGitDiffComparison,
   GitCommandResult,
   GetSupportedCommandsRequest,
+  LocalAgentCatalogRow,
   LocalSessionsBridge,
   LocalFileEntry,
   LocalFileReadResult,
@@ -30,7 +31,9 @@ import type {
   StartSessionInput,
   WorkspaceTrustResult,
   WorkspaceContext,
+  WorkspaceSshConfig,
   WriteSessionFileResult,
+  OfficialChangeCwdResult,
 } from "./types";
 import { buildOfficialCoworkSendMessageArgs } from "./coworkSendMessageContract";
 import { createMessageUuid } from "./messageUuid";
@@ -55,6 +58,11 @@ type RawLocalSessionsBridge = {
   getSession?: (id: string, options?: Record<string, unknown>) => Promise<unknown | null>;
   getSessionsForScheduledTask?: (taskId: string) => Promise<unknown[]>;
   getTranscript?: (id: string) => Promise<unknown[]>;
+  getTranscriptPage?: (
+    id: string,
+    beforeUuid?: string,
+    limit?: number,
+  ) => Promise<unknown>;
   getGitInfo?: (idOrCwd: string) => Promise<unknown>;
   getGitDiff?: (idOrCwd: string, base?: string) => Promise<unknown>;
   getGitDiffStats?: (idOrCwd: string, base?: string) => Promise<unknown>;
@@ -90,12 +98,16 @@ type RawLocalSessionsBridge = {
   saveTrust?: (folder: string) => Promise<unknown>;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<unknown>;
+  getAgents?: () => Promise<unknown>;
   getSupportedCommands?: (request?: GetSupportedCommandsRequest) => Promise<unknown>;
   getWorkingTreeStatus?: (idOrCwd: string) => Promise<unknown>;
   launchUltrareview?: (idOrCwd: string, options?: unknown) => Promise<unknown>;
   readFileAtCwd?: (idOrCwd: string, filePath: string) => Promise<unknown>;
   readSessionFile?: (id: string, filePath: string) => Promise<unknown>;
   readSessionImageAsDataUrl?: (id: string, filePath: string) => Promise<unknown>;
+  getSessionImageStreamUrl?: (id: string, filePath: string) => Promise<unknown>;
+  getSessionMediaStreamUrl?: (id: string, filePath: string) => Promise<unknown>;
+  readSessionMediaAsDataUrl?: (id: string, filePath: string) => Promise<unknown>;
   pickSessionFile?: (id: string) => Promise<unknown>;
   pickFileAtCwd?: (idOrCwd: string) => Promise<unknown>;
   listSessionDirectory?: (id: string, relative?: string) => Promise<unknown>;
@@ -108,10 +120,12 @@ type RawLocalSessionsBridge = {
   /** Official jxi: plugins_search reverse-RPC reply. */
   respondPluginSearch?: (requestId: string, resultsJson: string) => Promise<unknown>;
   setEffort?: (id: string, effort: string) => Promise<unknown>;
+  setFastMode?: (id: string, enabled: boolean) => Promise<unknown>;
   setMcpServers?: (id: string, mcpServers: unknown) => Promise<unknown>;
   setModel?: (id: string, model: string) => Promise<unknown>;
   setPermissionMode?: (id: string, mode: string) => Promise<unknown>;
   updateSession?: (id: string, patch: Record<string, unknown>) => Promise<unknown>;
+  changeCwd?: (id: string, cwd: string, trustAccepted?: boolean, trustedDirectory?: string) => Promise<unknown>;
   startShellPty?: (sessionId: string, cols?: number, rows?: number) => Promise<unknown>;
   interrupt?: (id: string) => Promise<unknown>;
   stop?: (id: string) => Promise<unknown>;
@@ -125,6 +139,7 @@ type RawLocalSessionsBridge = {
   sendMessage?: (...args: unknown[]) => Promise<unknown>;
   cancelQueuedMessage?: (id: string, uuid: string) => Promise<unknown>;
   forkSession?: (id: string, messageId?: string) => Promise<unknown>;
+  setManualKeepAwake?: (id: string, enabled: boolean) => Promise<unknown>;
   rewind?: (id: string, messageId?: string) => Promise<unknown>;
   setFocusedSession?: (id: string | null) => Promise<unknown>;
   submitFeedback?: (input?: unknown) => Promise<unknown>;
@@ -164,17 +179,17 @@ type CoworkQueryBridge = Pick<CoworkSessionsBridge,
   | "getDefaultEffort" | "getDefaultPermissionMode" | "getDetectedProjects"
   | "getDiffFileContent" | "getEffort" | "getEffortCatalogDefaults" | "getGitInfo" | "getGitDiff"
   | "getGitDiffStats" | "getMergeBase" | "getLocalBranches" | "checkRemoteTrust" | "checkTrust"
-  | "isFolderTrusted" | "saveTrust" | "addTrustedFolder" | "openInEditor" | "getPermissionMode" | "getSupportedCommands"
+  | "isFolderTrusted" | "saveTrust" | "addTrustedFolder" | "openInEditor" | "getPermissionMode" | "getAgents" | "getSupportedCommands"
   | "getWorkingTreeStatus"
 >;
 type CoworkFileBridge = Pick<CoworkSessionsBridge,
   | "clearSession" | "launchUltrareview" | "readFileAtCwd" | "readSessionFile"
-  | "readSessionImageAsDataUrl" | "pickSessionFile" | "pickFileAtCwd" | "writeSessionFile"
+  | "readSessionImageAsDataUrl" | "getSessionImageStreamUrl" | "getSessionMediaStreamUrl" | "readSessionMediaAsDataUrl" | "pickSessionFile" | "pickFileAtCwd" | "writeSessionFile"
 >;
 type CoworkMutationBridge = Pick<CoworkSessionsBridge,
   | "addFolderToSession" | "respondToToolPermission" | "respondDirectoryServers"
   | "respondSlashMenuSkills" | "respondPluginSearch"
-  | "setEffort" | "setMcpServers"
+  | "setEffort" | "setFastMode" | "setMcpServers"
   | "setModel" | "setPermissionMode" | "updateSession" | "startShellPty" | "stop"
   | "stopShellPty" | "stopTask" | "writeShellPty" | "resizeShellPty" | "getShellPtyBuffer"
 >;
@@ -344,6 +359,10 @@ export type RawClaudeWebBridge = {
   };
   WindowControl?: {
     close?: () => Promise<unknown>;
+    dockPopout?: () => Promise<unknown>;
+    getAlwaysOnTop?: () => Promise<unknown>;
+    openPopout?: (entry: unknown) => Promise<unknown>;
+    setAlwaysOnTop?: (on: boolean) => Promise<unknown>;
   };
   BrowserNavigation?: {
     goBack?: () => Promise<unknown>;
@@ -360,6 +379,8 @@ export type RawClaudeWebBridge = {
     onFullscreenChanged?: (listener: (...args: unknown[]) => void) => () => void;
     zoomFactorChanged?: (listener: (...args: unknown[]) => void) => () => void;
     onZoomFactorChanged?: (listener: (...args: unknown[]) => void) => () => void;
+    epitaxyPopoutDocked?: (listener: (...args: unknown[]) => void) => () => void;
+    onEpitaxyPopoutDocked?: (listener: (...args: unknown[]) => void) => () => void;
   };
   /**
    * Official _T = globalThis["claude.web"]?.CustomPlugins
@@ -545,6 +566,18 @@ export function createDesktopBridgeFromOfficialNamespaces(
       close: async () => {
         await web.WindowControl?.close?.();
       },
+      openPopout: async (entry) => {
+        const ok = await web.WindowControl?.openPopout?.(entry);
+        return ok === true;
+      },
+      dockPopout: async () => {
+        const ok = await web.WindowControl?.dockPopout?.();
+        return ok === true;
+      },
+      setAlwaysOnTop: async (on) => {
+        return asStrictBoolean(await web.WindowControl?.setAlwaysOnTop?.(on));
+      },
+      getAlwaysOnTop: async () => asStrictBoolean(await web.WindowControl?.getAlwaysOnTop?.()),
       // Strict true-check: Boolean(object) would wrongly kill traffic-light spacer (qWt).
       getFullscreen: async () => asStrictBoolean(await web.WindowState?.getFullscreen?.()),
       getZoomFactor: async () => {
@@ -564,6 +597,13 @@ export function createDesktopBridgeFromOfficialNamespaces(
         return subscribe((value) => {
           const zoom = Number(value);
           listener(Number.isFinite(zoom) && zoom > 0 ? zoom : 1);
+        });
+      },
+      onEpitaxyPopoutDocked: (listener) => {
+        const subscribe = web.WindowState?.onEpitaxyPopoutDocked ?? web.WindowState?.epitaxyPopoutDocked;
+        if (!subscribe) return () => undefined;
+        return subscribe((value) => {
+          listener(asRecord(value));
         });
       },
     },
@@ -707,7 +747,7 @@ function createBrowserUseBridge(
   if (!raw?.mcpCallTool) return {};
   const callChromeTool = async (toolName: string, input: Record<string, unknown> = {}) => raw.mcpCallTool?.(chromeMcpServerName, toolName, input);
   return {
-    // Official ion-dist basis: index-BELzQL5P.js MRt uses local tool list_connected_browsers/select_browser;
+    // Official ion-dist basis: c21f11e6d-CxD82rYo.js MRt uses local tool list_connected_browsers/select_browser;
     // PZt.displayName="BrowserPickerButton" renders the same connected-browser picker surface.
     listConnectedBrowsers: async () => normalizeConnectedBrowsers(await callChromeTool("list_connected_browsers").catch(() => [])),
     selectBrowser: async (deviceId) => !mcpToolReturnedError(await callChromeTool("select_browser", { deviceId }).catch(() => ({ isError: true }))),
@@ -927,6 +967,25 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     },
     getSessionsForScheduledTask: async (taskId) => normalizeSessionList(await raw?.getSessionsForScheduledTask?.(taskId), targetKind),
     getTranscript: async (id) => normalizeMessages(await raw?.getTranscript?.(id).catch(() => [])) ?? [],
+    getTranscriptPage: async (id, beforeUuid, limit) => {
+      try {
+        const result = await raw?.getTranscriptPage?.(id, beforeUuid, limit);
+        if (result != null && typeof result === "object") {
+          const page = asRecord(result);
+          if (Array.isArray(page.messages)) {
+            return {
+              messages: normalizeMessages(page.messages) ?? [],
+              hasMore: page.hasMore === true,
+              cursor: stringValue(page.cursor),
+            };
+          }
+        }
+      } catch {
+        /* IPC missing / not in LOCAL_SESSIONS_METHODS — do not swallow into empty li. */
+      }
+      const all = normalizeMessages(await raw?.getTranscript?.(id).catch(() => [])) ?? [];
+      return { messages: all, hasMore: false };
+    },
     addFolderToSession: async (id, folder) => {
       const item = await raw?.addFolderToSession?.(id, folder);
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
@@ -1090,6 +1149,7 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     saveTrust: async (folder) => raw?.saveTrust?.(folder),
     openInEditor: async (target, editor, line, column) => raw?.openInEditor?.(target, editor, line, column),
     getPermissionMode: async (id) => String(await raw?.getPermissionMode?.(id).catch(() => "default") ?? "default"),
+    getAgents: async () => normalizeLocalAgentCatalog(await raw?.getAgents?.().catch(() => [])),
     getSupportedCommands: async (request) => normalizeSupportedCommands(await raw?.getSupportedCommands?.(request).catch(() => [])),
     getWorkingTreeStatus: async (idOrCwd) => normalizeGitCommandResult(await raw?.getWorkingTreeStatus?.(idOrCwd)),
     clearSession: async (id) => raw?.clearSession?.(id),
@@ -1100,6 +1160,18 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     readSessionFile: async (id, filePath) => normalizeFileReadResult(await raw?.readSessionFile?.(id, filePath)) as string | null | Record<string, unknown>,
     readSessionImageAsDataUrl: async (id, filePath) => {
       const result = await raw?.readSessionImageAsDataUrl?.(id, filePath);
+      return typeof result === "string" ? result : null;
+    },
+    getSessionImageStreamUrl: async (id, filePath) => {
+      const result = await raw?.getSessionImageStreamUrl?.(id, filePath);
+      return typeof result === "string" ? result : null;
+    },
+    getSessionMediaStreamUrl: async (id, filePath) => {
+      const result = await raw?.getSessionMediaStreamUrl?.(id, filePath);
+      return typeof result === "string" ? result : null;
+    },
+    readSessionMediaAsDataUrl: async (id, filePath) => {
+      const result = await raw?.readSessionMediaAsDataUrl?.(id, filePath);
       return typeof result === "string" ? result : null;
     },
     pickSessionFile: async (id) => {
@@ -1135,6 +1207,7 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       const item = await raw?.setEffort?.(id, effort);
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
     },
+    setFastMode: async (id, enabled) => Boolean(await raw?.setFastMode?.(id, enabled)),
     setMcpServers: async (id, mcpServers) => {
       const item = await raw?.setMcpServers?.(id, mcpServers);
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
@@ -1153,6 +1226,8 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
       const item = await raw?.updateSession?.(id, officialPatch);
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
     },
+    changeCwd: async (id, cwd, trustAccepted, trustedDirectory) =>
+      normalizeChangeCwdResult(await raw?.changeCwd?.(id, cwd, trustAccepted, trustedDirectory)),
     startShellPty: async (sessionId, cols, rows) => normalizeShellPtyStartResult(await raw?.startShellPty?.(sessionId, cols, rows), await raw?.getShellPtyBuffer?.(sessionId).catch(() => "")),
     interrupt: async (id) => raw?.interrupt?.(id),
     stop: async (id) => raw?.stop?.(id),
@@ -1197,6 +1272,7 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
         {
           messageUuid,
           userSelectedFiles: input?.userSelectedFiles?.length ? input.userSelectedFiles : undefined,
+          ...(input?.agent ? { agent: input.agent } : {}),
         },
       );
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
@@ -1209,6 +1285,9 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     forkSession: async (id, messageId) => {
       const item = await raw?.forkSession?.(id, messageId);
       return item ? enrichSessionWithGitInfo(normalizeSession(item, targetKind), raw) : null;
+    },
+    setManualKeepAwake: async (id, enabled) => {
+      await raw?.setManualKeepAwake?.(id, enabled === true);
     },
     rewind: async (id, messageId) => raw?.rewind?.(id, messageId),
     create: async (kind) => {
@@ -1309,7 +1388,7 @@ function createCoworkDirectMcpBridge(raw: RawLocalSessionsBridge | undefined): P
 }
 
 /**
- * Official nFt skill IPC (index-BELzQL5P PLe/HLe/BLe/KLe).
+ * Official nFt skill IPC (c63a78ed4-DmFZsHvd PLe/HLe/BLe/KLe).
  * Host writes userData/local-skills — not ~/.claude/skills (Code CLI source).
  */
 function createCoworkLocalSkillsBridge(raw: RawLocalSessionsBridge | undefined): Pick<
@@ -1500,6 +1579,7 @@ function createCoworkQueryBridge(raw: RawLocalSessionsBridge | undefined): Cowor
     addTrustedFolder: async (folder) => raw?.addTrustedFolder?.(folder),
     openInEditor: async (target, editor, line, column) => raw?.openInEditor?.(target, editor, line, column),
     getPermissionMode: async (id) => String(await raw?.getPermissionMode?.(id).catch(() => "default") ?? "default"),
+    getAgents: async () => normalizeLocalAgentCatalog(await raw?.getAgents?.().catch(() => [])),
     getSupportedCommands: async (request) => normalizeSupportedCommands(await raw?.getSupportedCommands?.(request).catch(() => [])),
     getWorkingTreeStatus: async (idOrCwd) => normalizeGitCommandResult(await raw?.getWorkingTreeStatus?.(idOrCwd)),
   };
@@ -1522,6 +1602,21 @@ function createCoworkFileBridge(raw: RawLocalSessionsBridge | undefined): Cowork
     readSessionImageAsDataUrl: async (id, filePath) => {
       if (!raw?.readSessionImageAsDataUrl) return null;
       const result = await raw.readSessionImageAsDataUrl(id, filePath);
+      return typeof result === "string" ? result : null;
+    },
+    getSessionImageStreamUrl: async (id, filePath) => {
+      if (!raw?.getSessionImageStreamUrl) return null;
+      const result = await raw.getSessionImageStreamUrl(id, filePath);
+      return typeof result === "string" ? result : null;
+    },
+    getSessionMediaStreamUrl: async (id, filePath) => {
+      if (!raw?.getSessionMediaStreamUrl) return null;
+      const result = await raw.getSessionMediaStreamUrl(id, filePath);
+      return typeof result === "string" ? result : null;
+    },
+    readSessionMediaAsDataUrl: async (id, filePath) => {
+      if (!raw?.readSessionMediaAsDataUrl) return null;
+      const result = await raw.readSessionMediaAsDataUrl(id, filePath);
       return typeof result === "string" ? result : null;
     },
     pickSessionFile: async (id) => {
@@ -1550,6 +1645,7 @@ function createCoworkMutationBridge(raw: RawLocalSessionsBridge | undefined): Co
     respondPluginSearch: async (requestId, resultsJson) =>
       raw?.respondPluginSearch?.(requestId, resultsJson),
     setEffort: async (id, effort) => normalizeCoworkResult(await raw?.setEffort?.(id, effort)),
+    setFastMode: async (id, enabled) => Boolean(await raw?.setFastMode?.(id, enabled)),
     setMcpServers: async (id, mcpServers) => normalizeCoworkResult(await raw?.setMcpServers?.(id, mcpServers)),
     setModel: async (id, model) => normalizeCoworkResult(await raw?.setModel?.(id, model)),
     setPermissionMode: async (id, mode) => normalizeCoworkResult(await raw?.setPermissionMode?.(id, mode)),
@@ -1987,7 +2083,10 @@ function normalizeSession(
     kind,
     sessionKind: kind === "code" ? "code" : "cowork",
     cwd,
+    sshConfig: normalizeWorkspaceSshConfig(raw.sshConfig ?? original.sshConfig),
     effort: stringValue(raw.effort) ?? stringValue(original.effort),
+    fastMode: booleanValue(raw.fastMode) ?? booleanValue(original.fastMode),
+    loops: normalizeComposerLoops(raw.loops ?? original.loops),
     folders: Array.isArray(raw.folders) ? raw.folders.filter((folder): folder is string => typeof folder === "string") : undefined,
     folderExists: booleanValue(raw.folderExists) ?? booleanValue(original.folderExists),
     homePath: stringValue(raw.homePath) ?? stringValue(original.homePath),
@@ -2015,6 +2114,7 @@ function normalizeSession(
     // Official frame pin uses pinnedOrder; host may also set isPinned / starred.
     isPinned: Boolean(raw.isPinned ?? raw.pinned ?? raw.isStarred ?? original.isPinned ?? original.isStarred),
     isArchived: Boolean(raw.archived ?? raw.isArchived ?? original.archived ?? original.isArchived),
+    manualKeepAwake: booleanValue(raw.manualKeepAwake) ?? booleanValue(original.manualKeepAwake) ?? false,
     isAgentCompleted: booleanValue(raw.isAgentCompleted) ?? booleanValue(original.isAgentCompleted),
     hasCompleted: booleanValue(raw.hasCompleted) ?? booleanValue(original.hasCompleted) ?? false,
     error: stringValue(raw.error) ?? stringValue(original.error),
@@ -2197,7 +2297,7 @@ function normalizeCoworkMountedProjects(value: unknown): CoworkMountedProject[] 
   return projects.length > 0 ? projects : undefined;
 }
 
-/** Official Me hydrate: n.fsDetectedFiles array → activity merge (index-BELzQL5P ~114116). */
+/** Official Me hydrate: n.fsDetectedFiles array → activity merge (c21f11e6d-CxD82rYo). */
 function normalizeCoworkDetectedFiles(value: unknown): CoworkDetectedFile[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const files = value
@@ -2211,6 +2311,41 @@ function normalizeCoworkDetectedFiles(value: unknown): CoworkDetectedFile[] | un
     })
     .filter((file): file is CoworkDetectedFile => Boolean(file));
   return files.length > 0 ? files : undefined;
+}
+
+function normalizeChangeCwdResult(value: unknown): OfficialChangeCwdResult {
+  const bag = asRecord(value);
+  const status = stringValue(bag.status);
+  if (status === "needs_trust") {
+    const directory = stringValue(bag.directory) ?? "";
+    const sources = Array.isArray(bag.sources)
+      ? bag.sources.filter((item): item is string => typeof item === "string")
+      : [];
+    return { status: "needs_trust", directory, sources };
+  }
+  if (status === "ok") {
+    const files = asRecord(bag.filesCarried);
+    const filesCarried = Object.keys(files).length > 0
+      ? {
+          alreadyThere: typeof files.alreadyThere === "number" ? files.alreadyThere : undefined,
+          copied: typeof files.copied === "number" ? files.copied : undefined,
+          notCopied: typeof files.notCopied === "number" ? files.notCopied : undefined,
+          outcome: stringValue(files.outcome),
+        }
+      : undefined;
+    return {
+      status: "ok",
+      cwd: stringValue(bag.cwd) ?? "",
+      changed: bag.changed === true,
+      transcriptRelocated: bag.transcriptRelocated === true,
+      filesCarried,
+    };
+  }
+  return {
+    status: "rejected",
+    reason: stringValue(bag.reason),
+    message: stringValue(bag.message) ?? "Couldn’t change the session directory.",
+  };
 }
 
 async function enrichSessionWithGitInfo(session: SessionSummary, raw?: RawLocalSessionsBridge): Promise<SessionSummary> {
@@ -2280,6 +2415,7 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
     images: images?.length ? images : undefined,
     messageUuid: input.messageUuid,
     model: input.model,
+    ...(input.agent ? { agent: input.agent } : {}),
     scheduledTaskId: input.scheduledTaskId,
     skipRedirect: input.skipRedirect,
     origin: input.origin,
@@ -2307,6 +2443,27 @@ function toStartPayload(input: StartSessionInput, targetKind: SessionSummary["ki
           },
         }
       : {}),
+  };
+}
+
+/** Official Hd session.sshConfig — both host and sshHost residual shapes. */
+function normalizeWorkspaceSshConfig(value: unknown): WorkspaceSshConfig | undefined {
+  const raw = asRecord(value);
+  const host = stringValue(raw.host) ?? stringValue(raw.sshHost) ?? stringValue(raw.hostName);
+  if (!host) return undefined;
+  return {
+    host,
+    hostName: stringValue(raw.hostName),
+    user: stringValue(raw.user),
+    port: (raw.port as number | string | undefined) ?? (raw.sshPort as number | string | undefined),
+    identityFile: stringValue(raw.identityFile) ?? stringValue(raw.sshIdentityFile),
+    proxyJump: stringValue(raw.proxyJump),
+    remoteCwd: stringValue(raw.remoteCwd),
+    sshHost: stringValue(raw.sshHost) ?? host,
+    sshPort: (raw.sshPort as number | string | undefined) ?? (raw.port as number | string | undefined),
+    sshIdentityFile: stringValue(raw.sshIdentityFile) ?? stringValue(raw.identityFile),
+    name: stringValue(raw.name),
+    id: stringValue(raw.id),
   };
 }
 
@@ -2659,6 +2816,23 @@ function normalizeDiffFileContentResult(value: unknown): DiffFileContentResult {
   }
   if (oldText === null && newText === null) return null;
   return { oldText, newText };
+}
+
+/** Official fe.getAgents — keep host source; do not remap local → user. */
+function normalizeLocalAgentCatalog(value: unknown): LocalAgentCatalogRow[] {
+  if (!Array.isArray(value)) return [];
+  const out: LocalAgentCatalogRow[] = [];
+  for (const item of value) {
+    const raw = asRecord(item);
+    const name = stringValue(raw.name);
+    if (!name) continue;
+    out.push({
+      description: stringValue(raw.description) ?? undefined,
+      name,
+      source: stringValue(raw.source) ?? undefined,
+    });
+  }
+  return out;
 }
 
 function normalizeSupportedCommands(value: unknown): SlashCommand[] {
@@ -3088,6 +3262,25 @@ function joinPath(parentPath: string, name?: string) {
 
 function booleanValue(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
+}
+
+/** Official c119 `O?.loops` — only persist host list; empty → omit. */
+function normalizeComposerLoops(value: unknown): SessionSummary["loops"] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const loops = value.flatMap((item) => {
+    const raw = asRecord(item);
+    const id = stringValue(raw.id);
+    if (!id) return [];
+    return [{
+      id,
+      createdAt: numberOrUndefined(raw.createdAt),
+      cron: stringValue(raw.cron),
+      humanSchedule: stringValue(raw.humanSchedule),
+      nextRunAt: numberOrUndefined(raw.nextRunAt),
+      prompt: stringValue(raw.prompt),
+    }];
+  });
+  return loops.length > 0 ? loops : undefined;
 }
 
 function numberValue(value: unknown): number {

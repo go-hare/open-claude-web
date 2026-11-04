@@ -54,6 +54,18 @@ describe("residualUr (setSidePane insert)", () => {
     }
   });
 
+  it("first file open → row [chat:2, file:3] (official c039 la)", () => {
+    const layout = residualUr(residualChatOnlyLayout(), "file");
+    expect(residualChatFlex(layout)).toBe(2);
+    expect(residualSideColumns(layout)).toEqual([{ flex: 3, tiles: ["file"] }]);
+    const root = layout.root;
+    expect(root.kind).toBe("stack");
+    if (root.kind === "stack") {
+      const side = root.children[1]!;
+      expect(side.kind === "tile" && side.tileId === "file" && side.flex === 3).toBe(true);
+    }
+  });
+
   it("second open under last side tile → one column stack (tasks above, file below)", () => {
     let layout = residualUr(residualChatOnlyLayout(), "tasks");
     layout = residualUr(layout, "file");

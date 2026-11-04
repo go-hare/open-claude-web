@@ -31,6 +31,7 @@ export const OFFICIAL_SESSION_SHORTCUT_BINDINGS = [
   { command: "togglePreview", key: "cmd+alt+p", code: "KeyP" },
   { command: "toggleDiff", key: "cmd+shift+d", code: "KeyD", when: "isClaudeApp" },
   { command: "toggleDiff", key: "ctrl+shift+d", code: "KeyD", when: "!isClaudeApp" },
+  { command: "toggleTerminal", key: "cmd+j", code: "KeyJ", when: "isClaudeApp" },
   { command: "toggleTerminal", key: "ctrl+`", code: "Backquote" },
   { command: "toggleBrowser", key: "cmd+shift+f", code: "KeyF" },
   { command: "closePane", key: "cmd+\\", code: "Backslash" },

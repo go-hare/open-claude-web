@@ -7,6 +7,9 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../../../shell/icons";
 import { OfficialHoverCardTooltip, OfficialTooltip } from "../../shared/OfficialTooltip";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { formatOfficialIcu } from "../../../i18n/formatOfficialIcu";
+import { EFFORT_CONTROL_MESSAGES } from "../officialCodeChromeMessages";
 import { OfficialEffortSlider } from "./OfficialEffortSlider";
 
 export type OfficialEffortItem = {
@@ -106,21 +109,26 @@ export function OfficialEffortControl({
     onOpenChange(next, eventDetails?.reason);
   }, [onOpenChange]);
 
+  const effortText = useI18nText(EFFORT_CONTROL_MESSAGES);
   const triggerLabel = items[selectedIndex]?.label;
+  const triggerAriaLabel = formatOfficialIcu(effortText.effortSelectorTrigger, {
+    name: String(triggerLabel ?? ""),
+  });
   const fillShader = items.at(-1)?.accent === true;
-  const helpTitle = activeItem?.help?.title ?? "Effort";
+  const helpTitle = activeItem?.help?.title ?? effortText.effort;
   const helpBody = activeItem?.help?.body ?? DEFAULT_HELP_BODY;
 
   return (
     <Popover.Root open={open} onOpenChange={handleOpenChange}>
-      <OfficialTooltip delayDuration={400} side="top" tooltipContent="Effort" keyboardShortcut="cmd+shift+e">
+      <OfficialTooltip delayDuration={400} side="top" tooltipContent={effortText.effort} keyboardShortcut="cmd+shift+e">
         <Popover.Trigger
           disabled={disabled || !canOpen}
           className="group/btn relative isolate inline-flex items-center justify-center h-small rounded-small text-footnote text-uncontained-default hover:text-uncontained-hover disabled:text-uncontained-disabled shrink-0 select-none border-0 outline-none hide-focus-ring ring-focus cursor-default aria-[expanded=true]:text-[var(--text-uncontained-selected)] aria-[expanded=true]:hover:text-[var(--text-uncontained-selected)]"
           type="button"
+          data-cds="ModelSelectorEffort"
+          aria-label={triggerAriaLabel}
         >
           <span aria-hidden="true" className="btn-squish absolute inset-0 -z-[1] rounded-[inherit] bg-[var(--fill-uncontained-default)] group-hover/btn:bg-[var(--fill-uncontained-hover)] group-disabled/btn:bg-[var(--fill-uncontained-disabled)] group-aria-[expanded=true]/btn:bg-[var(--fill-uncontained-selected)]" />
-          <span className="sr-only">Effort: </span>
           <span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap px-p5">
             {triggerLabel}
           </span>
@@ -133,7 +141,7 @@ export function OfficialEffortControl({
               <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
               <div className="flex items-center justify-between gap-g3">
                 <div className="flex min-w-0 items-center gap-g3 text-body">
-                  <span className="shrink-0 text-t6">Effort</span>
+                  <span className="shrink-0 text-t6">{effortText.effort}</span>
                   <EffortTitleLabel accent={activeItem?.accent} index={activeIndex} label={activeItem?.label} />
                 </div>
                 <OfficialHoverCardTooltip
@@ -153,7 +161,7 @@ export function OfficialEffortControl({
                   <button
                     type="button"
                     className="inline-flex size-[18px] shrink-0 cursor-default items-center justify-center rounded-full text-t5 outline-none hide-focus-ring ring-focus hover:text-t7"
-                    aria-label="About effort"
+                    aria-label={effortText.effort}
                   >
                     <Icon name="Help" size="m" />
                   </button>
@@ -165,7 +173,7 @@ export function OfficialEffortControl({
                   <span>Smarter</span>
                 </div>
                 <OfficialEffortSlider
-                  aria-label="Effort"
+                  aria-label={effortText.effort}
                   disabled={disabled}
                   fillShader={fillShader}
                   getAriaValueText={getAriaValueText}

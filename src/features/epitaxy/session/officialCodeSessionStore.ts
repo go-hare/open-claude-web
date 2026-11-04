@@ -1,5 +1,5 @@
 /**
- * Official-shaped code session bucket store (index-BELzQL5P `he` / `Wke`).
+ * Official-shaped code session bucket store (cd5a31703 `he` / `Wke`).
  *
  * Official De: mount `openSession(id, transport)` / unmount `releaseSession(id)`.
  * Recents / home still seed meta via attachSession (product name: openSession).
@@ -35,6 +35,7 @@ import {
   parseOfficialContextUsageMarkdown,
 } from "./officialTranscriptParse";
 import type { OfficialCodeSessionSub, OfficialCodeSessionTransport } from "./officialCodeSessionTransport";
+import { officialXmShowsThinking } from "./officialTranscriptMode";
 
 type OfficialCodeSessionHostApply = (sessionId: string, event: unknown) => void;
 let officialCodeSessionHostApply: OfficialCodeSessionHostApply | null = null;
@@ -48,11 +49,13 @@ export type StreamActivityMode = "idle" | "requesting" | "thinking" | "respondin
 
 export const idleStreamActivityMode: StreamActivityMode = "idle";
 
-/** Official index-BELzQL5P `Hke` — stable empty array for queuedMessages. */
+/** Official cd5a31703 `Hke` — stable empty array for queuedMessages. */
 export const EMPTY_QUEUED_MESSAGES: ChatMessage[] = [];
 
-/** Official he.releaseSession pendingClose delay (`36e4`). Idle evicts immediately. */
+/** Official he.releaseSession pendingTurn delay (`Wm=36e4` in c06cf64bb). */
 export const OFFICIAL_CODE_SESSION_PENDING_CLOSE_MS = 36e4;
+/** Official he.releaseSession idle delay (`Um=6e4`). Keep bucket/sub so A→B→A / StrictMode remount skips Ja. */
+export const OFFICIAL_CODE_SESSION_IDLE_CLOSE_MS = 6e4;
 
 /** Official Wke `connection` (U.subscribe kind:connection). */
 export type OfficialCodeSessionConnection =
@@ -72,7 +75,7 @@ export type OfficialCodeSessionBucket = {
   isMetaPending: boolean;
   isSessionNotFound: boolean;
   /**
-   * Official index-BELzQL5P `liveMeta` (Fke/Uke).
+   * Official cd5a31703 `liveMeta` (Fke/Uke).
    * CLI system init/status permissionMode + model — not wiped by stale session_updated.
    */
   liveMeta: OfficialLiveMeta | null;
@@ -89,13 +92,13 @@ export type OfficialCodeSessionBucket = {
   pendingQueuedSends: number;
   pendingTurnStartedAt: number | null;
   /**
-   * Official `pendingTurn.endTurnSeen` (index-BELzQL5P).
+   * Official `pendingTurn.endTurnSeen` (cd5a31703).
    * Set on durable assistant stop_reason=end_turn (`p`); cleared when pendingTurn resets.
    * Xke / pe = pendingTurn && !endTurnSeen — end_turn alone does NOT Pke.clear / lift Va.
    */
   pendingTurnEndTurnSeen: boolean;
   /**
-   * Official index-BELzQL5P `compactionStatus` (d_e / Gv).
+   * Official cd5a31703 `compactionStatus` (d_e / Gv).
    * Set from system/status `status` (any string; Gv chrome only for `"compacting"`); cleared on result settle.
    */
   compactionStatus: string | null;
@@ -125,6 +128,13 @@ export type OfficialCodeSessionBucket = {
   evictTimer: ReturnType<typeof setTimeout> | null;
   /** Official Wke refCount — De mount/unmount. */
   refCount: number;
+  /**
+   * Official cef1e `hasMore` / Fu `H.pager.hasEarlier`.
+   * Newest-page load leaves older jsonl on disk until loadOlder.
+   */
+  hasOlder: boolean;
+  /** Outer uuid of the earliest loaded message — next getTranscriptPage beforeUuid. */
+  olderCursor: string | null;
 };
 
 export type OfficialCodeSessionState = {
@@ -158,6 +168,8 @@ function emptyBucket(pending: boolean): OfficialCodeSessionBucket {
     pendingClose: false,
     evictTimer: null,
     refCount: 0,
+    hasOlder: false,
+    olderCursor: null,
   };
 }
 
@@ -294,8 +306,8 @@ type OfficialCodeSessionActions = {
    */
   openSessionTransport: (sessionId: string, transport: OfficialCodeSessionTransport) => void;
   /**
-   * Official he.releaseSession(id) — De unmount.
-   * refCount>0 keep; ==0 && pendingTurn → pendingClose + 360s evict; else evict now.
+   * Official he.releaseSession(id) — De unmount (c06cf64bb).
+   * refCount>0 keep; ==0 && pendingTurn → pendingClose + Wm 360s; else idle Um 60s then evict.
    */
   releaseSession: (sessionId: string) => void;
   /**
@@ -305,7 +317,7 @@ type OfficialCodeSessionActions = {
   /** Official beginPendingTurn — pendingTurn + promptSuggestion:null only. */
   beginPendingTurn: (sessionId: string) => void;
   /**
-   * Official clearPendingTurn (index-BELzQL5P) — pendingTurn=null + compactionStatus=null.
+   * Official clearPendingTurn (cd5a31703) — pendingTurn=null + compactionStatus=null.
    * Also clears je (turnStartedAt). Does not touch queuedMessages / isRunning / Va.
    * Yr / Gr.onError when queue drained; not Esc (Esc is markInterrupting).
    */
@@ -323,7 +335,7 @@ type OfficialCodeSessionActions = {
    */
   applyRuntimeError: (sessionId: string, error: Error, errorCategory?: string | null) => void;
   /**
-   * Official noteQueuedSend (index-BELzQL5P) — only bumps pendingQueuedSends when
+   * Official noteQueuedSend (cd5a31703) — only bumps pendingQueuedSends when
    * pendingTurn is already set. Gr always calls this; no-op when idle.
    */
   noteQueuedSend: (sessionId: string) => void;
@@ -340,8 +352,19 @@ type OfficialCodeSessionActions = {
   applyLoad: (
     sessionId: string,
     generation: number,
-    payload: { messages: ChatMessage[]; session: SessionSummary | null } | null,
+    payload: {
+      messages: ChatMessage[];
+      session: SessionSummary | null;
+      hasOlder?: boolean;
+      olderCursor?: string | null;
+    } | null,
     options?: { preserveLiveStream?: boolean },
+  ) => void;
+  /** Official Fu loadEarlier — prepend older page without replacing the newest window. */
+  prependOlderMessages: (
+    sessionId: string,
+    messages: ChatMessage[],
+    meta: { hasOlder: boolean; olderCursor?: string | null },
   ) => void;
   applyLoadError: (sessionId: string, generation: number, error: Error) => void;
   patchSession: (sessionId: string, patch: Partial<SessionSummary> | SessionSummary) => void;
@@ -489,7 +512,7 @@ function seenUuidsFromMessages(messages: ChatMessage[], prev?: Set<string>): Set
 
 /**
  * Structural richness for *reload* same-outer-uuid choice only.
- * Live path never uses this — official same-uuid is pure replace (index-BELzQL5P).
+ * Live path never uses this — official same-uuid is pure replace (cd5a31703).
  * Multi-emit different outer uuids append; eke f() merges consecutive assistants.
  */
 function chatMessageRichness(message: ChatMessage): number {
@@ -568,7 +591,7 @@ function findOptimisticPlainUserIndex(messages: ChatMessage[], text: string): nu
 }
 
 function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[] {
-  // Official live path (index-BELzQL5P): same outer-uuid replaces in place; else append.
+  // Official live path (cd5a31703): same outer-uuid replaces in place; else append.
   // Durable shape is CLI SoT (1 send → 1 user). No multi-text expand / invent split.
   const identity = messageIdentity(next);
   const index = messages.findIndex((message) => messageIdentity(message) === identity);
@@ -591,7 +614,7 @@ function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[
 }
 
 /**
- * Official zke-style durable row identity (index-BELzQL5P live message handler):
+ * Official zke-style durable row identity (cd5a31703 live message handler):
  * outer CLI `uuid` is per NDJSON event. Multi-emit assistant partials APPEND as separate
  * rows; eke suppresses paint while message.id === streamingMessageId, then f() merges
  * consecutive assistants. Collapsing by Anthropic message.id at upsert time forced
@@ -679,7 +702,7 @@ function evictOfficialCodeSessionBucketFrom(
 }
 
 /**
- * Official index-BELzQL5P:
+ * Official cd5a31703:
  *   v = system/status with `"status" in e` → e.status (any string, incl. compacting|complete|failed)
  * Gv only treats `compacting` as compacting chrome; failed/complete leave that branch.
  */
@@ -836,6 +859,8 @@ function createOfficialCodeSessionStore() {
             seenUuids: seenUuidsFromMessages(messagesToKeep),
             contextTokens: prev.contextTokens ?? usage.contextTokens,
             contextUsage: prev.contextUsage ?? usage.contextUsage,
+            hasOlder: false,
+            olderCursor: null,
             // Load path: host mode + status recovery (not full Uke init overwrite).
             session: sessionForLoad(baseSession, messagesToKeep, liveMeta),
           },
@@ -847,6 +872,7 @@ function createOfficialCodeSessionStore() {
   openSessionTransport: (sessionId, transport) => {
     // Official he.openSession(s, n): if (a?.sub) refCount++ / cancel pendingClose / reclaim.
     const existing = get().buckets[sessionId];
+    if (existing?.evictTimer && !existing.sub) clearTimeout(existing.evictTimer);
     if (existing?.sub) {
       if (existing.evictTimer) clearTimeout(existing.evictTimer);
       set((state) => {
@@ -916,9 +942,9 @@ function createOfficialCodeSessionStore() {
       });
       return;
     }
-    // Official: pendingTurn !== null → pendingClose + 36e4 then evict. Else evict now.
+    // Official c06cf64bb: pendingTurn → i() Wm=36e4 pendingClose; idle → r() Um=6e4 then o().
+    if (raw.evictTimer) clearTimeout(raw.evictTimer);
     if (raw.pendingTurnStartedAt !== null) {
-      if (raw.evictTimer) clearTimeout(raw.evictTimer);
       const timer = setTimeout(() => {
         evictOfficialCodeSessionBucketFrom(get, set, sessionId);
       }, OFFICIAL_CODE_SESSION_PENDING_CLOSE_MS);
@@ -939,17 +965,47 @@ function createOfficialCodeSessionStore() {
       });
       return;
     }
+    const timer = setTimeout(() => {
+      const current = get().buckets[sessionId];
+      if (!current || current.refCount > 0) return;
+      if (current.pendingTurnStartedAt !== null) {
+        if (current.evictTimer) clearTimeout(current.evictTimer);
+        const pendingTimer = setTimeout(() => {
+          evictOfficialCodeSessionBucketFrom(get, set, sessionId);
+        }, OFFICIAL_CODE_SESSION_PENDING_CLOSE_MS);
+        set((state) => {
+          const prev = state.buckets[sessionId];
+          if (!prev || prev.refCount > 0) return state;
+          return {
+            buckets: {
+              ...state.buckets,
+              [sessionId]: {
+                ...prev,
+                pendingClose: true,
+                evictTimer: pendingTimer,
+              },
+            },
+          };
+        });
+        return;
+      }
+      evictOfficialCodeSessionBucketFrom(get, set, sessionId);
+    }, OFFICIAL_CODE_SESSION_IDLE_CLOSE_MS);
     set((state) => {
       const prev = state.buckets[sessionId];
       if (!prev) return state;
       return {
         buckets: {
           ...state.buckets,
-          [sessionId]: { ...prev, refCount: nextCount },
+          [sessionId]: {
+            ...prev,
+            refCount: nextCount,
+            pendingClose: false,
+            evictTimer: timer,
+          },
         },
       };
     });
-    evictOfficialCodeSessionBucketFrom(get, set, sessionId);
   },
 
   resetOnCleared: (sessionId) => {
@@ -1148,7 +1204,7 @@ function createOfficialCodeSessionStore() {
     });
   },
 
-  // Official noteQueuedSend (index-BELzQL5P): only when pendingTurn already set.
+  // Official noteQueuedSend (cd5a31703): only when pendingTurn already set.
   // Do NOT invent mid-turn from isRunning / Va / stream — that desynced web queue
   // from host deferredSends and left Esc sticky after markNotRunning.
   noteQueuedSend: (sessionId) => {
@@ -1322,6 +1378,8 @@ function createOfficialCodeSessionStore() {
               session: nextSession,
               pendingTurnStartedAt: pendingSeed.pendingTurnStartedAt,
               pendingTurnEndTurnSeen: pendingSeed.pendingTurnEndTurnSeen,
+              hasOlder: payload.hasOlder === true || prev.hasOlder,
+              olderCursor: payload.olderCursor ?? prev.olderCursor,
             },
           },
         };
@@ -1365,6 +1423,41 @@ function createOfficialCodeSessionStore() {
             pendingTurnEndTurnSeen: pendingSeed.pendingTurnEndTurnSeen,
             streamActivityMode: clearStreamOwnership ? idleStreamActivityMode : prev.streamActivityMode,
             streamingMessageId: clearStreamOwnership ? null : prev.streamingMessageId,
+            hasOlder: payload.hasOlder === true,
+            olderCursor: payload.olderCursor ?? prev.olderCursor,
+          },
+        },
+      };
+    });
+  },
+
+  prependOlderMessages: (sessionId, messages, meta) => {
+    set((state) => {
+      const prev = state.buckets[sessionId];
+      if (!prev) return state;
+      const incoming = filterStreamEvents(messages);
+      if (incoming.length === 0) {
+        return {
+          buckets: {
+            ...state.buckets,
+            [sessionId]: {
+              ...prev,
+              hasOlder: meta.hasOlder,
+              olderCursor: meta.olderCursor ?? prev.olderCursor,
+            },
+          },
+        };
+      }
+      const merged = mergeTranscriptUnion(incoming, prev.messages);
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: {
+            ...prev,
+            messages: merged,
+            seenUuids: seenUuidsFromMessages(merged),
+            hasOlder: meta.hasOlder,
+            olderCursor: meta.olderCursor ?? prev.olderCursor,
           },
         },
       };
@@ -1608,7 +1701,7 @@ function createOfficialCodeSessionStore() {
           },
         };
       }
-      // Official index-BELzQL5P merge residual (literal):
+      // Official cd5a31703 merge residual (literal):
       //   u = type==="result" && !parent
       //   m = apiError assistant while pendingTurn
       //   h = u || m          → settle: messages += [n, ...queuedMessages], clear queue
@@ -1976,6 +2069,15 @@ export const officialCodeSessionStore = resolveOfficialCodeSessionStore();
 const EMPTY_BUCKET_IDLE = emptyBucket(false);
 const EMPTY_BUCKET_PENDING = emptyBucket(true);
 
+/** Official c227 `bY` / cc432 `Rb` — Thinking option in ke Transcript view. */
+export function useOfficialXmShowsThinking(sessionId?: string | null, isLocalSession?: boolean) {
+  return useStore(officialCodeSessionStore, (state) => officialXmShowsThinking({
+    sessionId,
+    isLocalSession: Boolean(isLocalSession),
+    messages: sessionId ? state.buckets[sessionId]?.messages : undefined,
+  }));
+}
+
 export function useOfficialCodeSessionBucket(sessionId?: string) {
   return useStore(officialCodeSessionStore, (state) => {
     if (!sessionId) return EMPTY_BUCKET_IDLE;
@@ -1985,7 +2087,9 @@ export function useOfficialCodeSessionBucket(sessionId?: string) {
     // Returning EMPTY_BUCKET_PENDING here disabled composer + swapped full loading
     // chrome for a frame on warm switch (bottom flash).
     if (!bucket) return EMPTY_BUCKET_IDLE;
-    return withQueueDefaults(bucket);
+    // Do not wrap getSnapshot in withQueueDefaults — a new object every tick
+    // forceStoreRerenders EpitaxyChatPanel → Ho Maximum update depth.
+    return bucket;
   });
 }
 
@@ -2020,6 +2124,17 @@ export function useOfficialCodeSessionPermissionSuppressed(sessionId?: string) {
   return useStore(officialCodeSessionStore, (state) => {
     if (!sessionId) return false;
     return (state.buckets[sessionId]?.session?.pendingToolPermissions?.length ?? 0) > 0;
+  });
+}
+
+/**
+ * Official cd5a `cwe` source.hasOlder — Fu older pager + w9 +40.
+ * Full-bucket subscribe would remeasure Fu on every stream tick.
+ */
+export function useOfficialCodeSessionHasOlder(sessionId?: string) {
+  return useStore(officialCodeSessionStore, (state) => {
+    if (!sessionId) return false;
+    return state.buckets[sessionId]?.hasOlder === true;
   });
 }
 

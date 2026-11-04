@@ -9,6 +9,7 @@ const {
   clearTurnMock,
   planClearMock,
   previewClearMock,
+  evictTabsMock,
 } = vi.hoisted(() => ({
   deleteMock: vi.fn(),
   archiveMock: vi.fn(),
@@ -18,6 +19,7 @@ const {
   clearTurnMock: vi.fn(),
   planClearMock: vi.fn(),
   previewClearMock: vi.fn(),
+  evictTabsMock: vi.fn(),
 }));
 
 // Minimal window for node test env (no jsdom dependency).
@@ -78,6 +80,14 @@ vi.mock("./officialSidePaneSessionStore", () => ({
   officialEvictSidePaneSession: vi.fn(),
 }));
 
+vi.mock("./officialEpitaxyTerminalTabsStore", () => ({
+  officialEpitaxyTerminalTabsStore: {
+    getState: () => ({
+      evictSession: (...args: unknown[]) => evictTabsMock(...args),
+    }),
+  },
+}));
+
 vi.mock("../../../shell/useCodeSidebarPrState", () => ({
   removeCodeSidebarPrStateForSession: vi.fn(),
 }));
@@ -128,6 +138,7 @@ describe("deleteCodeSession", () => {
     clearTurnMock.mockReset();
     planClearMock.mockReset();
     previewClearMock.mockReset();
+    evictTabsMock.mockReset();
   });
 
   it("clears caches and emits only on bridge success", async () => {
@@ -148,6 +159,7 @@ describe("deleteCodeSession", () => {
     expect(clearTurnMock).toHaveBeenCalledWith("s1");
     expect(planClearMock).toHaveBeenCalledWith("s1");
     expect(previewClearMock).toHaveBeenCalledWith("s1");
+    expect(evictTabsMock).toHaveBeenCalledWith("s1");
     expect(events).toEqual(["s1"]);
   });
 
@@ -196,6 +208,7 @@ describe("archiveCodeSession", () => {
     clearTurnMock.mockReset();
     planClearMock.mockReset();
     previewClearMock.mockReset();
+    evictTabsMock.mockReset();
   });
 
   it("clears caches and emits archived only on bridge success", async () => {
@@ -214,6 +227,7 @@ describe("archiveCodeSession", () => {
     expect(removeSessionMock).toHaveBeenCalledWith("s1");
     expect(clearEkeMock).toHaveBeenCalledWith("s1");
     expect(streamDropMock).toHaveBeenCalledWith("s1");
+    expect(evictTabsMock).toHaveBeenCalledWith("s1");
     expect(events).toEqual(["s1"]);
   });
 

@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Tooltip } from "@base-ui-components/react/tooltip";
 import type { AppRoute } from "../app/routes";
-import { desktopBridge } from "../adapters/desktopBridge";
+import { desktopBridge, type ScheduledTaskSummary } from "../adapters/desktopBridge";
 import { CoworkRecentsSection } from "../features/cowork/sidebar/CoworkRecentsSection";
+import { fetchBootstrapPayload, organizationUuidFromBootstrap } from "../features/settings/accountSettingsApi";
+import {
+  fetchOfficialCodeTriggersList,
+  OFFICIAL_COWORK_SCHEDULED_TRIGGER_TAG,
+} from "./officialCodeTriggers";
 import { useShellText } from "../i18n/shellMessages";
 import { SIDEBAR_WIDTH_BOUNDS, type FrameStore } from "../stores/frameStore";
 import { ModePill } from "./ModePill";
@@ -11,7 +16,7 @@ import { SidebarNav } from "./SidebarNav";
 import { SidebarFooter } from "./SidebarFooter";
 import { CustomizeSidebarDialog } from "./CustomizeSidebarDialog";
 import { Icon } from "./icons";
-import { primaryNavItemsForMode } from "./sidebarData";
+import { defaultPinnedNavKeys, effectivePinnedNavKeys, officialPersistedHasCodeRoutines, officialW2HasCodeRoutines, officialW2LiveHasCodeRoutines, primaryNavItemsForMode } from "./sidebarData";
 import { sessionHomePath } from "./sessionPaths";
 import { resolveTrafficLightPadding } from "./trafficLightPadding";
 
@@ -23,6 +28,7 @@ type FrameSidebarProps = {
 };
 
 export function FrameSidebar({ currentRoute, frame, onNavigate, onSearch }: FrameSidebarProps) {
+  const shellText = useShellText();
   const customization = useSidebarCustomization(frame.mode, frame);
   const peekHandlers = useSidebarPeek(frame);
 
@@ -38,7 +44,7 @@ export function FrameSidebar({ currentRoute, frame, onNavigate, onSearch }: Fram
         href="#dframe-main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-bg-000 focus:px-3 focus:py-1.5 focus:text-sm focus:text-text-000 focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-focus"
       >
-        Skip to content
+        {shellText.skipToContent}
       </a>
       <SidebarResizeHandle frame={frame} />
       <SidebarCollapsedTrigger frame={frame} />
@@ -391,17 +397,85 @@ function SidebarResizeHandle({ frame }: { frame: FrameStore }) {
   );
 }
 
+function useCodeHasRoutines(mode: FrameStore["mode"], frame: FrameStore): boolean {
+  const [live, setLive] = useState(false);
+  const [settled, setSettled] = useState(false);
+  const [orgId, setOrgId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchBootstrapPayload()
+      .then((payload) => {
+        if (alive) setOrgId(organizationUuidFromBootstrap(payload));
+      })
+      .catch(() => {
+        if (alive) setOrgId(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (mode !== "code") {
+      setLive(false);
+      setSettled(true);
+      return;
+    }
+    let alive = true;
+    setSettled(false);
+    const apply = async () => {
+      // Official w2 `l`: CCD `s.some(e=>e.enabled)` OR Ln GET `/v1/code/triggers`
+      // excludeTags gM=`cowork-scheduled`, skip aN. 3p GET miss → empty cloud list.
+      const [tasks, cloud] = await Promise.all([
+        desktopBridge.CCDScheduledTasks.list().catch(() => [] as ScheduledTaskSummary[]),
+        fetchOfficialCodeTriggersList({
+          orgUuid: orgId,
+          excludeTags: [OFFICIAL_COWORK_SCHEDULED_TRIGGER_TAG],
+        }).catch(() => ({ data: [], has_more: false })),
+      ]);
+      if (!alive) return;
+      setLive(officialW2LiveHasCodeRoutines(tasks, cloud.data));
+      setSettled(true);
+    };
+    void apply();
+    const unsubscribe = desktopBridge.CCDScheduledTasks.onEvent?.(() => {
+      void apply();
+    });
+    return () => {
+      alive = false;
+      unsubscribe?.();
+    };
+  }, [mode, orgId]);
+
+  useEffect(() => {
+    if (mode !== "code" || !orgId) return;
+    // Official w2 persist: write true as soon as live; write false only after settled.
+    if (live) frame.setNavHasCodeRoutines(orgId, true);
+    else if (settled) frame.setNavHasCodeRoutines(orgId, false);
+  }, [frame, live, mode, orgId, settled]);
+
+  const persisted = officialPersistedHasCodeRoutines(frame.navHasCodeRoutinesByOrg, orgId);
+  return officialW2HasCodeRoutines(live, persisted, settled);
+}
+
 function useSidebarCustomization(mode: FrameStore["mode"], frame: FrameStore) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const hasCodeRoutines = useCodeHasRoutines(mode, frame);
   const configurableItems = useMemo(() => primaryNavItemsForMode(mode), [mode]);
-  const isPinned = useCallback((key: string) => frame.navPinnedIds === null || frame.navPinnedIds.includes(key), [frame.navPinnedIds]);
+  const defaultPinned = useMemo(() => defaultPinnedNavKeys(mode, hasCodeRoutines), [mode, hasCodeRoutines]);
+  const configurableKeys = useMemo(() => configurableItems.map((item) => item.key), [configurableItems]);
+  const storedPins = frame.navPinnedIds;
+  const effectivePins = effectivePinnedNavKeys(mode, storedPins, configurableKeys, hasCodeRoutines);
+  const isPinned = useCallback((key: string) => effectivePins.includes(key), [effectivePins]);
   const hiddenKeys = useMemo(() => new Set(configurableItems.filter((item) => !isPinned(item.key)).map((item) => item.key)), [configurableItems, isPinned]);
   const togglePinned = (key: string) => {
-    const allKeys = configurableItems.map((item) => item.key);
-    const current = frame.navPinnedIds ?? allKeys;
+    const allKeys = configurableKeys;
+    const current = effectivePins;
     const next = current.includes(key) ? current.filter((item) => item !== key) : [...current, key];
     const normalized = allKeys.filter((item) => next.includes(item));
-    frame.setNavPinnedIds(normalized.length === allKeys.length ? null : normalized);
+    const matchesDefault = normalized.length === defaultPinned.length && defaultPinned.every((item) => normalized.includes(item));
+    frame.setNavPinnedIds(matchesDefault ? null : normalized);
   };
 
   return {

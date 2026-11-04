@@ -1,5 +1,5 @@
 /**
- * Official code stream session manager (index-BELzQL5P `Pke` / c119 `Pe`).
+ * Official code stream session manager (cd5a31703 `Pke` / c119 `Pe`).
  *
  * Official shape:
  *   Rke: Map<sessionId, { smoother, abort, messageId, cleared, listeners }>
@@ -94,7 +94,7 @@ function resolveParentToolUseId(
  *
  * Callers may pass either the envelope or the inner event — we normalize here.
  *
- * Residual gate (index-BELzQL5P `Pke.feed`):
+ * Residual gate (cd5a31703 `Pke.feed`):
  *   if (null !== parent) return;
  * Only strict `parent === null` drives main Va typewriter. Subagent ids / undefined skip.
  */
@@ -143,7 +143,7 @@ export function officialStreamActiveMessageId(sessionId: string | undefined) {
 }
 
 export function officialStreamClear(sessionId: string) {
-  // Official Pke.clear (index-BELzQL5P):
+  // Official Pke.clear (cd5a31703):
   //   t.cleared=!0, dont_smooth=!1, on_completion=void 0, restart(), Oke(t,null)
   // Does NOT zero messageId; Oke once (smoother.clear → store emit via subscribe).
   const entry = sessions.get(sessionId);

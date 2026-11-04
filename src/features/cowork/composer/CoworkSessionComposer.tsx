@@ -247,10 +247,10 @@ function useCoworkComposerController(props: CoworkSessionComposerProps) {
     label: option.label,
     onSelect: () => void actions.applyModel(option.value),
   }));
-  // Official local_session / agent path: dqe || isAgentNewRoute → hide project/Drive/GitHub + modes.
+  // Official CS/sx/kx: local agent session hides plus Add folder (Ix FolderPlus is a separate seat).
   const plusMenuItems = createCoworkAddMenuItems({
     isAgentRoute: true,
-    includeAddFolder: true,
+    includeAddFolder: false,
     labels: addMenuLabels,
     onAddFiles: () => void actions.addFiles(),
     onAddFolder: () => void actions.addFolder(),

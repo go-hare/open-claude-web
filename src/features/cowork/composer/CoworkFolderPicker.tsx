@@ -34,7 +34,7 @@ export function CoworkFolderPicker({ bridge, defaultTarget, disabled, onSelected
   const menuOpen = open && confirmations.length === 0;
   return (
     <>
-      {/* Official Ikt (index-BELzQL5P Ide/Ade): modal:false — Base UI defaults modal:true and mounts InternalBackdrop that steals item clicks. */}
+      {/* Official Ikt (c21f11e6d-CxD82rYo.js Ide/Ade): modal:false — Base UI defaults modal:true and mounts InternalBackdrop that steals item clicks. */}
       <Menu.Root
         modal={false}
         onOpenChange={(next) => {

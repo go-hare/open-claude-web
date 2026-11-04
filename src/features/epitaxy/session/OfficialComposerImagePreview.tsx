@@ -1,5 +1,5 @@
 /**
- * Official FHe / gs (index-BELzQL5P + c119 Cv): single-image click preview modal.
+ * Official FHe / gs (cd5a31703 + c10f0af0c Cv): single-image click preview modal.
  * Zh shell with FHe chrome — max-w-[40rem] px-3 pb-14 pt-3, close left-full,
  * rounded-md shadow + img block w-full max-h-[calc(100vh-4rem)].
  */
@@ -10,6 +10,12 @@ import {
   THEME_MODE_CHANGE_EVENT,
 } from "../../settings/appearanceSettings";
 import { Icon } from "../../../shell/icons";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { TRANSCRIPT_SURFACE_MESSAGES } from "../officialCodeChromeMessages";
+
+const COMPOSER_IMAGE_PREVIEW_MESSAGES = {
+  closeImagePreview: { defaultMessage: "Close image preview", id: "gylVBxmE7Z" },
+} as const;
 
 /**
  * Portaled FHe must re-root CDS tokens (same le pattern as BaseMenu CdsPortalRoot).
@@ -37,7 +43,7 @@ function CdsPortalRoot({ children }: { children: ReactNode }) {
       data-density="default"
       data-mode={mode}
       data-platform="desktop"
-      data-official-source="index-BELzQL5P:FHe"
+      data-official-source="cd5a31703-B4nKQMBN.js:FHe"
     >
       {children}
     </div>
@@ -55,6 +61,8 @@ export function OfficialComposerImagePreview({
   onClose: () => void;
   src: string;
 }) {
+  const surfaceText = useI18nText(TRANSCRIPT_SURFACE_MESSAGES);
+  const closeText = useI18nText(COMPOSER_IMAGE_PREVIEW_MESSAGES);
   useEffect(() => {
     if (!isOpen) return;
     const previousOverflow = document.body.style.overflow;
@@ -77,7 +85,7 @@ export function OfficialComposerImagePreview({
   return createPortal(
     <CdsPortalRoot>
       <button
-        aria-label="Close image preview overlay"
+        aria-label={closeText.closeImagePreview}
         className="fixed inset-0 z-modal bg-always-black/60 draggable-none border-0 cursor-default"
         onClick={onClose}
         type="button"
@@ -91,11 +99,11 @@ export function OfficialComposerImagePreview({
           className="relative max-w-[40rem] px-3 pb-14 pt-3 pointer-events-auto w-full"
           onClick={(event) => event.stopPropagation()}
           role="dialog"
-          aria-label="Image preview"
+          aria-label={surfaceText.imagePreview}
           aria-modal="true"
         >
           <button
-            aria-label="Close image preview"
+            aria-label={closeText.closeImagePreview}
             className="hover:!text-text-100 !ring-border-200 !absolute left-full top-0 ml-1.5 !text-always-white !ring-offset-0 size-8 inline-flex items-center justify-center rounded-full"
             data-testid="close-file-preview"
             onClick={(event) => {

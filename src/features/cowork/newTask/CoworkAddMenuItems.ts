@@ -22,15 +22,19 @@ export type CoworkAddMenuProject = {
 };
 
 /**
- * Official cwt (~178629 index-BELzQL5P):
- * - files: awt/nwt=gy paperclip, optional Qyt=cv Add folder, optional screenshot
- * - agent path e = dqe() || (isAgentNewRoute && considerEnabledForNonUI):
- *   hide project / Drive / GitHub and entire modes group
- * - tools: Skills (eRe=Vv) only if items; Connectors (Fvt=Ky); Plugins (Dv)
+ * Official plus catalog (shared-8 CS/sx + c752 to/Gn):
+ *   nx groups: files [uploadFile, addFolder, teach, screenshot, project, github]
+ *              tools [skills, connectors, designSystem, plugins, devices]
+ *              modes [haystack, research, webSearch, memory, permissionMode]
+ *   ix (agentMode): hide project, github, haystack, research, webSearch
+ *   CS.addFolder = Ax = kx(isLocalAgentRoute, composerFolderTarget) — hidden on
+ *   /task/new (no session) so folder lives on $4t/Akt chin, not plus.
+ *   skills omitted when SS() false (no skill items).
  */
 export type CreateCoworkAddMenuItemsOptions = {
-  /** Official isAgentNewRoute && considerEnabledForNonUI, or dqe agent mode. Default true for /task/new. */
+  /** Official CS.agentMode = Lx = dqe || (isAgentNewRoute && considerEnabledForNonUI). Default true for /task/new. */
   isAgentRoute?: boolean;
+  /** Official CS.addFolder / Ax. Default false on /task/new (kx hidden). Session plus may enable. */
   includeAddFolder?: boolean;
   onAddFiles: () => void;
   onAddFolder?: () => void;
@@ -41,7 +45,7 @@ export type CreateCoworkAddMenuItemsOptions = {
   skills?: CoworkDropdownItem[];
   projects?: CoworkAddMenuProject[];
   webSearchEnabled?: boolean;
-  /** Plugin catalog empty → official "Add plugins..."; with items → Plugins submenu. */
+  /** Plugin catalog empty → official "Add plugins" (u8sCx7LYvW); with items → Plugins submenu. */
   hasEnabledPlugins?: boolean;
   /** Connectors empty → "Add connectors" button; with items → Connectors submenu. */
   hasConnectors?: boolean;
@@ -74,7 +78,7 @@ const DEFAULT_COWORK_ADD_MENU_LABELS: CoworkAddMenuLabels = {
   addFilesOrPhotos: "Add files or photos",
   addFolder: "Add folder",
   addConnectors: "Add connectors",
-  addPlugins: "Add plugins...",
+  addPlugins: "Add plugins",
   plugins: "Plugins",
   skills: "Skills",
   connectors: "Connectors",
@@ -89,11 +93,10 @@ function icon(node: ComponentType<{ size?: number }>): ReactElement {
 }
 
 // Official reference:
-// index-BELzQL5P.js:dwt renders the Add popup with align="start",
-// alignOffset=-10, side="bottom", sideOffset=4.
-// index-BELzQL5P.js:pwt uses "Add files, connectors, and more".
-// index-BELzQL5P.js:cwt assembles files/projects, tools and modes groups.
-export const coworkAddMenuOfficialSource = "index-BELzQL5P.js:cwt/dwt/pwt";
+// shared-8-4Jj8qhmU.js:aC Y.Root plus popup align="start" side="bottom" sideOffset=4
+// shared-8-4Jj8qhmU.js:oC OnsnuZtVJO "Add files, connectors, and more"
+// shared-8-4Jj8qhmU.js:CS/sx + c752b32f8-DLL-jMVJ.js:to MenuItems
+export const coworkAddMenuOfficialSource = "shared-8-4Jj8qhmU.js:CS/sx/aC c752b32f8-DLL-jMVJ.js:to";
 
 export function createCoworkAddMenuItems({
   isAgentRoute = true,
@@ -180,23 +183,22 @@ function createCoworkFileItems({
 }): CoworkDropdownItem[] {
   const items: CoworkDropdownItem[] = [
     {
-      // Official awt icon nwt = gy
       icon: icon(CoworkAddMenuPaperclipIcon),
       label: labels.addFilesOrPhotos,
       onSelect: onAddFiles,
+      testId: "add-menu-upload-file",
     },
   ];
 
   if (includeAddFolder && onAddFolder) {
     items.push({
-      // Official Qyt = cv
       icon: icon(CoworkAddMenuFolderAddIcon),
       label: labels.addFolder,
       onSelect: onAddFolder,
     });
   }
 
-  // Official: project / Drive / GitHub only when !(dqe || agentNewRoute)
+  // Official sx ix: project / github hidden when agentMode
   if (!isAgentRoute) {
     items.push(...createProjectSubmenuItem(projects ?? [], onSelectProject, openProjectCreate));
     items.push(createDriveMenuItem());
@@ -282,6 +284,7 @@ function createCoworkToolItems({
       icon: icon(CoworkAddMenuSkillsIcon),
       items: skills,
       label: labels.skills,
+      testId: "add-menu-skills",
       type: "submenu",
     });
   }
@@ -291,6 +294,7 @@ function createCoworkToolItems({
     items.push({
       icon: icon(CoworkAddMenuConnectorsIcon),
       label: labels.connectors,
+      testId: "add-menu-connectors",
       type: "submenu",
       items: [
         {
@@ -305,6 +309,7 @@ function createCoworkToolItems({
       icon: icon(CoworkAddMenuConnectorsIcon),
       label: labels.addConnectors,
       onSelect: routes.openConnectors,
+      testId: "add-menu-connectors",
     });
   }
 
@@ -313,6 +318,7 @@ function createCoworkToolItems({
     items.push({
       icon: icon(CoworkAddMenuPluginsIcon),
       label: labels.plugins,
+      testId: "add-menu-plugins",
       type: "submenu",
       items: [
         {
@@ -332,6 +338,7 @@ function createCoworkToolItems({
       icon: icon(CoworkAddMenuPluginsIcon),
       label: labels.addPlugins,
       onSelect: routes.openPlugins,
+      testId: "add-menu-plugins",
     });
   }
 

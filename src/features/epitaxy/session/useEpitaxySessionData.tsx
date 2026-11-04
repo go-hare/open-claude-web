@@ -13,6 +13,8 @@ import {
   useSyncExternalStore,
 } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { SESSION_LOAD_MESSAGES } from "../officialCodeChromeMessages";
 import type { ChatMessage, SendMessageInput, SessionSummary } from "../../../adapters/desktopBridge/types";
 import {
   officialCodeSessionStore,
@@ -85,19 +87,20 @@ export function isMacPlatform() {
  * - contained small CTA +4zh1/luZI "Start a new session" → home (not Retry/reload)
  */
 export function SessionNotFound({ onStartNewSession }: { onStartNewSession: () => void }) {
+  const text = useI18nText(SESSION_LOAD_MESSAGES);
   const fromCli =
     typeof window !== "undefined"
     && new URLSearchParams(window.location.search).get("from") === "cli";
   return (
     <div className="h-full flex flex-col items-center justify-center gap-g5 text-body text-t6">
-      <span>This session could not be found. It may have been deleted, or you may not have access.</span>
+      <span data-intl-id="VZoQaACZaG">{text.sessionCouldNotBeFound}</span>
       {fromCli ? (
-        <span className="text-t7 max-w-md text-center">
-          If you just created this session from the Claude Code CLI, make sure you&apos;re signed in to the same Claude account here as in your terminal.
+        <span className="text-t7 max-w-md text-center" data-intl-id="DgpHBoCXb3">
+          {text.sessionNotFoundCliHint}
         </span>
       ) : null}
       <OfficialButton onClick={onStartNewSession} size="small" variant="contained">
-        Start a new session
+        <span data-intl-id="+4zh1/luZI">{text.startANewSession}</span>
       </OfficialButton>
     </div>
   );
@@ -108,9 +111,10 @@ export function SessionNotFound({ onStartNewSession }: { onStartNewSession: () =
  * title + footnote error body only — no Retry button.
  */
 export function SessionError({ error }: { error: Error }) {
+  const text = useI18nText(SESSION_LOAD_MESSAGES);
   return (
     <div className="h-full flex flex-col items-center justify-center gap-g3 px-p8 text-body text-t5 text-center">
-      <span>Couldn&apos;t load this session.</span>
+      <span data-intl-id="diHcJ+720f">{text.couldntLoadThisSession}</span>
       <div className="text-footnote text-t6 break-words">{error.message}</div>
     </div>
   );
@@ -163,15 +167,22 @@ export function useEpitaxySessionData(sessionId?: string) {
   // The panel is reused when the route session id changes, so React state still
   // holds the previous session's typewriter. Drop it before paint — otherwise
   // the open session shows the other session's live text until the next delta.
+  // Official Va lives on the session panel (not inside keyed Xb/Gb). Same reuse:
+  // setState during render still continues this commit with the old snapshot, so
+  // Kwe(Xa, Va) must use this id's Pe tail on the same frame (A→B→A two-paint flash).
   const [snapshotForSessionId, setSnapshotForSessionId] = useState(sessionId);
-  if (snapshotForSessionId !== sessionId) {
-    const owned = sessionId ? officialStreamGetSnapshot(sessionId) : null;
+  const sessionChanged = snapshotForSessionId !== sessionId;
+  const ownedOnSwitch = sessionChanged
+    ? (sessionId ? officialStreamGetSnapshot(sessionId) : null)
+    : null;
+  if (sessionChanged) {
     setSnapshotForSessionId(sessionId);
-    setStreamSnapshot(owned);
+    setStreamSnapshot(ownedOnSwitch);
     streamSessionIdRef.current = sessionId;
-    streamMessageIdRef.current = owned?.messageId ?? null;
-    setStreamingMessageId(owned?.messageId ?? null);
+    streamMessageIdRef.current = ownedOnSwitch?.messageId ?? null;
+    setStreamingMessageId(ownedOnSwitch?.messageId ?? null);
   }
+  const va = sessionChanged ? ownedOnSwitch : streamSnapshot;
   // Residual Va visibility arg `n` (default true) — ref so setVisibility(() => r.current) tracks live.
   const transcriptVisibleRef = useRef(true);
 
@@ -199,21 +210,21 @@ export function useEpitaxySessionData(sessionId?: string) {
     };
   }, [sessionId, store]);
 
-  // Keep Qa/eke suppress + char budget in lockstep with Va.
+  // Keep Qa/eke suppress + char budget in lockstep with Va (this-id `va`, not stale streamSnapshot).
   useEffect(() => {
     if (!sessionId || streamSessionIdRef.current !== sessionId) {
       setStreamingMessageId(null);
       streamMessageIdRef.current = null;
       return;
     }
-    if (streamSnapshot === null) {
+    if (va === null) {
       streamMessageIdRef.current = null;
       setStreamingMessageId(null);
       return;
     }
-    const nextId = streamSnapshot.messageId;
+    const nextId = va.messageId;
     if (!nextId) return;
-    const chars = streamSnapshot.blocks.reduce((total, block) => {
+    const chars = va.blocks.reduce((total, block) => {
       if (block.kind === "text") return total + block.text.length;
       if (block.kind === "tool") return total + 1 + block.partialJson.length;
       return total;
@@ -222,7 +233,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     officialSetStreamCharBudget(sessionId, chars);
     streamMessageIdRef.current = nextId;
     setStreamingMessageId((current) => (current === nextId ? current : nextId));
-  }, [sessionId, streamSnapshot]);
+  }, [sessionId, va]);
 
   // Official Va (c119): useState(null) + useEffect(Pe.subscribe) + startTransition same-id.
   // Product bridge: useLayoutEffect so Pe.subscribe is live before paint (Electron/3p burst
@@ -458,7 +469,7 @@ export function useEpitaxySessionData(sessionId?: string) {
   const activeStreamingMessageId =
     streamMessageIdRef.current
     ?? streamingMessageId
-    ?? streamSnapshot?.messageId
+    ?? va?.messageId
     ?? bucket.streamingMessageId
     ?? (sessionId ? officialStreamActiveMessageId(sessionId) : null);
   // Official Xa = Xwe/eke(sessionId, messages, streamingMessageId); Ya = Kwe(Xa, Va) only.
@@ -498,7 +509,7 @@ export function useEpitaxySessionData(sessionId?: string) {
     [bucket.isMetaPending, bucket.isSessionNotFound, bucket.session, isUltrareviewLaunching, sessionId],
   );
   // Residual Xb isResponding paint (c11959232): H || "spawning"===Os || null!==Js || bs
-  // Official H = pe = Xke = Qke(pendingTurn && !endTurnSeen) — index-BELzQL5P.
+  // Official H = pe = Xke = Qke(pendingTurn && !endTurnSeen) — cd5a31703.
   // Composer busy:H (c119 Qj). Residual p (assistant end_turn) sets endTurnSeen → H false
   // while Va stays until result `u&&Pke.clear` (typewriter continues; Stop→Send).
   // Do NOT invent OR of streamSnapshot / streamingMessageId / isRunning / queue / streamActivity
@@ -523,8 +534,8 @@ export function useEpitaxySessionData(sessionId?: string) {
   // in the composer column (c11959232 ~659669). Concatenating ge into entries put Gv
   // under the queued bubbles.
   const entries = useMemo(
-    () => mergeOfficialStreamSnapshot(parsedEntries, streamSnapshot),
-    [parsedEntries, streamSnapshot],
+    () => mergeOfficialStreamSnapshot(parsedEntries, va),
+    [parsedEntries, va],
   );
 
   // Residual Ja (c119): Boolean(D) && 0===Ya.length && (B||J)
@@ -536,7 +547,9 @@ export function useEpitaxySessionData(sessionId?: string) {
     && (
       bucket.isTranscriptPending
       || bucket.isMetaPending
-    );
+    )
+    // Compact rewrite reloads jsonl; do not unmount Fu into Ja Loading (white).
+    && bucket.compactionStatus !== "compacting";
 
   const stopLiveTurn = useCallback(async () => {
     // Official Wr onMutate = markInterrupting (Pke.flush + mCe.reset) only.
@@ -631,21 +644,30 @@ function chatMessageContentRichness(message: ChatMessage): number {
 }
 
 /**
- * Official eke/zke load path (index-BELzQL5P):
+ * Official eke/zke load path (cd5a31703):
  * - Identity for de-dupe is OUTER CLI uuid (per NDJSON event), NOT Anthropic message.id.
  * - Multi-emit assistants (thinking emit + text emit, same mid, different uuid) stay as
  *   separate ChatMessages; eke ake + f() merges consecutive assistant items into one bubble.
  * - session.messages durable assistants are mid-collapsed chat history — only back-fill when
  *   no transcript multi-emit for that Anthropic id is present.
  */
-async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMessage[]; session: SessionSummary } | null> {
+async function loadEpitaxySession(sessionId: string): Promise<{
+  messages: ChatMessage[];
+  session: SessionSummary;
+  hasOlder?: boolean;
+  olderCursor?: string | null;
+} | null> {
   const bridge = desktopBridge.LocalSessions;
   const session = await bridge.getSession(sessionId).catch(() => null);
   if (!session) return null;
   // Official Ae cold: transport.fetchTranscript (U = getTranscript only). Keep getSession for meta.
-  const transcript = await officialCodeLocalTransport.fetchTranscript(sessionId).catch(() => [] as ChatMessage[]);
+  const fetched = await officialCodeLocalTransport.fetchTranscript(sessionId).catch(() => [] as ChatMessage[]);
+  const transcriptPage = Array.isArray(fetched)
+    ? { messages: fetched, hasMore: false, cursor: undefined as string | undefined }
+    : fetched;
   const sessionMessages = session.messages ?? [];
-  const transcriptMessages = transcript.length ? transcript : [];
+  const transcriptMessages = transcriptPage.messages.length ? transcriptPage.messages : [];
+  const transcriptHasMore = transcriptPage.hasMore === true;
   const outerUuidOf = (message: ChatMessage) => {
     const raw = asRecord(message.raw);
     return stringValue(raw.uuid) ?? stringValue(raw.id) ?? message.id;
@@ -721,7 +743,15 @@ async function loadEpitaxySession(sessionId: string): Promise<{ messages: ChatMe
     put(message);
   }
   const messages = order.map((key) => byOuter.get(key)!).filter(Boolean);
-  return { messages, session: { ...session, messages } };
+  const olderCursor = messages[0]
+    ? (stringValue(asRecord(messages[0].raw).uuid) ?? messages[0].id)
+    : transcriptPage.cursor;
+  return {
+    messages,
+    session: { ...session, messages },
+    hasOlder: transcriptHasMore,
+    olderCursor: olderCursor ?? null,
+  };
 }
 
 export async function sendMessageToSession(sessionId: string, text: string, input?: SendMessageInput) {

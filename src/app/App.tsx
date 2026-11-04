@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { MotionConfig } from "motion/react";
+import {
+  isReducedMotionActive,
+  MOTION_MODE_CHANGE_EVENT,
+} from "../features/settings/appearanceSettings";
 import { matchRoute } from "./routes";
 import { isDesktopBridgeMissingInElectron } from "../adapters/desktopBridge";
 import { BootstrapConnectionErrorPage } from "../features/public/AccessPages";
@@ -8,6 +13,17 @@ import { DesktopFrame } from "../shell/DesktopFrame";
 import { DirectoryModal } from "../features/customize/directory/DirectoryModal";
 import { OfficialWorktreeDisposalDialog } from "../shell/OfficialWorktreeDisposalDialog";
 import { OfficialPierreWorkerPool } from "../features/epitaxy/diff/OfficialPierreWorkerPool";
+import { SettingsModal } from "../features/settings/SettingsModal";
+import {
+  parseSettingsHash,
+  parseSettingsPath,
+  settingsHashFor,
+} from "../features/settings/settingsPath";
+import {
+  settingsModalStore,
+  tryOpenSettingsModalFromPath,
+} from "../features/settings/settingsModalStore";
+import { readPersistedFrameMode } from "../stores/frameStoreHelpers";
 import {
   accountDetailsFromBootstrap,
   bootstrapUrls,
@@ -36,7 +52,7 @@ const subscribeLocation = (onChange: () => void) => {
 };
 
 /**
- * Official ion-dist residual (index-BELzQL5P.js Pos `/`):
+ * Official ion-dist residual (index-D35w9RK9.js Pos `/`):
  *   isLoggedOut && !bootstrapFailed → navigate /login
  * Product: bootstrap account.uuid missing ⇒ logged out (1p residual).
  * Skip gate for public auth routes so /login itself is reachable.
@@ -71,8 +87,29 @@ export function App() {
   // Setup Apply → close small window → main SPA apply countdown → process relaunch.
   const { overlay: applyRelaunchOverlay } = useApplyRelaunchFromSetup();
   useEffect(() => subscribeResponseCompletionEvents(), []);
+  const [reducedMotion, setReducedMotion] = useState(isReducedMotionActive);
+  useEffect(() => {
+    const update = () => setReducedMotion(isReducedMotionActive());
+    window.addEventListener(MOTION_MODE_CHANGE_EVENT, update);
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    media.addEventListener("change", update);
+    return () => {
+      window.removeEventListener(MOTION_MODE_CHANGE_EVENT, update);
+      media.removeEventListener("change", update);
+    };
+  }, []);
   const locationKey = useSyncExternalStore(subscribeLocation, getLocation);
-  const route = useMemo(() => matchRoute(window.location.pathname), [locationKey]);
+  const route = useMemo(() => {
+    const pathname = window.location.pathname;
+    // Official Qs: /settings* on desktop opens O5 modal and replace to origin#settings/…
+    // Do not paint SettingsDFrame standalone over the shell.
+    const parsed = parseSettingsPath(pathname);
+    if (parsed) {
+      const home = readPersistedFrameMode() === "cowork" ? "/task/new" : "/code";
+      return matchRoute(home);
+    }
+    return matchRoute(pathname);
+  }, [locationKey]);
   const [loginGate, setLoginGate] = useState<"pending" | "logged_out" | "signed_in" | "unknown">(
     "pending",
   );
@@ -81,12 +118,50 @@ export function App() {
   const [bootstrapInFlight, setBootstrapInFlight] = useState(true);
 
   const navigate = useCallback((path: string) => {
-    // Official Ac push accepts pathname + search (e.g. /customize/connectors?directory=true).
-    const current = `${window.location.pathname}${window.location.search}`;
-    if (path === current) return;
-    window.history.pushState({}, "", path);
+    // Official B0t/P5: /settings* while SettingsModal mounted → open section, keep frame.
+    const hashIndex = path.indexOf("#");
+    const withoutHash = hashIndex >= 0 ? path.slice(0, hashIndex) : path;
+    const destHash = hashIndex >= 0 ? path.slice(hashIndex) : "";
+    const pathnameOnly = withoutHash.split("?")[0] ?? withoutHash;
+    if (parseSettingsPath(pathnameOnly)) {
+      if (tryOpenSettingsModalFromPath(path) || settingsModalStore.getState().mounted) {
+        const parsed = parseSettingsPath(pathnameOnly);
+        if (parsed) settingsModalStore.getState().open(parsed.section, parsed.subpath);
+        return;
+      }
+    }
+    // pushState does not fire hashchange. Close overlay and drop leftover #settings.
+    if (!parseSettingsHash(destHash) && settingsModalStore.getState().section !== null) {
+      settingsModalStore.getState().close();
+    }
+    const destPathSearch = withoutHash.startsWith("/")
+      ? withoutHash
+      : `${window.location.pathname}${window.location.search}`;
+    const next = destHash ? `${destPathSearch}${destHash}` : destPathSearch;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next === current) return;
+    window.history.pushState({}, "", next);
     window.dispatchEvent(new Event("app:navigation"));
   }, []);
+
+  /**
+   * Official Qs (cf4f70727): when modal GB is on, /settings* replace to origin#settings/{section}
+   * and openFromRoute. Product always uses the desktop modal (claude_ai_sumac equivalent).
+   */
+  useLayoutEffect(() => {
+    if (loginGate !== "signed_in") return;
+    const parsed = parseSettingsPath(window.location.pathname);
+    if (!parsed) return;
+    const home = readPersistedFrameMode() === "cowork" ? "/task/new" : "/code";
+    const { search } = window.location;
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${home}${search}${settingsHashFor(parsed.section, parsed.subpath)}`,
+    );
+    settingsModalStore.getState().openFromRoute(parsed.section, parsed.subpath);
+    window.dispatchEvent(new Event("app:navigation"));
+  }, [locationKey, loginGate]);
 
   // Re-resolve on locationKey and after setDeploymentMode (clear/3p) soft path.
   // Official process relaunch reloads bootstrap; product SPA must re-fetch or
@@ -232,7 +307,7 @@ export function App() {
       // Official B0t: /submit_quick_entry is not a router push.
       if (!path || path === "/submit_quick_entry") return;
       // Official: if settings modal already mounted, open section in-place (O5/P5).
-      // We use route-based settings — no O5 store; fall through to push.
+      if (tryOpenSettingsModalFromPath(path)) return;
       navigate(path);
     };
     const subscribe = navigation.onNavigate ?? navigation.navigate;
@@ -264,14 +339,15 @@ export function App() {
   }, []);
 
   if (route.frame === "standalone") {
-    // Official $8t is globally mounted in the signed-in shell (index-BELzQL5P.js
+    // Official $8t is globally mounted in the signed-in shell (index-D35w9RK9.js
     // a.jsx($8t,{})). Official /customize is jos under gos `_withSidebar` → Urs
     // DesktopFrame (Brs B4). Settings stays product-standalone; still open HT
-    // DirectoryModal from el/o7t/qCt.
+    // DirectoryModal from el/o7t/qCt. Settings is overlay, not this standalone branch.
     return (
       <>
         <route.Component route={route} onNavigate={navigate} />
         <DirectoryModal />
+        <SettingsModal />
         {applyRelaunchOverlay}
       </>
     );
@@ -290,7 +366,7 @@ export function App() {
     );
   }
 
-  // Official Pos residual (index-BELzQL5P): only after bootstrap knows isLoggedOut → /login.
+  // Official Pos residual (index-D35w9RK9): only after bootstrap knows isLoggedOut → /login.
   // Do not mount DesktopFrame with a null account. While history catches up, render
   // LoginDesktop directly (same end state as replaceState → /login).
   if (loginGate === "logged_out" && !isLoginGateExempt(window.location.pathname)) {
@@ -329,7 +405,7 @@ export function App() {
   // Keep pool outside route.Component so /code/:id A→B does not remount workers.
   const main = <route.Component route={route} onNavigate={navigate} />;
   return (
-    <>
+    <MotionConfig reducedMotion={reducedMotion ? "always" : "user"}>
       <DesktopFrame currentRoute={route} onNavigate={navigate}>
         {route.kind === "code" ? (
           <OfficialPierreWorkerPool>{main}</OfficialPierreWorkerPool>
@@ -343,7 +419,9 @@ export function App() {
       <DirectoryModal />
       {/* Official VYt: $Yt uncommitted worktree disposal confirm (archive/delete). */}
       <OfficialWorktreeDisposalDialog />
+      {/* Official Ois/Ris SettingsModal (cc011544b) — overlay, not SettingsDFrame. */}
+      <SettingsModal />
       {applyRelaunchOverlay}
-    </>
+    </MotionConfig>
   );
 }

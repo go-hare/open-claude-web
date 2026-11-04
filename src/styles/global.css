@@ -16,7 +16,10 @@ body,
 button,
 input,
 textarea {
-  font: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
 }
 
 .claude-rebuild-composer textarea {
@@ -60,4 +63,592 @@ textarea {
   font-size: 13px;
   line-height: 18px;
   font-weight: 500;
+}
+
+/*
+ * Live Claude.app c6a992d55-C0zTICcS.css utilities missing from product
+ * c6a992d55-CgNGFRYw.css. Required so c593 Om / ca80 G0 titlebar classNames
+ * are not no-ops (--spacing, size-control, folder-chip before:).
+ */
+:root,
+:host {
+  --spacing: 0.25rem;
+  --cds-rem-scale: calc(16 / 17);
+  --cds-pad-xs: calc(0.25rem * var(--cds-rem-scale, 1));
+  --cds-outset-x: 0px;
+}
+.size-control {
+  width: var(--cds-h-control);
+  height: var(--cds-h-control);
+}
+.font-control {
+  --_cds-font-weight-role: var(--cds-font-weight-control);
+  --_cds-font-axis-wght-role: var(--cds-font-axis-wght-control);
+}
+.ps-md {
+  padding-inline-start: var(--cds-pad-md);
+}
+.px-1\.25 {
+  padding-inline: calc(var(--spacing) * 1.25);
+}
+.gap-0\.75 {
+  gap: calc(var(--spacing) * 0.75);
+}
+.me-\[calc\(--spacing\(1\)\+var\(--cds-pad-md\)\)\] {
+  margin-inline-end: calc(var(--spacing) + var(--cds-pad-md));
+}
+.gap-\[calc\(--spacing\(1\)\+var\(--cds-pad-md\)\)\] {
+  gap: calc(var(--spacing) + var(--cds-pad-md));
+}
+.min-w-\[calc\(32px\+var\(--cds-h-control\,24px\)\)\] {
+  min-width: calc(32px + var(--cds-h-control, 24px));
+}
+.min-w-\[calc\(32px\+var\(--cds-h-control\,24px\)\+--spacing\(1\)\+var\(--cds-pad-md\)\)\] {
+  min-width: calc(32px + var(--cds-h-control, 24px) + var(--spacing) + var(--cds-pad-md));
+}
+.w-control {
+  width: var(--cds-h-control);
+}
+.mx-outset {
+  margin-inline: calc(var(--cds-outset-x, 0px) * -1);
+}
+.px-xs {
+  padding-inline: var(--cds-pad-xs);
+}
+/* Official c6a992d55-C0zTICcS.css — cc432 VY / split pills. */
+.pb-xs {
+  padding-bottom: var(--cds-pad-xs);
+}
+.h-\[var\(--pill-h\,24px\)\] {
+  height: var(--pill-h, 24px);
+}
+.pl-1\.25 {
+  padding-left: calc(var(--spacing) * 1.25);
+}
+.bg-fill-disabled {
+  background-color: var(--cds-fill-disabled);
+}
+.text-disabled {
+  color: var(--cds-text-disabled);
+}
+.hover\:bg-fill-secondary-hover:hover {
+  background-color: var(--cds-fill-secondary-hover);
+}
+.disabled\:bg-fill-disabled:disabled {
+  background-color: var(--cds-fill-disabled);
+}
+.disabled\:text-disabled:disabled {
+  color: var(--cds-text-disabled);
+}
+.aria-\[expanded\=true\]\:bg-fill-secondary-hover[aria-expanded="true"] {
+  background-color: var(--cds-fill-secondary-hover);
+}
+.aria-\[expanded\=true\]\:hover\:bg-fill-secondary-hover[aria-expanded="true"]:hover {
+  background-color: var(--cds-fill-secondary-hover);
+}
+.has-\[\[aria-expanded\=true\]\]\:bg-fill-secondary-hover:has([aria-expanded="true"]) {
+  background-color: var(--cds-fill-secondary-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion-reduce\:transition-none {
+    transition-property: none;
+  }
+}
+.before\:content-\[\'\'\]:before {
+  --tw-content: "";
+  content: var(--tw-content);
+}
+.before\:bg-alpha-2:before {
+  content: var(--tw-content);
+  background-color: var(--cds-alpha-2);
+}
+.hover\:before\:bg-alpha-3:hover:before {
+  content: var(--tw-content);
+  background-color: var(--cds-alpha-3);
+}
+.aria-\[expanded\=true\]\:before\:bg-alpha-3[aria-expanded="true"]:before {
+  content: var(--tw-content);
+  background-color: var(--cds-alpha-3);
+}
+.before\:rounded:before {
+  content: var(--tw-content);
+  border-radius: var(--cds-radius);
+}
+.before\:absolute:before {
+  content: var(--tw-content);
+  position: absolute;
+}
+.before\:inset-0:before {
+  content: var(--tw-content);
+  inset: 0;
+}
+.before\:-z-\[1\]:before {
+  content: var(--tw-content);
+  z-index: calc(1 * -1);
+}
+.aria-\[expanded\=true\]\:bg-fill-control[aria-expanded="true"] {
+  background-color: var(--cds-fill-control);
+}
+.aria-\[expanded\=true\]\:text-primary[aria-expanded="true"] {
+  color: var(--cds-text-primary);
+}
+.focus-visible\:outline-hidden:focus-visible {
+  --tw-outline-style: none;
+  outline-style: none;
+}
+.h-\[calc\(1\.5rem\*var\(--cds-rem-scale\,1\)\)\] {
+  height: calc(1.5rem * var(--cds-rem-scale, 1));
+}
+.w-\[var\(--chat-gutter-start\,32px\)\] {
+  width: var(--chat-gutter-start, 32px);
+}
+.min-w-\[calc\(var\(--origin-box-end-clearance\,0\)\*1\.75rem\*var\(--cds-rem-scale\,1\)\)\] {
+  min-width: calc(var(--origin-box-end-clearance, 0) * 1.75rem * var(--cds-rem-scale, 1));
+}
+.pe-\[calc\(var\(--origin-box-end-clearance\,0\)\*0\.25rem\*var\(--cds-rem-scale\,1\)\)\] {
+  padding-inline-end: calc(var(--origin-box-end-clearance, 0) * 0.25rem * var(--cds-rem-scale, 1));
+}
+.h-\[calc\(2rem\*var\(--cds-rem-scale\,1\)\)\] {
+  height: calc(2rem * var(--cds-rem-scale, 1));
+}
+.pr-\[var\(--titlebar-end-inset\,12px\)\] {
+  padding-right: var(--titlebar-end-inset, 12px);
+}
+.font-medium {
+  font-weight: var(--_cds-font-weight-role, var(--cds-font-weight-medium, 500));
+}
+.\[--origin-box-end-clearance\:1\] {
+  --origin-box-end-clearance: 1;
+}
+
+/* Official c6a992d55 @layer base — product c6a missing this reset.
+ * `cccc` `db` is `border-r` (width only). Without the reset, border-color is
+ * currentColor → the Files tree paints a black splitter the official pane does not. */
+html:where(.cds-root),
+html:where(.cds-root):before,
+html:where(.cds-root):after,
+:not(html),
+:not(html):before,
+:not(html):after {
+  border-color: var(--cds-border);
+}
+
+/* Official c6a `.cds-root{--cds-border:var(--cds-alpha-2)}`. Product c6a only
+ * has `:root{--cds-border:currentColor}` after c43, so Files `border-r` and
+ * Filter ring paint as currentColor (black). Restore the official token. */
+html.cds-root {
+  --cds-border: var(--cds-alpha-2);
+  --cds-fill-field-ring: var(--cds-border);
+  /* Official c6a `.cds-root` body type. Product c6a only has `--cds-text-body:13px`
+   * / `--cds-leading-body:18px` and sets `--cds-font-sans` to system ui-sans.
+   * `.epitaxy-markdown` (c19e) uses `--cds-font-sans` + `--cds-font-size-body` /
+   * `--cds-leading-body`. Without these, assistant prose is 16px/18px system-ui. */
+  --cds-font-sans: var(--font-anthropic-sans, "Anthropic Sans"), system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --cds-font-size-body: calc(0.8125rem * var(--cds-rem-scale, 1));
+  --cds-leading-body: calc(1.1875rem * var(--cds-rem-scale, 1));
+  /* Official c6a `.cds-root` heading — shared-9 `font-large` prompt uses these. */
+  --cds-font-size-heading: calc(0.875rem * var(--cds-rem-scale, 1));
+  --cds-leading-heading: calc(1.125rem * var(--cds-rem-scale, 1));
+  --cds-font-weight-regular: 400;
+  /* Official c6a `.cds-root` prose (KR/Ig). Product c6a has neither token nor `.text-prose`. */
+  --cds-font-size-prose: 0.875rem;
+  --cds-leading-prose: 1.25rem;
+}
+/* Official live c6a `.font-large` (shared-9 ChatComposer). Product c6a is 1rem/430 — beat it. */
+.cds-root .font-large,
+.epitaxy-root .font-large {
+  font-family: var(--cds-font-sans);
+  font-size: var(--cds-font-size-heading);
+  font-weight: var(--cds-font-weight-regular);
+  line-height: var(--cds-leading-heading);
+}
+/*
+ * Official 2.31 ion-dist has no cca `.epitaxy-chat-column { --text-body: 14px }`.
+ * Product cca still remaps the whole column (composer VY pills included) to 14px / --family-ui.
+ * cc432 VY is `text-body` → CDS `--cds-font-size-body` (≈12.24px), not transcript 14px.
+ * Same specificity as cca `.epitaxy-root :is(:where(.epitaxy-root) .text-body)`; later wins.
+ */
+.epitaxy-root :is(:where(.epitaxy-root) .text-body) {
+  font-family: var(--cds-font-sans);
+  font-size: var(--cds-font-size-body);
+  line-height: var(--cds-leading-body);
+  font-weight: var(--cds-font-weight-regular);
+}
+.placeholder\:italic::placeholder {
+  font-style: italic;
+}
+.placeholder\:text-muted::placeholder {
+  color: var(--cds-text-muted);
+}
+.\[\&_\.ProseMirror\.is-editor-empty\]\:italic .ProseMirror.is-editor-empty {
+  font-style: italic;
+}
+.\[\&_\.ProseMirror\.is-editor-empty\]\:before\:text-muted .ProseMirror.is-editor-empty:before {
+  content: var(--tw-content);
+  color: var(--cds-text-muted);
+}
+.before\:text-muted:before {
+  content: var(--tw-content);
+  color: var(--cds-text-muted);
+}
+.text-prose {
+  font-size: var(--cds-font-size-prose);
+  line-height: var(--tw-leading, var(--cds-leading-prose));
+}
+/* Official c6a AU: UserMessage/AssistantMessage[data-text-size] remaps prose (md keeps .cds-root). */
+.cds-root :where([data-cds="AssistantMessage"], [data-cds="UserMessage"])[data-text-size="sm"] {
+  --cds-font-size-prose: 0.8125rem;
+  --cds-leading-prose: 1.1875rem;
+}
+.cds-root :where([data-cds="AssistantMessage"], [data-cds="UserMessage"])[data-text-size="lg"] {
+  --cds-font-size-prose: 0.9375rem;
+  --cds-leading-prose: 1.375rem;
+}
+
+/*
+ * Official c6a `.epitaxy-root .epitaxy-transcript-typography` plus c119 Gb sizer
+ * `epitaxy-chat-column`. Default Medium `--chat-body` ≈ 13.18px, leading 1.42857.
+ * Small/Large via html[data-chat-text-size] (He/Ge fan-out already in editor prefs).
+ */
+.epitaxy-root .epitaxy-transcript-typography,
+.epitaxy-root [data-testid="epitaxy-virtual-transcript"] > .epitaxy-chat-column {
+  --chat-body: calc(0.875rem * var(--cds-rem-scale, 1));
+  --chat-leading: 1.42857;
+  --chat-turn-gap: calc(var(--chat-body) * var(--chat-leading) * 0.75);
+  --chat-item-gap: calc(var(--chat-body) * var(--chat-leading) * 0.5);
+  font-size: var(--chat-body);
+  line-height: var(--chat-leading);
+}
+[data-chat-text-size="s"] .epitaxy-transcript-typography,
+[data-chat-text-size="s"] [data-testid="epitaxy-virtual-transcript"] > .epitaxy-chat-column {
+  --chat-body: calc(0.8125rem * var(--cds-rem-scale, 1));
+}
+[data-chat-text-size="l"] .epitaxy-transcript-typography,
+[data-chat-text-size="l"] [data-testid="epitaxy-virtual-transcript"] > .epitaxy-chat-column {
+  --chat-body: calc(0.9375rem * var(--cds-rem-scale, 1));
+  --chat-leading: 1.46667;
+}
+.epitaxy-root .epitaxy-transcript-typography :where(.text-body):not(button, input, textarea):not(:where([role="toolbar"] *)):not(:where(a.cds-reset)),
+.epitaxy-root .epitaxy-transcript-typography [data-cds="TurnStatusStep"] > :where(.text-body),
+.epitaxy-root .epitaxy-transcript-typography :where(.text-body-medium):not(button, input, textarea):not(:where([role="toolbar"] *)):not(:where(a.cds-reset)),
+.epitaxy-root .epitaxy-transcript-typography :where(.text-body-semibold):not(button, input, textarea):not(:where([role="toolbar"] *)):not(:where(a.cds-reset)),
+.epitaxy-root [data-testid="epitaxy-virtual-transcript"] > .epitaxy-chat-column :where(.text-body):not(button, input, textarea):not(:where([role="toolbar"] *)):not(:where(a.cds-reset)),
+.epitaxy-root [data-testid="epitaxy-virtual-transcript"] > .epitaxy-chat-column [data-cds="TurnStatusStep"] > :where(.text-body),
+.epitaxy-root [data-testid="epitaxy-virtual-transcript"] > .epitaxy-chat-column :where(.text-body-medium):not(button, input, textarea):not(:where([role="toolbar"] *)):not(:where(a.cds-reset)),
+.epitaxy-root [data-testid="epitaxy-virtual-transcript"] > .epitaxy-chat-column :where(.text-body-semibold):not(button, input, textarea):not(:where([role="toolbar"] *)):not(:where(a.cds-reset)) {
+  font-size: var(--chat-body);
+  line-height: var(--chat-line, var(--chat-leading));
+}
+/* Official c6a: Code `Zat`/`P9` — turn-keyed bubbles pin to CDS body, not Appearance --chat-body. */
+.epitaxy-root .epitaxy-transcript-typography [data-cds="AssistantMessage"][data-turn-key],
+.epitaxy-root .epitaxy-transcript-typography [data-cds="UserMessage"][data-turn-key],
+.epitaxy-root .epitaxy-transcript-typography [data-code-own-row],
+.epitaxy-root [data-testid="epitaxy-virtual-transcript"] > .epitaxy-chat-column [data-cds="AssistantMessage"][data-turn-key],
+.epitaxy-root [data-testid="epitaxy-virtual-transcript"] > .epitaxy-chat-column [data-cds="UserMessage"][data-turn-key] {
+  --chat-body: var(--cds-font-size-body);
+  --chat-line: var(--cds-leading-body);
+}
+
+/*
+ * Official c425 `ue` (cd5a o2e group body) + c6a992d55-C0zTICcS.css.
+ * Product c6a992d55-CgNGFRYw.css has no `.epitaxy-card-outline-layer` and no
+ * `[&>*]:px-2.5` / `[&>*]:py-md`. Without these, o2e inner rows have no card.
+ */
+.epitaxy-root .epitaxy-card-outline-layer,
+.epitaxy-root .epitaxy-fence {
+  position: relative;
+}
+.epitaxy-root .epitaxy-card-outline-layer:after,
+[data-mode="light"][data-code-theme-light="claude-light"] .epitaxy-root .epitaxy-fence:after,
+[data-mode="dark"][data-code-theme-dark="claude-dark"] .epitaxy-root .epitaxy-fence:after {
+  content: "";
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--cds-border), inset 0 0 0 1px var(--epitaxy-transcript-surface, var(--cds-surface-1));
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+}
+.\[\&\>\*\]\:px-2\.5 > * {
+  padding-inline: calc(var(--spacing) * 2.5);
+}
+.\[\&\>\*\]\:py-md > * {
+  padding-block: var(--cds-pad-md);
+}
+
+/*
+ * Official c425 `F` collapse (`epitaxy-expanding-body` + `flow-root`) and inner
+ * `pl-md`/`pt-xs` (cd5a `_y` bodies). Missing from product c6a992d55-CgNGFRYw.css.
+ * Pin uses `[hidden]` (c6a `[hidden]:where(:not([hidden=until-found])){display:none!important}`)
+ * — not a motion height spring.
+ */
+.flow-root {
+  display: flow-root;
+}
+.pl-md {
+  padding-left: var(--cds-pad-md);
+}
+.pt-xs {
+  padding-top: var(--cds-pad-xs);
+}
+
+/*
+ * Official c6a `text-git-added` / `text-git-removed` (cd5a `_B` badge).
+ * Missing from product c6a992d55-CgNGFRYw.css.
+ */
+:where(:root, :host, .cds-root[data-mode], [data-mode] .cds-root:not([data-mode])) {
+  --cds-text-git-added: #1e9e3c;
+  --cds-text-git-removed: #cd2054;
+}
+@media screen {
+  :where([data-mode="dark"] .cds-root:not([data-mode="light"]):not([data-mode="system"]), .cds-root[data-mode="dark"], .cds-dark-scope[data-mode="dark"]) {
+    --cds-text-git-added: #32d74b;
+    --cds-text-git-removed: #ff2c56;
+  }
+}
+.text-git-added {
+  color: var(--cds-text-git-added);
+}
+.text-git-removed {
+  color: var(--cds-text-git-removed);
+}
+
+/*
+ * Official c6a `.scroll-fade-strip-top` / keyframes — missing from product c6a.
+ * cd5a Gat `G=h&&!te` + c4a709 `p` / `_` (`supports-[animation-timeline:scroll()]:[--epitaxy-top-fade-height:32px]`).
+ */
+@property --cds-scroll-fade-strip-raw {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --cds-scroll-fade-strip-active {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@keyframes cds-scroll-fade-strip-in {
+  0% { --cds-scroll-fade-strip-raw: 0; }
+  to { --cds-scroll-fade-strip-raw: 1; }
+}
+@keyframes cds-scroll-fade-strip-out {
+  0% { --cds-scroll-fade-strip-raw: 1; }
+  to { --cds-scroll-fade-strip-raw: 0; }
+}
+@keyframes cds-scroll-fade-strip-active {
+  0%, to { --cds-scroll-fade-strip-active: 1; }
+}
+.scroll-fade-strip-top {
+  --cds-scroll-fade-size: var(--epitaxy-top-fade-height);
+  --cds-scroll-fade-strip-color: var(--epitaxy-transcript-surface, var(--cds-surface-1));
+  height: var(--cds-scroll-fade-size);
+  margin-bottom: calc(var(--cds-scroll-fade-size) * -1);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--cds-scroll-fade-strip-color, var(--cds-surface-1)),
+    rgb(from var(--cds-scroll-fade-strip-color, var(--cds-surface-1)) r g b / 0.85) 13%,
+    rgb(from var(--cds-scroll-fade-strip-color, var(--cds-surface-1)) r g b / 0.5) 40%,
+    rgb(from var(--cds-scroll-fade-strip-color, var(--cds-surface-1)) r g b / 0.15) 70%,
+    transparent
+  );
+  top: 0;
+  position: sticky;
+  inset-inline-start: 0;
+}
+.scroll-fade-strip-bottom {
+  --cds-scroll-fade-size: 48px;
+  --cds-scroll-fade-strip-color: var(--epitaxy-transcript-surface, var(--cds-surface-1));
+  height: var(--cds-scroll-fade-size);
+  margin-top: calc(var(--cds-scroll-fade-size) * -1);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  background: linear-gradient(
+    to top,
+    var(--cds-scroll-fade-strip-color, var(--cds-surface-1)),
+    rgb(from var(--cds-scroll-fade-strip-color, var(--cds-surface-1)) r g b / 0.85) 13%,
+    rgb(from var(--cds-scroll-fade-strip-color, var(--cds-surface-1)) r g b / 0.5) 40%,
+    rgb(from var(--cds-scroll-fade-strip-color, var(--cds-surface-1)) r g b / 0.15) 70%,
+    transparent
+  );
+  bottom: 0;
+  position: sticky;
+  inset-inline-start: 0;
+}
+@supports (animation-timeline: scroll()) {
+  .supports-\[animation-timeline\:scroll\(\)\]\:\[--epitaxy-top-fade-height\:32px\] {
+    --epitaxy-top-fade-height: 32px;
+  }
+  .scroll-fade-strip-top {
+    opacity: calc(var(--cds-scroll-fade-strip-raw) * var(--cds-scroll-fade-strip-active));
+    animation-name: cds-scroll-fade-strip-in, cds-scroll-fade-strip-active;
+    animation-timing-function: linear;
+    animation-fill-mode: both, none;
+    animation-duration: auto;
+    animation-timeline: scroll(), scroll();
+    animation-range: 0px var(--cds-scroll-fade-size), 0px 101%;
+  }
+  .scroll-fade-strip-bottom {
+    opacity: calc(var(--cds-scroll-fade-strip-raw) * var(--cds-scroll-fade-strip-active));
+    animation-name: cds-scroll-fade-strip-out, cds-scroll-fade-strip-active;
+    animation-timing-function: linear;
+    animation-fill-mode: both, none;
+    animation-duration: auto;
+    animation-timeline: scroll(), scroll();
+    animation-range: calc(100% - var(--cds-scroll-fade-size)) 100%, 0px 101%;
+  }
+}
+.shadow-field-ring {
+  box-shadow: inset 0 0 0 1px var(--cds-fill-field-ring, var(--cds-border)) !important;
+}
+.shadow-field-hover {
+  box-shadow: inset 0 0 0 1px var(--cds-border-strong, var(--cds-border)) !important;
+}
+/* Official sl ghost pressed (`$s` / `Yc` aria-pressed:text-accent). */
+.group\/btn[aria-pressed="true"] .group-aria-pressed\/btn\:bg-accent {
+  background-color: var(--cds-bg-accent, var(--accent));
+}
+.group\/btn[aria-pressed="true"] .group-hover\/btn\:group-aria-pressed\/btn\:bg-accent:hover,
+.group\/btn[aria-pressed="true"]:hover .group-hover\/btn\:group-aria-pressed\/btn\:bg-accent {
+  background-color: var(--cds-bg-accent, var(--accent));
+}
+.aria-pressed\:text-accent[aria-pressed="true"] {
+  color: var(--cds-text-accent, var(--accent));
+}
+/*
+ * Official live c6a992d55-C0zTICcS.css GNe utilities missing from product
+ * c6a992d55-CgNGFRYw.css. cd5a `WNe` / `OI` / hover-reveal `z`. Do not swap bundles.
+ */
+.pl-1\.25 {
+  padding-left: calc(var(--spacing) * 1.25);
+}
+.\[\&_\[data-cds\=Button\]\:hover\:not\(\[aria-pressed\=true\]\)\]\:text-primary [data-cds=Button]:hover:not([aria-pressed=true]) {
+  color: var(--cds-text-primary);
+}
+.\[\&_\[data-cds\=Button\]\:not\(\[aria-pressed\=true\]\)\]\:text-muted [data-cds=Button]:not([aria-pressed=true]) {
+  color: var(--cds-text-muted);
+}
+.has-\[\[aria-expanded\=true\]\]\:opacity-100:has([aria-expanded=true]) {
+  opacity: 1;
+}
+.has-\[\[aria-expanded\=true\]\]\:pointer-events-auto:has([aria-expanded=true]) {
+  pointer-events: auto;
+}
+.has-\[\[aria-haspopup\=dialog\]\[data-popup-open\]\]\:opacity-100:has([aria-haspopup=dialog][data-popup-open]) {
+  opacity: 1;
+}
+.has-\[\[aria-haspopup\=dialog\]\[data-popup-open\]\]\:pointer-events-auto:has([aria-haspopup=dialog][data-popup-open]) {
+  pointer-events: auto;
+}
+@media (pointer: coarse) {
+  .pointer-coarse\:opacity-100 {
+    opacity: 1;
+  }
+  .pointer-coarse\:pointer-events-auto {
+    pointer-events: auto;
+  }
+}
+@media (hover: none) {
+  .\[\@media\(hover\:none\)\]\:opacity-100 {
+    opacity: 1;
+  }
+  .\[\@media\(hover\:none\)\]\:pointer-events-auto {
+    pointer-events: auto;
+  }
+}
+/*
+ * Official live c6a pretty `oW` / `gW` / `jI` utilities missing from product c6a.
+ * cd5a Uz `Ee` → zI. Do not swap bundles.
+ */
+.\[\&_button\]\:text-muted button {
+  color: var(--cds-text-muted);
+}
+.\[\&_button\:hover\:not\(\[aria-pressed\=true\]\)\]\:text-primary button:hover:not([aria-pressed=true]) {
+  color: var(--cds-text-primary);
+}
+.pe-md {
+  padding-inline-end: var(--cds-pad-md);
+}
+.ps-sm {
+  padding-inline-start: var(--cds-pad-sm);
+}
+.pe-sm {
+  padding-inline-end: var(--cds-pad-sm);
+}
+.first\:ps-0:first-child {
+  padding-inline-start: 0;
+}
+.last\:pe-0:last-child {
+  padding-inline-end: 0;
+}
+
+/*
+ * Official shared-styles `[data-hint]` for shared-23 qQ overlay.
+ * Product cbc59a8af overlay is present; this token is not. Append only.
+ */
+.dframe-drop-overlay-badge[data-hint] {
+  opacity: 0.45;
+}
+.dframe-drop-overlay-badge[data-hint] .dframe-drop-overlay-label {
+  background: var(--cds-neutral-30);
+  color: var(--cds-neutral-700);
+}
+
+/*
+ * Official shared-styles overlay paint (live 2.31226.1).
+ * Product cbc59 uses hsl(var(--accent-100)) / border-300 — computed ring is
+ * the wrong hue. Official is --cds-fill-accent inset 2px, always on (hint
+ * only drops opacity). Append later than cbc59. Do not swap the bundle.
+ */
+/*
+ * Official shared-styles `.dframe-pane-host`:
+ *   grid-template-columns: var(--df-col-tracks, minmax(0, 1fr))
+ * Unsplit is one track. Product cbc59 `1fr 0%` + primary `span 2` makes qQ's
+ * containing block the 0% column. Append later than cbc59. Do not swap the bundle.
+ */
+.dframe-pane-host:not([data-slots]) {
+  grid-template-columns: var(--df-col-tracks, minmax(0, 1fr));
+}
+.dframe-pane-host:not([data-slots]) > .dframe-pane-primary {
+  grid-column: 1;
+}
+.dframe-pane-host > .dframe-drop-overlay {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+html.cds-root .dframe-drop-overlay-badge {
+  border: 1px solid var(--cds-border-strong);
+  background: color-mix(in srgb, var(--cds-surface-0) 40%, transparent);
+  box-shadow: inset 0 0 0 2px var(--cds-fill-accent);
+  opacity: 1;
+}
+html.cds-root .dframe-drop-overlay-badge[data-over] {
+  box-shadow: inset 0 0 0 2px var(--cds-fill-accent);
+  opacity: 1;
+}
+html.cds-root .dframe-drop-overlay-label {
+  background: var(--cds-fill-accent);
+  color: var(--cds-gray-0);
+}
+html.cds-root .dframe-drop-overlay-badge[data-over] .dframe-drop-overlay-label {
+  background: var(--cds-fill-accent);
+  color: var(--cds-gray-0);
+}
+html.cds-root .dframe-drop-overlay-badge:before {
+  box-shadow: inset 0 0 24px 0 color-mix(in srgb, var(--cds-fill-accent) 20%, transparent);
+}
+
+/*
+ * Official DY `showCursor("grabbing")` while session rowGhost is live.
+ * HTML5 drag would steal the OS arrow; pointer-drag needs this on html.
+ */
+html.dframe-session-dragging,
+html.dframe-session-dragging * {
+  cursor: grabbing !important;
 }

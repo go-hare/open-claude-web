@@ -39,7 +39,7 @@ export function coworkPermissionApprovalKind(toolName: string): CoworkPermission
 }
 
 /**
- * Official Age residual (index-BELzQL5P):
+ * Official Age residual (c21f11e6d-CxD82rYo.js):
  *   featureDisabled → Uge (ComputerUseEnablePanel)
  *   tccState → Fge (ComputerUseTccPanel)
  *   else → Oge (ComputerUseAppListPanel)
@@ -53,7 +53,7 @@ export function coworkComputerAccessApprovalKind(
 }
 
 /**
- * Official $ge residual (index-BELzQL5P) for computer:request_teach_access:
+ * Official $ge residual (c21f11e6d-CxD82rYo.js) for computer:request_teach_access:
  *   tccState → Fge (ComputerUseTccPanel)
  *   else → Wge (ComputerUseTeachPanel / computer-teach)
  */
@@ -77,7 +77,7 @@ export function coworkPermissionApprovalKindFromRequest(
 }
 
 /**
- * Official getToolApprovalState residual (index-BELzQL5P ~40191):
+ * Official getToolApprovalState residual (c21f11e6d-CxD82rYo.js ~40191):
  *   coworkWriteToolWarning = mode === "cowork" && annotations.readOnlyHint !== true
  * Generic approval is only mounted on the Cowork session path (mode residual = cowork).
  * Undefined readOnlyHint → true (same as official `!0 !== undefined`).

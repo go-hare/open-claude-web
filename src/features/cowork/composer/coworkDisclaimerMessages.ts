@@ -1,5 +1,5 @@
 /**
- * Official composer disclaimer residual (index-BELzQL5P data-disclaimer):
+ * Official composer disclaimer residual (c21f11e6d-CxD82rYo.js data-disclaimer):
  * - Hz3uf5n9Ga base (no feedback window)
  * - JyEEg0ExZX + aQPexOUJ+Y when openFeedbackWindow present
  *

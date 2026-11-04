@@ -1,7 +1,7 @@
 import type { PermissionMode } from "../../../adapters/desktopBridge";
 
 /**
- * Official Nwt.cowork + Ewt (index-BELzQL5P ~217984):
+ * Official Nwt.cowork + Ewt (c21f11e6d-CxD82rYo.js ~217984):
  * cowork base modes = ["default"]; auto/bypass appended when feature-enabled.
  * Awt(sessionType: "cowork"): triggerLabel Ask/Act, icons hv/rm.
  *
@@ -113,7 +113,8 @@ export function normalizeCoworkPermissionMode(value: unknown): PermissionMode {
   return "default";
 }
 
-function readFeatureGate(key: string): boolean {
+/** Official GB gate reader (gb_gate_* query / localStorage). Exported for Cowork chrome flags. */
+export function readFeatureGate(key: string): boolean {
   try {
     const params = new URLSearchParams(window.location.search);
     const query = params.get(`gb_gate_${key}`) ?? params.get(key);
@@ -123,6 +124,29 @@ function readFeatureGate(key: string): boolean {
     return stored === "1" || stored === "true";
   } catch {
     return false;
+  }
+}
+
+/**
+ * Official c621 `C("cowork_home_greeting_polish")`.
+ * When unset, default **on** (2.31226 shipping home uses `gn` / NUs72amU1j).
+ * Force off: `?gb_gate_cowork_home_greeting_polish=0` or localStorage.
+ */
+export function resolveCoworkHomeGreetingPolish(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const query = params.get("gb_gate_cowork_home_greeting_polish") ?? params.get("cowork_home_greeting_polish");
+    if (query === "1" || query === "true") return true;
+    if (query === "0" || query === "false") return false;
+    const stored =
+      window.localStorage.getItem("gb_gate_cowork_home_greeting_polish") ??
+      window.localStorage.getItem("cowork_home_greeting_polish");
+    if (stored === "1" || stored === "true") return true;
+    if (stored === "0" || stored === "false") return false;
+    return true;
+  } catch {
+    return true;
   }
 }
 

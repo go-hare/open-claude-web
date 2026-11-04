@@ -2,7 +2,7 @@
  * Official message action bar (pretty w0e + C0e flow positionMode).
  * Cowork is agent/local_session (T=true): copy for human+assistant; human rewind when
  * onRewind && !streaming; assistant footer retry is official-disabled under !T.
- * Source: index-BELzQL5P.js w0e / C0e.
+ * Source: c21f11e6d-CxD82rYo.js w0e / C0e.
  */
 import { useState, type ReactNode } from "react";
 import { micromark } from "micromark";

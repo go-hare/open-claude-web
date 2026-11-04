@@ -36,9 +36,10 @@ describe("official Ek DropZone mount (c11959232)", () => {
     expect(existing).toContain(
       'className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]"',
     );
-    // Official vI: jsxs(Ek) fills iE. KI flex wrap only when a side column exists.
-    expect(tile).toContain("{hasSidePanes ? (");
-    expect(tile).toContain(") : chatColumn}");
+    // Official vI: jsxs(Ek) fills iE. Product keeps KI wrap always so opening a
+    // side pane does not remount Ek/Fu (ternary wrap was the Tasks-click flash).
+    expect(tile).toContain("{hostedPopoutPane ? null : chatColumn}");
+    expect(tile).not.toContain(") : chatColumn}");
   });
 
   it("PaneLayout session content keeps official overflow-x-clip overflow-y-auto (cbc59a8af)", () => {
@@ -47,6 +48,27 @@ describe("official Ek DropZone mount (c11959232)", () => {
       'const contentClassName = "flex-1 min-h-0 relative flex flex-col overflow-x-clip overflow-y-auto"',
     );
     expect(pane).not.toContain("overflow-hidden");
+  });
+
+  it("sidebar toggle does not rebuild PaneLayout navigate (Fu flash)", () => {
+    const frame = readSrc("shell/DesktopFrame.tsx");
+    const pane = readSrc("shell/PaneLayout.tsx");
+    const tasks = readSrc("features/epitaxy/session/OfficialTasksPane.tsx");
+    const store = readSrc("stores/frameStore.ts");
+    const transcript = readSrc("features/epitaxy/session/OfficialTranscript.tsx");
+    expect(frame).toContain("frameStore.getState().mode !== nextMode");
+    expect(frame).toContain("}, [onNavigate]);");
+    expect(frame).not.toContain("}, [frame, onNavigate]);");
+    expect(frame).toContain("function DesktopFrameRoot(");
+    expect(frame).not.toContain("const frame = useFrameStore();\n  const [searchOpen");
+    expect(pane).toContain("export const PaneLayout = memo(function PaneLayout");
+    expect(tasks).not.toContain("from \"motion/react\"");
+    expect(tasks).not.toContain("officialTaskLayoutTransition");
+    expect(store).toContain("const subscribers = new Set<() => void>()");
+    expect(store).toContain("export function useFrameStoreSelector");
+    expect(transcript).toContain("useOfficialTranscriptFu");
+    expect(transcript).toContain("data-rs-index");
+    expect(transcript).not.toContain("useVirtualizer");
   });
 
   it("iE isolate rounded-r6 is OfficialChatTileShell only — not a second box around Ek", () => {
@@ -77,7 +99,7 @@ describe("official Ek DropZone mount (c11959232)", () => {
 
   it("workspace pills keep official pb-p3 overlap class", () => {
     const pills = readSrc("features/epitaxy/composer/OfficialWorkspaceControls.tsx");
-    expect(pills).toContain('className="flex flex-wrap gap-g5 pb-p3 pr-[96px]"');
+    expect(pills).toContain('className="flex flex-wrap gap-xs pb-xs pr-[96px]"');
   });
 
   it("Qj StarterKit disables dropcursor (official disableDropCursor:!0)", () => {
@@ -87,12 +109,17 @@ describe("official Ek DropZone mount (c11959232)", () => {
     expect(existing).toContain("dropcursor: false");
   });
 
-  it("Fu pin layout deps include viewportHeight (c3d5 H / composer shelf shrink)", () => {
+  it("Fu uses official wse/cr spacers, not TanStack sizerHeight pin layout", () => {
     const transcript = readSrc("features/epitaxy/session/OfficialTranscript.tsx");
-    expect(transcript).toContain(
-      "}, [isScrolling, itemCount, totalSize, tryRestoreAnchorKey, viewportHeight]);",
-    );
-    expect(transcript).toContain("sizerHeight = Math.max(totalSize, viewportHeight)");
+    const fu = readSrc("features/epitaxy/session/officialTranscriptFu.ts");
+    expect(transcript).toContain("useOfficialTranscriptFu");
+    expect(transcript).toContain("data-rocksteady-sizer");
+    expect(transcript).toContain("officialFu.spacerTop");
+    expect(transcript).toContain("officialFu.spacerBottom");
+    expect(transcript).not.toContain("sizerHeight = Math.max(totalSize, viewportHeight)");
+    expect(transcript).not.toContain("useVirtualizer");
+    expect(fu).toContain("OFFICIAL_WINDOW_OVERSCAN_PX");
+    expect(fu).toContain("holdPlaceOnWidthChange: undefined");
   });
 
   it("chat tiles-shell is official overflowMin, not idle translateZ (c119 YI)", () => {

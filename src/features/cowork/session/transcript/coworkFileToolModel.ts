@@ -17,16 +17,25 @@ export function coworkFileAction(name: string, path: string): CoworkFileAction {
   return "edit";
 }
 
-export function coworkFileDisplayName(path: string) {
+/** Official c21 Xv: CLAUDE.md displayName uses dqW6sjmil4 / 53DiPrdI5r; filename stays literal. */
+export type CoworkClaudeMdLabels = {
+  folderInstructions?: string;
+  globalInstructions?: string;
+};
+
+export function coworkFileDisplayName(path: string, labels?: CoworkClaudeMdLabels) {
   if (isMemoryPath(path) && !isMemoryFileWithoutMarkdown(path)) return humanizeMemoryFileName(path);
   if (basename(path) !== "CLAUDE.md") return "";
-  return `${isGlobalInstructionsPath(path) ? "Global instructions" : "Folder instructions"} (CLAUDE.md)`;
+  const folder = labels?.folderInstructions ?? "Folder instructions";
+  const global = labels?.globalInstructions ?? "Global instructions";
+  return `${isGlobalInstructionsPath(path) ? global : folder} (CLAUDE.md)`;
 }
 
 export function coworkFileStatusText(input: {
   action: CoworkFileAction;
   description?: string;
   isError: boolean;
+  labels?: CoworkClaudeMdLabels;
   normalizedName: string;
   path: string;
   streaming: boolean;
@@ -35,7 +44,7 @@ export function coworkFileStatusText(input: {
   if (input.action === "skill") return skillStatus(input.path, input.streaming);
   if (isMemoryPath(input.path)) return memoryStatus(input);
   if (input.action !== "edit") return undefined;
-  const name = coworkFileDisplayName(input.path) || basename(input.path);
+  const name = coworkFileDisplayName(input.path, input.labels) || basename(input.path);
   return input.streaming ? `Editing ${name}` : input.isError ? `Failed to edit ${name}` : `Edited ${name}`;
 }
 
@@ -59,9 +68,9 @@ export function basename(path: string) {
  * Official D5e create_file Blt target: strip extension, split `_`, title-case parts.
  * Wlt still special-cases CLAUDE.md via coworkFileDisplayName before calling this.
  */
-export function coworkCreateFileBltTarget(path: string) {
+export function coworkCreateFileBltTarget(path: string, labels?: CoworkClaudeMdLabels) {
   const file = basename(path);
-  if (file === "CLAUDE.md") return coworkFileDisplayName(path) || file;
+  if (file === "CLAUDE.md") return coworkFileDisplayName(path, labels) || file;
   return file
     .replace(/\.[^/.]+$/, "")
     .split("_")

@@ -3,7 +3,7 @@ import { desktopBridge, type WorkspaceContext } from "../../adapters/desktopBrid
 import { Icon } from "../../shell/icons";
 import { sessionPath } from "../../shell/sessionPaths";
 import { useI18nText } from "../../i18n/footerMenuMessages";
-import { COMPOSER_SEND_STOP_MESSAGES } from "./officialCodeChromeMessages";
+import { COMPOSER_BASH_PILL_MESSAGES, COMPOSER_CHAT_MODE_MESSAGES, COMPOSER_SEND_STOP_MESSAGES } from "./officialCodeChromeMessages";
 import { officialCodeSessionStore } from "./session/officialCodeSessionStore";
 import { kickOfficialAutoSessionTitle } from "./session/useOfficialAutoSessionTitle";
 
@@ -16,6 +16,8 @@ type EpitaxyComposerProps = {
 
 export function EpitaxyComposer({ onNavigate, placeholder, workspace }: EpitaxyComposerProps) {
   const sendText = useI18nText(COMPOSER_SEND_STOP_MESSAGES);
+  const chatModeText = useI18nText(COMPOSER_CHAT_MODE_MESSAGES);
+  const bashPillText = useI18nText(COMPOSER_BASH_PILL_MESSAGES);
   const [prompt, setPrompt] = useState("");
   const [permissionMode, setPermissionMode] = useState<"default" | "bypass">("bypass");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,21 +59,21 @@ export function EpitaxyComposer({ onNavigate, placeholder, workspace }: EpitaxyC
         <div className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-prompt-blur effect-prompt-blur" />
         {isBashMode ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-r7 shadow-[inset_0_0_0_1px_var(--extended-purple)]" /> : null}
         <span className="sr-only" role="status">
-          {isBashMode ? "Bash mode. Press Escape to return to chat." : "Chat mode"}
+          {isBashMode ? chatModeText.bashMode : chatModeText.chatMode}
         </span>
         <div aria-hidden="true" className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: "0fr" }}>
           <div className="min-h-0 overflow-hidden" />
         </div>
         <div className="relative flex w-full">
           {isBashMode ? (
-            <span aria-hidden="true" title="Run as a shell command" className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">
+            <span aria-hidden="true" title={bashPillText.runAsShellCommand} className="ml-[var(--p7)] mt-[13px] shrink-0 select-none self-start rounded-r2 bg-extended-purple px-p3 text-code text-[var(--core-black)]">
               bash
             </span>
           ) : null}
-          <div className="epitaxy-prompt-input flex-1 min-w-0 text-heading text-t9 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0">
+          <div className="relative font-large epitaxy-prompt-input flex-1 min-w-0 [&_.tiptap]:min-h-[var(--h8)] [&_.tiptap]:max-h-[218px] [&_.tiptap]:overflow-y-auto [&_.tiptap]:outline-none [&_.tiptap]:border-0 [&_.tiptap]:py-[13px] [&_.tiptap]:pl-p7 [&_.tiptap]:pr-p3 [&_.tiptap_p]:m-0 [&_.ProseMirror.is-editor-empty]:italic [&_.ProseMirror.is-editor-empty]:before:text-muted">
             <textarea
               aria-label="Prompt"
-              className="tiptap block w-full resize-none bg-transparent placeholder:text-t5"
+              className="tiptap block w-full resize-none bg-transparent placeholder:italic placeholder:text-muted"
               disabled={isSubmitting}
               onChange={(event) => setPrompt(event.target.value)}
               onKeyDown={(event) => {

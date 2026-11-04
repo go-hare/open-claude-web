@@ -1,4 +1,4 @@
-/** Official Iss avatar map (index-BELzQL5P Tss/Iss) — 72 variants, viewBox 0 0 28 28. */
+/** Official Iss avatar map (index-D35w9RK9 Tss/Iss) — 72 variants, viewBox 0 0 28 28. */
 import type { ReactNode } from "react";
 
 export type OfficialAvatarVariant = number; // 1..72

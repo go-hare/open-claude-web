@@ -56,7 +56,7 @@ export function isOfficialComputerTeachAccessTool(toolName: string | undefined |
 }
 
 /**
- * Official Age residual (index-BELzQL5P):
+ * Official Age residual (cd5a31703):
  *   featureDisabled → Uge
  *   tccState → Fge
  *   else → Oge
@@ -71,7 +71,7 @@ export function officialComputerAccessAgeKind(
 }
 
 /**
- * Official $ge residual (index-BELzQL5P) for computer:request_teach_access:
+ * Official $ge residual (cd5a31703) for computer:request_teach_access:
  *   tccState → Fge (ComputerUseTccPanel)
  *   else → Wge (ComputerUseTeachPanel)
  * Vge wraps $ge; Hge matches tool name.
@@ -180,7 +180,7 @@ export function officialComputerUseTierLabel(tier: OfficialComputerUseTier): str
 }
 
 /**
- * Official Wfe / Da sentinel kind (index-BELzQL5P zfe/Ffe/Ufe + Windows sets).
+ * Official Wfe / Da sentinel kind (cd5a31703 zfe/Ffe/Ufe + Windows sets).
  * Used only when app.isSentinel for yellow footnote.
  */
 export function officialComputerUseSentinelKind(

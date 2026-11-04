@@ -1,7 +1,7 @@
 /**
- * Official residual cowork scheduled-task detail route (index-BELzQL5P rKt + UQt wrapper).
- * Shell: flex flex-col h-full overflow-auto → Flt narrow max-w-4xl → rKt body.
- * Edit opens residual uYt with editingTask (not Epitaxy form page).
+ * Official residual cowork scheduled-task detail (c21f11e6d FQt/UQt + rKt + uYt).
+ * Mount gates: loading → Flt skeleton; !task(+deleting) → null; task → rKt + uYt(editingTask).
+ * Edit opens residual uYt modal (not Code Epitaxy ScheduledTaskForm /new).
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RouteViewProps } from "../../../app/routes";
@@ -49,8 +49,11 @@ export function ScheduledTaskDetail({ onNavigate }: RouteViewProps) {
     task: ScheduledTaskSummary | null;
     loading: boolean;
   }>({ id: "", task: null, loading: false });
+  // Residual FQt `_` / isDeleting — while delete in flight, missing task stays null (not form/404 invent).
+  const [isDeletingTask, setIsDeletingTask] = useState(false);
 
   useEffect(() => {
+    setIsDeletingTask(false);
     if (!taskId) return;
     let alive = true;
     setDirectLookup({ id: taskId, task: null, loading: true });
@@ -73,15 +76,17 @@ export function ScheduledTaskDetail({ onNavigate }: RouteViewProps) {
   const directTask = directLookup.id === taskId ? directLookup.task : null;
   const task = tasks.find((item) => item.id === taskId) ?? directTask;
   const waitingDirect = directLookup.id !== taskId || directLookup.loading;
-  if (!isLoading && !waitingDirect && !task) {
-    return <MissingTaskRedirect onNavigate={onNavigate} />;
-  }
-  if (!task) return <DetailLoading />;
+  // Residual FQt: A = listLoading || runsLoading → skeleton; !g && _ → null; !g → empty (null here, not Epitaxy form).
+  const pageLoading = isLoading || waitingDirect;
+  if (pageLoading) return <DetailLoading />;
+  if (!task && isDeletingTask) return null;
+  if (!task) return null;
   return (
     <ScheduledTaskDetailView
       existingNames={existingNames}
       onBack={() => onNavigate(scheduledTaskIndexPath)}
       onNavigate={onNavigate}
+      onDeletingChange={setIsDeletingTask}
       onTaskMutated={() => {
         void reload?.();
         void desktopBridge.CoworkScheduledTasks.get(taskId).then((next) => {
@@ -93,17 +98,10 @@ export function ScheduledTaskDetail({ onNavigate }: RouteViewProps) {
   );
 }
 
-function MissingTaskRedirect({ onNavigate }: { onNavigate: (path: string) => void }) {
-  useEffect(() => {
-    onNavigate(scheduledTaskIndexPath);
-  }, [onNavigate]);
-  return <DetailLoading />;
-}
-
 function DetailLoading() {
-  // Residual UQt loading: Flt + skeleton bars
+  // Residual FQt loading: flex col overflow-auto → Flt narrow → sge bars (200/150/120).
   return (
-    <div className="flex flex-col h-full overflow-auto" data-official-source="index-BELzQL5P.js:UQt loading">
+    <div className="flex flex-col h-full overflow-auto" data-official-source="c21f11e6d-CxD82rYo.js:FQt loading">
       <main className="mx-auto mt-4 w-full flex-1 px-4 md:px-8 lg:mt-6 max-w-4xl">
         <div className="space-y-4">
           <div className="h-8 w-[200px] rounded-md bg-bg-200" />
@@ -118,12 +116,14 @@ function DetailLoading() {
 function ScheduledTaskDetailView({
   existingNames,
   onBack,
+  onDeletingChange,
   onNavigate,
   onTaskMutated,
   task,
 }: {
   existingNames: Set<string>;
   onBack: () => void;
+  onDeletingChange?: (deleting: boolean) => void;
   onNavigate: (path: string) => void;
   onTaskMutated: () => void;
   task: ScheduledTaskSummary;
@@ -164,11 +164,13 @@ function ScheduledTaskDetailView({
   const remove = async () => {
     if (isDeleting) return;
     setIsDeleting(true);
+    onDeletingChange?.(true);
     try {
       await desktopBridge.CoworkScheduledTasks.updateStatus?.(task.id, "deleted");
       onBack();
-    } finally {
+    } catch {
       setIsDeleting(false);
+      onDeletingChange?.(false);
     }
   };
 
@@ -201,11 +203,11 @@ function ScheduledTaskDetailView({
   return (
     <div
       className="flex flex-col h-full overflow-auto"
-      data-official-source="index-BELzQL5P.js:rKt root"
+      data-official-source="c21f11e6d-CxD82rYo.js:rKt root"
     >
       <main
         className="mx-auto mt-4 w-full flex-1 px-4 md:px-8 lg:mt-6 max-w-4xl flex flex-col"
-        data-official-source="index-BELzQL5P.js:Flt narrow"
+        data-official-source="c21f11e6d-CxD82rYo.js:Flt narrow"
       >
         <button
           className="draggable-none flex items-center gap-0.5 text-sm text-text-400 hover:text-text-200 transition-colors -ml-2 mt-2 mb-6 w-fit"

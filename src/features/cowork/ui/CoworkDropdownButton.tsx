@@ -69,7 +69,7 @@ function CoworkDropdownPopup({ align, alignOffset, header, items, popupClassName
   return (
     <Menu.Portal>
       <Menu.Positioner align={align} alignOffset={alignOffset} className="epitaxy-root z-[60]" side={side} sideOffset={sideOffset}>
-        <Menu.Popup className={`${popupClass} ${popupClassName ?? ""}`} data-cds="Menu">
+        <Menu.Popup className={`${popupClass} ${popupClassName ?? ""}`} data-cds="Menu" role="menu">
           <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
           <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
             {header ? <div className="flex items-center gap-g3 px-p8 py-p2 min-h-[20px] text-footnote text-t6" role="presentation">{header}</div> : null}
@@ -102,7 +102,7 @@ function CoworkMenuItem({ hasChecks, item }: { hasChecks: boolean; item: CoworkD
   return (
     <>
       {item.separatorBefore ? <CoworkMenuSeparator /> : null}
-      <Menu.Item aria-checked={item.checked} className={[itemClass, item.icon ? "gap-g6" : "gap-g3"].join(" ")} closeOnClick={item.keepOpen || item.closeOnClick === false ? false : undefined} disabled={item.disabled} onClick={item.onSelect} role={item.checked === undefined ? undefined : "menuitemradio"}>
+      <Menu.Item aria-checked={item.checked} className={[itemClass, item.icon ? "gap-g6" : "gap-g3"].join(" ")} closeOnClick={item.keepOpen || item.closeOnClick === false ? false : undefined} data-testid={item.testId} disabled={item.disabled} onClick={item.onSelect} role={item.checked === undefined ? "menuitem" : "menuitemradio"}>
         <CoworkMenuItemIcon checked={item.checked} icon={item.icon} />
         <CoworkMenuItemLabel item={item} />
         {hasChecks ? <span className="flex items-center justify-center size-[16px] shrink-0 ml-[6px] text-[var(--accent)]" style={iconStyle}>{item.checked ? <Icon name="CheckSelection" size="sm" /> : null}</span> : null}
@@ -118,11 +118,11 @@ function CoworkSubmenu({ hasChecks, item }: { hasChecks: boolean; item: CoworkDr
   const [open, setOpen] = useState(false);
   return (
     <Menu.SubmenuRoot onOpenChange={setOpen} open={open}>
-      <Menu.SubmenuTrigger className={[itemClass, item.icon ? "gap-g6" : "gap-g3"].join(" ")} disabled={item.disabled} onClick={() => setOpen(true)} openOnHover>
+      <Menu.SubmenuTrigger className={[itemClass, item.icon ? "gap-g6" : "gap-g3"].join(" ")} data-testid={item.testId} disabled={item.disabled} onClick={() => setOpen(true)} openOnHover>
         <CoworkMenuItemIcon icon={item.icon} />
         <CoworkMenuItemLabel item={item} />{hasChecks ? <span className="size-[16px] shrink-0 ml-[6px]" /> : null}<Icon name="ChevronRightMedium" size="sm" />
       </Menu.SubmenuTrigger>
-      <Menu.Portal><Menu.Positioner align="start" className="epitaxy-root z-[70]" side="right" sideOffset={4}><Menu.Popup className={popupClass}><span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] bg-surface-popover effect-hud" /><CoworkMenuItems items={item.items ?? []} /></Menu.Popup></Menu.Positioner></Menu.Portal>
+      <Menu.Portal><Menu.Positioner align="start" className="epitaxy-root z-[70]" side="right" sideOffset={4}><Menu.Popup className={popupClass} data-cds="Menu" role="menu"><span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] bg-surface-popover effect-hud" /><CoworkMenuItems items={item.items ?? []} /></Menu.Popup></Menu.Positioner></Menu.Portal>
     </Menu.SubmenuRoot>
   );
 }

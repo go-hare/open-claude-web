@@ -3,6 +3,9 @@ import { Tooltip } from "@base-ui-components/react/tooltip";
 import { isValidElement, useMemo, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import { Icon } from "../../shell/icons";
 import { officialComposerPillClass, officialComposerSplitPillClass } from "./OfficialEpitaxyComponents";
+import { COMPOSER_GIT_MESSAGES, COMPOSER_ORIGIN_MESSAGES } from "./officialCodeChromeMessages";
+import { useI18nText } from "../../i18n/footerMenuMessages";
+import { formatOfficialIcu } from "../../i18n/formatOfficialIcu";
 
 type OfficialComposerEnvironmentPillProps = {
   envLabel: ReactNode;
@@ -33,12 +36,13 @@ export function OfficialComposerEnvironmentPill({
   onSelectLocalEnv,
 }: OfficialComposerEnvironmentPillProps) {
   const [open, setOpen] = useState(false);
+  const origin = useI18nText(COMPOSER_ORIGIN_MESSAGES);
   const icon = officialComposerEnvironmentIconMap[envType];
   const showLocalEnvSettings = Boolean(onOpenLocalEnvSettings);
   return (
     <Menu.Root open={open} onOpenChange={setOpen}>
-      <OfficialTooltip label="Where Claude runs">
-        <Menu.Trigger className={officialComposerPillClass}>
+      <OfficialTooltip label={origin.whereClaudeRuns}>
+        <Menu.Trigger className={officialComposerPillClass} data-testid="epitaxy-env-pill">
           <Icon name={icon} size="s" />
           <span className="truncate max-w-[200px]">{envLabel}</span>
         </Menu.Trigger>
@@ -66,12 +70,12 @@ export function OfficialComposerEnvironmentPill({
                   role="menuitemradio"
                 >
                   <span className={["relative flex items-center justify-center size-[14px] shrink-0", envType === "local" ? "text-[var(--accent)]" : ""].join(" ")} style={officialMenuIconStyle}>
-                    <Icon name="SystemComputerLaptopMacbook" size="m" bold={envType === "local"} />
+                    <Icon name="SystemComputerLaptopMacbook" size="s" bold={envType === "local"} />
                   </span>
                   <span className="flex-1 min-w-0 truncate pr-[16px]">
-                    <span className="flex-1">本地</span>
-                    {showLocalEnvSettings ? <span className="sr-only">, environment settings, right arrow</span> : null}
-                    {!localEnvAvailable ? <span className="text-footnote text-t6 ml-[var(--g6)]">Desktop only</span> : null}
+                    <span className="flex-1">{origin.local}</span>
+                    {showLocalEnvSettings ? <span className="sr-only">{origin.envSettingsRightArrow}</span> : null}
+                    {!localEnvAvailable ? <span className="text-footnote text-t6 ml-[var(--g6)]">{origin.desktopOnly}</span> : null}
                   </span>
                   {showLocalEnvSettings ? (
                     <button
@@ -121,13 +125,14 @@ function OfficialTooltip({ children, label }: { children: ReactElement | ReactNo
 }
 
 export function OfficialComposerAdditionalFolderPill({ folder, onRemove }: { folder: string; onRemove: (folder: string) => void }) {
+  const gitText = useI18nText(COMPOSER_GIT_MESSAGES);
   const label = basename(folder) ?? folder;
   return (
     <span className={`${officialComposerPillClass} !pr-p4`} title={folder}>
       <Icon name="Folder1" size="s" />
       <span className="truncate max-w-[160px]">{label}</span>
       <button
-        aria-label={`Remove ${label}`}
+        aria-label={formatOfficialIcu(gitText.removeName, { name: label })}
         className="inline-flex items-center justify-center rounded-r2 p-[2px] hover:bg-fill-contained-hover"
         onClick={() => onRemove(folder)}
         type="button"
@@ -139,15 +144,18 @@ export function OfficialComposerAdditionalFolderPill({ folder, onRemove }: { fol
 }
 
 export function OfficialComposerAddFolderButton({ onClick }: { onClick: () => void }) {
+  const gitText = useI18nText(COMPOSER_GIT_MESSAGES);
   return (
-    <button
-      aria-label="Add another folder"
-      className={officialComposerPillClass}
-      onClick={onClick}
-      type="button"
-    >
-      <Icon name="FolderAddRight" size="s" />
-    </button>
+    <OfficialTooltip label={gitText.addAnotherFolder}>
+      <button
+        aria-label={gitText.addAnotherFolder}
+        className={officialComposerPillClass}
+        onClick={onClick}
+        type="button"
+      >
+        <Icon name="FolderAddRight" size="s" />
+      </button>
+    </OfficialTooltip>
   );
 }
 
@@ -170,6 +178,7 @@ export function OfficialComposerBranchGroup({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const gitText = useI18nText(COMPOSER_GIT_MESSAGES);
   const value = branch || "—";
   const filteredBranches = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -184,7 +193,7 @@ export function OfficialComposerBranchGroup({
         <Menu.Trigger
           className={`${officialComposerSplitPillClass} gap-g5 px-p5`}
           disabled={branchPickerDisabled}
-          title="Branch to start from"
+          title={gitText.branchToStartFrom}
         >
           <Icon name="GitBranch" size="s" />
           <span className="truncate">{value}</span>
@@ -215,7 +224,7 @@ export function OfficialComposerBranchGroup({
                       </span>
                     </Menu.Item>
                   )) : (
-                    <div className="px-p8 py-p4 text-body text-t6">No branches match.</div>
+                    <div className="px-p8 py-p4 text-body text-t6">{gitText.noBranchesMatch}</div>
                   )}
                 </Menu.Group>
               </div>
@@ -224,7 +233,7 @@ export function OfficialComposerBranchGroup({
                 <Icon name="Search" size="s" />
                 <input
                   autoFocus
-                  aria-label="Search branches…"
+                  aria-label={gitText.searchBranches}
                   className="flex-1 min-w-0 bg-transparent border-0 outline-none hide-focus-ring text-body text-t8 placeholder:text-t6"
                   onChange={(event) => setQuery(event.target.value)}
                   onKeyDown={(event) => {
@@ -233,7 +242,7 @@ export function OfficialComposerBranchGroup({
                       setOpen(false);
                     }
                   }}
-                  placeholder="Search branches…"
+                  placeholder={gitText.searchBranches}
                   value={query}
                 />
               </div>
@@ -248,10 +257,11 @@ export function OfficialComposerBranchGroup({
           className={`${officialComposerSplitPillClass} group/cb gap-g2 pl-p4 pr-p5`}
           onClick={() => onWorktreeChange(!worktree)}
           role="checkbox"
+          title={gitText.workInIsolatedCopy}
           type="button"
         >
           <span className="inline-flex items-center justify-center size-[16px] shrink-0 p-[2.4px]">
-            <span className="flex items-center justify-center size-full rounded-[2.4px] bg-[var(--ui-switch-off-background)] group-aria-[checked=true]/cb:bg-[var(--accent)]">
+            <span className="flex items-center justify-center size-full rounded-[2.4px] bg-[var(--ui-switch-off-background)] group-aria-[checked=true]/cb:bg-[var(--accent)] group-data-[checked]/cb:bg-[var(--accent)]">
               <span className={worktree ? "flex items-center justify-center" : "hidden"}>
                 <svg width="6" height="5" viewBox="0 0 5.875 5.375" fill="none" aria-hidden="true" className="text-[var(--core-white)]">
                   <path d="M0.500014 2.75004L2.25001 4.87504L5.37501 0.500039" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
@@ -259,7 +269,7 @@ export function OfficialComposerBranchGroup({
               </span>
             </span>
           </span>
-          <span>worktree</span>
+          <span>{gitText.worktree}</span>
         </button>
       ) : null}
     </div>

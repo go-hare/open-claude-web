@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import type { SessionSummary } from "../adapters/desktopBridge";
 import { type ShellText, useShellText } from "../i18n/shellMessages";
 import type { DFrameGroupBy, DFrameSortBy, FrameMode } from "../stores/frameStore";
@@ -19,26 +19,45 @@ export type RecentsFilterState = {
   activityDays: "0" | "1" | "3" | "7" | "30";
   groupBy: DFrameGroupBy;
   sortBy: DFrameSortBy;
+  /** Official TS / Ok. Default false; S1 treats `true` as an active filter. */
+  showEmptyGroups: boolean;
+  /** Official Wz `Oy(Qc, !0)`. Default true. */
+  showPrStatus: boolean;
 };
 
 type DisplayGroup = { key: string; label?: string; sessions: SessionSummary[] };
-type MenuKey = keyof RecentsFilterState;
+type SubmenuKey = Exclude<keyof RecentsFilterState, "selectedProjects" | "showEmptyGroups" | "showPrStatus">;
 type Option<T extends string> = { label: string; value: T; description?: string };
 
-type FilterRow = { kind: "row"; key: Exclude<MenuKey, "selectedProjects">; label: string; summary: string; value: string; accent?: boolean; options: Option<string>[] };
-type SeparatorRow = { kind: "separator"; key: "separator" };
+type FilterRow = { kind: "row"; key: SubmenuKey; label: string; summary: string; value: string; accent?: boolean; options: Option<string>[]; separatorBefore?: string };
+type SeparatorRow = { kind: "separator"; key: string };
+type ToggleRow = { kind: "toggle"; key: "showEmptyGroups" | "showPrStatus"; label: string; checked: boolean };
 
 // Official ca0135: Button ghost iconOnly + df-chrome-btn (inherits text-500 chrome color).
 const triggerClassName = "df-chrome-btn relative -my-1 text-text-500";
+
+/**
+ * Official Code classic T1 (`shared-21`): persist-unset groupBy is Folder (`"project"`).
+ * Crop 7 screenshot: Group by Folder + Show empty groups row (`x1(code, project)`).
+ */
+export const officialCodeDefaultGroupBy: DFrameGroupBy = "project";
 
 export const defaultRecentsFilter: RecentsFilterState = {
   status: "active",
   selectedProjects: [],
   environment: "all",
-  activityDays: "0",
-  groupBy: "none",
+  /** Official Kz `Oy(Yc, 7)` — used when `groupBy === "state"`. */
+  activityDays: "7",
+  groupBy: officialCodeDefaultGroupBy,
   sortBy: "recency",
+  showEmptyGroups: false,
+  showPrStatus: true,
 };
+
+/** Official x1: empty-groups toggle when Code Folder or Custom. */
+export function showsEmptyGroupsToggle(groupBy: RecentsFilterState["groupBy"]): boolean {
+  return groupBy === "project" || groupBy === "custom";
+}
 
 function statusOptions(text: ShellText): Option<RecentsFilterState["status"]>[] {
   return [
@@ -57,23 +76,27 @@ function environmentOptions(text: ShellText): Option<RecentsFilterState["environ
   ];
 }
 
+function activityDayLabel(text: ShellText, days: Exclude<RecentsFilterState["activityDays"], "0">): string {
+  return text.lastActivityDays.replace("{days}", days);
+}
+
 function activityOptions(text: ShellText): Option<RecentsFilterState["activityDays"]>[] {
   return [
-    { label: text.oneDay, value: "1" },
-    { label: text.threeDays, value: "3" },
-    { label: text.sevenDays, value: "7" },
-    { label: text.thirtyDays, value: "30" },
+    { label: activityDayLabel(text, "1"), value: "1" },
+    { label: activityDayLabel(text, "3"), value: "3" },
+    { label: activityDayLabel(text, "7"), value: "7" },
+    { label: activityDayLabel(text, "30"), value: "30" },
     { label: text.all, value: "0" },
   ];
 }
 
+/** Official T1 `fe` Code classic: Date / Folder / State / Custom groups / None. */
 function codeGroupOptions(text: ShellText): Option<RecentsFilterState["groupBy"]>[] {
   return [
     { label: text.date, value: "date" },
-    { label: text.project, value: "project" },
+    { label: text.folder, value: "project" },
     { label: text.state, value: "state" },
-    { label: text.environment, value: "environment" },
-    { label: text.custom, value: "custom" },
+    { label: text.customGroups, value: "custom" },
     { label: text.none, value: "none" },
   ];
 }
@@ -85,17 +108,18 @@ function coworkGroupOptions(text: ShellText): Option<RecentsFilterState["groupBy
   ];
 }
 
+/** Official T1 `be`: Name / Date created / Last activity. */
 function sortOptions(text: ShellText): Option<RecentsFilterState["sortBy"]>[] {
   return [
-    { label: text.recency, value: "recency" },
     { label: text.sortAlphabetical, value: "alpha" },
     { label: text.sortCreated, value: "created" },
+    { label: text.lastActivity, value: "recency" },
   ];
 }
 
 export function RecentsControls({ mode, sessions, value, onChange }: { mode: FrameMode; sessions: SessionSummary[]; value: RecentsFilterState; onChange: (value: RecentsFilterState) => void }) {
   const text = useShellText();
-  const active = isFilterActive(value);
+  const active = isFilterActive(mode, value);
 
   // Official Ide callers (Ikt / CCProjectDropdown / filter menus): modal:false.
   // Base UI defaults modal:true and mounts InternalBackdrop that can steal item clicks.
@@ -121,19 +145,32 @@ export function RecentsControls({ mode, sessions, value, onChange }: { mode: Fra
 }
 
 export function buildRecentsGroups(sessions: SessionSummary[], value: RecentsFilterState, text?: ShellText): DisplayGroup[] {
+  const catalog = sessions.filter((session) => !(session.scheduledTaskId && !session.isArchived));
   const visible = sessions.filter((session) => includeSession(session, value));
   const sorted = [...visible].sort(sorterFor(value.sortBy));
   if (value.groupBy === "none") return [{ key: "all", sessions: sorted }];
-  if (value.groupBy === "project") return groupSessionsByOfficialProject(sorted, text);
+  if (value.groupBy === "project") {
+    return groupSessionsByOfficialProject(sorted, text, {
+      keepEmpty: value.showEmptyGroups,
+      catalog: value.showEmptyGroups ? catalog : undefined,
+    });
+  }
   return groupByValue(sorted, value.groupBy, text);
 }
 
 function RecentsFilterMenu({ mode, sessions, text, value, onChange }: { mode: FrameMode; sessions: SessionSummary[]; text: ShellText; value: RecentsFilterState; onChange: (value: RecentsFilterState) => void }) {
   const projectOptions = useMemo(() => makeProjectOptions(sessions), [sessions]);
   const rows = makeRows(mode, value, text);
-  const active = isFilterActive(value);
-  const reset = () => onChange({ ...value, status: "active", selectedProjects: [], environment: "all", activityDays: "0" });
-  const update = (key: Exclude<MenuKey, "selectedProjects">, next: string) => onChange({
+  const active = isFilterActive(mode, value);
+  const reset = () => onChange({
+    ...value,
+    status: "active",
+    selectedProjects: [],
+    environment: "all",
+    activityDays: mode === "code" ? "7" : "0",
+    showEmptyGroups: false,
+  });
+  const update = (key: SubmenuKey, next: string) => onChange({
     ...value,
     [key]: next,
     ...(key === "groupBy" && next === "state" ? { status: "active" as const } : {}),
@@ -141,15 +178,31 @@ function RecentsFilterMenu({ mode, sessions, text, value, onChange }: { mode: Fr
 
   return (
     <>
-      <FilterSubmenu row={rows[0] as FilterRow} onSelect={update} />
-      <ProjectSubmenu options={projectOptions} selectedProjects={value.selectedProjects} text={text} onChange={(selectedProjects) => onChange({ ...value, selectedProjects })} />
-      {rows.slice(1).map((row, index) => row.kind === "separator" ? <BaseMenuSeparator key={`${row.key}-${index}`} /> : <FilterSubmenu key={row.key} row={row} onSelect={update} />)}
+      {rows.map((row, index) => {
+        if (row.kind === "separator") return <BaseMenuSeparator key={`${row.key}-${index}`} />;
+        if (row.kind === "toggle") {
+          return (
+            <BaseMenuItem
+              checked={row.checked}
+              keepOpen
+              key={row.key}
+              onClick={() => onChange({ ...value, [row.key]: !row.checked })}
+            >
+              {row.label}
+            </BaseMenuItem>
+          );
+        }
+        return <FilterSubmenu key={row.key} row={row} onSelect={update} />;
+      })}
+      {mode !== "code" ? (
+        <ProjectSubmenu options={projectOptions} selectedProjects={value.selectedProjects} text={text} onChange={(selectedProjects) => onChange({ ...value, selectedProjects })} />
+      ) : null}
       {active ? <><BaseMenuSeparator /><BaseMenuItem onClick={reset}>{text.clearFilters}</BaseMenuItem></> : null}
     </>
   );
 }
 
-function FilterSubmenu({ row, onSelect }: { row: FilterRow; onSelect: (key: Exclude<MenuKey, "selectedProjects">, value: string) => void }) {
+function FilterSubmenu({ row, onSelect }: { row: FilterRow; onSelect: (key: SubmenuKey, value: string) => void }) {
   return (
     <BaseSubmenu
       popupAlign="start"
@@ -162,7 +215,12 @@ function FilterSubmenu({ row, onSelect }: { row: FilterRow; onSelect: (key: Excl
         </span>
       }
     >
-        {row.options.map((option) => <MenuOption checked={option.value === row.value} key={option.value} option={option} onSelect={() => onSelect(row.key, option.value)} />)}
+        {row.options.map((option) => (
+          <Fragment key={option.value}>
+            {option.value === row.separatorBefore ? <BaseMenuSeparator /> : null}
+            <MenuOption checked={option.value === row.value} option={option} onSelect={() => onSelect(row.key, option.value)} />
+          </Fragment>
+        ))}
     </BaseSubmenu>
   );
 }
@@ -199,19 +257,51 @@ function ProjectSubmenu({ options, selectedProjects, text, onChange }: { options
   );
 }
 
-function makeRows(mode: FrameMode, value: RecentsFilterState, text: ShellText): Array<FilterRow | SeparatorRow> {
-  const groupOptions = mode === "code" ? codeGroupOptions(text) : coworkGroupOptions(text);
-  return [
-    row("status", text.status, value.status, statusOptions(text), value.status !== "all"),
-    row("environment", text.environment, value.environment, environmentOptions(text), value.environment !== "all"),
-    row("activityDays", text.lastActivity, value.activityDays, activityOptions(text), value.activityDays !== "0"),
-    { kind: "separator", key: "separator" },
-    row("groupBy", text.groupBy, value.groupBy, groupOptions, value.groupBy !== "none"),
-    row("sortBy", text.sortBy, value.sortBy, sortOptions(text), value.sortBy !== "recency"),
-  ];
+export function makeRecentsFilterRows(mode: FrameMode, value: RecentsFilterState, text: ShellText) {
+  return makeRows(mode, value, text);
 }
 
-function row<T extends string>(key: Exclude<MenuKey, "selectedProjects">, label: string, value: T, options: Option<T>[], accent: boolean): FilterRow {
+function makeRows(mode: FrameMode, value: RecentsFilterState, text: ShellText): Array<FilterRow | SeparatorRow | ToggleRow> {
+  if (mode !== "code") {
+    const groupOptions = coworkGroupOptions(text);
+    return [
+      row("status", text.status, value.status, statusOptions(text), value.status !== "active"),
+      row("environment", text.environment, value.environment, environmentOptions(text), value.environment !== "all"),
+      row("activityDays", text.lastActivity, value.activityDays, activityOptions(text), value.activityDays !== "0"),
+      { kind: "separator", key: "separator" },
+      row("groupBy", text.groupBy, value.groupBy, groupOptions, value.groupBy !== "none"),
+      row("sortBy", text.sortBy, value.sortBy, sortOptions(text), value.sortBy !== "recency"),
+    ];
+  }
+
+  /**
+   * Official T1 classic (`shared-21`):
+   *   st: Status (accent !== active) + Environment + Last activity iff groupBy state
+   *   Separator
+   *   ct: Group by `fe` (separatorBefore none) + Sort by `be`
+   *   Separator + Show empty groups if x1 + Show PR status always
+   */
+  const rows: Array<FilterRow | SeparatorRow | ToggleRow> = [
+    row("status", text.status, value.status, statusOptions(text), value.status !== "active"),
+    row("environment", text.environment, value.environment, environmentOptions(text), value.environment !== "all"),
+  ];
+  if (value.groupBy === "state") {
+    rows.push(row("activityDays", text.lastActivity, value.activityDays, activityOptions(text), value.activityDays !== "7"));
+  }
+  rows.push(
+    { kind: "separator", key: "separator-filters" },
+    { ...row("groupBy", text.groupBy, value.groupBy, codeGroupOptions(text), false), separatorBefore: "none" },
+    row("sortBy", text.sortBy, value.sortBy, sortOptions(text), false),
+    { kind: "separator", key: "separator-toggles" },
+  );
+  if (showsEmptyGroupsToggle(value.groupBy)) {
+    rows.push({ kind: "toggle", key: "showEmptyGroups", label: text.showEmptyGroups, checked: value.showEmptyGroups });
+  }
+  rows.push({ kind: "toggle", key: "showPrStatus", label: text.showPrStatus, checked: value.showPrStatus });
+  return rows;
+}
+
+function row<T extends string>(key: SubmenuKey, label: string, value: T, options: Option<T>[], accent: boolean): FilterRow {
   const summary = options.find((option) => option.value === value)?.label ?? value;
   return { kind: "row", key, label, value, accent, summary, options };
 }
@@ -234,7 +324,12 @@ function makeProjectOptions(sessions: SessionSummary[]): Option<string>[] {
 function includeSession(session: SessionSummary, value: RecentsFilterState) {
   // Official CCSessionList Q: main list excludes scheduled unless archived.
   if (session.scheduledTaskId && !session.isArchived) return false;
-  return includeByStatus(session, value.status) && includeByProject(session, value.selectedProjects) && includeByEnvironment(session, value.environment) && includeByActivity(session, value.activityDays);
+  if (!includeByStatus(session, value.status)) return false;
+  if (!includeByProject(session, value.selectedProjects)) return false;
+  if (!includeByEnvironment(session, value.environment)) return false;
+  // Official T1 Last activity row (`ne`) only when groupBy state.
+  if (value.groupBy === "state" && !includeByActivity(session, value.activityDays)) return false;
+  return true;
 }
 
 function includeByStatus(session: SessionSummary, status: RecentsFilterState["status"]) {
@@ -402,6 +497,12 @@ function groupByState(sessions: SessionSummary[]): DisplayGroup[] {
   return groups;
 }
 
-function isFilterActive(value: RecentsFilterState) {
-  return value.status !== "active" || value.selectedProjects.length > 0 || value.environment !== "all" || value.activityDays !== "0";
+/** Official S1 classic: status / env / state-activity / showEmptyGroups. PR + groupBy/sort are not S1. */
+function isFilterActive(mode: FrameMode, value: RecentsFilterState) {
+  if (mode !== "code") {
+    return value.status !== "active" || value.selectedProjects.length > 0 || value.environment !== "all" || value.activityDays !== "0";
+  }
+  const activityActive = value.groupBy === "state" && value.activityDays !== "7";
+  const emptyActive = showsEmptyGroupsToggle(value.groupBy) && value.showEmptyGroups;
+  return value.status !== "active" || value.environment !== "all" || activityActive || emptyActive;
 }

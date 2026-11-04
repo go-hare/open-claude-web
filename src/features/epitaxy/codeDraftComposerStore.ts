@@ -1,5 +1,5 @@
 /**
- * Code home draft Mode residual (c11959232-h_zsw3wI.js).
+ * Code home draft Mode residual (cd5a31703-B4nKQMBN.js; was c11959232).
  *
  * Official:
  *   [$s,Us]=fc("cc-landing-draft-permission-mode","acceptEdits")

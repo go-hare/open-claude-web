@@ -13,6 +13,8 @@ import {
   type ReactNode,
 } from "react";
 import { OfficialButton } from "../OfficialEpitaxyComponents";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { ASK_USER_QUESTION_MESSAGES } from "../officialCodeChromeMessages";
 import {
   OFFICIAL_ASK_USER_OTHER_INDEX,
   parseOfficialAskUserInput,
@@ -72,6 +74,17 @@ export const OfficialAskUserQuestionCard = memo(function OfficialAskUserQuestion
   }, [controller.containerRef, controller.currentQuestionIndex, isPanelActive]);
 
   const [otherFocused, setOtherFocused] = useState(false);
+  const askText = useI18nText(ASK_USER_QUESTION_MESSAGES);
+  const stopBubble = useCallback((event: { stopPropagation: () => void }) => {
+    event.stopPropagation();
+  }, []);
+  const stopArrowBubble = useCallback((event: ReactKeyboardEvent) => {
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") event.stopPropagation();
+  }, []);
+  const onSkip = useCallback(() => {
+    if (busy || submittedRef.current) return;
+    controller.handleSkip();
+  }, [busy, controller]);
   const current = questions[controller.currentQuestionIndex];
   if (!current) return null;
 
@@ -82,19 +95,6 @@ export const OfficialAskUserQuestionCard = memo(function OfficialAskUserQuestion
   const otherHighlighted = multiSelect && controller.highlightedIndex === OFFICIAL_ASK_USER_OTHER_INDEX;
   const optionCountWithOther = current.options.length + 1;
   const ghostCount = Math.min(queueDepth, 2);
-
-  const stopBubble = useCallback((event: { stopPropagation: () => void }) => {
-    event.stopPropagation();
-  }, []);
-
-  const stopArrowBubble = useCallback((event: ReactKeyboardEvent) => {
-    if (event.key === "ArrowUp" || event.key === "ArrowDown") event.stopPropagation();
-  }, []);
-
-  const onSkip = useCallback(() => {
-    if (busy || submittedRef.current) return;
-    controller.handleSkip();
-  }, [busy, controller]);
 
   return (
     <div
@@ -171,7 +171,7 @@ export const OfficialAskUserQuestionCard = memo(function OfficialAskUserQuestion
             }}
             type="button"
           >
-            <span className="flex-1">Other</span>
+            <span className="flex-1">{askText.other}</span>
             {multiSelect ? (
               <OfficialAskUserCheckbox checked={otherSelected} />
             ) : (
@@ -181,7 +181,7 @@ export const OfficialAskUserQuestionCard = memo(function OfficialAskUserQuestion
             )}
           </button>
           <textarea
-            aria-label="Other option"
+            aria-label={askText.otherOption}
             className="epitaxy-textarea w-full"
             disabled={busy}
             onBlur={() => setOtherFocused(false)}
@@ -192,7 +192,7 @@ export const OfficialAskUserQuestionCard = memo(function OfficialAskUserQuestion
             onClick={stopBubble}
             onFocus={() => setOtherFocused(true)}
             onKeyDown={stopArrowBubble}
-            placeholder="Type your own answer here"
+            placeholder={askText.typeYourOwnAnswer}
             ref={controller.otherInputRef}
             rows={1}
             style={{ fieldSizing: "content", maxHeight: "calc(4lh + 2 * var(--p5))" } as CSSProperties}
@@ -205,11 +205,11 @@ export const OfficialAskUserQuestionCard = memo(function OfficialAskUserQuestion
       <div className="flex items-center justify-end gap-[8px]">
         {controller.currentQuestionIndex > 0 ? (
           <OfficialButton className="mr-auto" disabled={busy} onClick={controller.handleBack} size="base" variant="contained">
-            Back
+            {askText.back}
           </OfficialButton>
         ) : null}
         <OfficialButton disabled={busy} onClick={onSkip} size="base" variant="contained">
-          Skip
+          {askText.skip}
         </OfficialButton>
         <OfficialButton
           disabled={busy || !hasSelection}
@@ -217,7 +217,7 @@ export const OfficialAskUserQuestionCard = memo(function OfficialAskUserQuestion
           size="base"
           variant="primary"
         >
-          {isLast ? "Submit" : "Next"}
+          {isLast ? askText.submit : askText.next}
           <OfficialApprovalShortcut>{multiSelect ? "⌘⏎" : "⏎"}</OfficialApprovalShortcut>
         </OfficialButton>
       </div>

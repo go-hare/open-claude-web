@@ -100,7 +100,18 @@ function updatePaneState(updater: (state: PaneStoreState) => PaneStoreState) {
   emit();
 }
 
-function addPane(mode: FrameMode, currentKey: string, ref: PaneRef, preferredSlot?: PaneSlot) {
+/** Official shared-16 `addPane(..., via="other")` — `suggestion_card` from `Ed` toast. */
+export type PaneAddVia = "other" | "drag" | "suggestion_card" | (string & {});
+
+function addPane(
+  mode: FrameMode,
+  currentKey: string,
+  ref: PaneRef,
+  preferredSlot?: PaneSlot,
+  via?: PaneAddVia,
+) {
+  void currentKey;
+  void via;
   updatePaneState((state) => {
     if (!canSplitRef(mode, ref)) return state;
     const panes = getPanes(state, mode);

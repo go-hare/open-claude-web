@@ -76,6 +76,11 @@ export type OfficialTooltipProps = {
   className?: string;
   delayDuration?: number;
   keyboardShortcut?: string;
+  /**
+   * Official ca80 `fs` `open:!menuOpen && void 0` — force closed while a sibling menu is open.
+   * Do not unmount the wrapper; that remounts Menu.Trigger and the popup anchors at 0,0.
+   */
+  open?: boolean;
   side?: "top" | "bottom" | "left" | "right";
   sideOffset?: number;
   tooltipContent?: ReactNode;
@@ -87,6 +92,7 @@ export function OfficialTooltip({
   className,
   delayDuration = 200,
   keyboardShortcut,
+  open,
   side = "top",
   sideOffset = 5,
   tooltipContent,
@@ -101,7 +107,7 @@ export function OfficialTooltip({
   }
 
   return (
-    <Tooltip.Root disableHoverablePopup>
+    <Tooltip.Root disableHoverablePopup {...(open === false ? { open: false } : {})}>
       <Tooltip.Trigger delay={delayDuration} render={children as ReactElement<Record<string, unknown>>} />
       <Tooltip.Portal>
         <Tooltip.Positioner className="z-tooltip" side={side} sideOffset={sideOffset}>

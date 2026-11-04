@@ -1,5 +1,5 @@
 /**
- * Official Ace residual (index-BELzQL5P ~53018) + session avatar Et (~228013).
+ * Official Ace residual (c21f11e6d-CxD82rYo.js ~53018) + session avatar Et (~228013).
  * Asset: c6a992d55-D5kpo8DQ.js (thinking/writing/shimmer/waiting/…).
  * Status row g$t mounts Ace with currentAvatarState, not a CSS ring spinner.
  *
@@ -9,6 +9,10 @@
  */
 import { useEffect, useReducer, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { OfficialTooltip } from "../../../shared/OfficialTooltip";
+import {
+  isReducedMotionActive,
+  MOTION_MODE_CHANGE_EVENT,
+} from "../../../settings/appearanceSettings";
 
 export type CoworkClaudeAvatarState =
   | "entrance"
@@ -54,7 +58,7 @@ export type CoworkPathAvatarMessage = {
 };
 
 /**
- * Official v$t path-derived Et inputs (index-BELzQL5P ~227990–228016):
+ * Official v$t path-derived Et inputs (c21f11e6d-CxD82rYo.js ~227990–228016):
  *   ge = last path message
  *   Ct = isSession && path.length === 1 && ge.sender === "human"
  *   wt = streaming && (!ge || Ct || empty content/attachments/files)
@@ -178,7 +182,7 @@ export function CoworkClaudeAvatar({ className, isInteractive = true, state = "s
 }
 
 /**
- * Official Ace tickle copy ladder (index-BELzQL5P ~53054):
+ * Official Ace tickle copy ladder (c21f11e6d-CxD82rYo.js ~53054):
  * default → (>5) → (>12) → (>18) → (>24)
  */
 export function resolveCoworkAceTickleTooltip(tickleCount: number): string {
@@ -262,13 +266,17 @@ function useAvatarAnimation(
 }
 
 function useReducedMotion() {
-  const [reduced, setReduced] = useState(false);
+  const [reduced, setReduced] = useState(() => isReducedMotionActive());
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(query.matches);
+    const update = () => setReduced(isReducedMotionActive());
     update();
     query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
+    window.addEventListener(MOTION_MODE_CHANGE_EVENT, update);
+    return () => {
+      query.removeEventListener("change", update);
+      window.removeEventListener(MOTION_MODE_CHANGE_EVENT, update);
+    };
   }, []);
   return reduced;
 }

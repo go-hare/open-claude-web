@@ -1,5 +1,5 @@
 /**
- * Official cFt non-file branches for local_session (index-BELzQL5P.pretty.js cFt ~217165+):
+ * Official cFt non-file branches for local_session (c21f11e6d-CxD82rYo.js cFt ~217165+):
  * iFt/Yzt mcp_server, oFt/aFt web_search, lFt browser_extension, sFt skill.
  * Structure/classNames copied from official; no homemade approximate chrome.
  */
@@ -121,7 +121,7 @@ function CoworkMcpServerActivityDetail({
   return (
     <div
       className="flex h-full flex-col pb-1 pl-5 pt-3"
-      data-official-source="index-BELzQL5P.js:Yzt McpServerActivityDetail"
+      data-official-source="c21f11e6d-CxD82rYo.js:Yzt McpServerActivityDetail"
       data-cft-type="mcp_server"
     >
       <div className="sticky flex items-center gap-1 pr-5">
@@ -178,7 +178,7 @@ function CoworkToolCallRow({
   return (
     <div
       className="rounded-lg border border-border-300 overflow-hidden"
-      data-official-source="index-BELzQL5P.js:Kzt ToolCallRow"
+      data-official-source="c21f11e6d-CxD82rYo.js:Kzt ToolCallRow"
     >
       <button
         className="flex w-full cursor-pointer select-none items-center gap-3 px-3 py-2 text-left text-sm text-text-200"
@@ -234,7 +234,7 @@ function CoworkWebSearchActivityDetail({
   return (
     <div
       className="flex h-full flex-col pb-1 pl-5 pt-3"
-      data-official-source="index-BELzQL5P.js:aFt WebSearchActivityDetail"
+      data-official-source="c21f11e6d-CxD82rYo.js:aFt WebSearchActivityDetail"
       data-cft-type="web_search"
     >
       <div className="sticky flex items-center gap-1 pr-5">
@@ -287,7 +287,7 @@ function CoworkWebSearchRow({
   return (
     <div
       className="rounded-lg border border-border-300 overflow-hidden"
-      data-official-source="index-BELzQL5P.js:nFt WebSearchRow"
+      data-official-source="c21f11e6d-CxD82rYo.js:nFt WebSearchRow"
     >
       <button
         className="flex w-full cursor-pointer select-none items-center gap-3 px-3 py-2 text-left text-sm text-text-200"
@@ -338,7 +338,7 @@ function CoworkSkillDetailPanel({
   return (
     <div
       className="flex h-full flex-col pb-1 pl-5 pt-3"
-      data-official-source="index-BELzQL5P.js:sFt skill detail"
+      data-official-source="c21f11e6d-CxD82rYo.js:sFt skill detail"
       data-cft-type="skill"
     >
       <div className="sticky flex items-center gap-1 pr-5">
@@ -384,7 +384,7 @@ function CoworkSkillProposalDetailPanel({
   return (
     <div
       className="flex h-full flex-col pb-1 pl-5 pt-3"
-      data-official-source="index-BELzQL5P.js:sFt skill_proposal"
+      data-official-source="c21f11e6d-CxD82rYo.js:sFt skill_proposal"
       data-cft-type="skill_proposal"
     >
       <div className="sticky flex items-center gap-1 pr-5">
@@ -491,7 +491,7 @@ function CoworkChatArtifactDetailPanel({
   return (
     <div
       className="flex h-full flex-col pb-1 pl-5 pt-3"
-      data-official-source="index-BELzQL5P.js:l8e→b6e→g6e Chat artifact"
+      data-official-source="c21f11e6d-CxD82rYo.js:l8e→b6e→g6e Chat artifact"
       data-cft-type="chat_artifact"
     >
       <div className="sticky flex items-center gap-1 pr-5">
@@ -601,7 +601,7 @@ function CoworkArtifactDetailPanel({
   return (
     <div
       className="flex h-full flex-col pb-1 pl-5 pt-3"
-      data-official-source="index-BELzQL5P.js:SELECT_COWORK_ARTIFACT + kGt showArtifact"
+      data-official-source="c21f11e6d-CxD82rYo.js:SELECT_COWORK_ARTIFACT + kGt showArtifact"
       data-cft-type="cowork_artifact"
     >
       <div className="sticky flex items-center gap-1 pr-5">

@@ -8,7 +8,7 @@ import { BOOTSTRAP_QUERY_KEY } from "../settings/bootstrapQuery";
 import { sessionPath } from "../../shell/sessionPaths";
 import { paneStore } from "../../stores/paneStore";
 import { EpitaxyRouteFrame } from "./EpitaxyFrameSurface";
-import { OfficialChatTileShell } from "./OfficialEpitaxyComponents";
+import { OfficialChatTileShell, OfficialSessionHeader, type OfficialViewPane } from "./OfficialEpitaxyComponents";
 import { CodeStatsCard } from "./CodeStatsCard";
 import { EpitaxyActionCenter } from "./EpitaxyActionCenter";
 import { useEpitaxyActionCenterState } from "./epitaxyActionCenterState";
@@ -25,19 +25,37 @@ import {
   setLandingWorktreeEnabled,
 } from "./codeDraftComposerStore";
 import {
+  OFFICIAL_LANDING_COMPOSER_DRAFT_KEY,
+  persistComposerDraft,
+  readComposerDraft,
+} from "./officialComposerDraftStore";
+import {
   clampEffortToCatalog,
   cliEffortLevelsForModel,
 } from "./session/officialComposerOptions";
 import { officialCodeSessionStore } from "./session/officialCodeSessionStore";
+import {
+  officialAgentFromSearch,
+  officialDirectPromptFromSearch,
+  officialFolderFromSearch,
+  replaceOfficialConsumedSearch,
+  useOfficialPromptUrlSeed,
+} from "./session/officialPromptUrl";
+import { useErrorsOptional } from "../settings/errorsToast";
 import { kickOfficialAutoSessionTitle } from "./session/useOfficialAutoSessionTitle";
 import {
   getSelectedFolder,
+  setSelectedFolder,
   subscribeSelectedFolder,
 } from "../customize/selectedFolderStore";
 import { applySelectedFolderToDraftWorkspace } from "../customize/applySelectedFolderToDraftWorkspace";
+import { OfficialSparkIdle } from "../shared/OfficialSparkIdle";
+import { EpitaxySidePaneColumn, sidePaneMinWidth } from "./session/EpitaxySidePanes";
+import type { OfficialFileViewTarget } from "./session/OfficialFilePane";
+import { useOfficialFramebufferMenuGate } from "./session/OfficialFramebufferPane";
 
 /**
- * Official c119 react-query residual for Code home draft seed:
+ * Official cd5a31703 react-query residual for Code home draft seed:
  *   ["ccd-default-effort"] staleTime: Infinity
  *   ["epitaxy-project-default-mode", cwd] staleTime/gcTime: Infinity + placeholderData
  * Product was remounting EpitaxyHome → full-page skeleton + re-IPC every visit.
@@ -102,7 +120,7 @@ export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
   const selectedFolder = useSyncExternalStore(subscribeSelectedFolder, getSelectedFolder, () => null);
   const hostWorkspace = workspaceQuery.data ?? null;
   /**
-   * Official c119 zm: `_ = P?.cwd ?? p ?? undefined`. Home has no session
+   * Official cd5a31703 zm: `_ = P?.cwd ?? p ?? undefined`. Home has no session
    * meta so draft cwd is vK selectedFolder (ca0135 fl mapped `+`).
    */
   const workspace = useMemo(
@@ -133,28 +151,6 @@ export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
     || "medium";
 
   /**
-   * Official c119 residual when no session (`!E`) and selectedFolder `je` is set:
-   * Uo?.onOpenFile → pickFileAtCwd(je).then(tt).
-   * Official home is the same tile as the session (has file side pane `tt`).
-   * Our CodeNewSessionPage has no file pane — only the pick half of the residual
-   * is valid here. Do not invent epitaxy-open-file / openInEditor fallbacks.
-   * Full tt path lives on EpitaxySessionTile when a session is open.
-   */
-  useEffect(() => {
-    if (!selectedFolder) return;
-    const menuEvents = window["claude.web"]?.MenuEvents as
-      | { onOpenFile?: (cb: () => void) => (() => void) | void; openFile?: (cb: () => void) => (() => void) | void }
-      | undefined;
-    if (!menuEvents?.onOpenFile && !menuEvents?.openFile) return;
-    const je = selectedFolder;
-    const pick = () => {
-      void desktopBridge.LocalSessions.pickFileAtCwd?.(je);
-    };
-    const subscribe = menuEvents.onOpenFile ?? menuEvents.openFile;
-    return subscribe?.(pick) ?? undefined;
-  }, [selectedFolder]);
-
-  /**
    * Official draft home mounts real Qj Prompt immediately (tipTap + RNt).
    * Do NOT invent a fake Prompt skeleton → live editor swap (blank ::before
    * then data-placeholder flash). Overlay selectedFolder onto host seed
@@ -165,6 +161,7 @@ export function EpitaxyHome({ onNavigate, route }: RouteViewProps) {
       initialEffort={effort}
       initialPermissionMode={permissionMode}
       onNavigate={onNavigate}
+      selectedFolder={selectedFolder}
       workspace={workspace}
     />
   );
@@ -182,14 +179,39 @@ function CodeNewSessionPage({
   initialEffort,
   initialPermissionMode,
   onNavigate,
+  selectedFolder,
   workspace,
 }: {
   initialEffort: EffortLevel;
   initialPermissionMode: PermissionMode;
   onNavigate: (path: string) => void;
+  selectedFolder: string | null;
   workspace: WorkspaceContext;
 }) {
-  const [prompt, setPrompt] = useState("");
+  const search = typeof window === "undefined" ? "" : window.location.search;
+  /**
+   * Official vI `E=l??wr(a)?.agent` seeds BEFORE bE `zo(uE,{text:u})`.
+   * Capture first so query prompt wipe does not drop a real chip name.
+   */
+  const [landingAgent] = useState(() =>
+    officialAgentFromSearch(search) ?? readComposerDraft(OFFICIAL_LANDING_COMPOSER_DRAFT_KEY)?.agent,
+  );
+  const [prompt, setPrompt] = useState(() => {
+    const query = officialDirectPromptFromSearch(search);
+    const queryAgent = officialAgentFromSearch(search);
+    // Official bE `u?zo(uE,{text:u})` — text-only wipe of files/agent in LS.
+    if (query) persistComposerDraft(OFFICIAL_LANDING_COMPOSER_DRAFT_KEY, { text: query });
+    else if (queryAgent) {
+      const existing = readComposerDraft(OFFICIAL_LANDING_COMPOSER_DRAFT_KEY);
+      persistComposerDraft(OFFICIAL_LANDING_COMPOSER_DRAFT_KEY, {
+        agent: queryAgent,
+        files: existing?.files,
+        text: existing?.text,
+      });
+    }
+    return query ?? readComposerDraft(OFFICIAL_LANDING_COMPOSER_DRAFT_KEY)?.text ?? "";
+  });
+  const [draftEpoch, setDraftEpoch] = useState(0);
   const [busy, setBusy] = useState(false);
   // Sticky draft model/effort/ultracode survive leave/return (same store as Mode).
   const [model, setModel] = useState(() => getCodeDraftComposerState().model ?? "default");
@@ -207,13 +229,100 @@ function CodeNewSessionPage({
   const [sourceBranch, setSourceBranch] = useState(workspace.cwd ? workspace.branchName : "");
   /** Official fc("cc-landing-worktree-enabled", true) — sticky Kn; cwd change does not wipe. */
   const [useWorktree, setUseWorktree] = useState(() => getLandingWorktreeEnabled());
-  /** Official c119: epitaxy:reset-draft remount key when no session id (void 0===o). */
-  const [draftEpoch, setDraftEpoch] = useState(0);
   /**
    * Official Ek on the session column; tC/Qj chrome publishes handlers.
    * Drop overlay is `absolute inset-0` of this h-full box — not the shrink-0 composer.
    */
   const dropHandlersRef = useRef<OfficialEpitaxyDropHandlers | null>(null);
+  const errors = useErrorsOptional();
+  /**
+   * Official bE `prompt_url` fetch → zo({text}) + remount when no session is bound.
+   * Direct `prompt`/`q` already zo'd in the prompt useState init.
+   */
+  useOfficialPromptUrlSeed({
+    addError: errors?.addError,
+    enabled: true,
+    sessionBound: false,
+    setComposerText: (text) => {
+      persistComposerDraft(OFFICIAL_LANDING_COMPOSER_DRAFT_KEY, { text });
+      setPrompt(text);
+      setDraftEpoch((n) => n + 1);
+    },
+  });
+  /**
+   * Official bE: `f=i.folder` + `src!==external` → setSelectedFolder(f).
+   * Then strip Tb keys (`q/prompt/prompt_url/folder/src/…`). Skip SSH confirm.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const folder = officialFolderFromSearch(window.location.search);
+    if (folder) setSelectedFolder(folder);
+    replaceOfficialConsumedSearch();
+  }, []);
+  /**
+   * Official c119 `tt`: pickFileAtCwd(je).then(tt) → setFileView + setSidePane("file").
+   * Empty home has no tiles until a pick succeeds — do not invent Nn on first paint.
+   */
+  const [homeFileView, setHomeFileView] = useState<OfficialFileViewTarget | null>(null);
+  /** Official eI YR setSidePane on draft (sessionRef null). */
+  const [homeSideTiles, setHomeSideTiles] = useState<OfficialViewPane[]>([]);
+  const canOpenHomeFiles = Boolean(composerWorkspace.cwd && desktopBridge.LocalSessions.pickFileAtCwd);
+  const selectHomeView = useCallback((view: OfficialViewPane) => {
+    if (view === "file") {
+      if (homeFileView) {
+        setHomeFileView(null);
+        setHomeSideTiles((tiles) => tiles.filter((tile) => tile !== "file"));
+        return;
+      }
+      const cwd = composerWorkspace.cwd;
+      const pick = desktopBridge.LocalSessions.pickFileAtCwd;
+      if (!cwd || !pick) return;
+      void pick(cwd).then((picked) => {
+        if (!picked) return;
+        setHomeFileView({ path: picked, scrollNonce: Date.now() });
+        setHomeSideTiles((tiles) => (tiles.includes("file") ? tiles : [...tiles, "file"]));
+      });
+      return;
+    }
+    setHomeSideTiles((tiles) => (
+      tiles.includes(view) ? tiles.filter((tile) => tile !== view) : [...tiles, view]
+    ));
+  }, [composerWorkspace.cwd, homeFileView]);
+  const homeTiles = useMemo((): OfficialViewPane[] => {
+    if (homeFileView && !homeSideTiles.includes("file")) return [...homeSideTiles, "file"];
+    return homeSideTiles;
+  }, [homeFileView, homeSideTiles]);
+  /** Official YR T && (sources || already open). Draft cwd is landing folder. */
+  const canOpenHomeFramebuffer = useOfficialFramebufferMenuGate(
+    composerWorkspace.cwd,
+    homeTiles.includes("framebuffer"),
+  );
+
+  /**
+   * Official cd5a31703 residual when no session (`!E`) and selectedFolder `je` is set:
+   * Uo?.onOpenFile → pickFileAtCwd(je).then(tt).
+   * `tt` = setFileView + setSidePane("file") on the same home tile.
+   */
+  useEffect(() => {
+    if (!selectedFolder) return;
+    const menuEvents = window["claude.web"]?.MenuEvents as
+      | { onOpenFile?: (cb: () => void) => (() => void) | void; openFile?: (cb: () => void) => (() => void) | void }
+      | undefined;
+    if (!menuEvents?.onOpenFile && !menuEvents?.openFile) return;
+    const je = selectedFolder;
+    const pick = () => {
+      const fn = desktopBridge.LocalSessions.pickFileAtCwd;
+      if (!fn) return;
+      void fn(je).then((picked) => {
+        if (picked) {
+          setHomeFileView({ path: picked, scrollNonce: Date.now() });
+          setHomeSideTiles((tiles) => (tiles.includes("file") ? tiles : [...tiles, "file"]));
+        }
+      });
+    };
+    const subscribe = menuEvents.onOpenFile ?? menuEvents.openFile;
+    return subscribe?.(pick) ?? undefined;
+  }, [selectedFolder]);
 
   /**
    * Seed composer from parent overlay. If cwd already matches (Ikt browse
@@ -234,12 +343,13 @@ function CodeNewSessionPage({
   }, [workspace]);
 
   /**
-   * Official c119 residual (sidebar Qas → CustomEvent "epitaxy:reset-draft"):
+   * Official cd5a31703 residual (sidebar Qas → CustomEvent "epitaxy:reset-draft"):
    * when no session id: clear prompt/ultracode + remount counter.
    * Does NOT wipe folder map / landing sticky Mode (official zo(uE) only).
    */
   useEffect(() => {
     const onReset = () => {
+      persistComposerDraft(OFFICIAL_LANDING_COMPOSER_DRAFT_KEY, {});
       setPrompt("");
       setBusy(false);
       setUltracode(false);
@@ -345,6 +455,7 @@ function CodeNewSessionPage({
         effort: wireEffort,
         model,
         prompt: startPrompt,
+        ...(options?.agent ? { agent: options.agent } : {}),
         ...(images && images.length > 0 ? { images } : {}),
         sourceBranch: shouldUseGitControls ? sourceBranch : undefined,
         useWorktree: shouldUseGitControls ? useWorktree : undefined,
@@ -364,6 +475,11 @@ function CodeNewSessionPage({
       });
       // Official create residual: generate_session_title when prompt length >= 10 → titleSource auto.
       kickOfficialAutoSessionTitle(session.id, startPrompt);
+      // Official vI keeps E across draft→session (same instance, persistKey epitaxy-draft → epitaxy-${id}).
+      // Product remounts ChatPanel — copy a real wr().agent only; never invent a name.
+      const persistedAgent = readComposerDraft(OFFICIAL_LANDING_COMPOSER_DRAFT_KEY)?.agent ?? landingAgent;
+      if (persistedAgent) persistComposerDraft(`epitaxy-${session.id}`, { agent: persistedAgent });
+      persistComposerDraft(OFFICIAL_LANDING_COMPOSER_DRAFT_KEY, {});
       // Residual openSession(meta) before route paint so ExistingSessionComposer seeds
       // Mode from host session.permissionMode (`be(n.permissionMode)`) — not invent
       // "default" (询问权限) for one frame after draft already showed bypass/accept.
@@ -372,26 +488,38 @@ function CodeNewSessionPage({
     } finally {
       setBusy(false);
     }
-  }, [busy, composerWorkspace, effort, model, onNavigate, permissionMode, prompt, sourceBranch, ultracode, useWorktree]);
+  }, [busy, composerWorkspace, effort, landingAgent, model, onNavigate, permissionMode, prompt, sourceBranch, ultracode, useWorktree]);
 
   // Official Pw shared by Tw greeting + _w ActionCenter / $x stats branch.
   const actionCenter = useEpitaxyActionCenterState();
 
-  // Official bE (c11959232) always mounts iE for draft (sessionRef may be null):
+  // Official bE (cd5a31703 / cc43287c9) always mounts iE for draft (sessionRef may be null):
   // isolate rounded-r6 + Nn sidebar, then Ek as the chat-column child. Do not
   // hand-roll a second isolate around Ek.
-  return (
-    <EpitaxyRouteFrame>
-      <OfficialChatTileShell onActivate={() => paneStore.setFocusedIndex("code", 0)}>
+  const chatColumn = (
         <OfficialEpitaxyDropZone
           className="h-full min-w-0 flex flex-col"
           onFilesDropped={(files) => dropHandlersRef.current?.onFilesDropped(files)}
           onFolderDropped={(folders) => dropHandlersRef.current?.onFolderDropped(folders)}
           onNonImageFilesDropped={(files) => dropHandlersRef.current?.onNonImageFilesDropped(files)}
+          style={homeTiles.length > 0 ? { height: "100%", minWidth: sidePaneMinWidth, flex: "1 1 0" } : undefined}
         >
-          <div className="relative">
-            <CodeGreeting greetEmpty={actionCenter.greetEmpty} workspace={workspace} />
-          </div>
+          {/* Official vI eI then nz greeting. YR mounts with sessionRef null. */}
+          <OfficialSessionHeader
+            agent={landingAgent}
+            canOpenFiles={canOpenHomeFiles}
+            canOpenFramebuffer={canOpenHomeFramebuffer}
+            isTitleLoading={false}
+            isTopLeft
+            onViewSelect={selectHomeView}
+            openViews={homeTiles}
+            paneIndex={0}
+            session={null}
+            sessionRef={null}
+            title=""
+          />
+          {/* Official cc432 nz: greeting is a direct Ek child (session tile: header + body). */}
+          <CodeGreeting greetEmpty={actionCenter.greetEmpty} workspace={workspace} />
           <div className="contents">
             <div className="flex-1 min-h-0 relative isolate [--epitaxy-scrim-inset-end:16px]">
               <div className="epitaxy-top-scrim" aria-hidden="true" />
@@ -412,6 +540,8 @@ function CodeNewSessionPage({
             <div className="epitaxy-chat-column epitaxy-chat-size relative shrink-0 flex flex-col gap-g5 [contain:layout]">
               <OfficialCodeComposer
                 key={draftEpoch}
+                persistKey={OFFICIAL_LANDING_COMPOSER_DRAFT_KEY}
+                initialAgent={landingAgent}
                 busy={busy}
                 dropHandlersRef={dropHandlersRef}
                 effort={effort}
@@ -450,18 +580,48 @@ function CodeNewSessionPage({
             </div>
           </div>
         </OfficialEpitaxyDropZone>
+  );
+
+  return (
+    <EpitaxyRouteFrame>
+      <OfficialChatTileShell onActivate={() => paneStore.setFocusedIndex("code", 0)}>
+        {homeTiles.length > 0 ? (
+          <div className="relative h-full min-w-0 flex" style={{ gap: 12 }}>
+            {chatColumn}
+            <EpitaxySidePaneColumn
+              fileView={homeFileView}
+              flex={homeFileView || homeTiles.includes("diff") || homeTiles.includes("preview") ? 3 : 1}
+              landingCwd={composerWorkspace.cwd}
+              messages={[]}
+              onCloseAll={() => {
+                setHomeFileView(null);
+                setHomeSideTiles([]);
+              }}
+              onCloseTile={(view) => {
+                if (view === "file") setHomeFileView(null);
+                setHomeSideTiles((tiles) => tiles.filter((tile) => tile !== view));
+              }}
+              onFileViewChange={setHomeFileView}
+              onSidePaneWidthChange={() => undefined}
+              previewTarget={null}
+              session={null}
+              sessionRef={null}
+              sideTiles={homeTiles}
+              subagentView={null}
+            />
+          </div>
+        ) : chatColumn}
       </OfficialChatTileShell>
     </EpitaxyRouteFrame>
   );
 }
 
 /**
- * Official c119 EpitaxyActionCenterGreeting residual (Tw):
+ * Official cc43287c9 `nz` greeting (non-centered): Spark `bu` size 22 + h1, not Ace raster.
  *   name = account.display_name || account.full_name?.split(" ")[0]  (Go())
  *   greetEmpty (Pw) → "What’s up next, {name}?" / "What’s up next?"
  *   else → "Welcome back, {name}" / "Welcome back"
  * ids: flLEnDzvfG / W8pMCdh9hq / UOxi8mioge / UKxoV8UIxo
- * zh-CN flLEnDzvfG: "{name}，接下来做点什么？"
  *
  * Official Go is a store already hydrated when Tw paints. Product shares App
  * login-gate bootstrap via react-query (BOOTSTRAP_QUERY_KEY) so name is not a
@@ -519,9 +679,9 @@ function CodeGreeting({
   return (
     <header
       className="epitaxy-chat-column epitaxy-chat-size flex flex-row items-center gap-[calc(var(--g3)+2px)] pt-[12px] pb-[24px]"
-      data-official-source="c11959232-h_zsw3wI.js:EpitaxyActionCenterGreeting"
+      data-official-source="cc43287c9-Bchz60VT.js:nz Tw EpitaxyActionCenterGreeting"
     >
-      <img alt="" aria-hidden="true" className="size-[22px] shrink-0 translate-y-px" src="/assets/v1/cd02a42d9-Vq_H3mgS.svg" />
+      <OfficialSparkIdle size={22} />
       <h1 className="text-title text-t9">{title}</h1>
     </header>
   );

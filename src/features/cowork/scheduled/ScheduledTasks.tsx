@@ -1,5 +1,5 @@
 /**
- * Official desktop scheduled tasks list: index-BELzQL5P zQt → CYt (B4 path).
+ * Official desktop scheduled tasks list: c21f11e6d-CxD82rYo.js zQt → CYt (B4 path).
  * Create opens uYt modal (not /new full page).
  * Action: Dc size sm; tabsEnd: Ide sort + gYt filter.
  */
@@ -61,7 +61,7 @@ export function ScheduledTasks({ onNavigate }: RouteViewProps) {
   const canCreate = typeof desktopBridge.CoworkScheduledTasks.create === "function";
 
   return (
-    <div className="h-full" data-official-source="index-BELzQL5P.js:CYt">
+    <div className="h-full" data-official-source="c21f11e6d-CxD82rYo.js:CYt">
       <ScheduledTasksPageShell
         action={
           canCreate ? (

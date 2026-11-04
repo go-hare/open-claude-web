@@ -1,5 +1,5 @@
 /**
- * Official projects list primitives from index-BELzQL5P:
+ * Official projects list primitives from index-D35w9RK9:
  * - EGt shell (lB)
  * - NGt grid (lC)
  * - SGt/MGt/jGt card (lD)
@@ -12,7 +12,7 @@ import { OfficialButton } from "../shared/OfficialButton";
 import { OfficialTextInput } from "../shared/OfficialTextInput";
 import { OfficialTooltip } from "../shared/OfficialTooltip";
 
-/** Official jGt card surface (index-BELzQL5P SGt). */
+/** Official jGt card surface (index-D35w9RK9 SGt). */
 export const PROJECT_CARD_CLASS =
   "from-bg-100 to-bg-100/30 border-0.5 border-border-300 hover:from-bg-000 hover:to-bg-000/80 hover:border-border-200 relative flex cursor-pointer flex-col overflow-hidden rounded-xl bg-gradient-to-b p-4 transition-all ease-in-out hover:shadow-sm active:scale-[0.98] h-full w-full text-left no-underline";
 
@@ -38,10 +38,10 @@ export function ProjectsPageShell({
   ) : null;
 
   return (
-    <div className="flex flex-col h-full" data-official-source="index-BELzQL5P.js:EGt">
+    <div className="flex flex-col h-full" data-official-source="index-D35w9RK9.js:EGt">
       <header
         className="flex w-full bg-bg-100 h-12 mx-auto md:h-24 md:items-end max-w-4xl shrink-0 md:!h-14 md:!items-center [&_h1]:font-normal [&>div]:md:!px-8"
-        data-official-source="index-BELzQL5P.js:BFe"
+        data-official-source="index-D35w9RK9.js:BFe"
         data-testid="page-header"
       >
         <div className="flex w-full items-center justify-between gap-4 pl-11 lg:px-8 px-4 md:px-8">
@@ -66,7 +66,7 @@ export function ProjectsCardGrid({ children }: { children: ReactNode }) {
   return (
     <div
       className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 md:gap-4 grid-cols-1 auto-rows-fr mb-3 md:mb-6"
-      data-official-source="index-BELzQL5P.js:NGt"
+      data-official-source="index-D35w9RK9.js:NGt"
     >
       {children}
     </div>
@@ -92,7 +92,7 @@ export function ProjectCard({
     .filter(Boolean)
     .join(" ");
   const body = (
-    <div className="flex flex-col flex-grow gap-1.5" data-official-source="index-BELzQL5P.js:MGt">
+    <div className="flex flex-col flex-grow gap-1.5" data-official-source="index-D35w9RK9.js:MGt">
       <div className="flex items-center overflow-hidden pr-10">
         <div className="font-base-bold text-text-100 truncate">{title}</div>
       </div>
@@ -106,7 +106,7 @@ export function ProjectCard({
       <div className="relative group h-full">
         <a
           className={cardClass}
-          data-official-source="index-BELzQL5P.js:SGt/jGt"
+          data-official-source="index-D35w9RK9.js:SGt/jGt"
           href={href}
           onClick={(event) => {
             if (onClick) {
@@ -123,7 +123,7 @@ export function ProjectCard({
 
   return (
     <div className="relative group h-full">
-      <button className={cardClass} data-official-source="index-BELzQL5P.js:SGt/jGt" onClick={onClick} type="button">
+      <button className={cardClass} data-official-source="index-D35w9RK9.js:SGt/jGt" onClick={onClick} type="button">
         {body}
       </button>
     </div>
@@ -181,7 +181,7 @@ export function ProjectsExpandableSearch({
         }
         aria-label={placeholder}
         className="w-[200px]"
-        data-official-source="index-BELzQL5P.js:gYt"
+        data-official-source="index-D35w9RK9.js:gYt"
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing) return;
@@ -207,7 +207,7 @@ export function ProjectsExpandableSearch({
     <OfficialTooltip keyboardShortcut="cmd+f" side="top" tooltipContent={placeholder}>
       <OfficialButton
         aria-label={placeholder}
-        data-official-source="index-BELzQL5P.js:gYt"
+        data-official-source="index-D35w9RK9.js:gYt"
         onClick={() => {
           setExpanded(true);
           requestAnimationFrame(() => inputRef.current?.focus());
@@ -250,7 +250,7 @@ export function ProjectsSortMenu({
       <Menu.Trigger
         aria-label={sortByLabel}
         className="inline-flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent text-text-300 hover:bg-bg-200"
-        data-official-source="index-BELzQL5P.js:_Component32 sort"
+        data-official-source="index-D35w9RK9.js:_Component32 sort"
         type="button"
       >
         <Icon customSize={16} name="Sort" />

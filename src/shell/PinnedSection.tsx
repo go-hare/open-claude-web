@@ -1,4 +1,4 @@
-import { useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { SessionSummary } from "../adapters/desktopBridge";
 import { type ShellText, useShellText } from "../i18n/shellMessages";
 import { BaseContextMenuPopup, ContextMenu } from "./BaseMenu";
@@ -10,6 +10,12 @@ import { SidebarSectionHeader } from "./SidebarSectionHeader";
 import { orderPinnedSessions, sessionPinKey } from "./sessionPinning";
 import { sessionPath } from "./sessionPaths";
 import { useCodeSidebarPrState } from "./useCodeSidebarPrState";
+import {
+  consumeSessionRowDragClick,
+  onSessionRowPointerDown,
+} from "./sessionPaneDrag";
+
+export { readSessionDragKey, writeSessionDragKey } from "./sessionPaneDrag";
 
 type PinnedSectionProps = {
   collapsed: boolean;
@@ -25,39 +31,40 @@ type PinnedSectionProps = {
   renderContextMenu: (session: SessionSummary, onCreateGroup: () => void) => ReactNode;
   selectedSessionId: string | null;
   showDragPinHint: boolean;
+  /** Official T1 tIBKrv7ywy — same Wz flag as Recents glyphs. */
+  showPrStatus?: boolean;
 };
 
-export function PinnedSection({ canOpenSplit, collapsed, onCloseDragPinHint, onCreateGroup, onDropSessionKey, onToggleCollapsed, pinnedOrder, renderActions, renderContextMenu, selectedSessionId, sessions, showDragPinHint, onNavigate }: PinnedSectionProps) {
+export function PinnedSection({ canOpenSplit, collapsed, onCloseDragPinHint, onCreateGroup, onDropSessionKey, onToggleCollapsed, pinnedOrder, renderActions, renderContextMenu, selectedSessionId, sessions, showDragPinHint, showPrStatus = true, onNavigate }: PinnedSectionProps) {
   const text = useShellText();
   const [dragOver, setDragOver] = useState(false);
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [groupTarget, setGroupTarget] = useState<SessionSummary | null>(null);
   const pinned = orderPinnedSessions(sessions, pinnedOrder);
 
+  useEffect(() => {
+    const onEnd = (event: Event) => {
+      const detail = (event as CustomEvent<{ key: string; x: number; y: number }>).detail;
+      const section = document.querySelector("[data-kind=code].group\\/section") as HTMLElement | null;
+      if (!section) return;
+      const rect = section.getBoundingClientRect();
+      const over = detail.x >= rect.left && detail.x <= rect.right && detail.y >= rect.top && detail.y <= rect.bottom;
+      setDragOver(false);
+      setDraggingKey(null);
+      if (document.elementFromPoint(detail.x, detail.y)?.closest(".dframe-pane-host")) return;
+      if (!over || !detail.key) return;
+      const before = document.elementFromPoint(detail.x, detail.y)?.closest("[data-row-key]")?.getAttribute("data-row-key") ?? undefined;
+      onDropSessionKey(detail.key, before && before !== detail.key ? before : undefined);
+    };
+    window.addEventListener("dframe:session-drag-end", onEnd);
+    return () => window.removeEventListener("dframe:session-drag-end", onEnd);
+  }, [onDropSessionKey]);
+
   return (
     <section
       className="group/section flex flex-col gap-px"
       data-kind="code"
       data-over={dragOver || undefined}
-      onDragEnter={(event) => {
-        if (hasSessionDrag(event)) setDragOver(true);
-      }}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false);
-      }}
-      onDragOver={(event) => {
-        if (!hasSessionDrag(event)) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "copy";
-        setDragOver(true);
-      }}
-      onDrop={(event) => {
-        const key = readSessionDragKey(event);
-        setDragOver(false);
-        if (!key) return;
-        event.preventDefault();
-        onDropSessionKey(key);
-      }}
     >
       <SidebarSectionHeader collapsed={collapsed} onToggle={onToggleCollapsed}>{text.pinned}</SidebarSectionHeader>
       {showDragPinHint ? <DragPinHint onClose={onCloseDragPinHint} text={text} /> : null}
@@ -76,31 +83,20 @@ export function PinnedSection({ canOpenSplit, collapsed, onCloseDragPinHint, onC
             data-jump-hint-row=""
             data-pin-dragging={draggingKey === key || undefined}
             data-row-key={key}
-            onDragOver={(event) => {
-              if (!hasSessionDrag(event)) return;
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "move";
-            }}
-            onDrop={(event) => {
-              const droppedKey = readSessionDragKey(event);
-              if (!droppedKey || droppedKey === key) return;
-              event.preventDefault();
-              event.stopPropagation();
-              onDropSessionKey(droppedKey, key);
-              setDraggingKey(null);
+            onPointerDown={(event) => {
+              setDraggingKey(key);
+              onSessionRowPointerDown(event, key);
             }}
           >
             <button
               className={sidebarRowButtonClassName()}
               data-row-main-button=""
               data-selected={selected ? "open" : undefined}
-              draggable
-              onDragEnd={() => setDraggingKey(null)}
-              onDragStart={(event) => {
-                setDraggingKey(key);
-                writeSessionDragKey(event, key);
-              }}
               onClick={(event) => {
+                if (consumeSessionRowDragClick()) {
+                  event.preventDefault();
+                  return;
+                }
                 if ((event.metaKey || event.ctrlKey) && canOpenSplit(session)) {
                   openSplit();
                   return;
@@ -110,7 +106,7 @@ export function PinnedSection({ canOpenSplit, collapsed, onCloseDragPinHint, onC
               type="button"
             >
               <span className="df-leading-slot text-text-300">
-                <PinnedSessionGlyph session={session} />
+                <PinnedSessionGlyph session={session} showPrStatus={showPrStatus} />
               </span>
               <span className="flex-1 min-w-0">
                 <OfficialSidebarTitle title={session.title} />
@@ -174,22 +170,9 @@ function sidebarRowButtonClassName() {
   return "w-full shrink-0 border-none text-left text-[length:var(--df-row-font)] text-text-300 flex items-center gap-[var(--df-row-gap)] h-[var(--df-row-h)] px-[var(--df-row-px)] hide-focus-ring focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--accent-100)),0_0_6px_0_hsl(var(--accent-100)/0.2)] rounded-[var(--df-radius-pill)] data-[selected=focused]:text-text-000";
 }
 
-function PinnedSessionGlyph({ session }: { session: SessionSummary }) {
+function PinnedSessionGlyph({ session, showPrStatus }: { session: SessionSummary; showPrStatus: boolean }) {
   // Official CodeStatusGlyph yje → prState (same residual as Recents SessionGlyph).
-  const prState = useCodeSidebarPrState(session);
+  const prState = useCodeSidebarPrState(session, showPrStatus);
   return <OfficialSidebarStatusGlyph session={{ ...session, prState }} />;
 }
 
-export function writeSessionDragKey(event: DragEvent<HTMLElement>, key: string) {
-  event.dataTransfer.setData("application/x-dframe-session-key", key);
-  event.dataTransfer.setData("text/plain", key);
-  event.dataTransfer.effectAllowed = "copyMove";
-}
-
-export function readSessionDragKey(event: DragEvent<HTMLElement>) {
-  return event.dataTransfer.getData("application/x-dframe-session-key") || event.dataTransfer.getData("text/plain");
-}
-
-function hasSessionDrag(event: DragEvent<HTMLElement>) {
-  return Array.from(event.dataTransfer.types).some((type) => type === "application/x-dframe-session-key" || type === "text/plain");
-}

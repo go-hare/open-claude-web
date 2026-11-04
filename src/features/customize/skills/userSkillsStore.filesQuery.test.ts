@@ -37,7 +37,7 @@ description: "Teambition MCP"
 Call the tools.
 `;
 
-describe("YLe files query vs PLe list hydrate (index-BELzQL5P)", () => {
+describe("YLe files query vs PLe list hydrate (index-D35w9RK9)", () => {
   beforeEach(() => {
     resetUserSkillsStoreForTests();
     listMock.mockReset();

@@ -1,5 +1,5 @@
 /**
- * Official create/edit scheduled task modal (index-BELzQL5P function uYt).
+ * Official create/edit scheduled task modal (c21f11e6d-CxD82rYo.js function uYt).
  * Tm modalSize xl hasCloseButton autoCloseOnFocusOut false;
  * body grid gap-4 mt-4 + compact grid-cols-6 when (max-height: 680px) and (min-width: 900px);
  * name/description vIe; prompt shell + aYt; toolbar Lkt/Kwt/txe; frequency txe; Yfe exact time; Dc footer.
@@ -102,7 +102,7 @@ function ScheduledTaskFolderControl({
     <OfficialButton
       aria-label={label}
       className="!min-w-0 w-full flex items-center justify-between !pl-3 !pr-2 !rounded-xl bg-transparent hover:!bg-bg-200 transition-colors text-text-300 active:!scale-100"
-      data-official-source="index-BELzQL5P.js:Lkt/Ikt"
+      data-official-source="c21f11e6d-CxD82rYo.js:Lkt/Ikt"
       onClick={() => void chooseFolder()}
       size="default"
       title={folders[0] ?? undefined}
@@ -290,7 +290,7 @@ export function ScheduledTaskCreateModal({
     >
       <div
         className={["grid gap-4 mt-4", compact ? "grid-cols-6 gap-x-6" : "grid-cols-1"].join(" ")}
-        data-official-source="index-BELzQL5P.js:uYt"
+        data-official-source="c21f11e6d-CxD82rYo.js:uYt"
       >
         <div className={["min-w-0", compact ? "col-span-3" : ""].filter(Boolean).join(" ")}>
           <OfficialTextInput
@@ -339,9 +339,9 @@ export function ScheduledTaskCreateModal({
         <div className={["min-w-0", compact ? "col-span-6" : ""].filter(Boolean).join(" ")}>
           <div
             className="relative z-10 rounded-[20px] border-0.5 border-border-300 bg-bg-000 focus-within:shadow-sm transition-all"
-            data-official-source="index-BELzQL5P.js:uYt prompt shell"
+            data-official-source="c21f11e6d-CxD82rYo.js:uYt prompt shell"
           >
-            {/* Official aYt CodeTipTapEditor (index-BELzQL5P aYt); remount on open like key "new" */}
+            {/* Official aYt CodeTipTapEditor (c21f11e6d-CxD82rYo.js aYt); remount on open like key "new" */}
             {isOpen ? (
               <ScheduledPromptEditor
                 ariaLabel={text.prompt}
@@ -355,7 +355,7 @@ export function ScheduledTaskCreateModal({
           </div>
           <div
             className="relative z-0 -mt-5 rounded-b-[20px] border border-transparent bg-always-black/[0.01] shadow-[inset_0_0_0_0.5px_hsl(var(--bg-000)/0.8),0_0_0_0.5px_hsl(var(--border-300)/0.18)] backdrop-blur-[2px]"
-            data-official-source="index-BELzQL5P.js:uYt prompt toolbar"
+            data-official-source="c21f11e6d-CxD82rYo.js:uYt prompt toolbar"
           >
             <div className="flex items-center gap-1 px-2 pb-2 pt-7">
               <div className="min-w-0 max-w-[220px]">
@@ -385,7 +385,7 @@ export function ScheduledTaskCreateModal({
           </div>
           {/* Residual uYt: w && _.length>0 → project folder chips with "from project" (not in q). */}
           {linkedToSpace && projectFolders.length > 0 ? (
-            <div className="mt-2 flex flex-col gap-1" data-official-source="index-BELzQL5P.js:uYt from project">
+            <div className="mt-2 flex flex-col gap-1" data-official-source="c21f11e6d-CxD82rYo.js:uYt from project">
               {projectFolders.map((folderPath) => (
                 <div
                   className="flex items-center gap-2 rounded-lg border border-border-300 bg-bg-100 px-3 py-2"

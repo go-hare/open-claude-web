@@ -1,5 +1,5 @@
 /**
- * Official index-BELzQL5P SearchTree (`ait` / `nit` / `sit` / `Zrt` / `Krt` / `Yrt`):
+ * Official cd5a31703 SearchTree (`ait` / `nit` / `sit` / `Zrt` / `Krt` / `Yrt`):
  *   <search_tree>…</search_tree> → ```search_tree fence → collapsible hypothesis tree
  * Ported control flow + classNames from ion-dist only.
  */

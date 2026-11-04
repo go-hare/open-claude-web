@@ -1,5 +1,5 @@
 /**
- * Cowork stream residual gates (index-BELzQL5P Pke / LocalAgent message path).
+ * Cowork stream residual gates (c21f11e6d-CxD82rYo.js Pke / LocalAgent message path).
  */
 import { describe, expect, it } from "vitest";
 import {

@@ -1,6 +1,6 @@
 /**
  * Official Browse-files right pane: AZt → TZt({ filePath, sessionId, hideTaskLink: true })
- * (index-BELzQL5P.pretty.js ~246180).
+ * (c21f11e6d-CxD82rYo.js ~246180).
  *
  * Load path matches Gzt: loadCoworkFileDetail → FileSystem.readLocalFile(sessionId,
  * encodeURIComponent(path)); image base64 → dataUrl; text → kzt-style body.
@@ -85,7 +85,7 @@ export function CoworkExplorerFilePreview({
     return (
       <section
         className="flex min-w-0 flex-1 items-center justify-center rounded-lg border border-border-300 bg-bg-100 px-4 text-center text-sm text-text-500"
-        data-official-source="index-BELzQL5P.js:AZt empty"
+        data-official-source="c21f11e6d-CxD82rYo.js:AZt empty"
       >
         Select a file to preview it.
       </section>
@@ -107,7 +107,7 @@ export function CoworkExplorerFilePreview({
   return (
     <section
       className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-300 bg-bg-100"
-      data-official-source="index-BELzQL5P.js:AZt→TZt explorer embed"
+      data-official-source="c21f11e6d-CxD82rYo.js:AZt→TZt explorer embed"
     >
       <div className="flex items-center gap-2 border-b border-border-300 px-3 py-2">
         <Icon className="text-text-400" name="NoteSquareLines" size="xs" />
@@ -174,7 +174,7 @@ function CoworkExplorerPreviewBody({
   // Official kzt → yzt
   if (isLoading && !state.content) {
     return (
-      <div className="flex h-full items-center justify-center" data-official-source="index-BELzQL5P.js:yzt">
+      <div className="flex h-full items-center justify-center" data-official-source="c21f11e6d-CxD82rYo.js:yzt">
         <Icon className="animate-spin text-text-300" name="Spinner" size="md" />
       </div>
     );
@@ -184,7 +184,7 @@ function CoworkExplorerPreviewBody({
     return (
       <div
         className="flex flex-col items-center justify-center h-full text-text-300 gap-4 px-4"
-        data-official-source="index-BELzQL5P.js:vzt"
+        data-official-source="c21f11e6d-CxD82rYo.js:vzt"
       >
         <div className="text-center text-sm">{error}</div>
         <div className="flex items-center gap-2">
@@ -212,7 +212,7 @@ function CoworkExplorerPreviewBody({
   }
   if (state.content?.kind === "image") {
     return (
-      <div className="h-full p-5" data-official-source="index-BELzQL5P.js:wzt image">
+      <div className="h-full p-5" data-official-source="c21f11e6d-CxD82rYo.js:wzt image">
         <div className="flex items-center justify-center w-full h-full">
           <img
             alt={title}
@@ -228,7 +228,7 @@ function CoworkExplorerPreviewBody({
   if (meta.isMarkdown) {
     const root = parseCoworkMarkdown(text);
     return (
-      <div className="relative h-full" data-official-source="index-BELzQL5P.js:wzt markdown">
+      <div className="relative h-full" data-official-source="c21f11e6d-CxD82rYo.js:wzt markdown">
         <div className="absolute inset-0 overflow-auto">
           <div className="mx-auto w-full max-w-3xl leading-[1.65rem] py-4 pl-6 pr-6 md:py-6 md:pl-11 md:pr-11">
             <div className="font-claude-response epitaxy-markdown">
@@ -250,7 +250,7 @@ function CoworkExplorerPreviewBody({
   }
   const codeText = formatCoworkFileCodeContent(text, meta.fileSyntax);
   return (
-    <div className="relative h-full" data-official-source="index-BELzQL5P.js:wzt code">
+    <div className="relative h-full" data-official-source="c21f11e6d-CxD82rYo.js:wzt code">
       <pre
         className="absolute inset-0 m-0 overflow-auto select-text p-4 font-mono text-[13px] leading-[18px] text-text-100 whitespace-pre-wrap"
         data-file-name={fileName}

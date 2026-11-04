@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { CdsButton, SettingsRow, SettingsSection, Switch } from "../SettingsShell";
+import { CoworkDeviceSettingsRows } from "./coworkSettingsDevice";
 import {
   formatDeleteMemoryLabel,
   useCoworkSettingsText,
@@ -22,30 +23,21 @@ type MemoryFile = {
 };
 
 /**
- * Official CoworkPage tn (cc989143e):
- * title + Dispatch Ht + Global instructions Xt + Auto-organize $t + Memory Vt.
- *
- * Product honesty (same family as Capabilities / Connectors):
- * - Dispatch Ht: hidden (user 派发隐藏吧) — no phone-dispatch parity.
- * - Auto-organize $t: official preference coworkSpaceContextEnabled, but product
- *   has no session-grouping / project-surface consumer → hide (do not invent).
- * - Global instructions Xt: CoworkMemory write/read CLAUDE.md on disk (wired).
- * - Memory Vt: list/delete account memory files + Qt toggle enabled_cowork_memory.
- *   Toggle → account-settings.json + startSession.memoryEnabled (auto-memory mount)
- *   + preference mirror `enabledCoworkMemory` for Space UI residual.
- *   No invent cloud memory API.
+ * Official CoworkPage Tt (c71860c77-Cx6eI2mP) onThisDevice:
+ *   J trusted devices (gated) · K cowork computers · gt=null
+ *   rt Dispatch — hide (user 派发隐藏吧)
+ *   nt Cowork files (cfea P)
+ *   Xe Trusted folders (cabd ht)
+ *   G cowork-backend — hide without dramatic_shrimp consumer
+ *   Y preferred browser + open links (+ allowed sites without Launch IPC)
+ *   q guest pass — hide (no OAuth)
+ *   W global instructions — General (9QOsx1rUjR), not duplicated here
+ *   Ye CLAUDE.md import (at) — hide without ant-only
+ *   _t Memory
  */
 export function CoworkSettings() {
   const text = useCoworkSettingsText();
   const { bootstrap, updateAccountSetting } = useSettingsBootstrap();
-  // Official $t: te.coworkSpaceContextEnabled. Product has no auto-group consumer → hide.
-  // Keep residual branch dead-code path out of render; no preferences hook needed.
-  const showAutoOrganize = false;
-  const [editingInstructions, setEditingInstructions] = useState(false);
-  const [instructions, setInstructions] = useState("");
-  const [instructionsLoading, setInstructionsLoading] = useState(false);
-  const [instructionsSaving, setInstructionsSaving] = useState(false);
-  const [instructionsError, setInstructionsError] = useState("");
   const [memories, setMemories] = useState<MemoryFile[]>([]);
   const [memoriesLoading, setMemoriesLoading] = useState(true);
   const [memoriesSupported, setMemoriesSupported] = useState(false);
@@ -54,29 +46,6 @@ export function CoworkSettings() {
 
   // Official Qt: !1 !== account.settings.enabled_cowork_memory
   const memoryEnabled = bootstrap.account?.settings?.enabled_cowork_memory !== false;
-
-  useEffect(() => {
-    if (!editingInstructions) return;
-    let alive = true;
-    setInstructionsLoading(true);
-    setInstructionsError("");
-    void memoryBridge()
-      ?.readGlobalMemory?.()
-      .then((value) => {
-        if (!alive) return;
-        setInstructions(value ?? "");
-      })
-      .catch(() => {
-        if (!alive) return;
-        setInstructions("");
-      })
-      .finally(() => {
-        if (alive) setInstructionsLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [editingInstructions]);
 
   useEffect(() => {
     let alive = true;
@@ -113,26 +82,6 @@ export function CoworkSettings() {
     };
   }, [memoryTick]);
 
-  const saveInstructions = useCallback(async () => {
-    if (instructionsSaving) return;
-    const memory = memoryBridge();
-    if (!memory?.writeGlobalMemory) {
-      setInstructionsError(text.failedToSaveInstructions);
-      return;
-    }
-    setInstructionsSaving(true);
-    setInstructionsError("");
-    try {
-      const ok = await memory.writeGlobalMemory(instructions);
-      if (ok === false) throw new Error("write failed");
-      setEditingInstructions(false);
-    } catch {
-      setInstructionsError(text.failedToSaveInstructions);
-    } finally {
-      setInstructionsSaving(false);
-    }
-  }, [instructions, instructionsSaving, text.failedToSaveInstructions]);
-
   const deleteMemory = useCallback(async (path: string) => {
     setMemoryError("");
     const memory = memoryBridge();
@@ -161,61 +110,7 @@ export function CoworkSettings() {
 
   return (
     <main className="flex flex-col gap-7">
-      <h1 className="text-heading-semibold text-primary">{text.cowork}</h1>
-      <SettingsSection>
-        {/* Dispatch Ht intentionally not rendered — user 派发隐藏吧 (2026-07-28). */}
-        {showAutoOrganize ? (
-          // Residual $t branch retained for ion-dist parity; product hides until a
-          // session-grouping consumer exists (do not invent store-only toggle).
-          <SettingsRow
-            label={text.autoOrganizeSessions}
-            description={text.autoOrganizeSessionsDescription}
-            control={<Switch checked={false} onCheckedChange={() => undefined} />}
-          />
-        ) : null}
-        {editingInstructions ? (
-          <div className="flex flex-col gap-3 py-md">
-            <p className="text-sm text-text-500">{text.globalInstructionsDescription}</p>
-            {instructionsLoading ? (
-              <div className="flex h-64 items-center justify-center text-text-500">{text.loading}</div>
-            ) : (
-              <textarea
-                aria-label={text.globalInstructions}
-                className="cds-input cds-reset h-64 resize-y rounded bg-fill-field px-sm py-sm font-mono text-body text-primary shadow-field-ring outline-none transition duration-fast placeholder:text-muted focus-visible:bg-surface-popover focus-visible:shadow-focus"
-                placeholder={text.globalInstructionsPlaceholder}
-                spellCheck={false}
-                value={instructions}
-                onChange={(event) => setInstructions(event.currentTarget.value)}
-              />
-            )}
-            {instructionsError ? <p className="text-footnote text-danger-000">{instructionsError}</p> : null}
-            <div className="flex justify-end gap-2">
-              <CdsButton
-                onClick={() => {
-                  setEditingInstructions(false);
-                  setInstructionsError("");
-                }}
-              >
-                {text.cancel}
-              </CdsButton>
-              <CdsButton
-                primary
-                disabled={instructionsLoading || instructionsSaving}
-                onClick={() => void saveInstructions()}
-              >
-                {instructionsSaving ? text.saving : text.save}
-              </CdsButton>
-            </div>
-          </div>
-        ) : (
-          <SettingsRow
-            label={text.globalInstructions}
-            description={text.globalInstructionsDescription}
-            control={<CdsButton onClick={() => setEditingInstructions(true)}>{text.edit}</CdsButton>}
-          />
-        )}
-      </SettingsSection>
-      {/* Official Vt: only when desktop product residual && memory bridge supported (r && o). */}
+      <CoworkDeviceSettingsRows />
       {memoriesSupported ? (
         <SettingsSection title={text.memory}>
           <SettingsRow

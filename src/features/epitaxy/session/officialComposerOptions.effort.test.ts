@@ -109,6 +109,53 @@ describe("buildOfficialEffortMenuItems", () => {
     });
     expect(items.some((item) => item.value === "ultra")).toBe(false);
   });
+
+  it("omitted labels keep English defaultMessage; catalog labels override display only", () => {
+    const unlabeled = buildOfficialEffortMenuItems({
+      current: "medium",
+      ultracode: false,
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      onSelect: () => undefined,
+    });
+    expect(unlabeled.map((item) => item.label)).toEqual([
+      "Low",
+      "Medium",
+      "High",
+      "Extra high",
+      "Max",
+      "Ultracode",
+    ]);
+    const labeled = buildOfficialEffortMenuItems({
+      current: "medium",
+      ultracode: false,
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      labels: {
+        extraHigh: "超高",
+        high: "高",
+        low: "低",
+        max: "Max",
+        medium: "中",
+        ultracode: "Ultracode",
+      },
+      onSelect: () => undefined,
+    });
+    expect(labeled.map((item) => item.value)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra",
+    ]);
+    expect(labeled.map((item) => item.label)).toEqual([
+      "低",
+      "中",
+      "高",
+      "超高",
+      "Max",
+      "Ultracode",
+    ]);
+  });
 });
 
 describe("normalizeEffortValue / clamp / catalogTop", () => {

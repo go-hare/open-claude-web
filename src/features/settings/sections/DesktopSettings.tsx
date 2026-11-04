@@ -1,30 +1,27 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SettingsRow, SettingsSection, Switch } from "../SettingsShell";
+import { desktopInfoBridge } from "../settingsDesktopBridge";
 import {
   GhostSelect,
-  QUICK_ENTRY_DICTATION_PRESETS,
   QUICK_ENTRY_NATIVE_PRESETS,
   ShortcutControl,
-  type QuickEntryDictationValue,
   type QuickEntryShortcutValue,
 } from "../SettingsControls";
 import { KeepAwakeControl } from "../../cowork/scheduled/KeepAwakeControl";
+import { DesktopStorageSettings } from "./DesktopStorageSettings";
 import {
   useDesktopNativeSettings,
   useDesktopPreferences,
   useDesktopSupportedFeatures,
   featureStatus,
 } from "../useDesktopPreferences";
-import {
-  renderDesktopBrowserUseDescription,
-  useDesktopSettingsText,
-} from "../settingsMessages";
+import { useDesktopSettingsText } from "../settingsMessages";
 
 /**
- * Official Desktop General bs/ms (c71860c77-B8t_5Z9x):
- * General desktop settings; Run on startup; nativeQuickEntry | legacy Quick Entry;
- * quickEntryDictation Voice shortcut; Menu bar / System tray; Keep awake / Wake for work (hYt controlOnly);
- * Browser Use allowAllBrowserActions.
+ * Official Qn overlay (c71860c77-C_7Gqn1u). Screenshot 27: version, startup,
+ * Quick access, Menu bar, Keep computer awake, Storage Cn (DeviceStorage.getUsage).
+ * Computer Pn F.show needs shared-26 HO()/RO() chicago GrowthBook — 3p kni has
+ * no chicago flag, so Pn stays omitted (do not invent).
  *
  * Feature gates come from AppFeatures.getSupportedFeatures → official pw() residual
  * (open-claude-desktop supportedFeatures.ts: Dvi/mvi/OW/Ovi/mT/…).
@@ -50,19 +47,29 @@ export function DesktopSettings() {
     : text.showInMenuBar;
 
   const nativeQuickEntry = featureStatus(features, "nativeQuickEntry") === "supported";
-  const dictationSupported = featureStatus(features, "quickEntryDictation") === "supported";
-  const customDictationSupported =
-    featureStatus(features, "customQuickEntryDictationShortcut") === "supported";
 
   const quickEntryPresetId = useMemo(() => {
     const value = preferences.quickEntryShortcut;
-    return QUICK_ENTRY_NATIVE_PRESETS.find((preset) => preset.match(value))?.id ?? "custom";
+    return QUICK_ENTRY_NATIVE_PRESETS.find((preset) => preset.match(value))?.id ?? "off";
   }, [preferences.quickEntryShortcut]);
 
-  const dictationPresetId = useMemo(() => {
-    const value = preferences.quickEntryDictationShortcut;
-    return QUICK_ENTRY_DICTATION_PRESETS.find((preset) => preset.match(value))?.id ?? "off";
-  }, [preferences.quickEntryDictationShortcut]);
+  const quickEntryPresetLabel = useCallback(
+    (id: string) => {
+      switch (id) {
+        case "double-tap-option":
+          return isWindows ? text.tapAltTwice : text.tapOptionTwice;
+        case "option-space":
+          return isWindows ? text.altSpace : text.optionSpace;
+        case "custom":
+          return text.customEllipsis;
+        case "off":
+          return text.noShortcut;
+        default:
+          return id;
+      }
+    },
+    [isWindows, text],
+  );
 
   const customQuickEntryAccelerator =
     typeof preferences.quickEntryShortcut === "object" && preferences.quickEntryShortcut
@@ -73,15 +80,6 @@ export function DesktopSettings() {
     && typeof preferences.quickEntryShortcut === "object"
     && preferences.quickEntryShortcut
     && preferences.quickEntryShortcut.accelerator !== "Alt+Space";
-
-  const customDictationAccelerator =
-    typeof preferences.quickEntryDictationShortcut === "object" && preferences.quickEntryDictationShortcut
-      ? preferences.quickEntryDictationShortcut.accelerator ?? ""
-      : "";
-  const showCustomDictation =
-    dictationSupported
-    && typeof preferences.quickEntryDictationShortcut === "object"
-    && preferences.quickEntryDictationShortcut !== null;
 
   const keepAwakeDefined = preferences.keepAwakeEnabled !== undefined;
   // Official ce(): native wake support → "Wake for work" copy; else Keep computer awake.
@@ -96,7 +94,8 @@ export function DesktopSettings() {
 
   return (
     <main className="flex flex-col">
-      <SettingsSection title={text.generalDesktopSettings}>
+      <SettingsSection id="general-desktop" title={text.generalDesktopSettings}>
+        <DesktopAppVersionRow />
         <SettingsRow
           description={text.runOnStartupDescription}
           label={text.runOnStartup}
@@ -118,10 +117,12 @@ export function DesktopSettings() {
               <div className="w-[220px] flex gap-4 flex-col justify-center">
                 <GhostSelect
                   align="end"
+                  searchable={false}
+                  variant="outline"
                   value={quickEntryPresetId}
                   options={QUICK_ENTRY_NATIVE_PRESETS.map((preset) => ({
                     value: preset.id,
-                    label: preset.label,
+                    label: quickEntryPresetLabel(preset.id),
                   }))}
                   onChange={(id) => {
                     const preset = QUICK_ENTRY_NATIVE_PRESETS.find((item) => item.id === id);
@@ -164,55 +165,6 @@ export function DesktopSettings() {
           />
         )}
 
-        {dictationSupported ? (
-          <SettingsRow
-            description={text.voiceShortcutDescription}
-            label={text.voiceShortcut}
-            control={
-              // Official: w-[280px] flex gap-2 flex-col > inner w-[220px] … self-end
-              <div className="w-[280px] flex gap-2 flex-col">
-                <div className="w-[220px] flex gap-4 flex-col justify-center self-end">
-                  <GhostSelect
-                    align="end"
-                    value={dictationPresetId}
-                    options={QUICK_ENTRY_DICTATION_PRESETS.filter(
-                      (preset) => !preset.requiresCustomSupport || customDictationSupported,
-                    ).map((preset) => ({
-                      value: preset.id,
-                      label: preset.label,
-                    }))}
-                    onChange={(id) => {
-                      const preset = QUICK_ENTRY_DICTATION_PRESETS.find((item) => item.id === id);
-                      if (!preset) return;
-                      setPreference(
-                        "quickEntryDictationShortcut",
-                        preset.value as QuickEntryDictationValue,
-                      );
-                    }}
-                  />
-                  {showCustomDictation ? (
-                    <ShortcutControl
-                      value={customDictationAccelerator}
-                      onChange={async (accelerator) => {
-                        if (!accelerator) {
-                          setPreference("quickEntryDictationShortcut", "off");
-                          return;
-                        }
-                        setPreference("quickEntryDictationShortcut", { accelerator });
-                      }}
-                    />
-                  ) : null}
-                </div>
-                {preferences.quickEntryDictationShortcut === "capslock" ? (
-                  <p className="text-center text-footnote text-secondary">
-                    Press once to start dictation, and press again when you&apos;re done speaking.
-                  </p>
-                ) : null}
-              </div>
-            }
-          />
-        ) : null}
-
         <SettingsRow
           description={trayDescription}
           label={trayLabel}
@@ -246,26 +198,39 @@ export function DesktopSettings() {
           />
         ) : null}
 
+        {/* Official Cn (c71860c77 wn/gn) — hidden until DeviceStorage.getUsage exists. */}
+        <DesktopStorageSettings />
+
         {nativeSettings.error ? (
           <p className="py-sm text-footnote text-danger-000" role="status">
             {nativeSettings.error}
           </p>
         ) : null}
       </SettingsSection>
-
-      <SettingsSection title={text.browserUse}>
-        <SettingsRow
-          // Official ts (c71860c77): 0Jh6jsTpeC + values.link → chrome safety article
-          description={renderDesktopBrowserUseDescription(text.allowAllBrowserActionsDescription)}
-          label={text.allowAllBrowserActions}
-          control={
-            <Switch
-              checked={!!preferences.allowAllBrowserActions}
-              onCheckedChange={(checked) => setPreference("allowAllBrowserActions", checked)}
-            />
-          }
-        />
-      </SettingsSection>
     </main>
+  );
+}
+
+/** Official In (c71860c77-C_7Gqn1u): Desktop app version from DesktopInfo.appVersion. */
+function DesktopAppVersionRow() {
+  const text = useDesktopSettingsText();
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void desktopInfoBridge()?.getSystemInfo?.().then((info) => {
+      if (!alive) return;
+      const next = typeof info?.appVersion === "string" ? info.appVersion.trim() : "";
+      setVersion(next || null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (!version) return null;
+  return (
+    <SettingsRow
+      label={text.desktopAppVersion}
+      control={<span className="text-body text-primary tabular-nums">{version}</span>}
+    />
   );
 }

@@ -1,5 +1,5 @@
 /**
- * Official p6e communicator (index-BELzQL5P) for claudeusercontent sandbox.
+ * Official p6e communicator (cd5a31703) for claudeusercontent sandbox.
  * Shared by eit MermaidIframe and g6e RichSandbox.
  *
  * Residual anchors:

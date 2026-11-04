@@ -3,7 +3,7 @@
  * Channel A: tool `loading_messages` → m$t rotator (when streaming && !statusMessage).
  * Channel B: shouldShowWaitingText → h$t (compaction / api_retry / timed standby).
  * ns = isStreaming && (retryCount || messageCount === 2 || isCompacting || apiRetry).
- * Source: index-BELzQL5P.pretty.js g$t / m$t / h$t / rce.
+ * Source: c21f11e6d-CxD82rYo.js g$t / m$t / h$t / rce.
  */
 
 export const COWORK_TOOL_LOADING_FALLBACK = Symbol("visualize-loading-fallback");

@@ -18,7 +18,7 @@ type CustomizeSideNavProps = {
 };
 
 /**
- * Official E7t (index-BELzQL5P): nav w-[256px], KK folder pill, Skills+Connectors+o7t.
+ * Official E7t (c63a78ed4-DmFZsHvd): nav w-[256px], KK folder pill, Skills+Connectors+o7t.
  * Back/自定义 header is `!framed && !B4()` — this ion-dist B4() is always true.
  */
 export function CustomizeSideNav({

@@ -1,5 +1,5 @@
 /**
- * Official jX / x8t / try-in-chat residual (index-BELzQL5P.js).
+ * Official jX / x8t / try-in-chat residual (index-D35w9RK9.js).
  *   jX(skill) = skill.userInvocable !== false
  *   slash → /task/new?q=/${name}   CCD → /code
  *   auto  → q template + skill-name

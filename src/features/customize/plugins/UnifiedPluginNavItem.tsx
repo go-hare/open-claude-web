@@ -1,5 +1,5 @@
 /**
- * Official i7t UnifiedPluginNavItem (index-BELzQL5P).
+ * Official i7t UnifiedPluginNavItem (index-D35w9RK9).
  * Link to /customize/plugins/:id; nested Skills/Connectors/Agents/Hooks when selected.
  */
 import type { ReactNode } from "react";

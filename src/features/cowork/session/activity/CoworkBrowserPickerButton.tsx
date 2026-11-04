@@ -102,7 +102,7 @@ export function CoworkBrowserPickerButton({ tooltipSide = "top" }: { tooltipSide
   };
 
   return (
-    <span ref={rootRef} className={browserPickerRootClass} data-official-source="index-BELzQL5P.js:PZt BrowserPickerButton">
+    <span ref={rootRef} className={browserPickerRootClass} data-official-source="c21f11e6d-CxD82rYo.js:PZt BrowserPickerButton">
       <button
         aria-busy={isSwitching || undefined}
         aria-expanded={isOpen}

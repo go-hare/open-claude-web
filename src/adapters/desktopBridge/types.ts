@@ -75,7 +75,23 @@ export type SessionSummary = {
   kind: "epitaxy" | "code";
   sessionKind: SessionKind;
   cwd?: string;
+  /** Official Hd session.sshConfig — host-pipe SSH Code sessions. */
+  sshConfig?: WorkspaceSshConfig;
   effort?: string;
+  /** Official D.fastMode residual — per-session fast mode (c119 Dne `A` / `tf+yHLZoYV`). */
+  fastMode?: boolean;
+  /**
+   * Official c119 `O?.loops` (session meta). Missing / empty → no Dne loop chip.
+   * Do not invent recurring loops without host list.
+   */
+  loops?: Array<{
+    createdAt?: number;
+    cron?: string;
+    humanSchedule?: string;
+    id?: string;
+    nextRunAt?: number;
+    prompt?: string;
+  }>;
   folders?: string[];
   /** Official getSession → activity Me hydrate (array of hostPath entries). */
   fsDetectedFiles?: CoworkDetectedFile[];
@@ -116,6 +132,16 @@ export type SessionSummary = {
   promptSuggestion?: string;
   isPinned?: boolean;
   isArchived?: boolean;
+  /**
+   * Official Nf session meta `isShared` (c119 `OC` Share gate).
+   * Missing / true → Share hidden. false → unshared remote may show Share.
+   */
+  isShared?: boolean;
+  /**
+   * Official LSM.manualKeepAwake — session "Keep computer awake" (c593 kp / cf74 ZT).
+   * Not AppPreferences.keepAwakeEnabled.
+   */
+  manualKeepAwake?: boolean;
   isAgentCompleted?: boolean;
   hasCompleted?: boolean;
   error?: string;
@@ -272,16 +298,45 @@ export type DesktopPreferences = {
    * Default false (HSA residual). Uge Enable → setPreference true.
    */
   chicagoEnabled?: boolean;
+  chicagoAutoUnhide?: boolean;
+  chicagoUserDeniedBundleIds?: string[];
+  chicagoPreferredMode?: "background" | "full_control";
   chillingSlothLocation?: "default" | { customPath: string };
+  /**
+   * Live Claude.app SSA coworkPreferredBrowser. Official sy() uses presence of
+   * this key to mount the Preferred browser row.
+   */
+  coworkPreferredBrowser?: "built_in" | "chrome";
   coworkSpaceContextEnabled?: boolean;
   dockBounceEnabled?: boolean;
   enabledCoworkMemory?: boolean;
   keepAwakeEnabled?: boolean;
   launchEnabled?: boolean;
   launchPreviewPersistSession?: boolean;
+  /** Live SSA none | shared | session — Keep cookies (Kr). */
+  launchPreviewStorage?: "none" | "shared" | "session";
+  /** Official c887 `launchChromeImportPrompt` pending|done|dismissed. */
+  launchChromeImportPrompt?: "pending" | "done" | "dismissed";
+  launchPreviewAllowedOrigins?: string[];
+  localAgentModeTrustedFolders?: string[];
+  notificationLevels?: Record<string, "off" | "badge" | "banner">;
+  notificationSound?: "system" | "none";
+  ccKeepAwakeWhileWorking?: boolean;
+  ccKeepAwakeOnBattery?: boolean;
+  ccPromptSuggestions?: boolean;
+  ccAutoArchiveInactiveDays?: number;
+  ccNewTaskPrompt?: "ask" | "here" | "new_session";
+  claudeIosSimulatorAccessEnabled?: boolean;
+  claudeAndroidEmulatorAccessEnabled?: boolean;
   menuBarEnabled?: boolean;
+  remoteFolderConsentMemory?: string[];
   /** Official quickEntryDictationShortcut: "capslock" | "off" | { accelerator } */
   quickEntryDictationShortcut?: string | { accelerator?: string };
+  /**
+   * Official SSA dictationShortcut — in-chat nest dictation (Qn _e).
+   * "default" = Cmd+D / Ctrl+D; "off"; { accelerator }.
+   */
+  dictationShortcut?: "default" | "off" | { accelerator?: string };
   /** Official quickEntryShortcut: "double-tap-option" | "off" | { accelerator } */
   quickEntryShortcut?: string | { accelerator?: string };
   useBuiltInNodeForMcp?: boolean;
@@ -361,6 +416,8 @@ export type StartSessionInput = {
   model?: string;
   permissionMode?: PermissionMode;
   prompt: string;
+  /** Official vI `agent:E` on create mutate. Falsy omitted — do not invent. */
+  agent?: string;
   scheduledTaskId?: string;
   sessionId?: string;
   skipRedirect?: boolean;
@@ -402,6 +459,8 @@ export type SendMessageInput = {
   images?: CoworkImagePayload[];
   messageUuid?: string;
   permissionMode?: string;
+  /** Official vI `agent:E` on follow-up mutate. Falsy omitted. */
+  agent?: string;
   toolStates?: CoworkToolState[];
   userSelectedFiles?: string[];
 };
@@ -539,10 +598,37 @@ export type LocalSessionEnvironmentBridge = {
 
 export type LocalEnvironmentVariables = Record<string, string>;
 
+/** Official LocalSessions.changeCwd (asar LSM / ca80 `hB`). */
+export type OfficialChangeCwdFilesCarried = {
+  alreadyThere?: number;
+  copied?: number;
+  notCopied?: number;
+  outcome?: string;
+};
+
+export type OfficialChangeCwdResult =
+  | {
+      status: "ok";
+      cwd: string;
+      changed: boolean;
+      transcriptRelocated?: boolean;
+      filesCarried?: OfficialChangeCwdFilesCarried;
+    }
+  | { status: "needs_trust"; directory: string; sources?: string[] }
+  | { status: "rejected"; reason?: string; message?: string };
+
 export type LocalSessionsBridge = {
   list: () => Promise<SessionSummary[]>;
   getSession: (id: string) => Promise<SessionSummary | null>;
   getTranscript?: (id: string) => Promise<ChatMessage[]>;
+  /**
+   * Official asar getTranscriptPage(id, beforeUuid, limit) — cef1e newest window 200.
+   */
+  getTranscriptPage?: (
+    id: string,
+    beforeUuid?: string,
+    limit?: number,
+  ) => Promise<{ messages?: ChatMessage[]; hasMore?: boolean; cursor?: string }>;
   getSessionsForScheduledTask?: (taskId: string) => Promise<SessionSummary[]>;
   addFolderToSession?: (id: string, folder: string) => Promise<SessionSummary | null>;
   getCodeStats?: () => Promise<CodeStats | null>;
@@ -642,6 +728,11 @@ export type LocalSessionsBridge = {
   onEvent?: (listener: (event: unknown) => void) => () => void;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<string>;
+  /**
+   * Official fe.getAgents (c119 Qj mention). Rows keep host `source`.
+   * Mention UI filters `source==="user"` — do not remap `local` → `user`.
+   */
+  getAgents?: () => Promise<LocalAgentCatalogRow[]>;
   getSupportedCommands?: (request?: GetSupportedCommandsRequest) => Promise<SlashCommand[]>;
   getWorkingTreeStatus?: (idOrCwd: string) => Promise<GitCommandResult>;
   clearSession?: (id: string) => Promise<unknown>;
@@ -649,6 +740,16 @@ export type LocalSessionsBridge = {
   readFileAtCwd?: (idOrCwd: string, filePath: string) => Promise<GitCommandResult>;
   readSessionFile?: (id: string, filePath: string) => Promise<string | null | Record<string, unknown>>;
   readSessionImageAsDataUrl?: (id: string, filePath: string) => Promise<string | null>;
+  /**
+   * Official cc432 `wL` imageLoader: HMAC `claude-media://s/` then dataUrl.
+   * Size must be in [1MiB, 10MiB] for the stream mint.
+   */
+  getSessionImageStreamUrl?: (id: string, filePath: string) => Promise<string | null>;
+  /**
+   * Official cc432 `wL` mediaLoader: Cyt2WTko `claude-media://v/` LRU stream, else dataUrl.
+   */
+  getSessionMediaStreamUrl?: (id: string, filePath: string) => Promise<string | null>;
+  readSessionMediaAsDataUrl?: (id: string, filePath: string) => Promise<string | null>;
   pickSessionFile?: (id: string) => Promise<string | null>;
   pickFileAtCwd?: (idOrCwd: string) => Promise<string | null>;
   /**
@@ -677,6 +778,8 @@ export type LocalSessionsBridge = {
     expectedHash?: string,
   ) => Promise<WriteSessionFileResult | null>;
   setEffort?: (id: string, effort: EffortLevel | string) => Promise<SessionSummary | null>;
+  /** Official c119 `ge=fe?.setFastMode` — persist D.fastMode. Host returns boolean. */
+  setFastMode?: (id: string, enabled: boolean) => Promise<boolean>;
   setMcpServers?: (id: string, mcpServers: unknown) => Promise<SessionSummary | null>;
   setModel?: (id: string, model: string) => Promise<SessionSummary | null>;
   setPermissionMode?: (id: string, mode: string) => Promise<SessionSummary | null>;
@@ -684,6 +787,16 @@ export type LocalSessionsBridge = {
     id: string,
     patch: Partial<Pick<SessionSummary, "title" | "titleSource" | "isAgentCompleted" | "isPinned" | "spaceId">>,
   ) => Promise<SessionSummary | null>;
+  /**
+   * Official LocalSessions.changeCwd (asar LSM / ca80 `hB`).
+   * browseFolder is FileSystem; this IPC returns ok | needs_trust | rejected.
+   */
+  changeCwd?: (
+    id: string,
+    cwd: string,
+    trustAccepted?: boolean,
+    trustedDirectory?: string,
+  ) => Promise<OfficialChangeCwdResult>;
   submitFeedback?: (input?: unknown) => Promise<unknown>;
   checkRemoteTrust?: (sshConfig: unknown, folder: string) => Promise<WorkspaceTrustResult>;
   checkTrust?: (folder: string) => Promise<WorkspaceTrustResult>;
@@ -732,6 +845,11 @@ export type LocalSessionsBridge = {
    */
   cancelQueuedMessage?: (id: string, uuid: string) => Promise<boolean>;
   forkSession?: (id: string, messageId?: string) => Promise<SessionSummary | null>;
+  /**
+   * Official LocalSessions.setManualKeepAwake(sessionId, enabled) — c593 kp.
+   * Session-scoped keep-awake; not global keepAwakeEnabled.
+   */
+  setManualKeepAwake?: (id: string, enabled: boolean) => Promise<void>;
   rewind?: (id: string, messageId?: string) => Promise<unknown>;
   create: (kind: SessionSummary["kind"]) => Promise<SessionSummary>;
   /**
@@ -789,6 +907,11 @@ export type CoworkSessionsBridge = {
   getLocalBranches?: (idOrCwd: string) => Promise<GitCommandResult | string[]>;
   openInEditor?: (target: string, editor?: unknown, line?: number, column?: number) => Promise<unknown>;
   getPermissionMode?: (id: string) => Promise<string>;
+  /**
+   * Official fe.getAgents (c119 Qj mention). Rows keep host `source`.
+   * Mention UI filters `source==="user"` — do not remap `local` → `user`.
+   */
+  getAgents?: () => Promise<LocalAgentCatalogRow[]>;
   getSupportedCommands?: (request?: GetSupportedCommandsRequest) => Promise<SlashCommand[]>;
   getWorkingTreeStatus?: (idOrCwd: string) => Promise<GitCommandResult>;
   clearSession?: (id: string) => Promise<unknown>;
@@ -796,6 +919,9 @@ export type CoworkSessionsBridge = {
   readFileAtCwd?: (idOrCwd: string, filePath: string) => Promise<GitCommandResult>;
   readSessionFile?: (id: string, filePath: string) => Promise<string | null | Record<string, unknown>>;
   readSessionImageAsDataUrl?: (id: string, filePath: string) => Promise<string | null>;
+  getSessionImageStreamUrl?: (id: string, filePath: string) => Promise<string | null>;
+  getSessionMediaStreamUrl?: (id: string, filePath: string) => Promise<string | null>;
+  readSessionMediaAsDataUrl?: (id: string, filePath: string) => Promise<string | null>;
   pickSessionFile?: (id: string) => Promise<string | null>;
   pickFileAtCwd?: (idOrCwd: string) => Promise<string | null>;
   /** Official fe.writeSessionFile — see LocalSessionsBridge.writeSessionFile. */
@@ -806,6 +932,8 @@ export type CoworkSessionsBridge = {
     expectedHash?: string,
   ) => Promise<WriteSessionFileResult | null>;
   setEffort?: (id: string, effort: EffortLevel | string) => Promise<SessionSummary | null>;
+  /** Official c119 `ge=fe?.setFastMode` — persist D.fastMode. Host returns boolean. */
+  setFastMode?: (id: string, enabled: boolean) => Promise<boolean>;
   setMcpServers?: (id: string, mcpServers: unknown) => Promise<SessionSummary | null>;
   setModel?: (id: string, model: string) => Promise<SessionSummary | null>;
   setPermissionMode?: (id: string, mode: string) => Promise<SessionSummary | null>;
@@ -876,7 +1004,7 @@ export type CoworkSessionsBridge = {
     listener: (statuses: DirectMcpServerStatus[]) => void,
   ) => () => void;
   /**
-   * Official nFt / PLe / HLe / BLe / KLe (index-BELzQL5P):
+   * Official nFt / PLe / HLe / BLe / KLe (c63a78ed4-DmFZsHvd):
    * LocalAgentModeSessions listLocalSkills / saveLocalSkill / setLocalSkillEnabled /
    * deleteLocalSkill / getLocalSkillFiles / revealLocalSkill / syncSkills.
    */
@@ -897,6 +1025,16 @@ export type CoworkSessionsBridge = {
   ) => Promise<Array<{ content?: string; path: string }>>;
   revealLocalSkill?: (skillId: string) => Promise<void>;
   syncSkills?: () => Promise<void>;
+};
+
+/**
+ * Official fe.getAgents catalog row (c119 `Jw=e=>e.filter(e=>"user"===e.source)`).
+ * Host listLocalAgents currently writes `source:"local"` — keep as-is.
+ */
+export type LocalAgentCatalogRow = {
+  description?: string;
+  name: string;
+  source?: string;
 };
 
 /** Official nFt listLocalSkills row (DLe maps name → skillName). */
@@ -1138,14 +1276,37 @@ export type BrowserUseBridge = {
   getSelectedBrowserId?: () => Promise<string | null>;
 };
 
+export type EpitaxySidePanePopoutEntry = {
+  type: "epitaxy-side-pane";
+  sessionId: string;
+  sessionType?: string;
+  paneTileId: string;
+  title?: string;
+  entryPoint?: string;
+  /** Official cccc `XO`/`gh` — c563 `bt` hydrates file pane from this payload. */
+  fileTabs?: string[];
+  fileView?: { findQuery?: string; line?: number; path: string };
+};
+
 export type WindowBridge = {
   close: () => Promise<void>;
+  /** Official c563 `H` / shared-18 `yx` — dock popout into the main window. */
+  dockPopout?: () => Promise<boolean>;
+  getAlwaysOnTop?: () => Promise<boolean>;
   getFullscreen: () => Promise<boolean>;
   getZoomFactor: () => Promise<number>;
   /** Official qWt / WindowState.fullscreenChanged subscription. */
   onFullscreenChanged?: (listener: (isFullscreen: boolean) => void) => () => void;
+  /** Official c563 dock: main window re-`setSidePane` after popout ArrowInSquare. */
+  onEpitaxyPopoutDocked?: (
+    listener: (entry: { sessionId?: string; paneTileId?: string; fileTabs?: string[]; fileView?: { path: string; line?: number; findQuery?: string } }) => void,
+  ) => () => void;
   /** Official qWt / WindowState.zoomFactorChanged subscription. */
   onZoomFactorChanged?: (listener: (zoomFactor: number) => void) => () => void;
+  /** Official cccc `nT` / shared-11 `openPopout` — Files header WindowNew. */
+  openPopout?: (entry: EpitaxySidePanePopoutEntry) => Promise<boolean>;
+  /** Official shared-18 `mx` `setPopoutAlwaysOnTop`. */
+  setAlwaysOnTop?: (on: boolean) => Promise<boolean>;
 };
 
 /** Official claude.web.Resources (Le) — mention / content search for XC Files browser. */

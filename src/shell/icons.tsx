@@ -276,6 +276,10 @@ const ICON_CODEPOINTS = {
   WrenchFilled: 57614,
   X: 57615,
   XCircle: 57616,
+  /** Official shared-frame Anthropicons — cd5a `BNe` rewind + Files `H` pop-out. */
+  ArrowClockwise: 57629,
+  ArrowCounterClockwise: 57630,
+  WindowNew: 57654,
 } as const;
 
 const ICON_ALIASES: Record<string, keyof typeof ICON_CODEPOINTS> = {
@@ -389,6 +393,7 @@ const OFFICIAL_ICON_ALIASES: Record<string, string> = {
   Activity: "StatusInProgressQuarterCircle",
   Add: "PlusSmall",
   Agent: "AgentPlanPath",
+  AgentsSimple: "AgentPlanPath",
   Alarm: "ClockTimeslot",
   Archive: "Bookmark",
   ArrowOutSquare: "SquareArrowTopRightOpenLink",
@@ -398,7 +403,8 @@ const OFFICIAL_ICON_ALIASES: Record<string, string> = {
   Calendar: "CalendarTimePlanSchedule",
   CaretDown: "ChevronDownSmall",
   CaretLeft: "ChevronLeftSmall",
-  CaretRight: "ChevronRightMedium",
+  /** Official Ko back/forward is CaretRight small, not ChevronRightMedium (`>`). */
+  CaretRight: "ChevronRightSmall",
   CaretUp: "ChevronUpSmall",
   ChangesPlusMinus: "ChangesDiffPlusMinusBox",
   ChangesPlusMinusFilled: "ChangesDiffPlusMinusBox",
@@ -425,7 +431,10 @@ const OFFICIAL_ICON_ALIASES: Record<string, string> = {
   Projects: "Projects",
   GitDiff: "ChangesDiffPlusMinusBox",
   Laptop: "SystemComputerLaptopMacbook",
-  ListBullet: "NumberedList",
+  ListBullet: "ListBullet",
+  Expand: "Expand",
+  Collapse: "Collapse",
+  WindowNew: "WindowNew",
   Menu: "MenuLines",
   Note: "NoteSquareLines",
   PinSlash: "Unpin",
@@ -447,7 +456,7 @@ const OFFICIAL_ICON_ALIASES: Record<string, string> = {
   // 本地旧命名 / 小写别名 -> 官方 SVG icon 名
   arrowLeft: "ArrowLeft",
   caretDown: "ChevronDownSmall",
-  caretRight: "ChevronRightMedium",
+  caretRight: "ChevronRightSmall",
   check: "CheckSelection",
   checklist: "CheckList",
   code: "Code",
@@ -504,7 +513,8 @@ const WEIGHT_RANGES: Record<16 | 20, { lo: number; hi: number }> = {
 
 type IconSize = keyof typeof ICON_SIZES;
 type OfficialIconSize = keyof typeof OFFICIAL_VIEW_BOX;
-type IconSizeProp = IconSize | OfficialIconSize;
+/** Official `jh`/`Qs` `size:"auto"` — 1em, fills `--df-icon-size` / `--cds-icon`. */
+type IconSizeProp = IconSize | OfficialIconSize | "auto";
 
 const OFFICIAL_SIZE_ALIAS_TO_ICON_SIZE: Record<OfficialIconSize, IconSize> = {
   s: "xs",
@@ -513,6 +523,7 @@ const OFFICIAL_SIZE_ALIAS_TO_ICON_SIZE: Record<OfficialIconSize, IconSize> = {
 };
 
 function normalizeIconSize(size: IconSizeProp): IconSize {
+  if (size === "auto") return "sm";
   return size in ICON_SIZES ? (size as IconSize) : OFFICIAL_SIZE_ALIAS_TO_ICON_SIZE[size as OfficialIconSize];
 }
 
@@ -595,9 +606,11 @@ function resolveOfficialIconPaths(rawName: string | undefined, iconSize: IconSiz
 
 export function Icon({ name, icon, size = "sm", customSize, bold = false, preferFont = false, alt, className, style }: IconProps) {
   const rawName = name ?? icon?.name;
+  const sizeAuto = size === "auto" && customSize === undefined;
   const selectedSize = customSize === undefined ? normalizeIconSize(size) : nearestSize(customSize);
   const pixelSize = customSize ?? ICON_SIZES[selectedSize].px;
-  const officialPaths = preferFont ? undefined : resolveOfficialIconPaths(rawName, selectedSize, bold);
+  // Official sidebar `jh`/`Qs` size auto is Anthropicons font, not the SVG path map.
+  const officialPaths = preferFont || sizeAuto ? undefined : resolveOfficialIconPaths(rawName, selectedSize, bold);
 
   if (officialPaths) {
     const officialSize = OFFICIAL_SIZE_FOR_ICON_SIZE[selectedSize];
@@ -641,7 +654,7 @@ export function Icon({ name, icon, size = "sm", customSize, bold = false, prefer
           fontOpticalSizing: "auto",
           fontStyle: "normal",
           fontVariationSettings: "normal",
-          fontSize: pixelSize,
+          fontSize: sizeAuto ? "var(--df-icon-size, var(--cds-icon, 16px))" : pixelSize,
           fontWeight: iconWeight(regularStroke, masterSize, pixelSize),
           lineHeight: 1,
           width: "1em",

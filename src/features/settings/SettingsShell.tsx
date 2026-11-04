@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import type { RouteViewProps } from "../../app/routes";
 import { Icon } from "../../shell/icons";
+import { readPersistedFrameMode } from "../../stores/frameStoreHelpers";
 import { readResolvedColorMode, THEME_MODE_CHANGE_EVENT } from "./appearanceSettings";
 import { useSettingsNavText } from "./settingsMessages";
 
@@ -9,6 +10,9 @@ export type NavSection = {
   href: string;
   label: string;
   exactMatch?: boolean;
+  /** Official Zn `icon:` glyph (cc989143e). */
+  icon?: string;
+  testId?: string;
 };
 
 export type NavGroup = {
@@ -82,7 +86,11 @@ export function SettingsDFrame({
         <button
           aria-label={navText.backToClaude}
           className={headerButtonClass}
-          onClick={() => onNavigate("/code")}
+          onClick={() => {
+            // Official H6t: standalone chrome back follows persisted frame mode
+            // (same split as Customize E7t K: cowork → /task/new, code → /code).
+            onNavigate(readPersistedFrameMode() === "cowork" ? "/task/new" : "/code");
+          }}
           type="button"
         >
           <Icon name="arrowLeft" />
@@ -204,7 +212,7 @@ export function SettingsSection({
   title,
 }: {
   action?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
   description?: ReactNode;
   id?: string;
@@ -222,7 +230,7 @@ export function SettingsSection({
           {action ? <div className="flex shrink-0 items-center gap-sm">{action}</div> : null}
         </div>
       ) : null}
-      <div className={sectionBodyClass}>{children}</div>
+      {children != null ? <div className={sectionBodyClass}>{children}</div> : null}
     </section>
   );
 }
@@ -234,6 +242,7 @@ export type SettingsRowControlRender = (ids: {
 }) => ReactNode;
 
 export function SettingsRow({
+  below,
   className,
   control,
   description,
@@ -241,6 +250,8 @@ export function SettingsRow({
   indent = false,
   label,
 }: {
+  /** Official xS `below` — stacked under the label/control row (c71860c77 Storage). */
+  below?: ReactNode;
   className?: string;
   control?: ReactNode | SettingsRowControlRender;
   description?: ReactNode;
@@ -256,18 +267,38 @@ export function SettingsRow({
     typeof control === "function"
       ? control({ labelId, descriptionId: description ? descriptionId : undefined })
       : control;
-  return (
-    <div
-      aria-describedby={description ? descriptionId : undefined}
-      aria-labelledby={labelId}
-      className={`flex items-center justify-between gap-lg py-md ${indent ? "pl-lg" : ""} ${className ?? ""}`}
-      role="group"
-    >
+  const main = (
+    <>
       <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         {htmlFor ? <label className="text-body text-primary" htmlFor={htmlFor} id={labelId}>{label}</label> : <div className="text-body text-primary" id={labelId}>{label}</div>}
         {description ? <div className="text-body text-muted" id={descriptionId}>{description}</div> : null}
       </div>
       {resolvedControl ? <div className="flex shrink-0 items-center">{resolvedControl}</div> : null}
+    </>
+  );
+  if (below) {
+    return (
+      <div
+        aria-describedby={description ? descriptionId : undefined}
+        aria-labelledby={labelId}
+        className={`flex flex-col gap-sm py-md ${indent ? "pl-lg" : ""} ${className ?? ""}`}
+        data-settings-row=""
+        role="group"
+      >
+        <div className="flex items-center justify-between gap-lg">{main}</div>
+        {below}
+      </div>
+    );
+  }
+  return (
+    <div
+      aria-describedby={description ? descriptionId : undefined}
+      aria-labelledby={labelId}
+      className={`flex items-center justify-between gap-lg py-md ${indent ? "pl-lg" : ""} ${className ?? ""}`}
+      data-settings-row=""
+      role="group"
+    >
+      {main}
     </div>
   );
 }

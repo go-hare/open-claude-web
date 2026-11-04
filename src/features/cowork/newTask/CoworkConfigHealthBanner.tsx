@@ -12,7 +12,7 @@ import {
  *   SQt → getConfigHealth
  *   AQt → hide Healthy / NotTestable
  *   TQt → warning Kfe banner with Details / Open Setup / Check again
- * Mount: cowork home max-w-2xl, above header (index-BELzQL5P AQt before header block).
+ * Mount: cowork home w-full max-w-2xl 内、Header 前（c62135ccf-Dn28vJ3V AQt / ur）。
  */
 
 export type ConfigHealthState =
@@ -257,7 +257,7 @@ function CoworkConfigHealthBannerInner({
   return (
     <div
       className="mx-auto mb-6 w-full max-w-2xl"
-      data-official-source="index-BELzQL5P.js:AQt/TQt ConfigHealth banner"
+      data-official-source="c62135ccf-Dn28vJ3V.js:AQt/TQt ConfigHealth banner"
     >
       <div role={isAlert ? "alert" : "status"}>
         <div

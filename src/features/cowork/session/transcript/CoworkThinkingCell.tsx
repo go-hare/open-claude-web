@@ -1,6 +1,6 @@
 /**
  * Official ThinkingCell (pretty O9e → bde/xde/gde/L9e/R9e).
- * Source: index-BELzQL5P.js ThinkingCell; flag claudeai_isp_thinking_ux defaults off (E9e).
+ * Source: c21f11e6d-CxD82rYo.js ThinkingCell; flag claudeai_isp_thinking_ux defaults off (E9e).
  */
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -169,7 +169,7 @@ export const CoworkThinkingCell = memo(function CoworkThinkingCell({
 
 /**
  * Official L9e: shell + pg StandardMarkdown (`className: "p-3 pt-0 pr-8", text`) + optional A9e.
- * Source: index-BELzQL5P.pretty.js L9e / A9e / T9e (~136499).
+ * Source: c21f11e6d-CxD82rYo.js L9e / A9e / T9e (~136499).
  * Exported for SSR unit tests (collapse expand is effect-driven).
  */
 export function CoworkThinkingBody({ cutOff, text }: { cutOff: boolean; text: string }) {
@@ -192,7 +192,7 @@ export function CoworkThinkingBody({ cutOff, text }: { cutOff: boolean; text: st
 /**
  * Official A9e via T9e: Sm icon + linked "thought process" → support article.
  * T9e spreads props onto shell (data-testid="message-warning").
- * Source: index-BELzQL5P.pretty.js T9e/A9e (~136499).
+ * Source: c21f11e6d-CxD82rYo.js T9e/A9e (~136499).
  */
 export function CoworkThinkingCutoffBanner() {
   return (

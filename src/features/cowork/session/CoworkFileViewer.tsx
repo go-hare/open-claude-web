@@ -1,5 +1,5 @@
 /**
- * Official Gzt file detail drawer content for local_session (index-BELzQL5P.pretty.js Gzt).
+ * Official Gzt file detail drawer content for local_session (c21f11e6d-CxD82rYo.js Gzt).
  * Shell: flex h-full flex-col relative outline-none
  * Header: flex items-center justify-between px-2 py-2 bg-bg-000 gap-2
  * Body: flex-1 min-h-0 bg-bg-000 overflow-auto
@@ -38,6 +38,8 @@ import { coworkComputerLinkPath } from "./transcript/coworkComputerLink";
 import type { CoworkFileTarget } from "./transcript/CoworkTranscriptActions";
 import { useCoworkTranscriptActions } from "./transcript/CoworkTranscriptActions";
 import { CoworkMarkdownTree, parseCoworkMarkdown } from "./transcript/CoworkMarkdown";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { SIDE_PANE_CHROME_MESSAGES } from "../../epitaxy/officialCodeChromeMessages";
 
 export function CoworkFileViewer({
   goBack,
@@ -147,7 +149,7 @@ export function CoworkFileViewer({
   return (
     <div
       className="flex h-full flex-col relative outline-none"
-      data-official-source="index-BELzQL5P.js:Gzt file detail shell"
+      data-official-source="c21f11e6d-CxD82rYo.js:Gzt file detail shell"
       data-native-preview={nativePreview ? "native" : "content"}
       data-native-enabled={nativePreviewHostEnabled === true ? "true" : nativePreviewHostEnabled === false ? "false" : "pending"}
       data-native-failed={nativePreviewFailed ? "true" : "false"}
@@ -157,7 +159,7 @@ export function CoworkFileViewer({
     >
       <div
         className="flex items-center justify-between px-2 py-2 bg-bg-000 gap-2"
-        data-official-source="index-BELzQL5P.js:Gzt header"
+        data-official-source="c21f11e6d-CxD82rYo.js:Gzt header"
       >
         <div className="flex items-center gap-2 flex-1 overflow-hidden pl-3">
           {showToggle ? (
@@ -199,7 +201,7 @@ export function CoworkFileViewer({
       </div>
       <div
         className="flex-1 min-h-0 bg-bg-000 overflow-auto"
-        data-official-source="index-BELzQL5P.js:Gzt body flex-1 min-h-0 bg-bg-000 overflow-auto"
+        data-official-source="c21f11e6d-CxD82rYo.js:Gzt body flex-1 min-h-0 bg-bg-000 overflow-auto"
       >
         {nativePreview ? (
           <CoworkNativeFilePreview
@@ -271,7 +273,8 @@ function useCoworkNativePreviewEnabled(): boolean | undefined {
   return enabled;
 }
 
-function CoworkNativeFilePreview({
+/** Official c6e1 `On` / Izt — native WebContentsView preview (pdf/office/html). */
+export function CoworkNativeFilePreview({
   cacheBuster,
   filePath,
   onFallback,
@@ -283,7 +286,8 @@ function CoworkNativeFilePreview({
   sessionId: string;
 }) {
   const placeholderRef = useRef<HTMLDivElement>(null);
-  const showRef = useRef<(() => void) | null>(null);
+  /** Official Izt `Y.current = C` — optional override is the `t` arg (`q.current?re:rect`). */
+  const showRef = useRef<((override?: { x: number; y: number; width: number; height: number }) => void) | null>(null);
   // Official Izt effect deps are only [sessionId, filePath, cacheBuster] — keep onFallback stable via ref.
   const onFallbackRef = useRef(onFallback);
   onFallbackRef.current = onFallback;
@@ -291,8 +295,13 @@ function CoworkNativeFilePreview({
   const overlayOccluded = useElectronWebContentsViewOccluded();
   const occluded = Boolean(frame?.moreOpen) || overlayOccluded;
   const occludedRef = useRef(occluded);
+  /** Official Izt `q.current` — previous occluded before this park effect. */
+  const parkWasOccludedRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [capture, setCapture] = useState<CoworkNativePreviewCapture | null>(null);
+  const [declineReason, setDeclineReason] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const chrome = useI18nText(SIDE_PANE_CHROME_MESSAGES);
   occludedRef.current = occluded;
 
   useEffect(() => {
@@ -325,26 +334,28 @@ function CoworkNativeFilePreview({
       return;
     }
     setLoading(true);
+    setDeclineReason(null);
     let cancelled = false;
     let observer: ResizeObserver | undefined;
     let firstShow = true;
-    const show = () => {
+    let showRaf = 0;
+    // Official Izt `C(t)` — always jkA/show, including 0×0. Skipping 0×0 leaves the
+    // compositor WebContentsView on the last non-zero bounds (PDF over transcript).
+    const show = (override?: { x: number; y: number; width: number; height: number }) => {
       if (cancelled) return;
       const rect = placeholder.getBoundingClientRect();
-      // Drawer spring / first layout can report 0×0. Official clip rejects that as
-      // invalid-bounds and Izt would permanently onFallback — wait for ResizeObserver.
-      if (!occludedRef.current && (rect.width < 1 || rect.height < 1)) {
-        placeholder.setAttribute("data-native-fallback-reason", `zero-size:${rect.width}x${rect.height}`);
-        bag.push({ t: Date.now(), phase: "zero-size", filePath, rect: { w: rect.width, h: rect.height } });
-        return;
-      }
+      const bounds =
+        override ??
+        (occludedRef.current
+          ? COWORK_NATIVE_PREVIEW_PARKED_BOUNDS
+          : { x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+      placeholder.setAttribute(
+        "data-native-fallback-reason",
+        `show-pending:${Math.round(bounds.width)}x${Math.round(bounds.height)}`,
+      );
+      bag.push({ t: Date.now(), phase: "show-call", filePath, bounds, occluded: occludedRef.current });
       const wasFirstShow = firstShow;
       firstShow = false;
-      const bounds = occludedRef.current
-        ? COWORK_NATIVE_PREVIEW_PARKED_BOUNDS
-        : { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-      placeholder.setAttribute("data-native-fallback-reason", "show-pending");
-      bag.push({ t: Date.now(), phase: "show-call", filePath, bounds, occluded: occludedRef.current });
       void Promise.resolve(showApi(sessionId, encodeCoworkNativePreviewPath(filePath), bounds))
         .then((result: boolean | { ok: boolean; declineReason?: unknown; painted?: boolean }) => {
           if (cancelled) {
@@ -364,7 +375,10 @@ function CoworkNativeFilePreview({
           );
           bag.push({ t: Date.now(), phase: "show-result", filePath, ok, result });
           if (wasFirstShow) setLoading(false);
-          if (!ok) onFallbackRef.current();
+          if (!ok) {
+            setDeclineReason(reason || "declined");
+            onFallbackRef.current();
+          }
         })
         .catch((error: unknown) => {
           if (cancelled) return;
@@ -374,24 +388,33 @@ function CoworkNativeFilePreview({
           );
           bag.push({ t: Date.now(), phase: "show-error", filePath, error: String(error) });
           if (wasFirstShow) setLoading(false);
+          setDeclineReason("ipc_error");
           onFallbackRef.current();
         });
+    };
+    // Official Izt `T` — ResizeObserver/window resize coalesce onto rAF then C().
+    const scheduleShow = () => {
+      showRaf ||= requestAnimationFrame(() => {
+        showRaf = 0;
+        show();
+      });
     };
     const begin = () => {
       showRef.current = show;
       show();
-      observer = new ResizeObserver(show);
+      observer = new ResizeObserver(scheduleShow);
       observer.observe(placeholder);
-      window.addEventListener("resize", show);
+      window.addEventListener("resize", scheduleShow);
     };
 
-    if (isCoworkOfficeNativePreviewPath(filePath)) {
+    if (/\.(docx?|pptx?|xlsx?)$/i.test(filePath)) {
       void Promise.resolve(hostPreview.isVmReady?.() ?? desktopBridge.CoworkFilePreview.isVmReady())
         .then((ready) => {
           if (cancelled) return;
           if (ready) begin();
           else {
             setLoading(false);
+            setDeclineReason("vm_unavailable");
             onFallbackRef.current();
           }
         })
@@ -406,15 +429,19 @@ function CoworkNativeFilePreview({
       cancelled = true;
       showRef.current = null;
       observer?.disconnect();
-      window.removeEventListener("resize", show);
+      window.removeEventListener("resize", scheduleShow);
+      if (showRaf) cancelAnimationFrame(showRaf);
       void Promise.resolve(hideApi?.() ?? desktopBridge.CoworkFilePreview.hide()).catch(() => {});
     };
-    // Official Izt: [sessionId, filePath, cacheBuster] only (index-BELzQL5P Izt ~214532).
-  }, [cacheBuster, filePath, sessionId]);
+    // Official Izt: [sessionId, filePath, cacheBuster] only; retryNonce is pe Try again.
+  }, [cacheBuster, filePath, retryNonce, sessionId]);
 
-  // Official Izt park effect deps are only [occluded] (index-BELzQL5P ~214534–214564).
+  // Official Izt park effect deps are only [occluded] (c6e1 `K` / c21f ~214534–214564).
   // Path/session are stamped into capture state and gated by visibleCapture equality.
   useEffect(() => {
+    // Official: n=q.current; q.current=G||K; if (!G&&!K) Y.current?.(); return
+    const wasOccluded = parkWasOccludedRef.current;
+    parkWasOccludedRef.current = occluded;
     if (!occluded) {
       showRef.current?.();
       return;
@@ -431,26 +458,52 @@ function CoworkNativeFilePreview({
       return;
     }
     const rect = placeholder.getBoundingClientRect();
+    // Official: (t||n)&&Y.current?.({x:P,y:0,width:o.width,height:o.height})
+    if (wasOccluded) {
+      showRef.current?.({
+        x: COWORK_NATIVE_PREVIEW_PARKED_BOUNDS.x,
+        y: 0,
+        width: rect.width,
+        height: rect.height,
+      });
+    }
     let cancelled = false;
-    void Promise.resolve(parkApi(COWORK_NATIVE_PREVIEW_PARKED_BOUNDS))
+    const restore = () => {
+      if (!cancelled) showRef.current?.();
+    };
+    // Official: first occlusion captures at current rect then double-rAF C() (q → re).
+    // Already occluded: parkAndCapture(re).
+    const captureBounds = wasOccluded
+      ? COWORK_NATIVE_PREVIEW_PARKED_BOUNDS
+      : { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    void Promise.resolve(parkApi(captureBounds))
       .then(async (base64) => {
-        if (cancelled || !base64) return;
+        if (cancelled) return;
+        if (!base64) {
+          restore();
+          return;
+        }
         const src = `data:image/png;base64,${base64}`;
         const image = new Image();
         image.src = src;
         await image.decode().catch(() => {});
-        if (!cancelled) {
-          setCapture({
-            cacheBuster,
-            filePath,
-            height: rect.height,
-            sessionId,
-            src,
-            width: rect.width,
-          });
+        if (cancelled || image.naturalWidth <= 1 || image.naturalHeight <= 1) {
+          restore();
+          return;
         }
+        setCapture({
+          cacheBuster,
+          filePath,
+          height: rect.height,
+          sessionId,
+          src,
+          width: rect.width,
+        });
+        requestAnimationFrame(() => {
+          requestAnimationFrame(restore);
+        });
       })
-      .catch(() => {});
+      .catch(restore);
     return () => {
       cancelled = true;
     };
@@ -464,9 +517,24 @@ function CoworkNativeFilePreview({
       ? capture
       : null;
 
+  const declineBody =
+    declineReason === "soffice_failed" || declineReason === "convert_timeout"
+      ? chrome.sofficeFailed
+      : chrome.couldntPreviewThisFile;
+
   return (
     <div ref={placeholderRef} className="h-full w-full relative overflow-hidden">
-      {loading ? (
+      {declineReason ? (
+        <div
+          className="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center"
+          data-decline-reason={declineReason}
+          data-testid="native-file-preview-error"
+        >
+          <div className="text-body font-medium text-secondary">{chrome.previewUnavailable}</div>
+          <div className="text-caption text-muted">{declineBody}</div>
+          <OfficialNativePreviewRetry onRetry={() => setRetryNonce((n) => n + 1)}>{chrome.tryAgain}</OfficialNativePreviewRetry>
+        </div>
+      ) : loading ? (
         <div className="absolute inset-0 flex items-center justify-center">
           <Icon className="animate-spin text-text-300" name="Spinner" size="md" />
         </div>
@@ -481,6 +549,19 @@ function CoworkNativeFilePreview({
         />
       ) : null}
     </div>
+  );
+}
+
+function OfficialNativePreviewRetry({ children, onRetry }: { children: string; onRetry: () => void }) {
+  return (
+    <button
+      className="mt-1 text-body text-primary"
+      data-cds="Button"
+      onClick={onRetry}
+      type="button"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -511,7 +592,7 @@ function CoworkFileDetailBody({
   // Official kzt → yzt loading spinner when isLoading && !content.
   if (isLoading && !state.content) {
     return (
-      <div className="flex h-full items-center justify-center" data-official-source="index-BELzQL5P.js:yzt">
+      <div className="flex h-full items-center justify-center" data-official-source="c21f11e6d-CxD82rYo.js:yzt">
         <Icon className="animate-spin text-text-300" name="Spinner" size="md" />
       </div>
     );
@@ -521,7 +602,7 @@ function CoworkFileDetailBody({
     return (
       <div
         className="flex flex-col items-center justify-center h-full text-text-300 gap-4"
-        data-official-source="index-BELzQL5P.js:vzt"
+        data-official-source="c21f11e6d-CxD82rYo.js:vzt"
       >
         <div>{error}</div>
         <button className="rounded-md bg-bg-300 px-3 py-1.5 text-sm text-text-100" onClick={onRetry} type="button">
@@ -536,7 +617,7 @@ function CoworkFileDetailBody({
   }
   if (state.content?.kind === "image") {
     return (
-      <div className="h-full p-5" data-official-source="index-BELzQL5P.js:wzt image">
+      <div className="h-full p-5" data-official-source="c21f11e6d-CxD82rYo.js:wzt image">
         <div className="flex items-center justify-center w-full h-full">
           <img
             alt={title}
@@ -554,7 +635,7 @@ function CoworkFileDetailBody({
   // inert source (never allow-scripts+same-origin srcDoc). Raw/code falls through.
   if (meta.isHtml && !isRaw) {
     return (
-      <div className="relative h-full" data-official-source="index-BELzQL5P.js:wzt rich plaintext fallback">
+      <div className="relative h-full" data-official-source="c21f11e6d-CxD82rYo.js:wzt rich plaintext fallback">
         <pre className="absolute inset-0 m-0 overflow-auto select-text p-4 font-mono text-[13px] leading-[18px] text-text-100 whitespace-pre-wrap" id="wiggle-file-content" tabIndex={0}>
           {text}
         </pre>
@@ -564,7 +645,7 @@ function CoworkFileDetailBody({
   // Official wzt: ("code" === s || S) — markdown normal uses document padding; raw uses code branch.
   if (meta.isMarkdown && !isRaw) {
     return (
-      <div className="relative h-full" data-official-source="index-BELzQL5P.js:wzt markdown normal">
+      <div className="relative h-full" data-official-source="c21f11e6d-CxD82rYo.js:wzt markdown normal">
         <div className="absolute inset-0 overflow-auto">
           <CoworkMarkdownDocumentBody fileName={fileName} onLinkClick={onMarkdownLinkClick} text={text} />
         </div>
@@ -574,7 +655,7 @@ function CoworkFileDetailBody({
   // Official wzt code/raw: H(content, language) pretty-prints JSON; xzt monospaced lines.
   const codeText = formatCoworkFileCodeContent(text, meta.fileSyntax);
   return (
-    <div className="relative h-full" data-official-source="index-BELzQL5P.js:wzt code/raw branch">
+    <div className="relative h-full" data-official-source="c21f11e6d-CxD82rYo.js:wzt code/raw branch">
       <pre
         className="absolute inset-0 m-0 overflow-auto select-text p-4 font-mono text-[13px] leading-[18px] text-text-100 whitespace-pre-wrap"
         data-file-syntax={meta.fileSyntax}
@@ -587,7 +668,7 @@ function CoworkFileDetailBody({
   );
 }
 
-/** Official Czt nonrenderable body (index-BELzQL5P ~214107). fileName = ohe basename. */
+/** Official Czt nonrenderable body (c21f11e6d-CxD82rYo ~214107). fileName = ohe basename. */
 function CoworkNonrenderableFileBody({
   fileName,
   onOpenFile,
@@ -613,7 +694,7 @@ function CoworkNonrenderableFileBody({
     return (
       <button
         className="flex flex-col items-center justify-center h-full gap-4 w-full cursor-pointer hover:bg-bg-100 transition-colors"
-        data-official-source="index-BELzQL5P.js:Czt"
+        data-official-source="c21f11e6d-CxD82rYo.js:Czt"
         onClick={onOpenFile}
         type="button"
       >
@@ -622,7 +703,7 @@ function CoworkNonrenderableFileBody({
     );
   }
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-4" data-official-source="index-BELzQL5P.js:Czt">
+    <div className="flex flex-col items-center justify-center h-full gap-4" data-official-source="c21f11e6d-CxD82rYo.js:Czt">
       {body}
     </div>
   );
@@ -630,7 +711,7 @@ function CoworkNonrenderableFileBody({
 
 /**
  * Official wzt markdown document branch + gzt SkillMdContent when fileName is SKILL.md
- * and frontmatter has description / extra fields (index-BELzQL5P ~214188 / gzt).
+ * and frontmatter has description / extra fields (c21f11e6d-CxD82rYo ~214188 / gzt).
  */
 function CoworkMarkdownDocumentBody({
   fileName,
@@ -653,7 +734,7 @@ function CoworkMarkdownDocumentBody({
     return (
       <div
         className="mx-auto w-full max-w-3xl leading-[1.65rem] py-4 pl-6 pr-6 md:py-6 md:pl-11 md:pr-11"
-        data-official-source="index-BELzQL5P.js:gzt SkillMdContent"
+        data-official-source="c21f11e6d-CxD82rYo.js:gzt SkillMdContent"
         id="wiggle-file-content"
         tabIndex={0}
       >
@@ -703,7 +784,7 @@ function CoworkMarkdownDocumentBody({
   return (
     <div
       className="mx-auto w-full max-w-3xl leading-[1.65rem] py-4 pl-6 pr-6 md:py-6 md:pl-11 md:pr-11"
-      data-official-source="index-BELzQL5P.js:wzt markdown document padding"
+      data-official-source="c21f11e6d-CxD82rYo.js:wzt markdown document padding"
       id="wiggle-file-content"
       tabIndex={0}
     >
@@ -723,7 +804,7 @@ function CoworkFileViewModeToggle({
   viewing: CoworkFileViewMode;
 }) {
   return (
-    <div className="flex items-center gap-0.5 rounded-md bg-bg-200 p-0.5 flex-shrink-0" data-official-source="index-BELzQL5P.js:_zt FileViewModeToggle">
+    <div className="flex items-center gap-0.5 rounded-md bg-bg-200 p-0.5 flex-shrink-0" data-official-source="c21f11e6d-CxD82rYo.js:_zt FileViewModeToggle">
       <button
         aria-label="Preview"
         aria-pressed={viewing === "normal"}

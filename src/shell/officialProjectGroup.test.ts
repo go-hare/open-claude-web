@@ -146,7 +146,7 @@ describe("buildRecentsGroups groupBy=project", () => {
           updatedAtMs: 5,
         }),
       ],
-      { ...defaultRecentsFilter, groupBy: "project" },
+      { ...defaultRecentsFilter, groupBy: "project", showEmptyGroups: false },
     );
     expect(groups.map((group) => group.label)).toEqual([
       "magicclaw-mofang",
@@ -185,7 +185,7 @@ describe("buildRecentsGroups scheduled / date / environment / state", () => {
         session({ id: "sched", scheduledTaskId: "task-1", updatedAtMs: 2 }),
         session({ id: "arch-sched", scheduledTaskId: "task-2", isArchived: true, updatedAtMs: 1 }),
       ],
-      { ...defaultRecentsFilter, status: "all" },
+      { ...defaultRecentsFilter, status: "all", groupBy: "none" },
     );
     expect(groups[0]?.sessions.map((row) => row.id)).toEqual(["live", "arch-sched"]);
   });
@@ -227,7 +227,7 @@ describe("buildRecentsGroups scheduled / date / environment / state", () => {
         session({ id: "no-cwd", updatedAtMs: 2 }),
         session({ id: "cloud", sessionType: "remote", updatedAtMs: 1 }),
       ],
-      { ...defaultRecentsFilter, environment: "remote" },
+      { ...defaultRecentsFilter, environment: "remote", groupBy: "none" },
     );
     expect(groups[0]?.sessions.map((row) => row.id)).toEqual(["cloud"]);
   });
@@ -241,7 +241,7 @@ describe("buildRecentsGroups scheduled / date / environment / state", () => {
         session({ id: "review", hasCompleted: true, isUnread: true, updatedAtMs: 2 }),
         session({ id: "arch", isArchived: true, updatedAtMs: 1 }),
       ],
-      { ...defaultRecentsFilter, status: "all", groupBy: "state" },
+      { ...defaultRecentsFilter, status: "all", groupBy: "state", activityDays: "0" },
     );
     expect(groups.map((group) => group.key)).toEqual(["blocked", "review", "working", "done"]);
     expect(groups.map((group) => group.label)).toEqual([

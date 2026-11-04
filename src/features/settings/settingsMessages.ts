@@ -30,7 +30,20 @@ export const SETTINGS_NAV_MESSAGES = {
   organization: { defaultMessage: "Organization", id: "K56Dims7Up" },
   organizationSettings: { defaultMessage: "Organization settings", id: "8JjaslSBQx" },
   settings: { defaultMessage: "Settings", id: "D3idYvSLF9" },
+  /** Official ZC forModal group title (jqhhMImrPt) — screenshot "Settings". */
+  settingsGroup: { defaultMessage: "Settings", id: "jqhhMImrPt" },
   backToClaude: { defaultMessage: "Back to Claude", id: "e4M0bJ/pZc" },
+  close: { defaultMessage: "Close", id: "rbrahOGMC3" },
+  search: { defaultMessage: "Search", id: "xmcVZ0BU63" },
+  searchSettings: { defaultMessage: "Search settings", id: "pyTWlkS60A" },
+  noMatchingSettings: { defaultMessage: "No matching settings", id: "jilxfQjKK7" },
+  usage: { defaultMessage: "Usage", id: "wbsq7OdxnV" },
+  importExport: { defaultMessage: "Import & export", id: "ZbqbfcKDqr" },
+  thisComputer: { defaultMessage: "This computer", id: "YY998h82la" },
+  system: { defaultMessage: "System", id: "I2acb3TGcT" },
+  customize: { defaultMessage: "Customize", id: "Fx/koR/KTo" },
+  skills: { defaultMessage: "Skills", id: "EJSVsOA19u" },
+  plugins: { defaultMessage: "Plugins", id: "QJAllUAc2k" },
 } as const satisfies MessageDescriptors;
 
 /** Capabilities page (official Fe / Te Memory · Ce General · _e Visuals · Skills). */
@@ -131,8 +144,15 @@ export const CAPABILITIES_MESSAGES = {
 /** General profile / preferences / notifications (c0db37792 H/X/ee/se/ie). */
 export const GENERAL_SETTINGS_MESSAGES = {
   profile: { defaultMessage: "Profile", id: "itPgxdbBzC" },
-  preferences: { defaultMessage: "Preferences", id: "PCSt5TwTnx" },
+  /** Official $n title (c0db37792 nwKczbeayM) — was Preferences PCSt5TwTnx. */
+  preferences: { defaultMessage: "Appearance", id: "nwKczbeayM" },
+  theme: { defaultMessage: "Theme", id: "Pe0ogRZhIF" },
   notifications: { defaultMessage: "Notifications", id: "NAidKbB0vi" },
+  scheduledTasks: { defaultMessage: "Scheduled tasks", id: "sy7vzf+1SO" },
+  scheduledTasksDescription: {
+    defaultMessage: "Get notified when scheduled tasks finish, can’t run, or need your input.",
+    id: "qshVSCfplf",
+  },
   avatar: { defaultMessage: "Avatar", id: "VnXp8ZIfSy" },
   fullName: { defaultMessage: "Full name", id: "yk4PT9S4sc" },
   whatShouldClaudeCallYou: {
@@ -141,7 +161,7 @@ export const GENERAL_SETTINGS_MESSAGES = {
   },
   whatBestDescribesWork: {
     defaultMessage: "What best describes your work?",
-    id: "1kdnAB9Eoo",
+    id: "JIAWSQbG7m",
   },
   /** Official X Y label — CoWpJWiYVJ (not the informal “know about you” string). */
   instructionsForClaude: {
@@ -178,14 +198,23 @@ export const GENERAL_SETTINGS_MESSAGES = {
   matchSystem: { defaultMessage: "System", id: "+CwN9C/QFk" },
   light: { defaultMessage: "Light", id: "3cc4CtJM5h" },
   dark: { defaultMessage: "Dark", id: "tOdNiYuuag" },
-  chatFont: { defaultMessage: "Chat font", id: "7JGu5oG/Uu" },
-  /** Official se labels (not K map Default/Sans titles). */
-  anthropicSerif: { defaultMessage: "Anthropic Serif", id: "kZqxEvVpFT" },
+  /** Official Un (c0db37792). */
+  motion: { defaultMessage: "Motion", id: "uALpKq2tu/" },
+  motionDescription: {
+    defaultMessage: "Reduce animation in streaming responses and other interface elements.",
+    id: "bEl7R5hbRq",
+  },
+  motionSystem: { defaultMessage: "System", id: "+CwN9C/QFk" },
+  motionReduced: { defaultMessage: "Reduced", id: "/8lcaWVENH" },
+  /** Official nr Chat font (c0db37792 uxlQHrX3fg). */
+  chatFont: { defaultMessage: "Chat font", id: "uxlQHrX3fg" },
+  /** Official qn serif (3eknETcjZF). */
+  anthropicSerif: { defaultMessage: "Anthropic Serif", id: "3eknETcjZF" },
   anthropicSans: { defaultMessage: "Anthropic Sans", id: "4EAtPWhM42" },
   dyslexicFriendly: { defaultMessage: "Dyslexic friendly", id: "twBGxrOFSV" },
   select: { defaultMessage: "Select", id: "kQAf2d9u+x" },
   /**
-   * Official j4t work-function labels (index-BELzQL5P) — value stays English residual
+   * Official j4t work-function labels (index-D35w9RK9) — value stays English residual
    * ("Product Management", …); display string comes from /i18n/{locale}.json
    * merged with /i18n/{locale}.overrides.json (product ZH补 for official EN residual).
    */
@@ -280,10 +309,108 @@ export const GENERAL_SETTINGS_MESSAGES = {
 
 /** Desktop app general settings (official bs/ms). */
 export const DESKTOP_SETTINGS_MESSAGES = {
+  /** Official Qn title I2acb3TGcT (c71860c77-C_7Gqn1u) — was v7i2fnB2+A. */
   generalDesktopSettings: {
-    defaultMessage: "General desktop settings",
-    id: "v7i2fnB2+A",
+    defaultMessage: "System",
+    id: "I2acb3TGcT",
   },
+  /** Official In (c71860c77-C_7Gqn1u). */
+  desktopAppVersion: { defaultMessage: "Desktop app version", id: "fzDl58Rwrd" },
+  /** Official wn / gn Storage (DUIDEquXSb). */
+  storage: { defaultMessage: "Storage", id: "DUIDEquXSb" },
+  storageDescription: {
+    defaultMessage: "See how much space Claude uses on this computer.",
+    id: "HT0EwshToA",
+  },
+  storageManage: { defaultMessage: "Manage", id: "rtbNQQ2C8O" },
+  storageModalDescription: {
+    defaultMessage:
+      "Space Claude uses on this computer. Cowork tasks that run in the cloud aren’t included.",
+    id: "jBch8p3Rzj",
+  },
+  storageUnavailable: {
+    defaultMessage: "Couldn’t calculate storage. Try again.",
+    id: "Dy5j7d8zvH",
+  },
+  diskSpaceUsed: { defaultMessage: "Disk space used", id: "uu47TeN43k" },
+  storageLowerBound: {
+    defaultMessage: "Some folders couldn’t be measured, so this is a lower bound.",
+    id: "AmBpsg2ljY",
+  },
+  storageCalculatedWhen: { defaultMessage: "Calculated {when}.", id: "EE2KwIs/V5" },
+  storageByArea: { defaultMessage: "Storage by area", id: "S0xbsFUexi" },
+  coworkTasks: { defaultMessage: "Cowork tasks", id: "Ps0CoiNXOT" },
+  codeSessionsAndWorktrees: {
+    defaultMessage: "Code sessions and worktrees",
+    id: "5aPhneVnWt",
+  },
+  runtime: { defaultMessage: "Runtime", id: "66kGA0NpIm" },
+  appCachesAndLogs: { defaultMessage: "App caches and logs", id: "jvKP7SKvKC" },
+  webCacheBrowserPanesLogs: {
+    defaultMessage: "Web cache, browser panes and logs.",
+    id: "XK8ej7dftk",
+  },
+  openFolder: { defaultMessage: "Open folder", id: "W+znbCrCL6" },
+  refresh: { defaultMessage: "Refresh", id: "rELDbByu8U" },
+  details: { defaultMessage: "Details", id: "Lv0zJuL1jH" },
+  clearCacheAndRestart: {
+    defaultMessage: "Clear cache and restart…",
+    id: "OOyYkBlff+",
+  },
+  coworkTaskDetails: { defaultMessage: "Cowork task details", id: "m/DmtCOPfJ" },
+  coworkStorageByKind: { defaultMessage: "Cowork storage by kind", id: "KKwwuQ+ktn" },
+  taskHistory: { defaultMessage: "Task history", id: "NGbaRxLuud" },
+  attachmentsAndGeneratedFiles: {
+    defaultMessage: "Attachments and generated files",
+    id: "GRbQIADc+L",
+  },
+  perTaskPluginCopies: { defaultMessage: "Per-task plugin copies", id: "KxkGpmc1rf" },
+  pluginsAndSkills: { defaultMessage: "Plugins and skills", id: "t6sxIMkk1A" },
+  webCache: { defaultMessage: "Web cache", id: "BpSvPpCSnA" },
+  browserPanes: { defaultMessage: "Browser panes", id: "dOEgDshfXV" },
+  logs: { defaultMessage: "Logs", id: "SNuQo7IJH/" },
+  other: { defaultMessage: "Other", id: "/VnDMl81rh" },
+  appStorageByKind: { defaultMessage: "App storage by kind", id: "PxhYEde2lq" },
+  appCacheDetails: { defaultMessage: "App cache details", id: "8S0SpZ11zE" },
+  codeSessionsAndWorktreesCount: {
+    defaultMessage: "{sessions, plural, one {# session} other {# sessions}} and {worktrees}",
+    id: "RWux9B/cSX",
+  },
+  codeWorktreesCount: {
+    defaultMessage: "{count, plural, one {# worktree} other {# worktrees}}",
+    id: "Mk/EHfLx4Z",
+  },
+  codeSessionsCount: {
+    defaultMessage: "{sessions, plural, one {# session} other {# sessions}}",
+    id: "GeTbcnUeUm",
+  },
+  coworkTasksAndChats: {
+    defaultMessage: "{count, plural, one {# task or chat} other {# tasks and chats}}.",
+    id: "mGOKdTsQmq",
+  },
+  coworkTasksOnly: {
+    defaultMessage: "{count, plural, one {# task} other {# tasks}}.",
+    id: "xIG84NwUlL",
+  },
+  coworkStaleActivity: {
+    defaultMessage:
+      "{count, plural, one {# has} other {# have}} had no activity in the last {days} days ({size}).",
+    id: "cUnWxAxEYc",
+  },
+  coworkAllActive: {
+    defaultMessage: "All active in the last {days} days.",
+    id: "WRVYAfFJ2V",
+  },
+  coworkMeasuringChats: {
+    defaultMessage:
+      "{count, plural, one {# task or chat} other {# tasks and chats}}. Measuring…",
+    id: "zdj+o1a4TH",
+  },
+  coworkMeasuringTasks: {
+    defaultMessage: "{count, plural, one {# task} other {# tasks}}. Measuring…",
+    id: "n00KPnUQww",
+  },
+  close: { defaultMessage: "Close", id: "rbrahOGMC3" },
   runOnStartup: { defaultMessage: "Run on startup", id: "5huDSewExH" },
   runOnStartupDescription: {
     defaultMessage: "Automatically start Claude when you log in to your computer",
@@ -291,9 +418,17 @@ export const DESKTOP_SETTINGS_MESSAGES = {
   },
   quickAccessShortcut: { defaultMessage: "Quick access shortcut", id: "7Orkcosvv2" },
   quickAccessShortcutDescription: {
-    defaultMessage: "Message Claude from anywhere on your desktop",
+    defaultMessage: "Message Claude from anywhere on your desktop.",
     id: "LhhO5hcqoy",
   },
+  /** Official qn / Q / Xn (c71860c77-C_7Gqn1u). */
+  tapOptionTwice: { defaultMessage: "Tap Option twice", id: "somfJ6iWh0" },
+  tapAltTwice: { defaultMessage: "Tap Alt twice", id: "XUir8trSmd" },
+  optionSpace: { defaultMessage: "Option+Space", id: "6nD7bwj4F7" },
+  altSpace: { defaultMessage: "Alt+Space", id: "0QLubSrZ2p" },
+  customEllipsis: { defaultMessage: "Custom…", id: "lKjjJ7PIFW" },
+  noShortcut: { defaultMessage: "No shortcut", id: "TMeenHCszI" },
+  capsLock: { defaultMessage: "Caps Lock", id: "5tVLXRUZrl" },
   /** Official ms legacy branch when nativeQuickEntry unsupported (wl6vXYrxQW / kpLUOdAdXq). */
   quickEntryKeyboardShortcut: {
     defaultMessage: "Quick Entry keyboard shortcut",
@@ -308,6 +443,66 @@ export const DESKTOP_SETTINGS_MESSAGES = {
     defaultMessage: "Speak to Claude from anywhere on your desktop",
     id: "lYaZC2VGFn",
   },
+  /** Official Qn _e (c7357c32b Sa5Vh4MotK). */
+  dictationShortcut: { defaultMessage: "Dictation shortcut", id: "Sa5Vh4MotK" },
+  dictationShortcutDescription: {
+    defaultMessage: "Start or stop dictation in the chat you’re typing in.",
+    id: "O3Y4fOLEDv",
+  },
+  commandD: { defaultMessage: "Command+D", id: "fuzyuUCXBZ" },
+  ctrlD: { defaultMessage: "Ctrl+D", id: "9mRD/6SHCw" },
+  computerUse: { defaultMessage: "Computer use", id: "RfG2KsHAez" },
+  beta: { defaultMessage: "Beta", id: "riw/yc06Nq" },
+  enableComputerUse: { defaultMessage: "Enable computer use", id: "SuJjHnT9jE" },
+  enableComputerUseBackgroundDescription: {
+    defaultMessage:
+      "Let Claude see and act in the apps you allow, working in the background or with full control of your screen.",
+    id: "Derf4fJ5+V",
+  },
+  enableComputerUseDescription: {
+    defaultMessage:
+      "Let Claude take control of your screen, mouse, and keyboard to work in the apps you allow.",
+    id: "c0o/FekLJX",
+  },
+  unhideAppsWhenClaudeFinishes: {
+    defaultMessage: "Unhide apps when Claude finishes",
+    id: "Ess7TkMY61",
+  },
+  unhideAppsWhenClaudeFinishesDescription: {
+    defaultMessage:
+      "When Claude has full control of your screen, apps hidden during a task are restored when Claude stops.",
+    id: "T7z5SKWO2K",
+  },
+  howClaudeUsesApps: {
+    defaultMessage: "How Claude uses the apps you allow",
+    id: "cuPGQUHxR4",
+  },
+  howClaudeUsesAppsDescription: {
+    defaultMessage:
+      "Background: Claude works inside the apps you allow while you keep using your computer, and asks your permission before taking full control of your screen. Full control: Claude takes control of your screen, mouse, and keyboard by default whenever Claude uses an app you allow, without asking again.",
+    id: "hlErDsqOX5",
+  },
+  background: { defaultMessage: "Background", id: "XQZA8epeh8" },
+  fullControl: { defaultMessage: "Full control", id: "SElXf9Ku11" },
+  deniedApps: { defaultMessage: "Denied apps", id: "3cNJSty9kF" },
+  deniedAppsDescription: {
+    defaultMessage:
+      "Any request Claude makes to access these apps is automatically rejected. Claude may still affect them indirectly through actions in allowed apps.",
+    id: "GDROPb/gVs",
+  },
+  addApp: { defaultMessage: "Add app", id: "8w8g6qgplC" },
+  noAppsDenied: {
+    defaultMessage: "No apps denied. Add an app to automatically reject Claude’s requests for it.",
+    id: "HIOQDyFAjX",
+  },
+  accessibility: { defaultMessage: "Accessibility", id: "fgCBG8/Fm+" },
+  screenRecording: { defaultMessage: "Screen recording", id: "+TFOeIaaS0" },
+  openSystemSettings: { defaultMessage: "Open System Settings", id: "U/a2e7uAwk" },
+  granted: { defaultMessage: "Granted", id: "rKbDywsl1o" },
+  denied: { defaultMessage: "Denied", id: "5kp1IeN5nQ" },
+  notRequested: { defaultMessage: "Not requested", id: "HGIy99VgLZ" },
+  notSupported: { defaultMessage: "Not supported", id: "+FiyOTaUCW" },
+  learnMore: { defaultMessage: "Learn more", id: "TdTXXf940t" },
   keepComputerAwake: { defaultMessage: "Keep computer awake", id: "CapHOIPauL" },
   keepComputerAwakeDescription: {
     defaultMessage:
@@ -324,7 +519,11 @@ export const DESKTOP_SETTINGS_MESSAGES = {
     defaultMessage: "Keep Claude running in the system tray",
     id: "ESsdM64wtu",
   },
-  browserUse: { defaultMessage: "Browser Use", id: "PNljFqXVt8" },
+  browserUse: { defaultMessage: "Browser Use", id: "j2hlcpE79k" },
+  browserUseSectionDescription: {
+    defaultMessage: "Not available in cloud Code sessions, which don’t run on this computer.",
+    id: "TvGEXwDFHH",
+  },
   allowAllBrowserActions: {
     defaultMessage: "Allow all browser actions",
     id: "fVIi0h0uIb",
@@ -356,14 +555,47 @@ export function useDesktopSettingsText() {
   return useI18nText(DESKTOP_SETTINGS_MESSAGES);
 }
 
+/** Official hb residual (shared-3) — unitDisplay short, bytes long. */
+export function formatStorageBytes(bytes: number, locale?: string): string {
+  const units = ["byte", "kilobyte", "megabyte", "gigabyte"] as const;
+  const step = 1000;
+  const index = bytes < step ? 0 : Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(step)));
+  return new Intl.NumberFormat(locale || undefined, {
+    style: "unit",
+    unit: units[index],
+    unitDisplay: index === 0 ? "long" : "short",
+    maximumFractionDigits: index === 0 ? 0 : 1,
+  }).format(bytes / step ** index);
+}
+
+/** Official ICU `{count, plural, one {# …} other {# …}}` plus simple `{name}` braces. */
+export function formatStorageIcu(
+  template: string,
+  values: Record<string, string | number>,
+): string {
+  const withPlural = template.replace(
+    /\{(\w+),\s*plural,\s*one\s*\{([^}]*)\}\s*other\s*\{([^}]*)\}\}/g,
+    (_all, key: string, one: string, other: string) => {
+      const n = Number(values[key] ?? 0);
+      const body = Math.abs(n) === 1 ? one : other;
+      return body.replace(/#/g, String(n));
+    },
+  );
+  return withPlural.replace(/\{(\w+)\}/g, (_all, key: string) => {
+    const value = values[key];
+    return value === undefined || value === null ? `{${key}}` : String(value);
+  });
+}
+
 /**
- * Official ClaudeCodePage Local sessions Ct + Pull requests _t (cc989143e).
+ * Official ClaudeCodePage Local sessions Ct + Pull requests _t (cf4f70727-a7CVSvFQ).
  * Auto-archive / autofix use Statsig Dynamic Config copy keys (1wdvcl/1kh0255,
  * 10wu7bs/qdsv98) — not spa i18n; keep residual EN in the section component.
  * Bypass description link → https://code.claude.com/docs/en/security.
  */
 export const CLAUDE_CODE_SETTINGS_MESSAGES = {
-  localSessions: { defaultMessage: "Local sessions", id: "SKeCK+7hmh" },
+  /** Official H id HG5KdMNuqG (c71860c77-DzP8HoeV) — was Local sessions SKeCK+7hmh. */
+  localSessions: { defaultMessage: "Sessions", id: "HG5KdMNuqG" },
   allowBypassPermissionsMode: {
     defaultMessage: "Allow bypass permissions mode",
     id: "FAZpmxbq/W",
@@ -382,32 +614,165 @@ export const CLAUDE_CODE_SETTINGS_MESSAGES = {
       "Bounce the dock icon or flash the taskbar when Claude needs your attention and the app is not focused.",
     id: "dWc+PWWxa4",
   },
+  /** Official rr (DzP8HoeV) — Local sandbox after worktree. */
+  localSandbox: { defaultMessage: "Local sandbox", id: "XZuN8Fgklz" },
+  localSandboxDescription: {
+    defaultMessage: "Runs commands from Claude Code in an isolated sandbox. Applies to new sessions.",
+    id: "0IQeTnXtHC",
+  },
+  strictSandboxMode: { defaultMessage: "Strict sandbox mode", id: "moEfZ8i+n2" },
+  strictSandboxModeDescription: {
+    defaultMessage:
+      "Blocks commands that can’t run inside the sandbox (ssh, for example) instead of running them outside it or asking you. Applies to every Claude Code session on this computer, including the terminal, unless a project’s own settings override it.",
+    id: "IoqC8Soln9",
+  },
+  sandboxUnavailable: {
+    defaultMessage: "The sandbox isn’t available on this machine yet.",
+    id: "g6FYbmEqNk",
+  },
+  sandboxAvailableWhenOn: {
+    defaultMessage: "Available when Local sandbox is on",
+    id: "IjR36HJptk",
+  },
   worktreeLocation: { defaultMessage: "Worktree location", id: "cU7ff1IrXY" },
   worktreeLocationDescription: {
-    defaultMessage: "Where to store git worktrees for isolated coding sessions",
-    id: "aaW9XOSy8a",
+    defaultMessage: "Where to store Git worktrees for isolated coding sessions.",
+    id: "MSsFqCg6Gh",
   },
-  branchPrefix: { defaultMessage: "Branch prefix", id: "K1Geta3vjp" },
+  branchPrefix: { defaultMessage: "Branch prefix", id: "88wJXbOjoo" },
   branchPrefixDescription: {
-    defaultMessage: "Prefix added to the beginning of every worktree branch name",
-    id: "7vetTkXExH",
+    defaultMessage: "Prefix added to branch names for both local and cloud sessions.",
+    id: "Wq7kmqvTqf",
   },
-  preview: { defaultMessage: "Preview", id: "TJo5E6JuIN" },
-  previewDescription: {
+  /** Official Kr (DzP8HoeV) — Browser tools, not Sessions Preview. */
+  browser: { defaultMessage: "Browser", id: "E3oB+tM0Ou" },
+  browserTools: { defaultMessage: "Browser tools", id: "cJT9hml5Dm" },
+  browserToolsDescription: {
     defaultMessage:
       "Claude can start dev servers, open a live preview, and verify code changes with screenshots, snapshots, and DOM inspection.",
     id: "idMrSFp0DS",
   },
-  persistPreviewSessions: {
-    defaultMessage: "Persist Preview sessions",
-    id: "ZCLCFImt5t",
-  },
-  persistPreviewSessionsDescription: {
+  keepCookies: { defaultMessage: "Keep cookies", id: "e6Cv5Y4QTL" },
+  keepCookiesDescription: {
     defaultMessage:
-      "Save cookies, local storage, and login sessions for dev server previews. Data is stored per workspace and persists across app restarts. Turning this off clears all saved session data.",
-    id: "WxnZAj20X1",
+      "Save cookies, local storage, and login sessions for Browser tabs across app restarts. Shared uses the same data for every session in a project. Per session gives each session its own copy, so sessions never see each other’s logins.",
+    id: "G+CBpQ6LJs",
   },
-  pullRequests: { defaultMessage: "Pull requests", id: "g73wlJea9A" },
+  cookiesUntilQuit: { defaultMessage: "Until quit", id: "w2AaFT5b5b" },
+  cookiesShared: { defaultMessage: "Shared", id: "kWI6zXRaHY" },
+  cookiesPerSession: { defaultMessage: "Per session", id: "pFAA1bn62c" },
+  browserToolsDesktopDescription: {
+    defaultMessage:
+      "Claude can start your dev servers, browse the web in a built-in browser, and verify changes with screenshots, snapshots, and DOM inspection.",
+    id: "joA9S0q8Kg",
+  },
+  keepCookiesDesktopDescription: {
+    defaultMessage:
+      "Browser tabs keep cookies and logins across restarts in one saved browser shared by every session and Cowork. Per session gives each Code session its own copy instead, so sessions never see each other’s logins.",
+    id: "MoAjWUV0jP",
+  },
+  /** Official Un / tt (cdc95db1a / Kr) — same ids as Cowork Y. */
+  openLinksInBuiltInBrowser: {
+    defaultMessage: "Open links in built-in browser",
+    id: "LgkdiZ92a8",
+  },
+  openLinksInBuiltInBrowserDescription: {
+    defaultMessage: "Links open in the built-in browser instead of your default browser.",
+    id: "pgZS018Oqj",
+  },
+  allowedSites: { defaultMessage: "Allowed sites", id: "BxVqgx1N4R" },
+  allowedSitesDescription: {
+    defaultMessage: "Sites where Claude can use its Browser tools without a permission prompt.",
+    id: "gFpafVw2/r",
+  },
+  promptSuggestions: { defaultMessage: "Prompt suggestions", id: "Fycjnepb7X" },
+  promptSuggestionsDescription: {
+    defaultMessage:
+      "Show a suggested next prompt in the message box after Claude replies. Suggestions add a little to your usage.",
+    id: "FgbOME4HwP",
+  },
+  permissionRequests: { defaultMessage: "Permission requests", id: "7vas0HJwrr" },
+  permissionRequestsDescription: {
+    defaultMessage: "Claude needs your approval to use a tool.",
+    id: "6/sAAh+NIB",
+  },
+  questions: { defaultMessage: "Questions", id: "KV/9HvLgtb" },
+  questionsDescription: {
+    defaultMessage: "Claude is asking you to choose between options.",
+    id: "E4l5E2QoYp",
+  },
+  taskComplete: { defaultMessage: "Task complete", id: "pmIAmFOt1l" },
+  taskCompleteDescription: {
+    defaultMessage: "Claude finished and is waiting for your input.",
+    id: "aFCUCfaD+M",
+  },
+  notificationLevel: { defaultMessage: "{type} notification level", id: "dsoj3T5PrP" },
+  notifyOff: { defaultMessage: "Off", id: "OvzONl52rs" },
+  notifyBadge: { defaultMessage: "Badge only", id: "18n2DsPCUH" },
+  notifyBanners: { defaultMessage: "Banners", id: "M/TDplXStW" },
+  notificationSound: { defaultMessage: "Notification sound", id: "kmJEqpMcAS" },
+  notificationSoundDescription: {
+    defaultMessage: "Played when an OS banner is shown.",
+    id: "OIHwK7PmyT",
+  },
+  systemSound: { defaultMessage: "System sound", id: "nWcwwjH6U2" },
+  none: { defaultMessage: "None", id: "450Fty8ldn" },
+  keepAwakeWhileWorking: {
+    defaultMessage: "Keep computer awake while Claude works",
+    id: "EcEP8qH6+A",
+  },
+  keepAwakeWhileWorkingDescription: {
+    defaultMessage:
+      "Prevent your computer from sleeping while a Code session is running, so long tasks can finish. Your display can still turn off. Closing the laptop lid will still put it to sleep.",
+    id: "2YChxhwK1R",
+  },
+  keepAwakeOnBattery: { defaultMessage: "Keep awake on battery power", id: "sLed/DhFoo" },
+  archiveInactiveSessions: { defaultMessage: "Archive inactive sessions", id: "Va2aVQRIyJ" },
+  archiveInactiveSessionsDescription: {
+    defaultMessage:
+      "Automatically archive local sessions after a period of no activity. Sessions that are running or have background work are never archived, and a worktree with uncommitted changes is kept on disk.",
+    id: "D9OqV7EIr6",
+  },
+  never: { defaultMessage: "Never", id: "du1laW45Py" },
+  archiveInactiveDays: {
+    defaultMessage: "{count, plural, one {# day} other {# days}}",
+    id: "xcWsw2T0kk",
+  },
+  worktreeInsideProject: { defaultMessage: "Inside project", id: "eI3zYFFnpz" },
+  worktreeCustom: { defaultMessage: "Custom…", id: "lKjjJ7PIFW" },
+  plugins: { defaultMessage: "Plugins", id: "QJAllUAc2k" },
+  pluginsDescription: {
+    defaultMessage: "Manage Claude Code plugins, agents, hooks, and connectors.",
+    id: "ItwZi5jzE0",
+  },
+  learnMore: { defaultMessage: "Learn more", id: "TdTXXf940t" },
+  manage: { defaultMessage: "Manage", id: "rtbNQQ2C8O" },
+  mobileSimulators: { defaultMessage: "Mobile simulators", id: "rlOV31zhNT" },
+  iosSimulator: { defaultMessage: "iOS Simulator", id: "fc+oEygAS4" },
+  iosSimulatorDescription: {
+    defaultMessage:
+      "Let Claude verify your changes in the iOS Simulator on this Mac: running your app, driving it through flows, and capturing screenshots and recordings. You will be asked before Claude uses each device. When off, Claude doesn’t get its simulator tools, and you can still use the simulator in the app yourself.",
+    id: "E7SrKlwU6s",
+  },
+  androidEmulator: { defaultMessage: "Android Emulator", id: "yUsyxi1gKs" },
+  androidEmulatorDescription: {
+    defaultMessage:
+      "Let Claude verify your changes in Android emulators on this computer: running your app, driving it through flows, and capturing screenshots and recordings. You will be asked before Claude uses each device. When off, Claude doesn’t get its emulator tools, and you can still use the emulator in the app yourself.",
+    id: "ztHNjqJY9S",
+  },
+  managedByYourOrganization: {
+    defaultMessage: "This configuration is managed by your organization. Contact your IT administrator to make changes.",
+    id: "UAoPW0hAYR",
+  },
+  drawAttentionDarwin: {
+    defaultMessage: "Bounce the Dock icon when Claude needs your attention and the app isn’t focused.",
+    id: "HOH5mdam48",
+  },
+  drawAttentionWin32: {
+    defaultMessage: "Flash the taskbar button when Claude needs your attention and the app isn’t focused.",
+    id: "3SBJtWgrE1",
+  },
+  pullRequests: { defaultMessage: "Pull requests", id: "uDMSR+gnHL" },
   createPullRequestsAutomatically: {
     defaultMessage: "Create pull requests automatically",
     id: "jrgiDtsEgq",
@@ -423,18 +788,18 @@ export const CLAUDE_CODE_SETTINGS_MESSAGES = {
     id: "qpCNNJoawH",
   },
   /**
-   * Official St (cc989143e): General · Classify session states.
+   * Official St (cf4f70727-a7CVSvFQ): General · Classify session states.
    * Gate: GrowthBook claudeai_session_state; account ccr_session_state_buckets.
    */
-  general: { defaultMessage: "General", id: "1iEPTMDqmi" },
+  general: { defaultMessage: "General", id: "f0sgug52cn" },
   classifySessionStates: {
     defaultMessage: "Classify session states",
-    id: "Ao1+HpCJOZ",
+    id: "p5zpXqu2Vt",
   },
   classifySessionStatesDescription: {
     defaultMessage:
       "Allow Claude to automatically classify sessions as blocked, ready for review, or done. Classifying sessions counts towards your plan usage. Applies to new sessions.",
-    id: "dASzGfiDEA",
+    id: "lIftuExuY6",
   },
   /**
    * Official _t autofix row uses Statsig dynamic copy 10wu7bs / qdsv98.
@@ -442,23 +807,22 @@ export const CLAUDE_CODE_SETTINGS_MESSAGES = {
    * when Statsig ids are absent (same pattern as auto-archive 1wdvcl/1kh0255).
    */
   autofixOnPrCreate: {
-    defaultMessage: "Auto-fix CI & address comments",
-    id: "pOrogLHpcW",
+    defaultMessage: "Auto-fix pull requests",
+    id: "wUV2EbNd4F",
   },
   autofixOnPrCreateDescription: {
     defaultMessage:
-      "When Claude opens a pull request, automatically watch CI and review comments and push fixes. Applies to remote sessions and local sessions with autofix enabled.",
-    id: "10wu7bs",
+      "When you create a pull request, Claude automatically monitors it for CI failures and review comments, then responds proactively. Claude may post comments on your behalf.",
+    id: "EgiIOTh2tM",
   },
-  /** Official Statsig 1wdvcl / 1kh0255 — not spa i18n; residual EN under those ids. */
   autoArchiveClosedPrSessions: {
-    defaultMessage: "Auto-archive closed PR sessions",
-    id: "1wdvcl",
+    defaultMessage: "Auto-archive after PR merge or close",
+    id: "yVPKfWxps3",
   },
   autoArchiveClosedPrSessionsDescription: {
     defaultMessage:
-      "When an auto-created pull request is closed, automatically archive the matching local session.",
-    id: "1kh0255",
+      "Automatically archive desktop sessions when the associated pull request is merged or closed. Archiving also removes the session’s worktree and deletes its branch once the pull request is merged. Work that isn’t pushed is kept.",
+    id: "JuT1yhTfY2",
   },
 } as const satisfies MessageDescriptors;
 
@@ -478,7 +842,7 @@ export function renderClaudeCodeBypassDescription(message: string): ReactNode {
 }
 
 /**
- * Official CoworkPage tn (cc989143e): Dispatch Ht · Auto-organize $t · Global Xt · Memory Vt.
+ * Official CoworkPage tn (cf4f70727-a7CVSvFQ): Dispatch Ht · Auto-organize $t · Global Xt · Memory Vt.
  * Several rows still EN in official zh-CN catalog — keep EN until catalogs fill in.
  */
 export const COWORK_SETTINGS_MESSAGES = {
@@ -518,7 +882,8 @@ export const COWORK_SETTINGS_MESSAGES = {
     defaultMessage: "Failed to save instructions. You can try again.",
     id: "3ln+ap2418",
   },
-  memory: { defaultMessage: "Memory", id: "dVx3yznM2C" },
+  /** Official X title JxlSRWr2J/ (c71860c77-Cx6eI2mP). */
+  memory: { defaultMessage: "Memory", id: "JxlSRWr2J/" },
   useMemoryInSessions: { defaultMessage: "Use memory in sessions", id: "psuGulikXK" },
   useMemoryInSessionsOn: {
     defaultMessage: "Claude will read and update these memories during Cowork sessions.",
@@ -545,6 +910,119 @@ export const COWORK_SETTINGS_MESSAGES = {
   /** Official aQT+klR6gE — ICU `{name}`; format via formatDeleteMemoryLabel. */
   deleteMemoryNamed: { defaultMessage: "Delete memory {name}", id: "aQT+klR6gE" },
   delete: { defaultMessage: "Delete", id: "K3r6DQW7h+" },
+  /** Official cfea P / cabd ht / Je / cdc95 f (Tt onThisDevice). */
+  coworkFiles: { defaultMessage: "Cowork files", id: "ciLKOe5nmN" },
+  coworkFilesDescription: {
+    defaultMessage: "Your artifacts and scheduled tasks are stored at {path}.",
+    id: "DqDjZwiEL2",
+  },
+  useRecommended: { defaultMessage: "Use recommended", id: "elCjxqeTRU" },
+  working: { defaultMessage: "Working…", id: "hsvAwBKpgC" },
+  change: { defaultMessage: "Change", id: "BY343C3tWs" },
+  changeCoworkFilesLocation: {
+    defaultMessage: "Change location for Cowork files?",
+    id: "+PMqUNutxd",
+  },
+  copyFilesAndRestart: {
+    defaultMessage:
+      "Copy files to {location} and restart the app. Your existing files will remain in {previousLocation}.",
+    id: "sQdJsccSi7",
+  },
+  copyAndRestart: { defaultMessage: "Copy and restart", id: "/gC5u6qZtz" },
+  coworkFilesSessionsRunning: {
+    defaultMessage: "Close your running Cowork sessions first, then try again.",
+    id: "zft0NHq3YV",
+  },
+  coworkFilesTargetInvalid: {
+    defaultMessage: "That folder can’t be used. Choose another.",
+    id: "pyH87+HVmt",
+  },
+  coworkFilesTargetUnc: {
+    defaultMessage:
+      "Network folders (UNC paths) can’t be used for your Cowork data. Choose a folder on this device.",
+    id: "IoQ1RE7jPR",
+  },
+  coworkFilesTargetInsideCurrent: {
+    defaultMessage: "Choose a folder outside the current Claude folder.",
+    id: "/9cXL0ekBt",
+  },
+  coworkFilesTargetNotWritable: {
+    defaultMessage: "Claude can’t write to that folder. Choose another.",
+    id: "tVdYWhBwbU",
+  },
+  coworkFilesCopyFailed: {
+    defaultMessage: "Couldn’t copy your Cowork data to the new location. See logs for details.",
+    id: "H2gd/n5tZS",
+  },
+  coworkFilesStateWriteFailed: {
+    defaultMessage: "Couldn’t save the folder setting. Try again.",
+    id: "J+paViqyAW",
+  },
+  coworkFilesFallback: {
+    defaultMessage: "Something went wrong. Try again.",
+    id: "3kJE8Gegin",
+  },
+  trustedCoworkFolders: { defaultMessage: "Trusted Cowork folders", id: "5UZ7woP+0X" },
+  trustedCoworkFoldersDescription: {
+    defaultMessage:
+      "When you trust a folder on this device, you allow Claude to use it and the folders inside it. Trusting a folder doesn’t add it to new tasks. When you add one to a task, you may be asked to allow it again.",
+    id: "3xPFv/Ldgz",
+  },
+  noTrustedFoldersYet: { defaultMessage: "No trusted folders yet.", id: "4txo620/Yp" },
+  remembered: { defaultMessage: "Remembered", id: "ntRjjBLRrZ" },
+  remove: { defaultMessage: "Remove", id: "G/yZLul6P1" },
+  addFolder: { defaultMessage: "Add folder", id: "lhYeghbH/7" },
+  done: { defaultMessage: "Done", id: "JXdbo8Vnlw" },
+  close: { defaultMessage: "Close", id: "rbrahOGMC3" },
+  manage: { defaultMessage: "Manage", id: "0AzlrbMWV9" },
+  preferredBrowser: { defaultMessage: "Preferred browser", id: "cGSF0vB/eU" },
+  preferredBrowserDescription: {
+    defaultMessage: "Claude uses this browser by default unless you ask otherwise.",
+    id: "7uDozdO5Rc",
+  },
+  builtInBrowser: { defaultMessage: "Built-in browser", id: "Yx/kiytXbg" },
+  chromeClaudeInChrome: { defaultMessage: "Chrome (Claude in Chrome)", id: "eYSxT0crXF" },
+  turnOnClaudeInChrome: {
+    defaultMessage: "Turn on the Claude in Chrome connector",
+    id: "1iqOtGoaOJ",
+  },
+  openLinksInBuiltInBrowser: {
+    defaultMessage: "Open links in built-in browser",
+    id: "LgkdiZ92a8",
+  },
+  openLinksInBuiltInBrowserDescription: {
+    defaultMessage: "Links open in the built-in browser instead of your default browser.",
+    id: "pgZS018Oqj",
+  },
+  allowedSites: { defaultMessage: "Allowed sites", id: "BxVqgx1N4R" },
+  allowedSitesDescription: {
+    defaultMessage: "Sites where Claude can use its Browser tools without a permission prompt.",
+    id: "gFpafVw2/r",
+  },
+  allowedSitesManage: { defaultMessage: "Manage", id: "rtbNQQ2C8O" },
+  allowedSitesModalDescription: {
+    defaultMessage:
+      "Claude can use its Browser tools on these sites without a permission prompt. Remove a site and Claude asks again the next time that site needs your approval.",
+    id: "dudlr0lxno",
+  },
+  addUrl: { defaultMessage: "Add URL", id: "8aTg3D2NqS" },
+  exampleCom: { defaultMessage: "example.com", id: "AgUG6bZewE" },
+  add: { defaultMessage: "Add", id: "alWu/MbgXB" },
+  builtin: { defaultMessage: "Built-in", id: "xKyAnbJOy3" },
+  noAllowedSitesYet: { defaultMessage: "No allowed sites yet.", id: "VY4eKypwEh" },
+  clearAll: { defaultMessage: "Clear all", id: "QW+Q5NHmeF" },
+  enterValidWebAddress: { defaultMessage: "Enter a valid web address.", id: "y0m/msJ/H2" },
+  localhostAlwaysAllowed: { defaultMessage: "Localhost is always allowed.", id: "lyTJBLZPN5" },
+  siteAlreadyAllowed: { defaultMessage: "That site is already allowed.", id: "/8asYhS9Nu" },
+  siteBlockedSafety: {
+    defaultMessage: "This site can’t be added due to safety restrictions.",
+    id: "CyrIZLjVQH",
+  },
+  siteBlockedOrg: {
+    defaultMessage: "This site is blocked by your organization’s policy.",
+    id: "cn41O1ufFd",
+  },
+  couldntVerifySite: { defaultMessage: "Couldn’t verify this site. Try again.", id: "Ug1sb8vGS5" },
 } as const satisfies MessageDescriptors;
 
 export function useCoworkSettingsText() {
@@ -557,7 +1035,7 @@ export function formatDeleteMemoryLabel(template: string, name: string): string 
 }
 
 /**
- * Official Connectors personal page Zt (cc989143e):
+ * Official Connectors personal page Zt (cf4f70727-a7CVSvFQ):
  * header 2mMJRvsAg1/PLHWL6pEBQ, moved hjDnwgc2xH → /customize/connectors,
  * Discovery Wt (only when cai_opt_in_connector_suggestions), empty Mijt/sMzDz,
  * extensions footnote E/nV5I+zT2 → /settings/desktop/extensions.
@@ -806,7 +1284,7 @@ export function formatExtensionsTemplate(
 }
 
 /**
- * Official Privacy personal page ln (cc989143e gateway provider card):
+ * Official Privacy personal page ln (cf4f70727-a7CVSvFQ gateway provider card):
  * tgkg69DKCl intro + ULnTQCHxiV / MYYAX2WEkL lists.
  * Anthropic-hosted training toggles are not in this residual arm — do not invent.
  */
@@ -902,7 +1380,7 @@ export function renderMessageWithLearnMore(
 }
 
 /**
- * Official Skills residual (c71860c77 Ee / ye from cc989143e `Rt`):
+ * Official Skills residual (c71860c77 Ee / ye from cf4f70727-a7CVSvFQ `Rt`):
  * `<link>…</link>` → in-app SPA link via ye("/customize/skills").
  * When `onNavigate` is provided (desktop shell history.pushState path),
  * intercept primary click so we do not full-reload the shell.

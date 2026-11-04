@@ -1,5 +1,5 @@
 /**
- * Official code-markdown mermaid block (index-BELzQL5P):
+ * Official code-markdown mermaid block (cd5a31703):
  *   hit → language === "mermaid" → eit MermaidIframe
  *   eit: ReadyForContent → SetContent(SandboxContent { content, type: xm.Mermaid })
  *   iframe height 600px; error chrome "Unable to render diagram."
@@ -34,7 +34,7 @@ export function isOfficialMermaidMarkdownLanguage(language?: string) {
 }
 
 /**
- * Official eit MermaidIframe (index-BELzQL5P, displayName="MermaidIframe"):
+ * Official eit MermaidIframe (cd5a31703, displayName="MermaidIframe"):
  *   loading i=true; ready l=false; error u=null
  *   m6e sendRequest g — effect if (!l || !g || !e) return; SetContent; catch → error chrome
  *   No source remount / iframeEpoch invent; error unmounts iframe (sticky until parent remount).
@@ -114,7 +114,7 @@ function OfficialMermaidDiagramCardImpl({
       <div
         className="p-4 rounded border border-border-300"
         style={{ backgroundColor }}
-        data-official-source="index-BELzQL5P.js:eit"
+        data-official-source="cd5a31703-B4nKQMBN.js:eit"
       >
         <div className="text-text-400 text-sm font-mono mb-2">{error}</div>
         <pre className="text-xs text-text-500 overflow-x-auto whitespace-pre-wrap m-0">
@@ -129,7 +129,7 @@ function OfficialMermaidDiagramCardImpl({
     <div
       className="relative min-h-[100px] rounded"
       style={{ backgroundColor }}
-      data-official-source="index-BELzQL5P.js:eit MermaidIframe"
+      data-official-source="cd5a31703-B4nKQMBN.js:eit MermaidIframe"
     >
       {loading ? (
         <div
@@ -172,7 +172,7 @@ export function OfficialMermaidHit({
   isStreaming?: boolean;
 }) {
   return (
-    <div className="mb-2" data-official-source="index-BELzQL5P.js:hit mermaid">
+    <div className="mb-2" data-official-source="cd5a31703-B4nKQMBN.js:hit mermaid">
       <OfficialMermaidDiagramCard source={source} isStreaming={isStreaming} />
     </div>
   );

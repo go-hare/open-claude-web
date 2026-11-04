@@ -23,6 +23,14 @@ export class EpitaxyChatPanelErrorBoundary extends Component<Props, State> {
     return { error };
   }
 
+  componentDidUpdate(prevProps: Props) {
+    // Official pL reset is per-session. Vite HMR / invalid-hook can trap the panel
+    // on the same id — still allow retry. Switching sessions always clears.
+    if (prevProps.sessionId !== this.props.sessionId && this.state.error) {
+      this.setState({ error: null });
+    }
+  }
+
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Residual: Sentry/Ho tags { feature: epitaxy, sessionId } — product logs only.
     if (typeof console !== "undefined") {
@@ -32,7 +40,8 @@ export class EpitaxyChatPanelErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.error) {
-      return <EpitaxyLandingError onBack={this.props.onBack} />;
+      // Official c119 Ho → uc({ message, onBack, error }) — always Back (KGeQPLIrlo), never Fazw Try again.
+      return <EpitaxyLandingError error={this.state.error} onBack={this.props.onBack} />;
     }
     return this.props.children;
   }

@@ -1,5 +1,5 @@
 /**
- * Official index-BELzQL5P Code session list residual (kve / Eve / Ive / Tve / Ave / Lve / Rve / Dve).
+ * Official cd5a31703 Code session list residual (kve / Eve / Ive / Tve / Ave / Lve / Rve / Dve).
  *
  *   Rve  — CT.getAll → set sessions (cold)
  *   Dve  — onOnEvent switch; ignores message/stream_event

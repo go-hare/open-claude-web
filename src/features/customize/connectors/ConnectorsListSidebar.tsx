@@ -10,6 +10,7 @@ import { ConnectorsEmptyState } from "./ConnectorsEmptyState";
 /**
  * Official c63a78ed4 Rt — list sidebar with search + Web / Desktop / Not connected.
  * Direct MCP remotes (source direct-mcp / local-custom) group under Desktop when connected.
+ * Overlay Settings uses ConnectorsOverlayList (c40525e86 Go table), not this sidebar.
  */
 export function ConnectorsListSidebar({
   items,

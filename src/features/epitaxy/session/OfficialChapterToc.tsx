@@ -13,6 +13,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MutableRefObject,
 } from "react";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { CHAPTER_TOC_MESSAGES } from "../officialCodeChromeMessages";
 import {
   BaseContextMenuItem,
   BaseContextMenuPopup,
@@ -238,17 +240,18 @@ export const OfficialChapterToc = memo(function OfficialChapterToc({
   const onRemove = useCallback((sid: string, chapterId: string) => {
     officialEpitaxyChaptersStore.getState().removeUserChapter(sid, chapterId);
   }, []);
+  const tocText = useI18nText(CHAPTER_TOC_MESSAGES);
 
   if (chapters.length === 0) return null;
 
   return (
     <div
       className="absolute top-[20px] bottom-[32px] left-[16px] z-[11] pointer-events-none epitaxy-toc-fade-in"
-      data-official-source="c11959232-h_zsw3wI.js:Qw"
+      data-official-source="cd5a31703-B4nKQMBN.js:Qw"
     >
       <nav
         ref={navRef}
-        aria-label="Session chapters"
+        aria-label={tocText.sessionChapters}
         tabIndex={0}
         onMouseLeave={collapse}
         onFocus={expand}
@@ -334,6 +337,7 @@ const OfficialChapterTocRow = memo(function OfficialChapterTocRow({
   onRemove: (sessionId: string, chapterId: string) => void;
   onContextMenuOpenChange: (open: boolean) => void;
 }) {
+  const tocText = useI18nText(CHAPTER_TOC_MESSAGES);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const committedRef = useRef(false);
 
@@ -378,7 +382,7 @@ const OfficialChapterTocRow = memo(function OfficialChapterTocRow({
           defaultValue={chapter.title}
           onBlur={commit}
           onKeyDown={onKeyDown}
-          aria-label="Chapter title"
+          aria-label={tocText.chapterTitle}
           className="flex-1 min-w-0 bg-transparent text-body text-t9 outline-none ring-focus"
         />
       </li>

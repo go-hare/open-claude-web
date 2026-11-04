@@ -1,5 +1,5 @@
 /**
- * Official chats empty pictogram rB (index-BELzQL5P M4t variant="chats").
+ * Official chats empty pictogram rB (index-D35w9RK9 M4t variant="chats").
  * Base Wq / highlight Vq residual.
  */
 import type { SVGProps } from "react";
@@ -64,7 +64,7 @@ export function ChatsEmptyPictogram({
     <svg
       aria-hidden="true"
       className={[lineColorClass(lineColor), className].filter(Boolean).join(" ")}
-      data-official-source="index-BELzQL5P.js:rB"
+      data-official-source="index-D35w9RK9.js:rB"
       fill="none"
       height={px}
       viewBox="0 0 500 500"

@@ -1,5 +1,5 @@
 /**
- * Official txe/sxe Select (index-BELzQL5P) over Base UI Select.
+ * Official txe/sxe Select (index-D35w9RK9) over Base UI Select.
  * Trigger chrome from exe CVA; popup Cde+wde; item kde.
  */
 import { Select } from "@base-ui-components/react/select";
@@ -72,7 +72,7 @@ export function OfficialSelect({
         className={[triggerBase, sizeChrome[size], variantChrome[variant], className ?? ""]
           .filter(Boolean)
           .join(" ")}
-        data-official-source="index-BELzQL5P.js:txe"
+        data-official-source="index-D35w9RK9.js:txe"
         id={id}
       >
         <span className="truncate">
@@ -84,7 +84,7 @@ export function OfficialSelect({
       </Select.Trigger>
       <Select.Portal>
         <Select.Positioner className="z-dropdown outline-none" sideOffset={4}>
-          <Select.Popup className={popupChrome} data-official-source="index-BELzQL5P.js:txe popup">
+          <Select.Popup className={popupChrome} data-official-source="index-D35w9RK9.js:txe popup">
             <Select.List className="p-1.5">
               {options.map((option) => (
                 <Select.Item className={itemChrome} key={option.value} value={option.value}>

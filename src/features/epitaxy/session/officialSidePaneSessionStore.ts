@@ -70,6 +70,8 @@ export function residualMapUpsert<T>(
 
 const BY_SESSION_CAP = 100;
 const TRANSCRIPT_MODE_KEY = "epitaxy.transcriptMode";
+/** Official c03935b01 pn account.settings.code_default_transcript_view mirror. */
+export const CODE_DEFAULT_TRANSCRIPT_VIEW_KEY = "settings:code_default_transcript_view";
 /** Residual Is / Ps — temporary html file preview ids are not session-persisted. */
 const TEMP_PREVIEW_PREFIX = "html-preview-";
 
@@ -115,12 +117,42 @@ export function residualDurablePreviewServerId(
   return serverId;
 }
 
-/** Residual kr() — default transcript mode from localStorage. */
+function parseTranscriptMode(raw: string | null | undefined): OfficialTranscriptMode | null {
+  if (raw === "verbose" || raw === "summary" || raw === "thinking" || raw === "normal") return raw;
+  return null;
+}
+
+/** Official c03935b01 pn — account.settings.code_default_transcript_view. */
+export function writeCodeDefaultTranscriptView(mode: OfficialTranscriptMode) {
+  if (typeof window === "undefined") return;
+  if (mode !== "normal" && mode !== "thinking" && mode !== "verbose") return;
+  try {
+    window.localStorage.setItem(CODE_DEFAULT_TRANSCRIPT_VIEW_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function syncCodeDefaultTranscriptViewFromSettings(
+  settings: Record<string, unknown> | null | undefined,
+) {
+  if (!settings || !("code_default_transcript_view" in settings)) return;
+  const parsed = parseTranscriptMode(String(settings.code_default_transcript_view ?? ""));
+  if (parsed && parsed !== "summary") writeCodeDefaultTranscriptView(parsed);
+}
+
+/**
+ * Residual kr() for a *new* session (no transcriptModeBySession row).
+ * Official pn: account.settings.code_default_transcript_view, else last
+ * session-menu write on epitaxy.transcriptMode, else normal.
+ */
 export function residualDefaultTranscriptMode(): OfficialTranscriptMode {
   if (typeof window === "undefined") return "normal";
   try {
-    const raw = window.localStorage.getItem(TRANSCRIPT_MODE_KEY);
-    if (raw === "verbose" || raw === "summary" || raw === "thinking" || raw === "normal") return raw;
+    const account = parseTranscriptMode(window.localStorage.getItem(CODE_DEFAULT_TRANSCRIPT_VIEW_KEY));
+    if (account) return account;
+    const last = parseTranscriptMode(window.localStorage.getItem(TRANSCRIPT_MODE_KEY));
+    if (last) return last;
   } catch {
     /* ignore */
   }
@@ -172,6 +204,11 @@ export type OfficialSidePaneSessionState = {
   transcriptMode: OfficialTranscriptMode;
   /** Residual live previewServerId for current session (Lr.previewServerId). */
   previewServerId: string | undefined;
+  /**
+   * Official c03935b01 `Lr.htmlFiles` — RAM-only list of HTML files opened via Wu /
+   * Globe `P`. Not in partialize. Cross-session `reset` spreads `Lr` → `[]`.
+   */
+  htmlFiles: string[];
   /** Residual Lr.fileView / subagentView — live (partialize). */
   fileView: OfficialFileViewTarget | undefined;
   subagentView: OfficialSubagentTarget | undefined;
@@ -206,6 +243,11 @@ export type OfficialSidePaneSessionState = {
   bindPreviewServer: (serverId: string) => void;
   /** Residual unbindPreviewServer(e) when matches live. */
   unbindPreviewServer: (serverId: string) => void;
+  /**
+   * Official c039 `addHtmlFile:e=>t(t=>t.htmlFiles.includes(e)?t:{htmlFiles:[...t.htmlFiles,e]})`.
+   * Wu html-preview-* auto-open and Globe `P`/`T` call this; not persisted.
+   */
+  addHtmlFile: (filePath: string) => void;
   /** Residual store.evictSession. */
   evictSession: (sessionId: string) => void;
 };
@@ -245,6 +287,7 @@ function createSidePaneState(
     sidePane: "none",
     transcriptMode: residualDefaultTranscriptMode(),
     previewServerId: undefined,
+    htmlFiles: [],
     fileView: undefined,
     subagentView: undefined,
     tileLayoutBySession: {},
@@ -317,9 +360,11 @@ function createSidePaneState(
         : residualDefaultTranscriptMode();
 
       // Residual return { ...Lr, ... } — clears fileView/subagentView/sessionView; sidePane none.
+      // Residual `{...Lr, tileLayoutBySession, ...}` — htmlFiles resets to [].
       set({
         currentSessionId: sessionId,
         previewServerId: restoredServer,
+        htmlFiles: [],
         fileView: undefined,
         subagentView: undefined,
         tileLayout,
@@ -469,6 +514,14 @@ function createSidePaneState(
       });
     },
 
+    // Residual addHtmlFile:e=>t(t=>t.htmlFiles.includes(e)?t:{htmlFiles:[...t.htmlFiles,e]})
+    addHtmlFile: (filePath) => {
+      if (!filePath) return;
+      set((state) => (
+        state.htmlFiles.includes(filePath) ? state : { htmlFiles: [...state.htmlFiles, filePath] }
+      ));
+    },
+
     // Residual unbindPreviewServer:e=>t(t=>t.previewServerId===e?{previewServerId:void 0}:t)
     unbindPreviewServer: (serverId) => {
       set((state) => {
@@ -501,6 +554,7 @@ function createSidePaneState(
           previewServerIdBySession,
           currentSessionId: isCurrent ? undefined : state.currentSessionId,
           previewServerId: isCurrent ? undefined : state.previewServerId,
+          htmlFiles: isCurrent ? [] : state.htmlFiles,
           fileView: isCurrent ? undefined : state.fileView,
           subagentView: isCurrent ? undefined : state.subagentView,
           tileLayout: isCurrent ? residualChatOnlyLayout() : state.tileLayout,
@@ -563,10 +617,12 @@ export function createOfficialSidePaneSessionStore(
         migrate: (persisted, version) =>
           migratePersistedSidePaneState((persisted ?? {}) as PersistedSidePaneV1, version),
         // Residual partialize: tileLayout + bySession + currentSessionId + live views + previewServerId.
+        // Official c039 htmlFiles is RAM-only — do not persist.
+        // Official c563 `at` hydrates popout fileView from XO each open — do not persist a stale editor split.
         partialize: (state) => ({
           currentSessionId: state.currentSessionId,
           previewServerId: residualDurablePreviewServerId(state.previewServerId),
-          fileView: state.fileView,
+          fileView: persistKey.includes(".popout.") ? undefined : state.fileView,
           subagentView: state.subagentView,
           tileLayout: state.tileLayout,
           tileLayoutBySession: state.tileLayoutBySession,

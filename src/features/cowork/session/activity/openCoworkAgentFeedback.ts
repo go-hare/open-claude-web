@@ -1,7 +1,7 @@
 import { COWORK_FEEDBACK_URL } from "../../newTask/coworkNewTaskMessages";
 
 /**
- * Official index-BELzQL5P xT residual:
+ * Official c21f11e6d-CxD82rYo.js xT residual:
  * xT = globalThis["claude.web"]?.AgentModeFeedback
  * openFeedbackWindow({ url: NAt, source, prefillErrorText?, meta? })
  * Fallback window.open(NAt) when bridge absent (header residual).

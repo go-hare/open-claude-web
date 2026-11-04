@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Official residual: index-BELzQL5P.js `Ase`
+ * Official residual: index-D35w9RK9.js `Ase`
  *
  * When focus is NOT on an input / contenteditable / textbox, and no dialog /
  * listbox / menu is open, a printable Latin key is redirected into the composer

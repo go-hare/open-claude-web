@@ -66,6 +66,9 @@ export function residualIsSimulatorTileId(tileId: string): boolean {
   return tileId === "simulator" || tileId.startsWith("simulator:");
 }
 
+/** Official c039 `la` — first-open beside chat uses flex 3, not 1. */
+const residualWideSideTileIds = new Set(["diff", "preview", "artifact", "file", "pr", "cr", "watercolor", "mcpapp"]);
+
 /** Residual Rs — deep clone tree (mutable path for Zs/ur wrap). */
 export function residualCloneLayoutNode(node: ResidualLayoutNode): ResidualLayoutNode {
   if (node.kind === "tile") return { ...node };
@@ -221,9 +224,11 @@ export function residualZs(layout: ResidualTileLayout, tileId: string): Residual
 export function residualUr(layout: ResidualTileLayout, tileId: string): ResidualTileLayout {
   const ids = residualIr(layout);
   if (![...ids].some((id) => id !== "chat")) {
+    // Official c039 `da`/`la`: file/diff/preview/artifact open at flex 3 beside chat:2.
+    const sideFlex = residualWideSideTileIds.has(tileId) ? 3 : 1;
     return residualXs({
       direction: "row",
-      children: [["chat", 2], tileId],
+      children: [["chat", 2], [tileId, sideFlex]],
     });
   }
   const root = layout.root;

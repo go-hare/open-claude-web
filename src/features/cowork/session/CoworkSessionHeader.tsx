@@ -35,7 +35,7 @@ import {
 import { coworkSessionsBridge } from "./coworkSessionBridge";
 
 /**
- * Official residual index-BELzQL5P.js:
+ * Official residual c21f11e6d-CxD82rYo.js:
  *   gUt — session title split control (Dc ghost title + Dc ghost icon_sm chevron)
  *   hUt — Ide(align end, unstyledTrigger) + pUt Item/Separator (Cde/wde/kde/Mde)
  *   uUt — RenameSessionModal
@@ -85,7 +85,14 @@ export function CoworkSessionHeader({
       </div>
       <div aria-hidden="true" className="draggable h-full flex-1 min-w-0" />
       <div className="flex items-center gap-2 shrink-0" id="dframe-header-actions-slot" />
-      {rightAction}
+      {/* Official jD / cowork-title-row-trailing — activity open affordance when panel closed. */}
+      <div
+        className="flex items-center empty:hidden"
+        data-official-source="c21f11e6d-CxD82rYo.js:jD cowork-title-row-trailing"
+        data-testid="cowork-title-row-trailing"
+      >
+        {rightAction}
+      </div>
     </div>
   );
 }

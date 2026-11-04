@@ -1,5 +1,5 @@
 /**
- * Official projects empty pictogram Kq (index-BELzQL5P M4t variant=projects).
+ * Official projects empty pictogram Kq (index-D35w9RK9 M4t variant=projects).
  * Base Wq / highlight Vq.
  */
 import type { SVGProps } from "react";
@@ -63,7 +63,7 @@ export function ProjectsEmptyPictogram({
     <svg
       aria-hidden="true"
       className={[lineColorClass(lineColor), className].filter(Boolean).join(" ")}
-      data-official-source="index-BELzQL5P.js:Kq"
+      data-official-source="index-D35w9RK9.js:Kq"
       fill="none"
       height={px}
       viewBox="0 0 500 500"

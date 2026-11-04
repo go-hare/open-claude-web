@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { desktopBridge, type SessionSummary } from "../adapters/desktopBridge";
 import { applyOfficialProjectGroupAdd, projectGroupFolder } from "./officialProjectGroupAdd";
 import { NO_PROJECT_KEY } from "./officialProjectGroup";
@@ -10,7 +10,8 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { GroupNameDialog } from "./GroupNameDialog";
 import { OfficialSidebarStatusGlyph } from "./OfficialSidebarStatusGlyph";
 import { OfficialSidebarTitle } from "./OfficialSidebarTitle";
-import { PinnedSection, readSessionDragKey, writeSessionDragKey } from "./PinnedSection";
+import { PinnedSection } from "./PinnedSection";
+import { consumeSessionRowDragClick, onSessionRowPointerDown } from "./sessionPaneDrag";
 import { useCodeSidebarPrState } from "./useCodeSidebarPrState";
 import { buildRecentsGroups, defaultRecentsFilter, RecentsControls, type RecentsFilterState } from "./RecentsControls";
 import { isPinnedSession, orderPinnedSessions, sessionPinKey } from "./sessionPinning";
@@ -55,7 +56,7 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
   useEffect(() => {
     let mounted = true;
     const source = desktopBridge.LocalSessions;
-    // Official index-BELzQL5P Rve / Dve (Code list store kve):
+    // Official index-D35w9RK9 Rve / Dve (Code list store kve):
     //   Rve: CT.getAll / list once on mount — set sessions only (no openSession invent).
     //   Dve: onOnEvent switch meta types → Ive upsert / archived / deleted / initialized;
     //        ignores message / stream_event (product invent was onEvent→list every tick).
@@ -97,12 +98,22 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
     ...filterDraft,
     groupBy: frame.groupByByMode.code ?? defaultRecentsFilter.groupBy,
     sortBy: frame.sortByByMode.code ?? defaultRecentsFilter.sortBy,
-  }), [filterDraft, frame.groupByByMode.code, frame.sortByByMode.code]);
+    showEmptyGroups: frame.showEmptyGroups,
+    showPrStatus: frame.showPrStatus,
+  }), [filterDraft, frame.groupByByMode.code, frame.showEmptyGroups, frame.showPrStatus, frame.sortByByMode.code]);
   const updateFilter = useCallback((next: RecentsFilterState) => {
     if (next.groupBy !== filter.groupBy) frame.setGroupBy("code", next.groupBy);
     if (next.sortBy !== filter.sortBy) frame.setSortBy("code", next.sortBy);
-    setFilterDraft({ ...next, groupBy: defaultRecentsFilter.groupBy, sortBy: defaultRecentsFilter.sortBy });
-  }, [filter.groupBy, filter.sortBy, frame]);
+    if (next.showEmptyGroups !== filter.showEmptyGroups) frame.setShowEmptyGroups(next.showEmptyGroups);
+    if (next.showPrStatus !== filter.showPrStatus) frame.setShowPrStatus(next.showPrStatus);
+    setFilterDraft({
+      ...next,
+      groupBy: defaultRecentsFilter.groupBy,
+      sortBy: defaultRecentsFilter.sortBy,
+      showEmptyGroups: defaultRecentsFilter.showEmptyGroups,
+      showPrStatus: defaultRecentsFilter.showPrStatus,
+    });
+  }, [filter.groupBy, filter.showEmptyGroups, filter.showPrStatus, filter.sortBy, frame]);
 
   const pinnedKeys = useMemo(() => new Set(sessions.filter((session) => isPinnedSession(session, frame.pinnedOrder)).map(sessionPinKey)), [frame.pinnedOrder, sessions]);
   const recentsSessions = useMemo(() => sessions.filter((session) => !pinnedKeys.has(sessionPinKey(session))), [pinnedKeys, sessions]);
@@ -242,6 +253,7 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
       <PinnedSection
         canOpenSplit={canOpenSplit}
         collapsed={frame.collapsedGroups.includes("pinned")}
+        showPrStatus={filter.showPrStatus}
         onCloseDragPinHint={frame.markDragPinHintSeen}
         onDropSessionKey={(key, beforeKey) => {
           frame.setPinnedOrder(nextPinnedOrder(frame.pinnedOrder, key, beforeKey));
@@ -271,42 +283,7 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
         Cap residual R = code ? Infinity : 20 — full map, no hard 20.
       */}
       <div className="flex-1 min-h-[120px] overflow-y-auto overflow-x-hidden" data-kind="code">
-        {rows.length === 0 ? (
-          <>
-            {/* Residual empty: 最近 + filter (no caret). Cold list pending same paint — not invent Loading…. */}
-            <div data-row-key="label:recents" className="df-drag-shiftable">
-              <SidebarSectionHeader trailing={filterControls}>{text.recent}</SidebarSectionHeader>
-            </div>
-            {sessions.length > 0 ? (
-              <div className="px-[var(--df-row-px)] py-1 text-xs text-text-500">{text.noFilteredSessions}</div>
-            ) : null}
-          </>
-        ) : filter.groupBy === "none" ? (
-          <div className="group/section flex flex-col gap-px">
-            <div data-row-key="label:recents" className="df-drag-shiftable">
-              <SidebarSectionHeader
-                collapsed={recentsCollapsed}
-                onToggle={() => frame.toggleGroupCollapsed("recents")}
-                trailing={recentsCollapsed ? undefined : filterControls}
-              >
-                {text.recent}
-              </SidebarSectionHeader>
-            </div>
-            <div className={recentsCollapsed ? "hidden" : "contents"}>
-              {rows.map((session) => (
-                <RecentSessionRow
-                  frame={frame}
-                  key={session.id}
-                  onAction={actions}
-                  renderActions={renderActions}
-                  selected={session.id === openSessionId}
-                  session={session}
-                  onNavigate={onNavigate}
-                />
-              ))}
-            </div>
-          </div>
-        ) : (
+        {filter.groupBy !== "none" && groups.length > 0 ? (
           groups.map((group, index) => {
             // Official ca0135 fl residual (project/homespace buckets):
             // trailing Add with aria-label `New session in ${label}` + Te customSize 14;
@@ -339,6 +316,42 @@ export function RecentsSection({ frame, onNavigate }: RecentsSectionProps) {
               />
             );
           })
+        ) : rows.length === 0 ? (
+          <>
+            {/* Residual empty: 最近 + filter (no caret). Cold list pending same paint — not invent Loading…. */}
+            <div data-row-key="label:recents" className="df-drag-shiftable">
+              <SidebarSectionHeader trailing={filterControls}>{text.recent}</SidebarSectionHeader>
+            </div>
+            {sessions.length > 0 ? (
+              <div className="px-[var(--df-row-px)] py-1 text-xs text-text-500">{text.noFilteredSessions}</div>
+            ) : null}
+          </>
+        ) : (
+          <div className="group/section flex flex-col gap-px">
+            <div data-row-key="label:recents" className="df-drag-shiftable">
+              <SidebarSectionHeader
+                collapsed={recentsCollapsed}
+                onToggle={() => frame.toggleGroupCollapsed("recents")}
+                trailing={recentsCollapsed ? undefined : filterControls}
+              >
+                {text.recent}
+              </SidebarSectionHeader>
+            </div>
+            <div className={recentsCollapsed ? "hidden" : "contents"}>
+              {rows.map((session) => (
+                <RecentSessionRow
+                  frame={frame}
+                  key={session.id}
+                  onAction={actions}
+                  renderActions={renderActions}
+                  selected={session.id === openSessionId}
+                  session={session}
+                  showPrStatus={filter.showPrStatus}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </div>
+          </div>
         )}
       </div>
       <ConfirmDialog
@@ -450,7 +463,7 @@ function RecentSessionGroup({
     </SidebarSectionHeader>
   ) : null;
   return (
-    <div className="group/section flex flex-col gap-px rounded-lg transition-colors" onDragOver={customDrop?.onDragOver} onDrop={customDrop?.onDropEnd}>
+    <div className="group/section flex flex-col gap-px rounded-lg transition-colors">
       {header ? (
         <div data-row-key={`label:${group.key}`} className="df-drag-shiftable">
           {header}
@@ -466,6 +479,7 @@ function RecentSessionGroup({
             renderActions={renderActions}
             selected={session.id === selectedSessionId}
             session={session}
+            showPrStatus={filter.showPrStatus}
             onNavigate={onNavigate}
           />
         ))}
@@ -474,7 +488,7 @@ function RecentSessionGroup({
   );
 }
 
-function RecentSessionRow({ frame, onAction, onDropBefore, renderActions, selected, session, onNavigate }: { frame: FrameStore; onAction: (session: SessionSummary, action: RowAction) => void; onDropBefore?: (droppedKey: string) => void; renderActions: (session: SessionSummary, onCreateGroup: () => void) => ReactNode; selected: boolean; session: SessionSummary; onNavigate: (path: string) => void }) {
+function RecentSessionRow({ frame, onAction, onDropBefore, renderActions, selected, session, showPrStatus, onNavigate }: { frame: FrameStore; onAction: (session: SessionSummary, action: RowAction) => void; onDropBefore?: (droppedKey: string) => void; renderActions: (session: SessionSummary, onCreateGroup: () => void) => ReactNode; selected: boolean; session: SessionSummary; showPrStatus: boolean; onNavigate: (path: string) => void }) {
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const path = sessionPath(session);
   const canOpenSplit = canOpenSessionInSplit(frame.mode, session);
@@ -494,27 +508,17 @@ function RecentSessionRow({ frame, onAction, onDropBefore, renderActions, select
           data-selected={selected ? "open" : undefined}
           data-jump-hint-row=""
           data-row-key={sessionPinKey(session)}
-          onDragOver={(event) => {
-            if (!onDropBefore) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "move";
-          }}
-          onDrop={(event) => {
-            if (!onDropBefore) return;
-            const droppedKey = readSessionDragKey(event);
-            if (!droppedKey || droppedKey === sessionPinKey(session)) return;
-            event.preventDefault();
-            event.stopPropagation();
-            onDropBefore(droppedKey);
-          }}
+          onPointerDown={(event) => onSessionRowPointerDown(event, sessionPinKey(session))}
         >
           <button
             className={sidebarRowButtonClassName()}
             data-row-main-button=""
             data-selected={selected ? "open" : undefined}
-            draggable
-            onDragStart={(event) => writeSessionDragKey(event, sessionPinKey(session))}
             onClick={(event) => {
+              if (consumeSessionRowDragClick()) {
+                event.preventDefault();
+                return;
+              }
               if ((event.metaKey || event.ctrlKey) && canOpenSplit) {
                 onOpenSplit();
                 return;
@@ -526,7 +530,7 @@ function RecentSessionRow({ frame, onAction, onDropBefore, renderActions, select
             type="button"
           >
             <span className="df-leading-slot text-text-300">
-              <SessionGlyph session={session} />
+              <SessionGlyph session={session} showPrStatus={showPrStatus} />
             </span>
             <span className="flex-1 min-w-0">
               <OfficialSidebarTitle title={session.title} />
@@ -574,14 +578,7 @@ function customGroupDropHandler(frame: FrameStore, group: RecentDisplayGroup, mo
       if (droppedKey === beforeKey) return;
       assign(droppedKey, insertBefore(keys, droppedKey, beforeKey));
     },
-    onDragOver: (event: DragEvent<HTMLElement>) => {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-    },
-    onDropEnd: (event: DragEvent<HTMLElement>) => {
-      const droppedKey = readSessionDragKey(event);
-      if (!droppedKey) return;
-      event.preventDefault();
+    dropEnd: (droppedKey: string) => {
       assign(droppedKey, [...keys.filter((key) => key !== droppedKey), droppedKey]);
     },
   };
@@ -594,8 +591,9 @@ function insertBefore(keys: string[], droppedKey: string, beforeKey: string) {
   return [...without.slice(0, index), droppedKey, ...without.slice(index)];
 }
 
-function SessionGlyph({ session }: { session: SessionSummary }) {
+function SessionGlyph({ session, showPrStatus }: { session: SessionSummary; showPrStatus: boolean }) {
   // Official CodeStatusGlyph yje → prState into u_e (ready still wins over pr).
-  const prState = useCodeSidebarPrState(session);
+  // T1 tIBKrv7ywy: skip PR fetch/paint when Show PR status is off.
+  const prState = useCodeSidebarPrState(session, showPrStatus);
   return <OfficialSidebarStatusGlyph session={{ ...session, prState }} />;
 }

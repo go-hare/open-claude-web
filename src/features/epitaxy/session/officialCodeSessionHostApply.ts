@@ -1,5 +1,5 @@
 /**
- * Official he.mergeMessage / U.subscribe callback for local Code (index-BELzQL5P `r(s,e)`).
+ * Official he.mergeMessage / U.subscribe callback for local Code (cd5a31703 `r(s,e)`).
  *
  * Bound into bucket.sub by he.openSession(id, transport) so pendingClose still
  * receives events after De unmount (official 360s evict). Not a tile-only IPC.
@@ -101,7 +101,16 @@ function chatMessageFromRawTranscriptEvent(rawEvent: Record<string, unknown>): C
           : rawType === "system"
             ? "system"
             : "user";
-  const createdAt = stringValue(rawEvent.createdAt) ?? stringValue(rawEvent.timestamp) ?? new Date().toISOString();
+  // Official Jp `Xp` is `e.timestamp` only. Inventing now on hydrate of
+  // system task_* resets zR elapsed after reload (host stamps the event).
+  const isTaskBookend =
+    rawType === "system"
+    && (stringValue(rawEvent.subtype) === "task_started"
+      || stringValue(rawEvent.subtype) === "task_progress"
+      || stringValue(rawEvent.subtype) === "task_notification");
+  const createdAt = stringValue(rawEvent.createdAt)
+    ?? stringValue(rawEvent.timestamp)
+    ?? (isTaskBookend ? "" : new Date().toISOString());
   const id = stringValue(rawEvent.id) ?? stringValue(rawEvent.uuid) ?? stringValue(rawEvent.message_id) ?? stringValue(nestedMessage.id) ?? `msg_${Date.now()}`;
   return {
     id,
@@ -185,6 +194,7 @@ export function normalizeSessionSummaryPatch(current: SessionSummary | null, pat
       isRunning: raw.isRunning === true,
       isArchived: raw.isArchived === true,
       isUnread: raw.isUnread === true,
+      manualKeepAwake: raw.manualKeepAwake === true,
       pendingToolPermissions,
       permissionMode,
       model,
@@ -199,6 +209,7 @@ export function normalizeSessionSummaryPatch(current: SessionSummary | null, pat
     updatedAtMs: updatedAtMs ?? current.updatedAtMs,
     isRunning: typeof raw.isRunning === "boolean" ? raw.isRunning : current.isRunning,
     isArchived: typeof raw.isArchived === "boolean" ? raw.isArchived : current.isArchived,
+    manualKeepAwake: typeof raw.manualKeepAwake === "boolean" ? raw.manualKeepAwake : current.manualKeepAwake,
     isUnread: typeof raw.isUnread === "boolean" ? raw.isUnread : current.isUnread,
     isAgentCompleted: typeof raw.isAgentCompleted === "boolean" ? raw.isAgentCompleted : current.isAgentCompleted,
     hasCompleted: typeof raw.hasCompleted === "boolean" ? raw.hasCompleted : current.hasCompleted,

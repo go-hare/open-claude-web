@@ -93,7 +93,10 @@ export function buildCustomGroups(sessions: SessionSummary[], filter: RecentsFil
     sessions: orderCustomGroup(byGroup.get(group.id) ?? [], frame.customGroupOrder[group.id]),
     customGroupId: group.id,
   }));
-  return [...groups, { key: "custom-ungrouped", label: text.ungrouped, sessions: byGroup.get("custom-ungrouped") ?? [], customGroupId: null }];
+  const visibleGroups = filter.showEmptyGroups ? groups : groups.filter((group) => group.sessions.length > 0);
+  const ungrouped = { key: "custom-ungrouped", label: text.ungrouped, sessions: byGroup.get("custom-ungrouped") ?? [], customGroupId: null };
+  if (ungrouped.sessions.length === 0 && !filter.showEmptyGroups) return visibleGroups;
+  return [...visibleGroups, ungrouped];
 }
 
 function orderCustomGroup(sessions: SessionSummary[], order: string[] = []) {

@@ -1,5 +1,5 @@
 /**
- * Official MCP App model-context residual (index-BELzQL5P):
+ * Official MCP App model-context residual (c21f11e6d-CxD82rYo.js):
  * - $7 / V7: gate `claudeai_mcp_a6k_enabled` (ud)
  * - Kte: zustand statesByConversation[conversation][toolName] → { tool_name, content }
  * - Gte / Wte: token estimate + ModelContextTooLargeError (~16k, check floor(17600))

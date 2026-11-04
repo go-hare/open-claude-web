@@ -23,12 +23,14 @@ test("xQt always mounts Progress + Working folder; never hides the rail when emp
   assert.match(panel, /title="上下文"/);
 
   assert.match(progress, /CoworkEmptyProgressState/);
-  assert.match(progress, /See task progress for longer tasks\./);
-  assert.match(progress, /index-BELzQL5P\.js:pQt/);
+  assert.match(progress, /chromeText\.progressEmpty/);
+  assert.match(progress, /c21f11e6d-CxD82rYo\.js:cKZ0dC17TM/);
+  // Official 2.31226.1 EmptyProgressState residual is Nx (not legacy pQt).
+  assert.match(progress, /c21f11e6d-CxD82rYo\.js:Nx/);
 
-  assert.match(shell, /aria-label="Session activity panel"/);
+  assert.match(shell, /aria-label=\{chromeText\.sessionActivityPanel\}/);
   assert.match(shell, /data-cowork-session-activity-panel/);
-  assert.match(shell, /xQt Session activity panel aside/);
+  assert.match(shell, /c21f11e6d-CxD82rYo\.js:xQt Session activity panel aside/);
   assert.match(shell, /expanded && !isFileDrawerOpen/);
   assert.match(panel, /hasExpandableActivity/);
   assert.match(panel, /setActivityExpanded\(true\)/);
@@ -38,8 +40,8 @@ test("S3t mounts xQt as sibling of the chat column, not yUt rightSidebar", () =>
   const view = read("src/features/cowork/session/CoworkSessionView.tsx");
   const layout = read("src/features/cowork/session/CoworkSessionFileDrawerLayout.tsx");
 
-  assert.match(view, /data-official-source="index-BELzQL5P\.js:S3t relative flex h-full"/);
-  assert.match(view, /data-official-source="index-BELzQL5P\.js:S3t chat column relative flex-1 min-w-0 flex flex-col"/);
+  assert.match(view, /data-official-source="c21f11e6d-CxD82rYo\.js:S3t relative flex h-full"/);
+  assert.match(view, /data-official-source="c21f11e6d-CxD82rYo\.js:S3t chat column relative flex-1 min-w-0 flex flex-col"/);
   assert.match(view, /<CoworkSessionFileDrawerLayout/);
   assert.match(view, /<CoworkSessionActivityPanel/);
   assert.doesNotMatch(view, /rightSidebar=\{/);
@@ -49,7 +51,7 @@ test("S3t mounts xQt as sibling of the chat column, not yUt rightSidebar", () =>
   assert.ok(activityIdx > drawerCloseIdx, "xQt must be a sibling after yUt, matching S3t not yUt.c");
 
   assert.match(layout, /\{rightSidebar\}/);
-  assert.match(layout, /index-BELzQL5P\.js:yUt outer flex shell/);
+  assert.match(layout, /c21f11e6d-CxD82rYo\.js:yUt outer flex shell/);
 });
 
 test("unused tiles-shell CoworkSessionLayout invent is gone", () => {

@@ -8,7 +8,7 @@ import { CoworkOfficialToolRenderer } from "./CoworkOfficialToolRenderer";
 import { useCoworkTranscriptActions } from "./CoworkTranscriptActions";
 
 /**
- * Official gst TimelineBlock (index-BELzQL5P.js).
+ * Official gst TimelineBlock (c21f11e6d-CxD82rYo.js).
  * thinking → Net clock-markdown row (not z9e → O9e ThinkingCell).
  * tool streaming: isStreaming || (last && isThisMessageStreaming && max_tokens && stop_timestamp).
  * thinking streaming: isThisMessageStreaming && (!stop_timestamp || last && max_tokens).

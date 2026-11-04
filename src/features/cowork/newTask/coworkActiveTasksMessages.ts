@@ -7,13 +7,14 @@ import {
 } from "../../../i18n/footerMenuMessages";
 
 /**
- * Official index-BELzQL5P p6t / d6t / l6t copy for /task/new active overview.
+ * Official c62135ccf-Dn28vJ3V p6t / d6t / l6t copy for /task/new active overview.
  * Residual: defaultMessage "Clear active" id 0mQ4LBF4e8 → zh-CN「清除进行中」.
  */
 export const COWORK_ACTIVE_TASKS_MESSAGES = {
-  inProgress: { defaultMessage: "进行中", id: "3a5wL8wo40" },
+  /** Official shared-23 overview titles (2.31226.1): Active / Pinned — not legacy 3a5w/fWZYP. */
+  inProgress: { defaultMessage: "Active", id: "D6/pjLi8/Y" },
   activeTasks: { defaultMessage: "Active tasks", id: "wGcWboPWPh" },
-  pinned: { defaultMessage: "已固定", id: "fWZYP5U4xZ" },
+  pinned: { defaultMessage: "Pinned", id: "A8GDlh2QW4" },
   pinnedOrActive: { defaultMessage: "Pinned or active", id: "Lv3Tf/QwaO" },
   clearActive: { defaultMessage: "Clear active", id: "0mQ4LBF4e8" },
   localTask: { defaultMessage: "Local task", id: "LX4QnxZM3M" },
@@ -30,7 +31,7 @@ export const COWORK_ACTIVE_TASKS_MESSAGES = {
 export type CoworkActiveTasksText = Record<keyof typeof COWORK_ACTIVE_TASKS_MESSAGES, string>;
 
 /**
- * Official residual `$Se` in index-BELzQL5P.js:
+ * Official residual `$Se` in c62135ccf-Dn28vJ3V.js:
  *   const $Se = "cowork-read-state"
  * GSe seeds `{ sessions: {}, initializedAt: Date.now() }` on first load so the
  * p6t filter does not treat every historical cowork session as "in progress".

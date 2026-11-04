@@ -157,7 +157,7 @@ export function mergeOfficialPlanCommentFeedback(
   return freeform ? `${joined}\n\n\n${freeform}` : joined;
 }
 
-/** Mfe approvedPlans seed (index-BELzQL5P setApprovedPlan) — separate from XN pane parse. */
+/** Mfe approvedPlans seed (cd5a31703 setApprovedPlan) — separate from XN pane parse. */
 type ApprovedPlanEntry = { approvedAt: number; plan: string; sessionId: string };
 
 function getApprovedPlansMap(): Map<string, ApprovedPlanEntry> {
@@ -205,7 +205,7 @@ export function useOfficialApprovedPlan(sessionId: string | undefined | null): s
 }
 
 // ---------------------------------------------------------------------------
-// Official nwe / rwe / jfe / _fe (index-BELzQL5P)
+// Official nwe / rwe / jfe / _fe (cd5a31703)
 // ---------------------------------------------------------------------------
 
 /**

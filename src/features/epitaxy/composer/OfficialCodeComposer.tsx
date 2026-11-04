@@ -11,19 +11,32 @@ import {
 } from "../../cowork/composer/coworkComposerStagedImages";
 import { OfficialPromptEditor, type OfficialPromptEditorHandle } from "../OfficialPromptEditor";
 import { OfficialComposerFooter } from "../OfficialComposerFooter";
+import { useOfficialCodeComposerHideDictation } from "../session/officialCodeComposerDictation";
 import { useWorkspaceTrustGate } from "../trust/useWorkspaceTrustGate";
 import {
   normalizeSelectorModelValue,
   useCodeModelOptions,
 } from "../../cowork/composer/useCoworkModelOptions";
+import { OfficialSwitch } from "../../shared/OfficialSwitch";
 import { permissionModeLabel } from "./options";
 import { EpitaxyPermissionModeModal } from "./EpitaxyPermissionModeModal";
 import { OfficialWorkspaceControls } from "./OfficialWorkspaceControls";
 import { usePermissionModeConfirm } from "./usePermissionModeConfirm";
 import { useCodePermissionModeOptions } from "./useBypassPermissionsEnabled";
 import { useClaudeCodeGitAvailable } from "./useClaudeCodeGitAvailable";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import {
+  EFFORT_CONTROL_MESSAGES,
+  EFFORT_LEVEL_MESSAGES,
+  COMPOSER_FAST_MODE_MESSAGES,
+  COMPOSER_GIT_MESSAGES,
+  COMPOSER_PLUS_MENU_MESSAGES,
+  GIT_REQUIRED_MESSAGES,
+  PERMISSION_MODE_MESSAGES,
+} from "../officialCodeChromeMessages";
 import {
   buildOfficialEffortMenuItems,
+  officialFastModeModelSupported,
 } from "../session/officialComposerOptions";
 import {
   dataUrlToImagePayload,
@@ -38,6 +51,12 @@ import {
   splitOfficialComposerDropFiles,
   type StagedComposerFileAttachment,
 } from "../session/officialComposerFileAttachments";
+import {
+  OFFICIAL_LANDING_COMPOSER_DRAFT_KEY,
+  readComposerDraft,
+  readComposerDraftAgent,
+  useOfficialComposerDraftPersist,
+} from "../officialComposerDraftStore";
 import { useOfficialTypeToComposer } from "../../shared/useOfficialTypeToComposer";
 import { coworkRateLimitStore } from "../../cowork/session/rateLimit/coworkRateLimitStore";
 import {
@@ -46,12 +65,15 @@ import {
   residualQjDisabled,
   residualQjSubmitDisabled,
 } from "../session/officialQjComposerGate";
+import { officialAgentMentionsEnvEnabled, officialSshConfigForMentions } from "./officialComposerAgentMentions";
 
 export type OfficialCodeComposerSubmitOptions = {
   /** Official start residual first-turn images (cn.images → LocalSessions.start). */
   images?: CoworkImagePayload[];
   /** Official f() `@relativePath` prefix for local file drops. */
   fileMentionPrefix?: string;
+  /** Official vI `agent:E` — only a real wr()/query name. */
+  agent?: string;
 };
 
 type OfficialCodeComposerProps = {
@@ -82,6 +104,10 @@ type OfficialCodeComposerProps = {
   onUseWorktreeChange: (enabled: boolean) => void;
   onWorkspaceChange: (workspace: WorkspaceContext) => void;
   permissionMode: PermissionMode;
+  /** Official vI `initialAgent` — `l=i.agent` from Mo query. Falsy falls back to wr()?.agent. */
+  initialAgent?: string;
+  /** Official vI `draftPersistKey` — landing is `epitaxy-draft`. */
+  persistKey?: string;
   prompt: string;
   setPrompt: (value: string) => void;
   sourceBranch: string;
@@ -106,6 +132,8 @@ export function OfficialCodeComposer({
   onUseWorktreeChange,
   onWorkspaceChange,
   permissionMode,
+  initialAgent,
+  persistKey = OFFICIAL_LANDING_COMPOSER_DRAFT_KEY,
   prompt,
   setPrompt,
   sourceBranch,
@@ -154,7 +182,11 @@ export function OfficialCodeComposer({
    * TipTap paste/drop + Plus Add image → strip → LocalSessions.start({ images }).
    */
   const [stagedImages, setStagedImages] = useState<StagedComposerImage[]>([]);
-  const [stagedFiles, setStagedFiles] = useState<StagedComposerFileAttachment[]>([]);
+  const [stagedFiles, setStagedFiles] = useState<StagedComposerFileAttachment[]>(
+    () => readComposerDraft(persistKey)?.files ?? [],
+  );
+  /** Official vI `E` — `l??wr(a)?.agent`. Falsy hides Cv pill. */
+  const [agent, setAgent] = useState(() => initialAgent ?? readComposerDraftAgent(persistKey));
   const stagedImagesRef = useRef(stagedImages);
   const stagedFilesRef = useRef(stagedFiles);
   stagedImagesRef.current = stagedImages;
@@ -168,6 +200,7 @@ export function OfficialCodeComposer({
     gitRequiredBlocksSubmit: showGitRequired,
   });
   const submitStateRef = useRef({
+    agent,
     busy,
     ensureTrusted,
     hasPrompt: false,
@@ -179,6 +212,13 @@ export function OfficialCodeComposer({
   // Official Ye / focusComposer residual: after folder pill / native browse, focus returns
   // to the prompt so keystrokes land in TipTap (not the folder Menu.Trigger / body).
   const promptEditorRef = useRef<OfficialPromptEditorHandle | null>(null);
+  useOfficialComposerDraftPersist({
+    agent,
+    files: stagedFiles,
+    getText: () => promptEditorRef.current?.getEditor?.()?.getText() ?? prompt,
+    persistKey,
+    text: prompt,
+  });
   const [replayKey, setReplayKey] = useState(0);
   // Official Te (he||m): text or ready staged images.
   const hasPrompt = prompt.trim().length > 0 || readyImageCount > 0 || stagedFiles.length > 0;
@@ -189,6 +229,7 @@ export function OfficialCodeComposer({
   const selectedModel = normalizeSelectorModelValue(model, allowedModelValues);
 
   submitStateRef.current = {
+    agent,
     busy,
     ensureTrusted,
     hasPrompt,
@@ -221,6 +262,16 @@ export function OfficialCodeComposer({
 
   // Official Sn: Os.map then disabled bypass (hint 9aM6b8EJG/) when pref off.
   const codePermissionModeOptions = useCodePermissionModeOptions();
+  const permissionModeText = useI18nText(PERMISSION_MODE_MESSAGES);
+  const effortLevelText = useI18nText(EFFORT_LEVEL_MESSAGES);
+  const effortControlText = useI18nText(EFFORT_CONTROL_MESSAGES);
+  const gitRequiredText = useI18nText(GIT_REQUIRED_MESSAGES);
+  const plusMenuText = useI18nText(COMPOSER_PLUS_MENU_MESSAGES);
+  const gitText = useI18nText(COMPOSER_GIT_MESSAGES);
+  const fastModeText = useI18nText(COMPOSER_FAST_MODE_MESSAGES);
+  const hideDictation = useOfficialCodeComposerHideDictation();
+  /** Official c119 Re — draft has no session id; Pe optimistic only (`!ke||!ge` return). */
+  const [fastModeOn, setFastModeOn] = useState(false);
   const permissionItems = codePermissionModeOptions.map((option) => ({
     checked: option.value === permissionMode,
     disabled: option.disabled,
@@ -240,19 +291,62 @@ export function OfficialCodeComposer({
     return buildOfficialEffortMenuItems({
       current: effort,
       effortLevels,
+      labels: effortLevelText,
       model: selectedModel,
       ultracode,
       showUltracode: ultracodeOfferable !== false,
       onSelect: (level, nextUltracode) => onEffortChange(level, nextUltracode),
     });
-  }, [effort, effortLevels, onEffortChange, selectedModel, ultracode, ultracodeOfferable]);
+  }, [effort, effortLevelText, effortLevels, onEffortChange, selectedModel, ultracode, ultracodeOfferable]);
   const plusMenuItems = useMemo(
-    () => [{ icon: "Folder1", label: "Add folder" }],
-    [],
+    () => [{
+      icon: "Folder",
+      label: plusMenuText.addFolder,
+      onSelect: () => {
+        void (async () => {
+          const browse = desktopBridge.FileSystem.browseFolder;
+          const picked = browse
+            ? await browse(gitText.addFolderToSession)
+            : (await desktopBridge.Preferences.getDirectoryPath?.(false))?.[0];
+          if (picked) promptEditorRef.current?.insertFileMention?.(picked);
+        })();
+      },
+    }],
+    [gitText.addFolderToSession, plusMenuText.addFolder],
   );
+  const fastModeDisabledReason = officialFastModeModelSupported(selectedModel)
+    ? null
+    : fastModeText.disabledModel;
+  const fastModeDisabled = fastModeDisabledReason != null;
   const modelExtraSections = useMemo(
-    () => [{ key: "effort", header: "Effort", items: effortItems }],
-    [effortItems],
+    () => [
+      { key: "effort", header: effortControlText.effort, items: effortItems },
+      ...(desktopBridge.LocalSessions.setFastMode
+        ? [{
+            key: "fastMode",
+            header: fastModeText.header,
+            items: [{
+              disabled: fastModeDisabled,
+              keepOpen: true,
+              label: fastModeText.enable,
+              onSelect: fastModeDisabled ? undefined : () => setFastModeOn((value) => !value),
+              tooltip: fastModeDisabledReason ?? fastModeText.hint,
+              trailing: (
+                <span inert>
+                  <OfficialSwitch
+                    aria-hidden
+                    checked={!fastModeDisabled && fastModeOn}
+                    disabled={fastModeDisabled}
+                    size="xs"
+                    tabIndex={-1}
+                  />
+                </span>
+              ),
+            }],
+          }]
+        : []),
+    ],
+    [effortControlText.effort, effortItems, fastModeDisabled, fastModeDisabledReason, fastModeOn, fastModeText.enable, fastModeText.header, fastModeText.hint],
   );
 
   const removeStagedImage = useCallback((id: string) => {
@@ -373,6 +467,7 @@ export function OfficialCodeComposer({
       state.onSubmit({
         ...(images ? { images } : {}),
         ...(fileMentionPrefix ? { fileMentionPrefix } : {}),
+        ...(state.agent ? { agent: state.agent } : {}),
       });
     });
   }, []);
@@ -396,7 +491,7 @@ export function OfficialCodeComposer({
     return document.activeElement === (ed?.view?.dom ?? dom);
   }, []);
 
-  // Official Ase residual (index-BELzQL5P): printable keys while focus is on folder /
+  // Official Ase residual (cd5a31703): printable keys while focus is on folder /
   // env pill still go into TipTap — matches Code home after folder select.
   // Residual Ase gated by !disabled (Ns/Ga); busy on draft is Ns not Stop chrome.
   useOfficialTypeToComposer(
@@ -513,6 +608,11 @@ export function OfficialCodeComposer({
           not dframe --df-shadow-card (card chrome). */}
       <OfficialPromptEditor
         ref={promptEditorRef}
+        agent={agent}
+        agentMentionsEnabled={officialAgentMentionsEnvEnabled(workspace.mode)}
+        fileMentionsEnabled={workspace.mode === "local" || workspace.mode === "ssh"}
+        mentionCwd={workspace.mode === "local" ? (workspace.cwd || null) : null}
+        sshConfigForMentions={officialSshConfigForMentions(workspace.sshConfig, workspace.cwd)}
         bridge={desktopBridge.LocalSessions}
         // Draft create in-flight maps Ns → disabled; not residual H busy/Stop.
         busy={false}
@@ -520,7 +620,9 @@ export function OfficialCodeComposer({
         hasAttachments={readyImageCount > 0 || stagedFiles.length > 0}
         onAddFileAttachments={addFileAttachments}
         onAddImageFiles={addImageFiles}
+        onAgentMention={setAgent}
         onChange={setPrompt}
+        onRemoveAgent={() => setAgent(undefined)}
         onRemoveStagedFile={removeStagedFile}
         onRemoveStagedImage={removeStagedImage}
         stagedFileAttachments={stagedFiles}
@@ -535,24 +637,26 @@ export function OfficialCodeComposer({
       {showGitRequired ? (
         <div
           className="text-footnote text-extended-pink select-text"
-          data-official-source="c11959232-h_zsw3wI.js:CHsqi6o1Li"
+          data-official-source="cd5a31703-B4nKQMBN.js:CHsqi6o1Li"
         >
-          Git is required for local sessions.
+          {gitRequiredText.gitRequiredForLocalSessions}
         </div>
       ) : null}
       {/* Official c119 `_Component175` / Dne — reuse existing-session footer, not a third draft footer. */}
       <OfficialComposerFooter
         bridge={desktopBridge.LocalSessions}
-        hideDictation
+        fastModeOn={fastModeOn}
+        hideDictation={hideDictation}
         isPanelActive
         modelExtraSections={modelExtraSections}
         modelItems={modelItems}
         modelLabel={codeModelOptions.labelFor(selectedModel)}
         modelPickerDisabled={qjDisabled}
         onAddFiles={addDroppedFiles}
+        onInsertSlashCommand={() => promptEditorRef.current?.insertSlashCommand()}
         permissionDanger={permissionMode === "bypassPermissions"}
         permissionItems={permissionItems}
-        permissionLabel={permissionModeLabel(permissionMode)}
+        permissionLabel={permissionModeLabel(permissionMode, permissionModeText)}
         plusMenuItems={plusMenuItems}
         session={null}
         sessionRef={null}

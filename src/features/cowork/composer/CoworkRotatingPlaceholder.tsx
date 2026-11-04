@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 
 /**
- * Official yAt RotatingPlaceholder (index-BELzQL5P ~240303):
+ * Official yAt RotatingPlaceholder (c62135ccf-Dn28vJ3V ~240303):
  * Fade-rotate placeholders every 5000ms while isVisible; stop after one full cycle
  * (index wraps to 0). Reset when isVisible becomes true again.
  * Class: absolute inset-0 pointer-events-none overflow-hidden pl-1.5 pt-[5px]
@@ -45,7 +45,7 @@ export function CoworkRotatingPlaceholder({
     <div
       aria-hidden="true"
       className="absolute inset-0 pointer-events-none overflow-hidden pl-1.5 pt-[5px]"
-      data-official-source="index-BELzQL5P.js:yAt RotatingPlaceholder"
+      data-official-source="c62135ccf-Dn28vJ3V.js:yAt RotatingPlaceholder"
     >
       <AnimatePresence initial={false} mode="wait">
         <motion.span

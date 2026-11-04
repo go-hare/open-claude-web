@@ -2,7 +2,7 @@
  * Official v$t Et residual packaging.
  * Conversation (path owner) computes Et; t$t Ace + g$t Ace must share it.
  * Product builds composer outside Conversation — Context replaces cloneElement inject.
- * data-official-source: index-BELzQL5P:v$t Et
+ * data-official-source: c21f11e6d-CxD82rYo.js:v$t Et
  */
 import { createContext, useContext, type ReactNode } from "react";
 import type { CoworkClaudeAvatarState } from "./CoworkClaudeAvatar";

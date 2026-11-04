@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { isReducedMotionActive } from "../../settings/appearanceSettings";
 
 const backgroundAnimationKey = "LSS-appearance:backgroundAnimation";
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
@@ -241,7 +242,7 @@ function compileShader(gl: WebGL2RenderingContext, type: number, source: string)
 
 function isAnimationEnabled() {
   const setting = readAnimationSetting();
-  return setting === "enabled" || (setting !== "disabled" && !window.matchMedia(reducedMotionQuery).matches);
+  return setting === "enabled" || (setting !== "disabled" && !isReducedMotionActive());
 }
 
 function readAnimationSetting() {

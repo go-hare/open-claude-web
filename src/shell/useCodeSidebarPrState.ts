@@ -1,5 +1,5 @@
 /**
- * Official Code sidebar PR glyph data plane (index-BELzQL5P yje → u_e pr branch).
+ * Official Code sidebar PR glyph data plane (cd5a31703 yje → u_e pr branch).
  *
  * Prefer session.prs (host AutoArchive / getPrState cache); else lazy
  * LocalSessions.getPrStateForBranch — same residual as branch rows.
@@ -64,21 +64,21 @@ async function fetchOfficialCodePrState(session: SessionSummary): Promise<Offici
  * Official yje prState for sidebar CodeStatusGlyph.
  * Prefer session.prs; else lazy branch PR lookup.
  */
-export function useCodeSidebarPrState(session: SessionSummary): OfficialCodePrState | undefined {
+export function useCodeSidebarPrState(session: SessionSummary, enabled = true): OfficialCodePrState | undefined {
   const fromPrs = useMemo(() => {
-    if (!isCodeSession(session)) return undefined;
+    if (!enabled || !isCodeSession(session)) return undefined;
     const prs = session.prs;
     if (!Array.isArray(prs) || prs.length === 0) return undefined;
     return aggregateOfficialCodePrState(prs.map((pr) => officialCodePrStateFromLocal(pr)));
-  }, [session]);
+  }, [enabled, session]);
 
   const [fetched, setFetched] = useState<OfficialCodePrState | undefined>(() => {
-    if (!isCodeSession(session)) return undefined;
+    if (!enabled || !isCodeSession(session)) return undefined;
     return prStateCache.get(cacheKey(session));
   });
 
   useEffect(() => {
-    if (!isCodeSession(session)) {
+    if (!enabled || !isCodeSession(session)) {
       setFetched(undefined);
       return;
     }
@@ -94,9 +94,9 @@ export function useCodeSidebarPrState(session: SessionSummary): OfficialCodePrSt
     return () => {
       cancelled = true;
     };
-  }, [session, fromPrs]);
+  }, [enabled, session, fromPrs]);
 
-  if (!isCodeSession(session)) return undefined;
+  if (!enabled || !isCodeSession(session)) return undefined;
   if (fromPrs && fromPrs !== "none") return fromPrs;
   return fetched;
 }

@@ -20,7 +20,7 @@ export type I18nMessages = Record<string, string>;
 export type MessageDescriptor = { defaultMessage: string; id: string };
 export type MessageDescriptors = Record<string, MessageDescriptor>;
 export const LOCALE_STORAGE_KEY = "claude-rebuild-locale";
-/** Official spa storage key (index-BELzQL5P l3t = "spa:locale"). Dual-read/write for parity. */
+/** Official spa storage key (index-D35w9RK9 l3t = "spa:locale"). Dual-read/write for parity. */
 export const OFFICIAL_LOCALE_STORAGE_KEY = "spa:locale";
 
 const DEFAULT_LOCALE = "en-US" satisfies SupportedLocale;
@@ -63,7 +63,7 @@ const FOOTER_MENU_MESSAGES = {
   privacyChoices: { defaultMessage: "Your privacy choices", id: "9z1SUK0pfj" },
   privacyPolicy: { defaultMessage: "Privacy policy", id: "cPwv2cbzf2" },
   settings: { defaultMessage: "Settings", id: "D3idYvSLF9" },
-  // Official account menu residual (index-BELzQL5P Gns): Sign out when EQt/getLoginDesktop3pStatus truthy
+  // Official account menu residual (index-D35w9RK9 Gns): Sign out when EQt/getLoginDesktop3pStatus truthy
   signOut: { defaultMessage: "Sign out", id: "xXbJsopyfR" },
   tutorials: { defaultMessage: "Tutorials", id: "4u7hBBtxd+" },
   courses: { defaultMessage: "Courses", id: "R85gsW8HY9" },
@@ -316,9 +316,9 @@ async function fetchOptionalJson(path: string) {
 }
 
 function mergeKnownOverrides(base: I18nMessages, overrides: I18nMessages) {
-  const next = { ...base };
-  for (const key of Object.keys(overrides)) if (key in base) next[key] = overrides[key];
-  return next;
+  // Product zh-CN.overrides fills incomplete official catalog entries, including
+  // ids that are not yet in zh-CN.json (c0db37792 Appearance / Motion / work-function).
+  return { ...base, ...overrides };
 }
 
 export function normalizeLocale(locale: string | null | undefined): SupportedLocale {

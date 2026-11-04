@@ -1,5 +1,5 @@
 /**
- * Official OX / dX / AX residual (index-BELzQL5P.js).
+ * Official OX / dX / AX residual (index-D35w9RK9.js).
  *
  * dX: queryKey [ET="localPlugins","list", pluginContext], queryFn kT.getPlugins
  * OX: remote eQ isVisible=false in this ion-dist → data = local AX(getPlugins)

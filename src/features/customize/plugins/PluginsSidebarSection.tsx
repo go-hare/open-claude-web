@@ -19,7 +19,7 @@ import {
 import { UnifiedPluginNavItem } from "./UnifiedPluginNavItem";
 
 /**
- * Official o7t / PluginsSidebarSection (index-BELzQL5P).
+ * Official o7t / PluginsSidebarSection (index-D35w9RK9).
  * OX() → personal (c7t) + org (l7t). Empty: isGlobalEmpty && DT() → awareness CTA.
  * c7t project block: KK() && selectedFolder && projectPlugins.length.
  */

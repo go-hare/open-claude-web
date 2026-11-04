@@ -1,7 +1,7 @@
 import { Icon } from "../../shell/icons";
 
 /**
- * Official V6t FolderPill (index-BELzQL5P ~267238):
+ * Official V6t FolderPill (index-D35w9RK9 ~267238):
  * button: inline-flex items-center gap-1.5 px-2.5 py-2 rounded-md border-0.5 border-border-200
  * shadow-sm text-xs text-text-300 hover:bg-bg-300 … + folder icon size 14 + truncate basename.
  */

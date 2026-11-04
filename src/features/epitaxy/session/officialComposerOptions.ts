@@ -14,13 +14,22 @@ export const codeModelOptions = [
   { label: "Default", value: "default" },
 ];
 
+/** Pin 2.31226.1 shared-8 `_j` EN defaultMessage (Code local/ssh/wsl/bridge). */
+export type PermissionModeCatalogText = {
+  acceptEdits: string;
+  auto: string;
+  bypassPermissions: string;
+  manual: string;
+  plan: string;
+};
+
 export const permissionModeOptions = [
-  { label: "询问权限", value: "default" },
-  { label: "接受编辑", value: "acceptEdits" },
-  { label: "规划模式", value: "plan" },
+  { label: "Manual", value: "default" },
+  { label: "Accept edits", value: "acceptEdits" },
+  { label: "Plan", value: "plan" },
   // Official Os residual: auto when available (settings defaultMode / plan exit trust).
   { label: "Auto", value: "auto" },
-  { label: "绕过权限", value: "bypassPermissions" },
+  { label: "Bypass permissions", value: "bypassPermissions" },
 ];
 
 /**
@@ -152,6 +161,24 @@ export type OfficialEffortMenuItem = {
   value: string;
 };
 
+/** Official Pk / bR catalog (`477I0ggSYe`…`ufa5QA7ilZ`). Omit → English defaultMessage. */
+export type OfficialEffortMenuLabels = {
+  extraHigh: string;
+  high: string;
+  low: string;
+  max: string;
+  medium: string;
+  ultracode: string;
+};
+
+const EFFORT_LADDER_LABEL_KEY = {
+  high: "high",
+  low: "low",
+  max: "max",
+  medium: "medium",
+  xhigh: "extraHigh",
+} as const satisfies Record<OfficialEffortLevel, keyof OfficialEffortMenuLabels>;
+
 export function buildOfficialEffortMenuItems(options: {
   current: string;
   onSelect: (level: OfficialEffortLevel, ultracode: boolean) => void;
@@ -165,6 +192,11 @@ export function buildOfficialEffortMenuItems(options: {
   effortLevels?: readonly string[] | null;
   /** Model id for provisional CLI catalog when effortLevels not yet from host. */
   model?: string | null;
+  /**
+   * Catalog strings from EFFORT_LEVEL_MESSAGES. When omitted, keep English defaultMessage
+   * so unit tests pass without i18n. Do not invent 超级代码 — ultracode stays catalog `ufa5QA7ilZ`.
+   */
+  labels?: OfficialEffortMenuLabels;
 }): OfficialEffortMenuItem[] {
   const showUltracode = options.showUltracode !== false;
   const levels = resolveDisplayEffortLevels(options.effortLevels, options.model);
@@ -173,19 +205,20 @@ export function buildOfficialEffortMenuItems(options: {
   // Display current must be on the ladder — never leave a ghost xhigh "Extra high" when catalog is 3-stop.
   const current = clampEffortToCatalog(options.current, levels);
   const ultraTop = catalogTopEffort(levels);
+  const labels = options.labels;
   // Explicit OfficialEffortMenuItem[] — Ultracode is residual value "ultra" (not a ladder id).
   const items: OfficialEffortMenuItem[] = ladder.map((option) => ({
-    label: option.label,
+    label: labels?.[EFFORT_LADDER_LABEL_KEY[option.value]] ?? option.label,
     value: option.value,
     checked: !options.ultracode && option.value === current,
     onSelect: () => options.onSelect(option.value, false),
   }));
   if (showUltracode) {
     items.push({
-      label: "Ultracode",
+      label: labels?.ultracode ?? "Ultracode",
       value: "ultra",
       accent: true,
-      help: { title: ULTRACODE_HELP.title, body: ULTRACODE_HELP.body },
+      help: { title: labels?.ultracode ?? ULTRACODE_HELP.title, body: ULTRACODE_HELP.body },
       checked: options.ultracode,
       // CLI residual: Ultracode = catalog top + workflows flag (NOT hard-coded xhigh).
       // grok-4.5 top is high; deepseek max; Claude full ladder xhigh/max.
@@ -205,11 +238,32 @@ export function normalizeCodeModelValue(value?: string, allowedValues: string[] 
   return normalizeSelectorModelValue(value, allowedValues);
 }
 
+/** Official pin `lt` / `qee`: Fast mode models include `opus-4-6`. */
+export function officialFastModeModelSupported(model: string): boolean {
+  return model.toLowerCase().includes("opus-4-6");
+}
+
 export function formatClaudeModelLabel(value: string) {
   return formatCoworkModelDisplayName(value);
 }
 
-export function permissionModeLabel(value: string) {
+export function permissionModeLabel(value: string, text?: PermissionModeCatalogText) {
+  if (text) {
+    switch (value) {
+      case "default":
+        return text.manual;
+      case "acceptEdits":
+        return text.acceptEdits;
+      case "plan":
+        return text.plan;
+      case "auto":
+        return text.auto;
+      case "bypassPermissions":
+        return text.bypassPermissions;
+      default:
+        break;
+    }
+  }
   return permissionModeOptions.find((option) => option.value === value)?.label ?? value;
 }
 

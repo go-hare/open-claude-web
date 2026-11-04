@@ -2,7 +2,7 @@
  * Official TipTap createView (`@tiptap/core` Editor.ts):
  *   attributes: { role: "textbox", ...editorProps?.attributes }
  *
- * Official Qj extraEditorAttributes (c11959232) / vTt (index-BELzQL5P):
+ * Official Qj extraEditorAttributes (c11959232) / vTt (index-D35w9RK9):
  *   { enterkeyhint: "enter", "aria-label": formatMessage(Prompt) }
  *   — does NOT set role; relies on TipTap's createView default.
  *
@@ -10,7 +10,7 @@
  * TipTap `setOptions` then does `view.setProps(this.options.editorProps)` without
  * re-merging `role: "textbox"`. Live ProseMirror therefore loses the attribute.
  *
- * Official EYe (`index-BELzQL5P`) skips `closest("button, a, input, select, textarea, [role]")`.
+ * Official EYe (`index-D35w9RK9`) skips `closest("button, a, input, select, textarea, [role]")`.
  * Without role, in-text clicks fall through to focus("end") and snap the caret.
  *
  * Persist TipTap's own default in editorProps.attributes so setProps keeps the

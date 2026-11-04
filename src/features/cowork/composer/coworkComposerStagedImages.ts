@@ -1,5 +1,5 @@
 /**
- * Official Cowork / local-agent image staging residual (index-BELzQL5P):
+ * Official Cowork / local-agent image staging residual (c21f11e6d-CxD82rYo.js):
  * - j0: clipboardData → image Files
  * - p0 mime allowlist (jpeg/png/gif/webp)
  * - LZe: image blocks with source.type===base64 → {base64, mimeType} for sendMessage arg3

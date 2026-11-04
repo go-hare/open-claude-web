@@ -12,7 +12,7 @@ import {
 } from "../../customize/connectors/connectorsStore";
 
 /**
- * Official Connectors personal page Zt (cc989143e):
+ * Official Connectors personal page Zt (cf4f70727-a7CVSvFQ):
  * - Gate qt = !c("papi_disable_mcp_ui") (nav already keeps page for desktop shell)
  * - Header + "Connectors have moved to Customize" + desktop extensions link
  * - Wt Discovery: only when GrowthBook cai_opt_in_connector_suggestions is true

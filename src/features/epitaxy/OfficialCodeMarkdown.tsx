@@ -33,8 +33,23 @@ import {
   OfficialCodeMarkdownImage,
   type AlluviumFenceBlock,
 } from "../cowork/session/transcript/AlluviumMarkdown";
+import { ConfirmDialog } from "../../shell/ConfirmDialog";
 import { Icon } from "../../shell/icons";
 import { OfficialButton } from "./OfficialEpitaxyComponents";
+import { OfficialSpinner } from "./session/OfficialWorkingStatus";
+import { useI18nText } from "../../i18n/footerMenuMessages";
+import { SIDE_PANE_CHROME_MESSAGES } from "./officialCodeChromeMessages";
+import { EpitaxyTranscriptActionContext } from "./session/epitaxyTranscriptActionContext";
+import {
+  officialStripInlineRunTrailingPrompt,
+  useOfficialInlineRunForFence,
+} from "./session/officialEpitaxyShellRunStore";
+import {
+  formatOfficialMarkdownLinkConfirmDescription,
+  OFFICIAL_MARKDOWN_LINK_CONFIRM_COPY,
+  shouldConfirmHttpHref,
+  useOfficialMarkdownLinkConfirmReady,
+} from "./officialMarkdownLinkConfirm";
 import { isOfficialMermaidMarkdownLanguage, OfficialMermaidHit } from "./OfficialMermaidDiagramCard";
 import { OfficialSearchTree, officialSearchTreeLanguage } from "./OfficialSearchTree";
 import {
@@ -44,6 +59,8 @@ import {
   splitOfficialBrMarkers,
   officialMarkdownUrlTransform as residualUrlTransform,
 } from "./officialMarkdownMbResidual";
+import { OfficialEuFileRef } from "./session/OfficialCcdFileContextMenu";
+import { handleCoworkTranscriptLinkClick } from "../settings/coworkTranscriptLinks";
 import { officialPierreLangFromPath } from "./diff/officialPierreLang";
 import { useOfficialPierreTheme, useWorkerPool } from "./diff/OfficialPierreWorkerPool";
 import { pierreTokenPaintOnPostRender } from "./diff/pierreTokenPaint";
@@ -75,6 +92,8 @@ function renderOfficialCodeAlluviumFence(block: AlluviumFenceBlock) {
  */
 export const OfficialCodeMarkdownStreamingContext = createContext(false);
 const OfficialCodeMarkdownSessionContext = createContext<string | undefined>(undefined);
+/** Official later Bu is Files preview markdown (`Sb`), not chat `xd`/`kb`. */
+const OfficialMarkdownConfirmContext = createContext(false);
 
 export function useOfficialCodeMarkdownStreaming(): boolean {
   return useContext(OfficialCodeMarkdownStreamingContext);
@@ -130,22 +149,24 @@ export function OfficialCodeMarkdown({
   if (alluviumEnabled) {
     return (
       <OfficialCodeMarkdownStreamingContext.Provider value={isStreaming}>
-        <div className="epitaxy-markdown" data-official-source="c11959232-h_zsw3wI.js:kb+wb">
-          {/*
-            Official wb → bb (c119): bare tags under .epitaxy-markdown for UI font
-            (--family-ui / --text-body). NOT Cowork ye font-claude-response-body.
-            Fence inject = ab / search_tree (official bb case"fence").
-          */}
-          <AlluviumMarkdown
-            className="contents"
-            dataAlluvium
-            isStreaming={isStreaming}
-            renderFence={renderOfficialCodeAlluviumFence}
-            sessionId={sessionId}
-            text={normalized}
-            variant="code"
-          />
-        </div>
+        <OfficialCodeMarkdownSessionContext.Provider value={sessionId}>
+          <div className="epitaxy-markdown" data-official-source="cd5a31703-B4nKQMBN.js:kb+wb">
+            {/*
+              Official wb → bb (c119): bare tags under .epitaxy-markdown for UI font
+              (--family-ui / --text-body). NOT Cowork ye font-claude-response-body.
+              Fence inject = ab / search_tree (official bb case"fence").
+            */}
+            <AlluviumMarkdown
+              className="contents"
+              dataAlluvium
+              isStreaming={isStreaming}
+              renderFence={renderOfficialCodeAlluviumFence}
+              sessionId={sessionId}
+              text={normalized}
+              variant="code"
+            />
+          </div>
+        </OfficialCodeMarkdownSessionContext.Provider>
       </OfficialCodeMarkdownStreamingContext.Provider>
     );
   }
@@ -153,7 +174,7 @@ export function OfficialCodeMarkdown({
   return (
     <OfficialCodeMarkdownStreamingContext.Provider value={isStreaming}>
       <OfficialCodeMarkdownSessionContext.Provider value={sessionId}>
-        <div className="epitaxy-markdown" data-official-source="c11959232-h_zsw3wI.js:kb+xd">
+        <div className="epitaxy-markdown" data-official-source="cd5a31703-B4nKQMBN.js:kb+xd">
           {completedChunks.map((chunk, index) => (
             <OfficialCodeMarkdownChunk chunk={chunk} key={`c${index}`} />
           ))}
@@ -196,7 +217,7 @@ export const OfficialFileMarkdownContent = memo(function OfficialFileMarkdownCon
       {parsed && parsed.fields.length > 0 ? (
         <dl
           className="grid grid-cols-[max-content_1fr] items-baseline gap-x-[28px] gap-y-g8 mb-[24px] pb-[20px] border-b border-t3"
-          data-official-source="c11959232-h_zsw3wI.js:Sb.frontmatter"
+          data-official-source="cd5a31703-B4nKQMBN.js:Sb.frontmatter"
         >
           {parsed.fields.map(({ key, value }) => (
             <Fragment key={key}>
@@ -206,12 +227,14 @@ export const OfficialFileMarkdownContent = memo(function OfficialFileMarkdownCon
           ))}
         </dl>
       ) : null}
-      <div
-        className="epitaxy-markdown epitaxy-file-prose"
-        data-official-source="c11959232-h_zsw3wI.js:Sb"
-      >
-        <OfficialCodeMarkdownChunk chunk={body} />
-      </div>
+      <OfficialMarkdownConfirmContext.Provider value={true}>
+        <div
+          className="epitaxy-markdown epitaxy-file-prose"
+          data-official-source="cd5a31703-B4nKQMBN.js:Sb"
+        >
+          <OfficialCodeMarkdownChunk chunk={body} />
+        </div>
+      </OfficialMarkdownConfirmContext.Provider>
     </>
   );
 });
@@ -380,21 +403,14 @@ function OfficialMarkdownInlineCode({
   const fileRef = text ? parseOfficialFileRef(text) : null;
   if (fileRef) {
     return (
-      <button
+      <OfficialEuFileRef
         className={`${OFFICIAL_INLINE_CODE_CLASS} border-0 p-0 m-0 bg-transparent cursor-pointer`}
-        data-official-source="c11959232-h_zsw3wI.js:ob+ru"
-        onClick={() => {
-          window.dispatchEvent(
-            new CustomEvent("epitaxy-open-file", {
-              detail: { path: fileRef.path, line: fileRef.line },
-            }),
-          );
-        }}
-        type="button"
+        fileRef={fileRef}
+        source="cd5a31703-B4nKQMBN.js:ob+ru"
       >
         {/* Official: rb on ru wrapper; bare <code> inside */}
         <code>{text}</code>
-      </button>
+      </OfficialEuFileRef>
     );
   }
   return <code className={OFFICIAL_INLINE_CODE_CLASS}>{children}</code>;
@@ -407,7 +423,7 @@ function OfficialMarkdownPre({ children }: { children?: ReactNode }) {
     const props = children.props as { children?: ReactNode; className?: string };
     const raw = typeof props.children === "string" ? props.children.replace(/\n$/, "") : "";
     if (isStreaming && raw === "") {
-      return <pre data-official-source="c11959232-h_zsw3wI.js:mb.pre empty" />;
+      return <pre data-official-source="cd5a31703-B4nKQMBN.js:mb.pre empty" />;
     }
     const lang = props.className
       ? parseLanguageClass(props.className)
@@ -424,8 +440,18 @@ function OfficialMarkdownPre({ children }: { children?: ReactNode }) {
   return <>{children}</>;
 }
 
+function openOfficialMarkdownHttpHref(url: string): void {
+  const synthetic = { preventDefault() {} };
+  if (handleCoworkTranscriptLinkClick(synthetic, url)) return;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 function OfficialMarkdownAnchor({ href, children }: { href?: string; children?: ReactNode }) {
   // Official db: decodeURI-safe path / external; product bridge CustomEvent for local paths.
+  // Official later Bu is Files `Sb` only — chat xd uses handleCoworkTranscriptLinkClick.
+  const confirmFilesHttp = useContext(OfficialMarkdownConfirmContext);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const confirmReady = useOfficialMarkdownLinkConfirmReady(confirmOpen && confirmFilesHttp);
   let resolvedHref = href;
   if (resolvedHref) {
     try {
@@ -435,31 +461,68 @@ function OfficialMarkdownAnchor({ href, children }: { href?: string; children?: 
     }
   }
   if (resolvedHref && looksLikeOfficialLocalPathHref(resolvedHref)) {
-    const fileRef = parseOfficialFileRef(resolvedHref);
+    const fileRef = parseOfficialFileRef(resolvedHref) ?? { path: resolvedHref };
     return (
-      <button
+      <OfficialEuFileRef
         className={OFFICIAL_MD_LINK_CLASS}
-        data-official-source="c11959232-h_zsw3wI.js:db file"
-        onClick={() => {
-          window.dispatchEvent(
-            new CustomEvent("epitaxy-open-file", {
-              detail: {
-                path: fileRef?.path ?? resolvedHref,
-                line: fileRef?.line,
-              },
-            }),
-          );
-        }}
-        type="button"
+        fileRef={fileRef}
+        source="cd5a31703-B4nKQMBN.js:db file"
       >
         {children}
-      </button>
+      </OfficialEuFileRef>
     );
   }
+  const confirmHref = resolvedHref ?? href ?? "";
+  const confirmHttp = confirmFilesHttp && shouldConfirmHttpHref(confirmHref);
   return (
-    <a className={OFFICIAL_MD_LINK_CLASS} href={href} rel="noreferrer" target="_blank">
-      {children}
-    </a>
+    <>
+      <a
+        className={OFFICIAL_MD_LINK_CLASS}
+        href={href}
+        onClick={
+          resolvedHref
+            ? (event) => {
+                if (confirmHttp) {
+                  event.preventDefault();
+                  setConfirmOpen(true);
+                  return;
+                }
+                handleCoworkTranscriptLinkClick(event, resolvedHref);
+              }
+            : undefined
+        }
+        rel="noreferrer"
+        target="_blank"
+      >
+        {children}
+      </a>
+      {confirmHttp ? (
+        <ConfirmDialog
+          confirmText={
+            <span data-intl-id={OFFICIAL_MARKDOWN_LINK_CONFIRM_COPY.confirm.id}>
+              {OFFICIAL_MARKDOWN_LINK_CONFIRM_COPY.confirm.defaultMessage}
+            </span>
+          }
+          confirmDisabled={!confirmReady}
+          isOpen={confirmOpen}
+          message={
+            <span data-intl-id={OFFICIAL_MARKDOWN_LINK_CONFIRM_COPY.description.id}>
+              {formatOfficialMarkdownLinkConfirmDescription(confirmHref)}
+            </span>
+          }
+          onClose={() => setConfirmOpen(false)}
+          onConfirm={() => {
+            openOfficialMarkdownHttpHref(confirmHref);
+          }}
+          title={
+            <span data-intl-id={OFFICIAL_MARKDOWN_LINK_CONFIRM_COPY.title.id}>
+              {OFFICIAL_MARKDOWN_LINK_CONFIRM_COPY.title.defaultMessage}
+            </span>
+          }
+          variant="danger"
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -582,21 +645,29 @@ function hashCodeCacheKey(value: string) {
 /**
  * Official ab (c11959232):
  * Pierre File fence + copy button; shell run affordance when single-line bash/! prefix
- * (run bridge optional — shows button only when epitaxy-run-inline event is handled later).
+ * (official j: Ps() && nb/bang && single-line; Play → vt.run / Grt.queueCommand).
  */
 export function OfficialAssistantCodeFence({ language, text }: { language?: string; text: string }) {
   const theme = useOfficialPierreTheme();
   const workerPool = useWorkerPool();
+  const chrome = useI18nText(SIDE_PANE_CHROME_MESSAGES);
+  const actions = useContext(EpitaxyTranscriptActionContext);
   // Official ab reads Jv streaming: cacheKey undefined while streaming.
   const isStreaming = useOfficialCodeMarkdownStreaming();
-  const [copied, setCopied] = useState(false);
+  const sessionId = useContext(OfficialCodeMarkdownSessionContext) ?? actions?.sessionId;
   const runId = useId();
+  const inline = useOfficialInlineRunForFence(runId);
+  const strippedOutput = officialStripInlineRunTrailingPrompt(inline.output);
+  const [copied, setCopied] = useState(false);
   const trimmed = text.trimEnd();
   const isTextLang = !language || language === "text";
   const withoutBang = isTextLang ? trimmed.replace(/^![ \t]*/, "") : trimmed;
   const bangShell = withoutBang !== trimmed;
   const isSingleLine = !/[\r\n]/.test(withoutBang);
-  const canRunShell = (OFFICIAL_SHELL_LANGS.has((language ?? "").toLowerCase()) || bangShell) && isSingleLine;
+  // Official j: Ps() && (nb.has(lang) || bang) && single-line. Product: session + runInTerminal.
+  const canRunShell = Boolean(sessionId && actions?.runInTerminal)
+    && (OFFICIAL_SHELL_LANGS.has((language ?? "").toLowerCase()) || bangShell)
+    && !/[\r\n]/.test(withoutBang);
   const lang = resolveMarkdownLang(language);
   // Official padding: extra right when run button present.
   const rightPad = canRunShell
@@ -620,10 +691,10 @@ export function OfficialAssistantCodeFence({ language, text }: { language?: stri
     // Product paint assist (not c119 ab) — keep for local Pierre token fidelity.
     onPostRender: pierreTokenPaintOnPostRender,
   }), [rightPad, theme]);
-  void runId;
 
+  const showInline = Boolean(strippedOutput || inline.error);
   return (
-    <div className="relative max-w-full w-fit" data-official-source="c11959232-h_zsw3wI.js:ab">
+    <div className={`relative max-w-full ${showInline ? "w-full" : "w-fit"}`} data-official-source="cd5a31703-B4nKQMBN.js:ab">
       <div className="relative">
         <div className="epitaxy-diff rounded-r6 overflow-clip">
           {workerPool ? (
@@ -638,20 +709,36 @@ export function OfficialAssistantCodeFence({ language, text }: { language?: stri
           className={`absolute right-[var(--p4)] flex gap-[var(--p2)] ${isSingleLine ? "top-1/2 -translate-y-1/2" : "top-[var(--p4)]"}`}
         >
           {canRunShell ? (
-            <OfficialButton
-              ariaLabel="Run in terminal"
-              icon="Play"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent("epitaxy-run-inline", {
-                  detail: { command: withoutBang, id: runId },
-                }));
-              }}
-              size="small"
-              variant="uncontained"
-            />
+            inline.running ? (
+              <OfficialButton
+                ariaLabel={chrome.cancel}
+                customIcon={
+                  <span className="grid place-items-center">
+                    <span className="col-start-1 row-start-1 flex transition-opacity group-hover/btn:opacity-0 group-focus-visible/btn:opacity-0">
+                      <OfficialSpinner size="s" inheritColor />
+                    </span>
+                    <span className="col-start-1 row-start-1 flex opacity-0 transition-opacity group-hover/btn:opacity-100 group-focus-visible/btn:opacity-100">
+                      <Icon name="XCrossCloseMedium" size="s" />
+                    </span>
+                  </span>
+                }
+                onClick={() => actions?.cancelInTerminal?.()}
+                size="small"
+                tooltip={chrome.runningClickToCancel}
+                variant="uncontained"
+              />
+            ) : (
+              <OfficialButton
+                ariaLabel={chrome.runInTerminal}
+                icon="Play"
+                onClick={() => actions?.runInTerminal?.(withoutBang, runId)}
+                size="small"
+                variant="uncontained"
+              />
+            )
           ) : null}
           <OfficialButton
-            ariaLabel={copied ? "Copied" : "Copy code"}
+            ariaLabel={copied ? chrome.copied : chrome.copyCode}
             icon={copied ? "CheckSelection" : "CopySquareBehind"}
             onClick={() => {
               void navigator.clipboard?.writeText(text).then(() => {
@@ -664,6 +751,13 @@ export function OfficialAssistantCodeFence({ language, text }: { language?: stri
           />
         </div>
       </div>
+      {showInline ? (
+        <div className="mt-[var(--p4)] rounded-r6 bg-t1 font-mono text-code max-h-[160px] overflow-y-auto px-[var(--p6)] py-[var(--p4)]">
+          <pre className="text-assistant-secondary whitespace-pre-wrap break-all">
+            {inline.error ? <span className="text-destructive-default">{inline.error}</span> : strippedOutput}
+          </pre>
+        </div>
+      ) : null}
     </div>
   );
 }

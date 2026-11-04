@@ -1,10 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GitCommandResult, LocalPrState, LocalSessionsBridge, SessionSummary } from "../../adapters/desktopBridge/types";
 import { useErrorsOptional } from "../settings/errorsToast";
+import { useI18nText } from "../../i18n/footerMenuMessages";
 import { Icon } from "../../shell/icons";
 import { parseLocalBranches, resolveOfficialBaseBranch } from "./composer/workspaceControlsHelpers";
 import { OfficialButton, OfficialSplitDropdownButton, type OfficialDropdownItem } from "./OfficialEpitaxyComponents";
 import { OfficialEpitaxyInstallGhModal } from "./OfficialEpitaxyInstallGhModal";
+import { PR_ROW_MESSAGES } from "./officialCodeChromeMessages";
 
 /** Official ion-dist c11959232 LSaIX82GfM defaultMessage. */
 const CREATE_PR_TOAST_MESSAGE = "Could not create pull request. You can try again.";
@@ -454,6 +456,7 @@ function EpitaxyBranchRow({
   prMode: OfficialPrMode;
   state: BranchRowState;
 }) {
+  const prRowText = useI18nText(PR_ROW_MESSAGES);
   const prLabel = officialPrActionLabel(prMode, prBusy);
   // Official X/Y residual (c11959232): disable when no remote / on base / not pushed /
   // Claude working / no changes (compose mode only needs remote for open URL).
@@ -553,7 +556,7 @@ function EpitaxyBranchRow({
           disabled={prDisabled}
           items={prMenuItems}
           label={prLabel}
-          menuLabel="More PR options"
+          menuLabel={prRowText.morePrOptions}
           onIconClick={onCreatePr}
           side="top"
           size="base"

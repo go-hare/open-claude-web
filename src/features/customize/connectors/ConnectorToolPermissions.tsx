@@ -20,7 +20,7 @@ import {
 } from "./connectorToolPermissionStore";
 
 /**
- * Official index-BELzQL5P lXt / cXt / dXt / pXt / mXt / wXt / XD.
+ * Official index-D35w9RK9 lXt / cXt / dXt / pXt / mXt / wXt / XD.
  * Direct MCP tools have no annotation groups — unspecified = Other tools.
  */
 export function ConnectorToolPermissions({ item }: { item: ConnectorListItem }) {

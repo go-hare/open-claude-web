@@ -257,7 +257,7 @@ function CoworkCompactionProgress({ status }: { status: string }) {
 }
 
 /**
- * Official g$t Ace mount (index-BELzQL5P ~227403):
+ * Official g$t Ace mount (c21f11e6d-CxD82rYo.js ~227403):
  * Ace({ state: currentAvatarState, isInteractive: !isCompacting }).
  * Prefer path-derived Et from Conversation; status-bag residual only as fallback.
  */

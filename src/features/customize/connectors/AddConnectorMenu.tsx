@@ -4,6 +4,9 @@ import { Icon } from "../../../shell/icons";
 import { OfficialButton } from "../../shared/OfficialButton";
 import { officialButtonClass } from "../../shared/buttonClasses";
 
+const OVERLAY_ADD_TRIGGER_CLASS =
+  "cds-reset group/btn relative isolate inline-flex h-control shrink-0 items-center justify-center gap-1.5 rounded border-0 px-md font-sans text-body font-medium font-control text-on-primary outline-none select-none whitespace-nowrap";
+
 /**
  * Official c63a78ed4 Bt — header "+" for Connectors list (Rt).
  *
@@ -21,6 +24,7 @@ export function AddConnectorMenu({
   onBrowse,
   showAddCustom = true,
   showBrowse = true,
+  variant = "page",
 }: {
   addCustomDisabled?: boolean;
   addCustomTooltip?: string;
@@ -28,7 +32,41 @@ export function AddConnectorMenu({
   onBrowse?: () => void;
   showAddCustom?: boolean;
   showBrowse?: boolean;
+  /** Overlay Ko (c40525e86): primary Add + Add custom connector; Discover is a tab. */
+  variant?: "page" | "overlay";
 }) {
+  if (variant === "overlay") {
+    return (
+      <Menu.Root>
+        <Menu.Trigger
+          aria-label="Add connector"
+          className={OVERLAY_ADD_TRIGGER_CLASS}
+          data-cds="Button"
+          data-official-source="cd08e92dc:Oe TriggerButton jdCrxH65Tm"
+        >
+          <span
+            aria-hidden="true"
+            className="absolute inset-0 rounded-[inherit] bg-fill-primary transition-[background-color] duration-fast group-hover/btn:bg-fill-primary-hover group-[[aria-haspopup][aria-expanded=true]]/btn:bg-fill-primary-hover"
+            data-cds-part="paint"
+          />
+          <span className="relative inline-flex min-w-0 items-center gap-1">
+            Add
+            <Icon className="shrink-0 opacity-60" name="CaretDown" preferFont size="sm" />
+          </span>
+        </Menu.Trigger>
+        <BaseMenuPopup align="end" side="bottom" sideOffset={4}>
+          <BaseMenuItem
+            className={addCustomDisabled ? "opacity-50 pointer-events-none" : undefined}
+            icon="Add"
+            onClick={addCustomDisabled ? undefined : onAddCustom}
+          >
+            Add custom connector
+          </BaseMenuItem>
+        </BaseMenuPopup>
+      </Menu.Root>
+    );
+  }
+
   const optionCount = [showBrowse, showAddCustom].filter(Boolean).length;
   if (optionCount === 0) return null;
 

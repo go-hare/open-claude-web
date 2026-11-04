@@ -26,6 +26,10 @@ import {
   permissionModeLabel,
 } from "./officialComposerOptions";
 import { OfficialAskUserQuestionCard } from "./OfficialAskUserQuestionCard";
+import { EXIT_PLAN_MODE_MESSAGES, TOOL_APPROVAL_MESSAGES } from "../officialCodeChromeMessages";
+import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { isOfficialProposeBranchTool } from "./officialSetupQuestionBranch";
+import { OfficialSetupQuestionBranch } from "./OfficialSetupQuestionBranch.tsx";
 import { isOfficialAskUserQuestionTool } from "./officialAskUserQuestionModel";
 import {
   OfficialComputerUseAgeApproval,
@@ -338,6 +342,7 @@ export function InlineToolPermissionApprovals({
 
   // Official Xt: AskUser Ow → ExitPlan Wk → yk wk → fo Age → mo Teach → nI.
   const isAskUserQuestion = isOfficialAskUserQuestionTool(request?.toolName);
+  const isProposeBranch = isOfficialProposeBranchTool(request?.toolName);
   const isComputerUseWk = isOfficialComputerUseWkTool(request?.toolName, request?.input);
   const isComputerRequestAccess = isOfficialComputerRequestAccessTool(request?.toolName);
   const isComputerTeach = isOfficialComputerTeachAccessTool(request?.toolName);
@@ -350,6 +355,7 @@ export function InlineToolPermissionApprovals({
       !request
       || isExitPlanMode
       || isAskUserQuestion
+      || isProposeBranch
       || isComputerUseWk
       || isComputerUseAge
       || isComputerTeach
@@ -386,6 +392,7 @@ export function InlineToolPermissionApprovals({
     isComputerUseAge,
     isComputerUseWk,
     isExitPlanMode,
+    isProposeBranch,
     request,
     resolvingId,
   ]);
@@ -405,6 +412,15 @@ export function InlineToolPermissionApprovals({
       >
         {resolveError ? <div className="text-footnote text-extended-pink">{resolveError}</div> : null}
       </OfficialAskUserQuestionCard>
+    );
+  }
+  if (isProposeBranch) {
+    return (
+      <OfficialSetupQuestionBranch
+        busy={busy}
+        input={request.input}
+        onContinue={(decision, updatedInput) => void decide(decision, updatedInput)}
+      />
     );
   }
   if (isExitPlanMode) {
@@ -507,6 +523,7 @@ const OfficialToolApprovalCard = memo(function OfficialToolApprovalCard({
   queueDepth: number;
   request: InlineToolPermissionRequest;
 }) {
+  const approvalText = useI18nText(TOOL_APPROVAL_MESSAGES);
   const copy = useMemo(() => officialToolApprovalCopy(request), [request]);
   const ghostCount = Math.min(queueDepth, 2);
   const hasAlwaysAllow = request.hasAlwaysAllow !== false;
@@ -534,19 +551,19 @@ const OfficialToolApprovalCard = memo(function OfficialToolApprovalCard({
       {children}
       {/* relative z-[1]: keep actions above decorative ghosts if stacking context flips */}
       <div className="epitaxy-approval-actions relative z-[1] flex flex-wrap justify-between gap-x-g3 gap-y-[8px]">
-        <OfficialButton ariaLabel="Deny" className="shrink-0" disabled={busy} onClick={() => onDecide("deny")} size="base" variant="contained">
-          Deny
+        <OfficialButton ariaLabel={approvalText.deny} className="shrink-0" disabled={busy} onClick={() => onDecide("deny")} size="base" variant="contained">
+          {approvalText.deny}
           <OfficialApprovalShortcut>esc</OfficialApprovalShortcut>
         </OfficialButton>
         <div className="flex min-w-0 flex-wrap gap-[8px]">
           {hasAlwaysAllow ? (
-            <OfficialButton ariaLabel="Always allow" className="min-w-0" disabled={busy} onClick={() => onDecide("always")} size="base" variant="contained">
-              <span className="min-w-0 truncate">{officialAlwaysAllowLabel(request.alwaysAllowScope)}</span>
+            <OfficialButton ariaLabel={approvalText.alwaysAllow} className="min-w-0" disabled={busy} onClick={() => onDecide("always")} size="base" variant="contained">
+              <span className="min-w-0 truncate">{officialAlwaysAllowLabel(request.alwaysAllowScope, approvalText)}</span>
               <OfficialApprovalShortcut>⌘⇧⏎</OfficialApprovalShortcut>
             </OfficialButton>
           ) : null}
-          <OfficialButton ariaLabel="Allow once" className="min-w-0" disabled={busy} onClick={() => onDecide("once")} size="base" variant="primary">
-            <span className="min-w-0 truncate">Allow once</span>
+          <OfficialButton ariaLabel={approvalText.allowOnce} className="min-w-0" disabled={busy} onClick={() => onDecide("once")} size="base" variant="primary">
+            <span className="min-w-0 truncate">{approvalText.allowOnce}</span>
             <OfficialApprovalShortcut>⌘⏎</OfficialApprovalShortcut>
           </OfficialButton>
         </div>
@@ -555,16 +572,14 @@ const OfficialToolApprovalCard = memo(function OfficialToolApprovalCard({
   );
 });
 
-/** Official Bk accept labels (c11959232 Wk). */
-const OFFICIAL_EXIT_PLAN_ACCEPT_LABELS: Record<string, string> = {
-  default: "Accept",
-  acceptEdits: "Accept and allow edits",
-  auto: "Accept and auto mode",
-  bypassPermissions: "Accept and bypass permissions",
-};
-
-function officialExitPlanAcceptLabel(mode: string): string {
-  return OFFICIAL_EXIT_PLAN_ACCEPT_LABELS[mode] ?? OFFICIAL_EXIT_PLAN_ACCEPT_LABELS.default;
+function officialExitPlanAcceptLabel(
+  mode: string,
+  labels: { accept: string; acceptEdits: string; auto: string; bypassPermissions: string },
+): string {
+  if (mode === "acceptEdits") return labels.acceptEdits;
+  if (mode === "auto") return labels.auto;
+  if (mode === "bypassPermissions") return labels.bypassPermissions;
+  return labels.accept;
 }
 
 /** Official qk default acceptOptions. */
@@ -608,6 +623,7 @@ const OfficialExitPlanModeApprovalCard = memo(function OfficialExitPlanModeAppro
   trustForwardMode?: string;
 }) {
   const ghostCount = Math.min(queueDepth, 2);
+  const planText = useI18nText(EXIT_PLAN_MODE_MESSAGES);
   const [revising, setRevising] = useState(false);
   const [feedback, setFeedback] = useState("");
   const feedbackRef = useRef<HTMLTextAreaElement | null>(null);
@@ -683,7 +699,7 @@ const OfficialExitPlanModeApprovalCard = memo(function OfficialExitPlanModeAppro
   }, [clearPlanComments, hostSessionId, input, onDecide, requestSessionId, setAcceptMenuOpenState]);
 
   // Official ultraplan accept-local: deny with special feedback prefix + plan body.
-  // index-BELzQL5P awe = "__ULTRAPLAN_TELEPORT_LOCAL__" (c119 Ha in Wk).
+  // cd5a31703 awe = "__ULTRAPLAN_TELEPORT_LOCAL__" (Ha in Wk).
   const acceptLocal = useCallback(() => {
     const plan = typeof input.plan === "string" ? input.plan : "";
     clearPlanComments();
@@ -738,16 +754,16 @@ const OfficialExitPlanModeApprovalCard = memo(function OfficialExitPlanModeAppro
     }
   }, [hasPlanComments, reject]);
 
-  const acceptLabel = officialExitPlanAcceptLabel(trustForwardMode);
+  const acceptLabel = officialExitPlanAcceptLabel(trustForwardMode, planText);
   const showDefaultAccept = trustForwardMode !== "default";
   // Official Wk D: menu items for every acceptOption (including trust primary).
   const acceptMenuItems = useMemo<OfficialDropdownItem[]>(
     () =>
       acceptOptions.map((mode) => ({
-        label: officialExitPlanAcceptLabel(mode),
+        label: officialExitPlanAcceptLabel(mode, planText),
         onSelect: () => accept(mode),
       })),
-    [accept, acceptOptions],
+    [accept, acceptOptions, planText],
   );
 
   return (
@@ -772,13 +788,13 @@ const OfficialExitPlanModeApprovalCard = memo(function OfficialExitPlanModeAppro
       <OfficialApprovalHeader
         trailing={
           onOpenPlan ? (
-            <OfficialButton ariaLabel="Open plan" onClick={onOpenPlan} size="small" variant="uncontained">
-              Open plan
+            <OfficialButton ariaLabel={planText.openPlan} onClick={onOpenPlan} size="small" variant="uncontained">
+              <span data-intl-id="/5O7cdFfl5">{planText.openPlan}</span>
             </OfficialButton>
           ) : undefined
         }
       >
-        Claude proposed a plan
+        <span data-intl-id="uwYMasx1yw">{planText.proposedAPlan}</span>
       </OfficialApprovalHeader>
       {request.decisionReason ? <div className="text-footnote text-t7 select-text break-words">{request.decisionReason}</div> : null}
       {children}
@@ -791,8 +807,9 @@ const OfficialExitPlanModeApprovalCard = memo(function OfficialExitPlanModeAppro
             />
           ) : null}
           <textarea
-            aria-label="Plan feedback"
+            aria-label={planText.planFeedback}
             className="epitaxy-textarea w-full"
+            data-intl-id="5+lBxMnx8m"
             disabled={busy}
             onChange={(event) => {
               const next = event.target.value;
@@ -800,7 +817,7 @@ const OfficialExitPlanModeApprovalCard = memo(function OfficialExitPlanModeAppro
               setFeedback(next);
             }}
             onKeyDown={onFeedbackKeyDown}
-            placeholder={hasPlanComments ? "Anything else to add?" : "What should change? (optional)"}
+            placeholder={hasPlanComments ? planText.anythingElseToAdd : planText.whatShouldChange}
             ref={feedbackRef}
             rows={3}
             value={feedback}
@@ -810,7 +827,7 @@ const OfficialExitPlanModeApprovalCard = memo(function OfficialExitPlanModeAppro
               <span />
             ) : (
               <OfficialButton
-                ariaLabel="Back"
+                ariaLabel={planText.back}
                 disabled={busy}
                 onClick={() => {
                   setRevising(false);
@@ -819,18 +836,18 @@ const OfficialExitPlanModeApprovalCard = memo(function OfficialExitPlanModeAppro
                 size="base"
                 variant="contained"
               >
-                Back
+                <span data-intl-id="cyR7KhiuaU">{planText.back}</span>
                 <OfficialApprovalShortcut>esc</OfficialApprovalShortcut>
               </OfficialButton>
             )}
             <OfficialButton
-              ariaLabel="Revise"
+              ariaLabel={planText.revise}
               disabled={busy}
               onClick={() => reject(feedbackValueRef.current)}
               size="base"
               variant="primary"
             >
-              Revise
+              <span data-intl-id="p4J+lV5p5N">{planText.revise}</span>
               <OfficialApprovalShortcut>⏎</OfficialApprovalShortcut>
             </OfficialButton>
           </div>
@@ -839,22 +856,22 @@ const OfficialExitPlanModeApprovalCard = memo(function OfficialExitPlanModeAppro
         <div className="flex flex-col gap-g3 sm:flex-row sm:justify-between">
           <div className="flex gap-[8px]">
             <OfficialButton
-              ariaLabel="Reject"
+              ariaLabel={planText.reject}
               disabled={busy}
               onClick={() => reject("")}
               size="base"
               variant="contained"
             >
-              Reject
+              <span data-intl-id="VzIOKf1uNn">{planText.reject}</span>
             </OfficialButton>
             <OfficialButton
-              ariaLabel="Revise"
+              ariaLabel={planText.reviseEllipsis}
               disabled={busy}
               onClick={() => setRevising(true)}
               size="base"
               variant="contained"
             >
-              Revise…
+              <span data-intl-id="PA0R7vOPMW">{planText.reviseEllipsis}</span>
               <OfficialApprovalShortcut>esc</OfficialApprovalShortcut>
             </OfficialButton>
           </div>
@@ -872,13 +889,13 @@ const OfficialExitPlanModeApprovalCard = memo(function OfficialExitPlanModeAppro
             ) : null}
             {showDefaultAccept ? (
               <OfficialButton
-                ariaLabel={officialExitPlanAcceptLabel("default")}
+                ariaLabel={officialExitPlanAcceptLabel("default", planText)}
                 disabled={busy}
                 onClick={() => accept("default")}
                 size="base"
                 variant="contained"
               >
-                {officialExitPlanAcceptLabel("default")}
+                {officialExitPlanAcceptLabel("default", planText)}
                 <OfficialApprovalShortcut>⌘⇧⏎</OfficialApprovalShortcut>
               </OfficialButton>
             ) : null}
@@ -896,7 +913,7 @@ const OfficialExitPlanModeApprovalCard = memo(function OfficialExitPlanModeAppro
                     <OfficialApprovalShortcut>⌘⏎</OfficialApprovalShortcut>
                   </span>
                 )}
-                menuLabel="More accept options"
+                menuLabel={planText.moreAcceptOptions}
                 onIconClick={() => accept(trustForwardMode)}
                 onOpenChange={setAcceptMenuOpenState}
                 open={acceptMenuOpen}
@@ -1050,12 +1067,21 @@ function OfficialApprovalShortcut({ children }: { children: ReactNode }) {
   return <kbd className="text-caption opacity-60 shrink-0">{children}</kbd>;
 }
 
-function officialAlwaysAllowLabel(scope?: string) {
-  if (scope === "session") return "Always allow in this session";
-  if (scope === "project") return "Always allow in this project";
-  if (scope === "projectLocal") return "Always allow in this project (local)";
-  if (scope === "user") return "Always allow everywhere";
-  return "Always allow";
+function officialAlwaysAllowLabel(
+  scope: string | undefined,
+  labels: {
+    alwaysAllow: string;
+    alwaysAllowEverywhere: string;
+    alwaysAllowProject: string;
+    alwaysAllowProjectLocal: string;
+    alwaysAllowSession: string;
+  },
+) {
+  if (scope === "session") return labels.alwaysAllowSession;
+  if (scope === "project") return labels.alwaysAllowProject;
+  if (scope === "projectLocal") return labels.alwaysAllowProjectLocal;
+  if (scope === "user") return labels.alwaysAllowEverywhere;
+  return labels.alwaysAllow;
 }
 
 function officialToolApprovalCopy(request: InlineToolPermissionRequest): OfficialToolApprovalCopy {

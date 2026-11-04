@@ -2,7 +2,7 @@
  * Official AYe layout surface (subset): chatInputTopToViewportBottom measure.
  * Writer: composer container ResizeObserver → innerHeight − top (pretty ~202618).
  * Readers: sparse in official; store kept for parity / future consumers.
- * Source: index-BELzQL5P.pretty.js AYe ~106152.
+ * Source: c21f11e6d-CxD82rYo.js AYe ~106152.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
 

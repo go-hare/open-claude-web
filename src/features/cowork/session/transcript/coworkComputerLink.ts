@@ -1,5 +1,5 @@
 /**
- * Official assistant markdown computer:// handler (index-BELzQL5P.pretty.js ~136785):
+ * Official assistant markdown computer:// handler (c21f11e6d-CxD82rYo.js ~136785):
  * if url.startsWith("computer://") → preventDefault + SELECT_FILE(path) + open drawer.
  * toolType official uses "create_file" for this path.
  */

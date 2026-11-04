@@ -1,5 +1,5 @@
 /**
- * Official qWt spacer math (index-BELzQL5P.pretty.js ~238248–238264).
+ * Official qWt spacer math (index-D35w9RK9.pretty.js ~238248–238264).
  * needsTrafficLightPadding = isMacDesktop && !isFullscreen (caller gates Mac)
  * trafficLightSpacerWidth = round(74 / min(zoom, 1)) when padding needed
  */

@@ -83,8 +83,77 @@ export type ExtensionsSettingsBridge = {
   onExtensionsChanged?: (listener: () => void) => () => void;
 };
 
+/** Official fA (shared-0): `claude.settings.Custom3pUsage.getSummary(windowDays)`. */
+export type Custom3pUsageSurface = {
+  costUSD?: number;
+  inputTokens: number;
+  outputTokens: number;
+  webSearchRequests: number;
+};
+
+export type Custom3pUsageBar = {
+  start: string;
+  chat: Custom3pUsageSurface;
+  cowork: Custom3pUsageSurface;
+  code: Custom3pUsageSurface;
+};
+
+export type Custom3pUsageSummary = {
+  bars: Custom3pUsageBar[];
+  bucketDays: number;
+  cap?: { cap: number; used: number; windowHours: number; windowStartMs: number } | null;
+  cost?: { basis?: "list" | "managed" | "mixed"; unpricedTurns: number } | null;
+  errorTurns?: number;
+  generatedAtMs?: number;
+  surfaces: {
+    chat: Custom3pUsageSurface;
+    cowork: Custom3pUsageSurface;
+    code: Custom3pUsageSurface;
+  };
+  turns: number;
+  windowDays?: number;
+};
+
+export type Custom3pUsageBridge = {
+  getSummary?: (windowDays: number) => Promise<Custom3pUsageSummary | null>;
+};
+
+/** Official QI residual (shared-23 eL). */
+export type HistoryImportCapabilities = {
+  cliUpdateRequired: boolean;
+  hasImportableSessions: boolean;
+  hostLoopRequired: boolean;
+  local1PSessionCount: number;
+  localSessions: boolean;
+  localZip: boolean;
+  promptBanner: string;
+  promptBannerMaxDismissals?: number;
+  remotePull: boolean;
+  remotePullConfigured: boolean;
+  sessionExport: boolean;
+  showSettingsPage?: boolean;
+};
+
+export type HistoryImportBridge = {
+  getImportCapabilities?: () => Promise<HistoryImportCapabilities>;
+  getImportHistory?: () => Promise<unknown[]>;
+};
+
+export type DesktopInfoBridge = {
+  getSystemInfo?: () => Promise<{
+    appVersion?: string;
+    userData?: string;
+    logs?: string;
+    [key: string]: unknown;
+  } | null | undefined>;
+  showLogsInFileManager?: () => Promise<boolean | void>;
+};
+
 type ClaudeSettingsRoot = {
+  Custom3pUsage?: Custom3pUsageBridge;
+  DesktopInfo?: DesktopInfoBridge;
   Extensions?: ExtensionsSettingsBridge;
+  HistoryImport?: HistoryImportBridge;
   MCP?: McpSettingsBridge;
 };
 
@@ -99,6 +168,18 @@ export function mcpSettingsBridge(): McpSettingsBridge | undefined {
 
 export function extensionsSettingsBridge(): ExtensionsSettingsBridge | undefined {
   return settingsRoot()?.Extensions;
+}
+
+export function custom3pUsageBridge(): Custom3pUsageBridge | undefined {
+  return settingsRoot()?.Custom3pUsage;
+}
+
+export function desktopInfoBridge(): DesktopInfoBridge | undefined {
+  return settingsRoot()?.DesktopInfo;
+}
+
+export function historyImportBridge(): HistoryImportBridge | undefined {
+  return settingsRoot()?.HistoryImport;
 }
 
 /** Electron File may expose absolute path for drop/install residual. */

@@ -1,6 +1,6 @@
 /**
  * Official react-intl descriptors for customize (el / E7t / o7t) and Directory
- * (B8t / O8t / n8t) — index-BELzQL5P.js + c63a78ed4-M1yh4U9h.js.
+ * (B8t / O8t / n8t) — c63a78ed4-DmFZsHvd.js.
  *
  * Residual pages previously hardcoded EN (or mixed 自定义 / Browse plugins).
  * Wire through the same catalogs Hns/G0t load. Incomplete official zh-CN.json

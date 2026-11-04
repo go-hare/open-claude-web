@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { SessionSummary } from "../../adapters/desktopBridge";
 import type { LocalSessionsBridge, OfficialGitDiffComparison } from "../../adapters/desktopBridge/types";
+import { useI18nText } from "../../i18n/footerMenuMessages";
+import { DIFF_PANE_MESSAGES } from "./officialCodeChromeMessages";
 import { parseLocalBranches, resolveOfficialBaseBranch } from "./composer/workspaceControlsHelpers";
 import { OfficialSpinner } from "./session/OfficialWorkingStatus";
 import { OfficialDiffFileRow } from "./diff/OfficialDiffFileRow";
@@ -49,12 +51,15 @@ export function OfficialDiffPane({
   sessionRef: EpitaxySessionRef;
   showTree: boolean;
 }) {
+  const chrome = useI18nText(DIFF_PANE_MESSAGES);
   const [state, setState] = useState<{
     base: string;
     comparison: OfficialGitDiffComparison | null;
+    /** Official ze: empty vs failed. getGitDiff null is empty (no repo / no comparison), not fail. */
     error?: string;
     headLabel: string;
     isLoading: boolean;
+    noRepo?: boolean;
   }>({ base: "main", comparison: null, headLabel: "working tree", isLoading: true });
   const [activePath, setActivePath] = useState<string | null>(null);
   // Official ng: S = useState(!0); tree still gated by width>=400 before paint when possible.
@@ -103,18 +108,20 @@ export function OfficialDiffPane({
       setState({
         base,
         comparison,
-        error: comparison ? undefined : "Failed to load diff",
+        error: undefined,
         headLabel,
         isLoading: false,
+        noRepo: !comparison && gitInfoRaw == null,
       });
     })().catch((error) => {
       if (!alive) return;
       setState({
         base: "main",
         comparison: null,
-        error: error instanceof Error ? error.message : "Failed to load diff",
+        error: error instanceof Error ? error.message : chrome.couldntLoadTheChanges,
         headLabel: "working tree",
         isLoading: false,
+        noRepo: false,
       });
     });
 
@@ -226,7 +233,11 @@ export function OfficialDiffPane({
   }
 
   if (state.error) {
-    return <div className="h-full flex items-center justify-center text-body text-t5 px-p8 text-center">{state.error}</div>;
+    return (
+      <div className="h-full flex items-center justify-center text-body text-t5 px-p8 text-center" role="alert">
+        {chrome.couldntLoadTheChanges}
+      </div>
+    );
   }
 
   // Official ng: comparison has files but tc yields none → "Diff content unavailable…"
@@ -240,7 +251,11 @@ export function OfficialDiffPane({
   }
 
   if (!state.comparison || files.length === 0) {
-    return <div className="h-full flex items-center justify-center text-body text-t5">No changes to show.</div>;
+    return (
+      <div className="h-full flex items-center justify-center text-body text-t5 px-p8 text-center">
+        {state.noRepo ? chrome.changesNeedAGitRepository : chrome.noChangesToShow}
+      </div>
+    );
   }
 
   // Official P = k && S (showTree && canFitTree).
@@ -266,6 +281,7 @@ export function OfficialDiffPane({
                   key={file.filePath}
                   bridge={bridge}
                   contentRef={contentRef}
+                  cwd={session?.cwd}
                   file={file}
                   fileAttr={OFFICIAL_DIFF_FILE_ATTR}
                   sessionId={sessionRef.id}

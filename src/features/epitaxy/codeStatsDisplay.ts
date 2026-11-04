@@ -5,6 +5,14 @@ export type CodeStatsRange = "all" | "30d" | "7d";
 export type ModelUsageDisplay = Array<{ input: string; model: string; output: string; tokens: string; totalTokens: number }>;
 export type CodeStatsDisplay = ReturnType<typeof buildCodeStatsDisplay>;
 
+export const EMPTY_CODE_STATS: CodeStats = {
+  dailyActivity: [],
+  dailyModelTokens: [],
+  modelUsage: {},
+  peakActivityHour: null,
+  streaks: { currentStreak: 0, longestStreak: 0 },
+};
+
 export function buildCodeStatsDisplay(stats: CodeStats | null, range: CodeStatsRange) {
   const dailyActivity = filterStatsByRange(stats?.dailyActivity ?? [], range);
   const dailyModelTokens = filterStatsByRange(stats?.dailyModelTokens ?? [], range);

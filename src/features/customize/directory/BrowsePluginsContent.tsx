@@ -1,5 +1,5 @@
 /**
- * Official L8t / R8t BrowsePluginsContent (index-BELzQL5P.js).
+ * Official L8t / R8t BrowsePluginsContent (index-D35w9RK9.js).
  * Residual: local-only E8t path (v=!jd()&&false). No Code tab, no org page,
  * no gitMissing/egressBlocked, no g8t drill (cards Install/Manage only).
  */
@@ -40,12 +40,15 @@ export function BrowsePluginsContentInner({
   initialConfig,
   isOpen,
   onClose,
+  onManageInstalled,
   searchQuery = "",
 }: {
   drillDownPluginId?: string | null;
   initialConfig?: DirectoryPluginSeed;
   isOpen: boolean;
   onClose: () => void;
+  /** Overlay Discover (c6a2a31c4 xl): manage stays in the Settings pane, not /customize. */
+  onManageInstalled?: (pluginId: string) => void;
   onDrillDownChange?: (id: string | null) => void;
   searchQuery?: string;
 }) {
@@ -254,11 +257,15 @@ export function BrowsePluginsContentInner({
 
   const onManage = useCallback(
     (pluginId: string) => {
+      if (onManageInstalled) {
+        onManageInstalled(pluginId);
+        return;
+      }
       onClose();
       window.history.pushState({}, "", `/customize/plugins/${encodeURIComponent(pluginId)}`);
       window.dispatchEvent(new Event("app:navigation"));
     },
-    [onClose],
+    [onClose, onManageInstalled],
   );
 
   const onRefresh = useCallback(

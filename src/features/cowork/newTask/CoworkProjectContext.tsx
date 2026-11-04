@@ -13,10 +13,10 @@ export type CoworkPendingProjectWarning = {
 const projectWarningDismissedPrefix = "agent_mode_project_warning_dismissed:";
 
 // Official reference:
-// index-BELzQL5P.js:WCt/HCt build "Add to project" with project rows and
+// c62135ccf-Dn28vJ3V.js:WCt/HCt build "Add to project" with project rows and
 // "Start a new project"; gwt/xwt render the warning dialog and persist
 // agent_mode_project_warning_dismissed:${uuid}.
-export const coworkProjectWarningOfficialSource = "index-BELzQL5P.js:WCt/HCt/gwt/xwt";
+export const coworkProjectWarningOfficialSource = "c62135ccf-Dn28vJ3V.js:WCt/HCt/gwt/xwt";
 
 export function sessionToCoworkAddMenuProject(session: SessionSummary): CoworkAddMenuProject | null {
   const hostPath = session.cwd ?? session.folders?.[0];
@@ -47,7 +47,7 @@ export function persistCoworkProjectWarningDismissed(projectUuid: string) {
 export function CoworkSelectedProjectIndicators({ onRemove, projects }: { onRemove: (uuid: string) => void; projects: CoworkMountedProject[] }) {
   if (projects.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-1" data-official-source="index-BELzQL5P.js:bwt agent-mode-project-indicator">
+    <div className="flex flex-wrap items-center gap-1" data-official-source="c62135ccf-Dn28vJ3V.js:bwt agent-mode-project-indicator">
       {projects.map((project) => (
         <button
           aria-label={`Project: ${project.name}`}
