@@ -1,10 +1,11 @@
 /**
- * Official c11959232 Ho residual around EpitaxyChatPanel:
- * fallback → uc({ message: "Something went wrong loading this session.", onBack, error }).
- * Product uses EpitaxyLandingError for the same copy + Back to landing page.
+ * Official cc432 `pL` / shared-23 Ho residual around EpitaxyChatPanel:
+ *   zr({ message: z0PjNhLbSp, onRetry, error })
+ * `onRetry` = Xy(sessionId)+eM(sessionId)+reset. Product: clearError + remount.
  */
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { EpitaxyLandingError } from "../EpitaxyFrameSurface";
+import { officialCodeSessionStore } from "./officialCodeSessionStore";
 
 type Props = {
   children: ReactNode;
@@ -36,12 +37,32 @@ export class EpitaxyChatPanelErrorBoundary extends Component<Props, State> {
     if (typeof console !== "undefined") {
       console.warn("[EpitaxyChatPanel]", this.props.sessionId, error, info.componentStack);
     }
+    if (typeof window !== "undefined") {
+      (window as Window & { __epitaxyHoLast?: unknown }).__epitaxyHoLast = {
+        sessionId: this.props.sessionId,
+        message: error.message,
+        stack: error.stack,
+        componentStack: info.componentStack,
+      };
+    }
   }
+
+  retry = () => {
+    const sessionId = this.props.sessionId;
+    if (sessionId) officialCodeSessionStore.getState().clearError(sessionId);
+    this.setState({ error: null });
+  };
 
   render() {
     if (this.state.error) {
-      // Official c119 Ho → uc({ message, onBack, error }) — always Back (KGeQPLIrlo), never Fazw Try again.
-      return <EpitaxyLandingError error={this.state.error} onBack={this.props.onBack} />;
+      // Official pL → zr({ message: z0PjNhLbSp, onRetry }). Keep onBack as secondary exit.
+      return (
+        <EpitaxyLandingError
+          error={this.state.error}
+          onBack={this.props.onBack}
+          onRetry={this.retry}
+        />
+      );
     }
     return this.props.children;
   }

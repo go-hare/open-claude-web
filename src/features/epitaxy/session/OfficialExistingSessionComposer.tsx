@@ -72,7 +72,7 @@ import {
 } from "./OfficialComposerStagedImages";
 import type { OfficialEpitaxyDropHandlers } from "./OfficialEpitaxyDropZone";
 import type { TranscriptEntry } from "./officialTranscriptParse";
-import { CodeUserEntryMessage } from "./OfficialTranscript";
+import { OfficialQueuedMessageBar } from "./OfficialQueuedMessageBar";
 import {
   capOfficialComposerFileAttachments,
   officialComposerFileAttachmentsFromFiles,
@@ -193,6 +193,10 @@ export function ExistingSessionComposer({
   onPermissionModeChange,
   onScrollToBottom,
   onCancelQueued,
+  onEditQueued,
+  onReorderQueued,
+  onSteerQueued,
+  steerHeadOnly = false,
   onStop,
   onSubmit,
   persistKey,
@@ -231,6 +235,14 @@ export function ExistingSessionComposer({
   onOpenPlan?: () => void;
   /** Official Hb isQueued X — dropQueuedMessage / yt(e.id). */
   onCancelQueued?: (entryId: string) => void;
+  /** Official D2 `a2` onEdit — Ke → xt(prompt) into composer. */
+  onEditQueued?: (entryId: string) => void;
+  /** Official cc432 `$o` — place activeId just after overId. */
+  onReorderQueued?: (activeId: string, overId: string) => void;
+  /** Official cc432 `_f` — head promoteQueued, else sendSteeredNow. */
+  onSteerQueued?: (entryId: string) => void;
+  /** Official `steerHeadOnly` — Send now stops the current response. */
+  steerHeadOnly?: boolean;
   /** Official Wk onModeChange after plan accept (target permission mode). */
   onPermissionModeChange?: (mode: string) => void | Promise<void>;
   /** Official ge — Hb isQueued tail in composer column, not Fu. */
@@ -1488,21 +1500,15 @@ export function ExistingSessionComposer({
       >
         <Icon name="ChevronDownSmall" size="s" />
       </button>
-      <OfficialEpitaxyBranchRows bridge={bridge} onOpenDiff={onOpenDiff} session={session} sessionRef={sessionRef} />
       {queuedEntries && queuedEntries.length > 0 ? (
-        <div
-          className="flex flex-col gap-[var(--chat-item-gap)] px-3.5"
-          data-official-source="c10f0af0c-D80FYKHo.js:composer isQueued Hb"
-        >
-          {queuedEntries.map((entry) => (
-            <CodeUserEntryMessage
-              entry={entry}
-              isQueued
-              key={entry.id}
-              onCancelQueued={onCancelQueued ? () => onCancelQueued(entry.id) : undefined}
-            />
-          ))}
-        </div>
+        <OfficialQueuedMessageBar
+          entries={queuedEntries}
+          onCancel={onCancelQueued}
+          onEdit={onEditQueued}
+          onReorder={onReorderQueued}
+          onSteer={onSteerQueued}
+          steerHeadOnly={steerHeadOnly}
+        />
       ) : null}
       <InlineToolPermissionApprovals
         bridge={bridge}
@@ -1510,6 +1516,7 @@ export function ExistingSessionComposer({
         onPermissionModeChange={onPermissionModeChange ?? ((mode) => void applyPermissionMode(mode))}
         sessionId={sessionRef?.id}
       />
+      <OfficialEpitaxyBranchRows bridge={bridge} onOpenDiff={onOpenDiff} session={session} sessionRef={sessionRef} />
       <div
         className={`epitaxy-prompt relative isolate rounded-r7 transition-shadow duration-300 ${isBashMode ? "[&_.tiptap]:font-mono [&_.tiptap]:text-[length:var(--text-code)]" : ""}`}
       >

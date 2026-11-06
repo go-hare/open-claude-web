@@ -17,6 +17,7 @@ import { useI18nText } from "../../../i18n/footerMenuMessages";
 import { SESSION_LOAD_MESSAGES } from "../officialCodeChromeMessages";
 import type { ChatMessage, SendMessageInput, SessionSummary } from "../../../adapters/desktopBridge/types";
 import {
+  messageIdentity,
   officialCodeSessionStore,
   useOfficialCodeSessionBucket,
 } from "./officialCodeSessionStore";
@@ -381,6 +382,50 @@ export function useEpitaxySessionData(sessionId?: string) {
     })();
   }, [sessionId, store]);
 
+  /**
+   * Official cc432 `$o` / c06 `reorderQueuedMessage`: optimistic place-after,
+   * host `reorderQueuedMessage(sessionId, uuid, overUuid)`, roll back via
+   * `placeQueuedMessageAfter` when the host says too-late.
+   */
+  const reorderQueuedMessage = useCallback((uuid: string, overUuid: string) => {
+    if (!sessionId || !uuid || !overUuid || uuid === overUuid) return;
+    const before = store.getState().buckets[sessionId]?.queuedMessages ?? [];
+    const from = before.findIndex((message) => messageIdentity(message) === uuid);
+    const previous = from > 0 ? messageIdentity(before[from - 1]!) : null;
+    const moved = store.getState().reorderQueuedMessage(sessionId, uuid, overUuid);
+    if (!moved) return;
+    void (async () => {
+      const ok = (await desktopBridge.LocalSessions.reorderQueuedMessage?.(sessionId, uuid, overUuid).catch(() => false)) === true;
+      if (!ok) store.getState().placeQueuedMessageAfter(sessionId, uuid, previous);
+    })();
+  }, [sessionId, store]);
+
+  /**
+   * Official cc432 `_f`: head → `promoteQueued` (`es`), else `sendSteeredNow` via
+   * the stop-and-send path is host `sendSteeredNow` (non-head, interrupt + drain).
+   * UI order follows the host; do not drop the row here — drain / echo does.
+   */
+  const steerQueuedMessage = useCallback((uuid: string) => {
+    if (!sessionId || !uuid) return;
+    const queued = store.getState().buckets[sessionId]?.queuedMessages ?? [];
+    const headId = queued[0] ? messageIdentity(queued[0]) : "";
+    const from = queued.findIndex((message) => messageIdentity(message) === uuid);
+    const previous = from > 0 ? messageIdentity(queued[from - 1]!) : null;
+    const head = headId === uuid;
+    void (async () => {
+      if (head) {
+        // Official promoteQueued enqueues the deferred head onto the live input
+        // now — it is no longer a queued row. Drop only after the host accepts.
+        const ok = (await desktopBridge.LocalSessions.promoteQueuedMessage?.(sessionId, uuid).catch(() => false)) === true;
+        if (ok) store.getState().dropQueuedMessage(sessionId, uuid);
+        return;
+      }
+      const moved = store.getState().placeQueuedMessageAfter(sessionId, uuid, null);
+      const ok = (await desktopBridge.LocalSessions.sendSteeredNow?.(sessionId, uuid).catch(() => false)) === true;
+      if (!ok && moved) store.getState().placeQueuedMessageAfter(sessionId, uuid, previous);
+    })();
+  }, [sessionId, store]);
+
   // useLayoutEffect: markLoading / open path must set B before paint so Ja shows
   // (official openSession leaves transcript pending until Ya). useEffect painted one
   // frame of empty idle → "No messages yet." flash on cold / hot-open empty buckets.
@@ -572,6 +617,8 @@ export function useEpitaxySessionData(sessionId?: string) {
     beginLocalUserTurn,
     busy: H,
     cancelQueuedMessage,
+    reorderQueuedMessage,
+    steerQueuedMessage,
     entries,
     queuedEntries,
     error: bucket.error,

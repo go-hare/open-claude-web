@@ -138,7 +138,7 @@ export function EpitaxyLandingError({
         <TileBackdrop />
         <div className="min-h-screen flex flex-col items-center justify-center px-4">
           <div className="text-center max-w-md">
-            <div className="text-danger-000 mb-6 text-lg font-medium">Something went wrong loading this session.</div>
+            <div className="text-danger-000 mb-6 text-lg font-medium" data-intl-id="z0PjNhLbSp">{text.wentWrongLoadingThisSession}</div>
             {onRetry ? (
               <button className={primaryButtonClass} type="button" onClick={onRetry}>
                 <span data-intl-id="FazwRldA7z">{text.tryAgain}</span>

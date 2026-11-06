@@ -346,6 +346,16 @@ type OfficialCodeSessionActions = {
   enqueueQueuedMessage: (sessionId: string, message: ChatMessage) => void;
   /** Official dropQueuedMessage — Remove queued message / cancel mid-turn send. */
   dropQueuedMessage: (sessionId: string, uuid: string) => void;
+  /**
+   * Official c06 `reorderQueuedMessage(sessionId, uuid, overUuid)`.
+   * Place `uuid` just after `overUuid`. Returns false when either id is missing.
+   */
+  reorderQueuedMessage: (sessionId: string, uuid: string, overUuid: string) => boolean;
+  /**
+   * Official c06 `placeQueuedMessageAfter(sessionId, uuid, afterUuid)`.
+   * `afterUuid === null` moves `uuid` to index 0 (promote / send-now optimistic).
+   */
+  placeQueuedMessageAfter: (sessionId: string, uuid: string, afterUuid: string | null) => boolean;
   /** Mark cold open pending flags (only when no renderable content). */
   markLoading: (sessionId: string, silent?: boolean) => number;
   /** Apply successful load for a generation. */
@@ -622,7 +632,7 @@ function upsertMessage(messages: ChatMessage[], next: ChatMessage): ChatMessage[
  *
  * Anthropic message.id collapse belongs in load/getTranscript richer-merge, not live upsert.
  */
-function messageIdentity(message: ChatMessage) {
+export function messageIdentity(message: ChatMessage) {
   const raw = (message.raw && typeof message.raw === "object" ? message.raw : {}) as Record<string, unknown>;
   return String(raw.uuid ?? raw.id ?? message.id);
 }
@@ -1281,6 +1291,62 @@ function createOfficialCodeSessionStore() {
         },
       };
     });
+  },
+
+  reorderQueuedMessage: (sessionId, uuid, overUuid) => {
+    if (!uuid || !overUuid || uuid === overUuid) return false;
+    let moved = false;
+    set((state) => {
+      const raw = state.buckets[sessionId];
+      if (!raw) return state;
+      const prev = withQueueDefaults(raw);
+      const from = prev.queuedMessages.findIndex((message) => messageIdentity(message) === uuid);
+      const over = prev.queuedMessages.findIndex((message) => messageIdentity(message) === overUuid);
+      if (from < 0 || over < 0 || from === over) return state;
+      const next = prev.queuedMessages.slice();
+      const [item] = next.splice(from, 1);
+      if (!item) return state;
+      const overIndex = next.findIndex((message) => messageIdentity(message) === overUuid);
+      if (overIndex < 0) return state;
+      next.splice(overIndex + 1, 0, item);
+      moved = true;
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: { ...prev, queuedMessages: next },
+        },
+      };
+    });
+    return moved;
+  },
+
+  placeQueuedMessageAfter: (sessionId, uuid, afterUuid) => {
+    if (!uuid || uuid === afterUuid) return false;
+    let moved = false;
+    set((state) => {
+      const raw = state.buckets[sessionId];
+      if (!raw) return state;
+      const prev = withQueueDefaults(raw);
+      const from = prev.queuedMessages.findIndex((message) => messageIdentity(message) === uuid);
+      if (from < 0) return state;
+      const next = prev.queuedMessages.slice();
+      const [item] = next.splice(from, 1);
+      if (!item) return state;
+      const afterIndex = afterUuid === null
+        ? -1
+        : next.findIndex((message) => messageIdentity(message) === afterUuid);
+      if (afterUuid !== null && afterIndex < 0) return state;
+      if (afterIndex + 1 === from) return state;
+      next.splice(afterIndex + 1, 0, item);
+      moved = true;
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: { ...prev, queuedMessages: next },
+        },
+      };
+    });
+    return moved;
   },
 
   markLoading: (sessionId, silent = false) => {

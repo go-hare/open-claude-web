@@ -844,6 +844,20 @@ export type LocalSessionsBridge = {
    * false = too-late (already on active stdin / no deferred queue entry).
    */
   cancelQueuedMessage?: (id: string, uuid: string) => Promise<boolean>;
+  /**
+   * Official cef1 reorderQueued(sessionId, uuid, overUuid) — place uuid just after overUuid.
+   * false = too-late (already on the live input) or unknown uuid.
+   */
+  reorderQueuedMessage?: (id: string, uuid: string, overUuid: string) => Promise<boolean>;
+  /**
+   * Official cef1 promoteQueued — enqueue the deferred head now, current response keeps going.
+   */
+  promoteQueuedMessage?: (id: string, uuid: string) => Promise<boolean>;
+  /**
+   * Official cef1 sendSteeredNow — move a non-head queued uuid to the front, then interrupt
+   * so drain sends it first (cf74 6Wu6VFE8rB).
+   */
+  sendSteeredNow?: (id: string, uuid: string) => Promise<boolean>;
   forkSession?: (id: string, messageId?: string) => Promise<SessionSummary | null>;
   /**
    * Official LocalSessions.setManualKeepAwake(sessionId, enabled) — c593 kp.

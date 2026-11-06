@@ -138,6 +138,12 @@ type RawLocalSessionsBridge = {
   start?: (input?: Record<string, unknown>) => Promise<unknown>;
   sendMessage?: (...args: unknown[]) => Promise<unknown>;
   cancelQueuedMessage?: (id: string, uuid: string) => Promise<unknown>;
+  /** Official cef1 reorderQueued(sessionId, uuid, overUuid). */
+  reorderQueuedMessage?: (id: string, uuid: string, overUuid: string) => Promise<unknown>;
+  /** Official cef1 promoteQueued — head of deferredSends onto the live input. */
+  promoteQueuedMessage?: (id: string, uuid: string) => Promise<unknown>;
+  /** Official cef1 sendSteeredNow — non-head queued row, interrupt then drain. */
+  sendSteeredNow?: (id: string, uuid: string) => Promise<unknown>;
   forkSession?: (id: string, messageId?: string) => Promise<unknown>;
   setManualKeepAwake?: (id: string, enabled: boolean) => Promise<unknown>;
   rewind?: (id: string, messageId?: string) => Promise<unknown>;
@@ -1280,6 +1286,19 @@ function createLocalSessionsBridge(raw: RawLocalSessionsBridge | undefined, targ
     // Official Yr → transport.cancelQueued(sessionId, uuid) → boolean (false = too-late).
     cancelQueuedMessage: async (id, uuid) => {
       const result = await raw?.cancelQueuedMessage?.(id, uuid);
+      return result === true;
+    },
+    // Official cef1 reorderQueued / promoteQueued / sendSteeredNow → boolean.
+    reorderQueuedMessage: async (id, uuid, overUuid) => {
+      const result = await raw?.reorderQueuedMessage?.(id, uuid, overUuid);
+      return result === true;
+    },
+    promoteQueuedMessage: async (id, uuid) => {
+      const result = await raw?.promoteQueuedMessage?.(id, uuid);
+      return result === true;
+    },
+    sendSteeredNow: async (id, uuid) => {
+      const result = await raw?.sendSteeredNow?.(id, uuid);
       return result === true;
     },
     forkSession: async (id, messageId) => {

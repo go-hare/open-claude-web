@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { GitCommandResult, LocalPrState, LocalSessionsBridge, SessionSummary } from "../../adapters/desktopBridge/types";
 import { useErrorsOptional } from "../settings/errorsToast";
 import { useI18nText } from "../../i18n/footerMenuMessages";
@@ -6,7 +6,7 @@ import { Icon } from "../../shell/icons";
 import { parseLocalBranches, resolveOfficialBaseBranch } from "./composer/workspaceControlsHelpers";
 import { OfficialButton, OfficialSplitDropdownButton, type OfficialDropdownItem } from "./OfficialEpitaxyComponents";
 import { OfficialEpitaxyInstallGhModal } from "./OfficialEpitaxyInstallGhModal";
-import { PR_ROW_MESSAGES } from "./officialCodeChromeMessages";
+import { PR_ROW_MESSAGES, SESSION_LOAD_MESSAGES } from "./officialCodeChromeMessages";
 
 /** Official ion-dist c11959232 LSaIX82GfM defaultMessage. */
 const CREATE_PR_TOAST_MESSAGE = "Could not create pull request. You can try again.";
@@ -26,7 +26,7 @@ type GitInfo = {
 
 /** Official nM / Yk pr visual states (c11959232 EpitaxyBranchRow). */
 type OfficialPrVisualState = "open" | "draft" | "merged" | "closed" | "changesRequested" | "conflicting" | "queued";
-type OfficialPrMode = "create" | "draft" | "compose" | "view";
+type OfficialPrMode = "create" | "draft" | "compose" | "view" | "commit";
 type OfficialCiStatus = "failed" | "passed" | "unavailable" | "loading" | "pending";
 
 type BranchRowState = {
@@ -119,7 +119,7 @@ function writeCreateAsDraft(draft: boolean) {
 /** Official Yk / Xk PR icon map (c11959232). */
 const PR_STATE_ICON: Record<OfficialPrVisualState, { name: string; accent?: "green" | "purple" | "pink" | "orange" | "yellow" }> = {
   open: { name: "GitPullRequest", accent: "green" },
-  draft: { name: "GitDraftPullRequestPR" },
+  draft: { name: "GitPullRequestDraft" },
   merged: { name: "GitMergedSimple", accent: "purple" },
   closed: { name: "GitPullRequestClosed", accent: "pink" },
   changesRequested: { name: "GitPullRequestClosed", accent: "pink" },
@@ -132,15 +132,18 @@ const PR_STATE_ELEVATION: Partial<Record<OfficialPrVisualState, "purple" | "yell
   queued: "yellow",
 };
 
-const ELEVATION_BG: Record<"purple" | "yellow", string> = {
-  purple: "!bg-[var(--extended-10-purple)] !shadow-none ![backdrop-filter:none]",
-  yellow: "!bg-[var(--extended-10-yellow)] !shadow-none ![backdrop-filter:none]",
-};
+/** Official cd5a `xe = t.type==="local"&&!n.repo` → `on=!B&&xe?"commit"`. */
+function officialCommitMode(sessionType: OfficialBranchSessionRef["type"] | undefined, state: BranchRowState) {
+  return sessionType === "local" && !state.remoteSlug && !state.prUrl;
+}
 
-const ELEVATION_TEXT: Record<"purple" | "yellow", string> = {
-  purple: "text-extended-purple",
-  yellow: "text-extended-yellow",
-};
+/** Session repo.name may be `owner/name` or a path basename — only GitHub slugs count as repo. */
+function githubSlugFromSessionRepo(name?: string | null) {
+  const raw = normalizeLabel(name);
+  if (!raw) return undefined;
+  if (raw.includes("/") && !raw.includes("\\") && !/^[A-Za-z]:/.test(raw)) return raw;
+  return undefined;
+}
 
 /**
  * Sticky last branch row per session — same spirit as OfficialComposerUsageIndicator
@@ -158,6 +161,7 @@ const officialBranchRowCache = new Map<string, BranchRowState | null>();
 export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows({ bridge, onOpenDiff, session, sessionRef }: OfficialEpitaxyBranchRowsProps) {
   // Official PC() toast carrier for LSaIX82GfM create-PR failures.
   const errors = useErrorsOptional();
+  const prRowText = useI18nText(PR_ROW_MESSAGES);
   const sessionId = sessionRef?.id;
   const [state, setState] = useState<BranchRowState | null>(() =>
     sessionId && officialBranchRowCache.has(sessionId)
@@ -195,7 +199,7 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
       const gitInfo = normalizeGitInfo(gitInfoRaw);
       const branchName = normalizeLabel(session?.repo?.branch) ?? normalizeLabel(gitInfo?.branch);
       const cwd = normalizeLabel(gitInfo?.root) ?? normalizeLabel(gitInfo?.cwd) ?? normalizeLabel(session?.cwd);
-      const remoteSlug = normalizeLabel(session?.repo?.name) ?? parseRemoteSlug(gitInfo?.remotes);
+      const remoteSlug = parseRemoteSlug(gitInfo?.remotes) ?? githubSlugFromSessionRepo(session?.repo?.name);
       const repoName = remoteSlug ? shortRepoName(remoteSlug) : normalizeLabel(basename(cwd));
       const branches = parseLocalBranches(branchesRaw, branchName ?? "");
       const baseBranch = resolveOfficialBaseBranch({
@@ -281,26 +285,34 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
       window.open(state.prUrl, "_blank", "noopener");
       return;
     }
+    // Official cd5a `on=!B&&xe?"commit"` — local without github repo asks Claude to commit.
+    if (mode === "commit" || officialCommitMode(sessionRef.type, state)) {
+      void bridge.sendMessage?.(
+        sessionRef.id,
+        "Commit the working tree changes with a sensible message.",
+      ).catch(() => undefined);
+      return;
+    }
     if (mode === "compose") {
       setPrMode("compose");
       openComposePr(state);
       return;
     }
     if (!state.hasRemote) {
-      setPrError("Add a GitHub remote to create a pull request");
+      setPrError(prRowText.addGithubRemote);
       return;
     }
     // Official G residual — create disabled when already on base (no feature branch).
     if (state.isOnBaseBranch && !state.prUrl) {
-      setPrError("Already on the base branch — check out a feature branch first");
+      setPrError(prRowText.alreadyOnBaseBranch);
       return;
     }
     if (!state.hasChanges && !state.prUrl) {
-      setPrError("No changes to create a PR from");
+      setPrError(prRowText.noChangesToCreatePr);
       return;
     }
     if (session?.isRunning) {
-      setPrError("Claude is working — wait for the turn to finish");
+      setPrError(prRowText.claudeIsWorking);
       return;
     }
     setPrBusy(true);
@@ -375,14 +387,15 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
     } finally {
       setPrBusy(false);
     }
-  }, [bridge, errors, openComposePr, prBusy, prMode, session?.isRunning, sessionRef, state]);
+  }, [bridge, errors, openComposePr, prBusy, prMode, prRowText.addGithubRemote, prRowText.alreadyOnBaseBranch, prRowText.claudeIsWorking, prRowText.noChangesToCreatePr, session?.isRunning, sessionRef, state]);
 
   const prMenuItems = useMemo((): OfficialDropdownItem[] | undefined => {
     if (!state || state.prUrl) return undefined;
+    if (officialCommitMode(sessionRef?.type, state)) return undefined;
     return [
       {
         icon: "GitPullRequest",
-        label: "Create PR",
+        label: prRowText.create,
         checked: prMode === "create",
         onSelect: () => {
           setPrMode("create");
@@ -390,8 +403,8 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
         },
       },
       {
-        icon: "GitDraftPullRequestPR",
-        label: "Create draft PR",
+        icon: "GitPullRequestDraft",
+        label: prRowText.draft,
         checked: prMode === "draft",
         onSelect: () => {
           setPrMode("draft");
@@ -400,16 +413,15 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
       },
       {
         icon: "SquareArrowTopRightOpenLink",
-        label: "Manually create PR",
+        label: prRowText.compose,
         checked: prMode === "compose",
         disabled: !state.hasRemote && !state.remoteSlug,
-        // Official: menu only selects compose mode; primary Kw click opens compose URL (Z/P).
         onSelect: () => {
           setPrMode("compose");
         },
       },
     ];
-  }, [openComposePr, prMode, state]);
+  }, [prMode, prRowText.compose, prRowText.create, prRowText.draft, sessionRef?.type, state]);
 
   if (!state) return null;
 
@@ -427,7 +439,7 @@ export const OfficialEpitaxyBranchRows = memo(function OfficialEpitaxyBranchRows
         isTurnBusy={session?.isRunning === true}
         prBusy={prBusy}
         prMenuItems={prMenuItems}
-        prMode={state.prUrl ? "view" : prMode}
+        prMode={state.prUrl ? "view" : officialCommitMode(sessionRef?.type, state) ? "commit" : prMode}
         state={state}
       />
       {prError ? <p className="text-footnote text-extended-pink select-text">{prError}</p> : null}
@@ -457,116 +469,119 @@ function EpitaxyBranchRow({
   state: BranchRowState;
 }) {
   const prRowText = useI18nText(PR_ROW_MESSAGES);
-  const prLabel = officialPrActionLabel(prMode, prBusy);
-  // Official X/Y residual (c11959232): disable when no remote / on base / not pushed /
-  // Claude working / no changes (compose mode only needs remote for open URL).
+  const prLabel = officialPrActionLabel(prMode, prBusy, prRowText);
+  const commitMode = prMode === "commit";
+  // Official cd5a `Sn` disable reasons — local create keeps ensureBranchPushed (Q is remote-only).
   const prDisabledReason = (() => {
     if (state.prUrl) return undefined;
     if (prMode === "compose") {
-      return !state.hasRemote && !state.remoteSlug
-        ? "Add a GitHub remote to create a pull request"
-        : undefined;
+      return !state.hasRemote && !state.remoteSlug ? prRowText.addGithubRemote : undefined;
     }
-    if (!state.hasRemote) return "Add a GitHub remote to create a pull request";
-    if (state.isOnBaseBranch) return "Already on the base branch — check out a feature branch first";
-    // Local path: not-pushed is soft — create will ensureBranchPushed. Only hard-disable
-    // when there is clearly no remote tracking and no commits ahead signal is unknown.
-    // Official Q is remote-session-centric; product local keeps create enabled so ensure can run.
-    if (!state.hasChanges) return "No changes to create a PR from";
-    if (isTurnBusy) return "Claude is working — wait for the turn to finish";
+    if (commitMode) {
+      if (!state.hasChanges) return prRowText.noChangesToCommit;
+      if (isTurnBusy) return prRowText.claudeIsWorking;
+      return undefined;
+    }
+    if (!state.hasRemote) return prRowText.addGithubRemote;
+    if (state.isOnBaseBranch) return prRowText.alreadyOnBaseBranch;
+    if (!state.hasChanges) return prRowText.noChangesToCreatePr;
+    if (isTurnBusy) return prRowText.claudeIsWorking;
     return undefined;
   })();
   const prDisabled = prBusy || Boolean(prDisabledReason);
-  const iconMeta = state.prVisual ? PR_STATE_ICON[state.prVisual] : { name: "GitPullRequest" as const };
+  const iconMeta = state.prVisual ? PR_STATE_ICON[state.prVisual] : undefined;
   const elevation = state.prVisual ? PR_STATE_ELEVATION[state.prVisual] : undefined;
   const prIconAria = state.prVisual
     ? state.prNumber
       ? `#${state.prNumber} · ${officialPrStateLabel(state.prVisual)}`
       : officialPrStateLabel(state.prVisual)
-    : "PR not yet created";
+    : undefined;
+  // Official FB `hre(pe)`: Xh band + @container/branch-row. Neutral = bg-alpha-1.
+  const bandClass = [
+    "flex items-center gap-[5px] w-full min-h-[40px] p-[8px] rounded-[10px] @container/branch-row",
+    elevation === "purple" ? "bg-git-merged" : elevation === "yellow" ? "bg-git-queued" : "bg-alpha-1",
+  ].join(" ");
 
   return (
-    <div className="epitaxy-branch-row relative isolate flex items-center gap-g4 w-full p-p6 rounded-r7 mb-[2px]">
-      <span
-        aria-hidden="true"
-        className={[
-          "absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-primary-elevated effect-primary-elevated",
-          elevation ? ELEVATION_BG[elevation] : "",
-        ].filter(Boolean).join(" ")}
-      />
-      <div className="flex-1 flex items-center gap-g1 min-w-0">
-        <OfficialButton
-          ariaLabel={prIconAria}
-          className={iconMeta.accent ? "shrink-0 [&:hover_.btn-squish]:!bg-[var(--accent-10)] [&:active_.btn-squish]:!bg-[var(--accent-10)]" : "shrink-0"}
-          disabled={!state.prUrl}
-          icon={iconMeta.name}
-          size="base"
-          variant={iconMeta.accent ? "accent" : "contained"}
-          onClick={state.prUrl ? onOpenPr : undefined}
-        />
-        {state.repoName ? <span className="px-p6 text-footnote text-t6 shrink-0">{state.repoName}</span> : null}
-        <span className="epitaxy-branch-flow contents">
+    <div className={bandClass} data-official-source="cd5a31703-B4nKQMBN.js:FB">
+      <div className="flex-1 flex items-center gap-0 min-w-0">
+        {state.prUrl && iconMeta ? (
           <OfficialButton
-            className="shrink-0"
+            ariaLabel={prIconAria}
+            className={iconMeta.accent ? "shrink-0 [&:hover_.btn-squish]:!bg-[var(--accent-10)] [&:active_.btn-squish]:!bg-[var(--accent-10)]" : "shrink-0"}
+            icon={iconMeta.name}
             size="base"
-            variant={elevation ? "link" : "uncontained"}
-          >
-            {state.baseBranch}
-          </OfficialButton>
-          <Icon
-            name="ArrowLeft"
-            size="xs"
-            className={["shrink-0 -mx-[var(--p3)]", elevation ? ELEVATION_TEXT[elevation] : "text-t6"].join(" ")}
+            variant={iconMeta.accent ? "accent" : "ghost"}
+            onClick={onOpenPr}
           />
-          <OfficialBranchNameButton branchName={state.branchName} />
-        </span>
+        ) : null}
+        {state.prUrl ? <span aria-hidden="true" className="w-[12px] min-w-0 shrink" /> : null}
+        <div className="flex-1 flex items-center gap-0 min-w-0">
+          {state.repoName ? (
+            <span className={`epitaxy-branch-repo inline-flex h-control min-w-0 items-center whitespace-nowrap !px-1.25 text-body font-normal text-muted ${commitMode ? "!max-w-none" : "max-w-[160px] shrink"}`}>
+              <span className="truncate">{state.repoName}</span>
+            </span>
+          ) : null}
+          <span className="flex-1 flex items-center gap-0 min-w-0 @container/branch-chip text-body">
+            <OfficialBranchNameButton branchName={state.branchName} />
+          </span>
+        </div>
+        <span aria-hidden="true" className="min-w-0 shrink-[9999]" />
       </div>
-      {state.changedFiles > 0 ? (
-        <OfficialButton className="shrink-0" onClick={onOpenDiff} size="base" variant={elevation ? "uncontained" : "contained"}>
-          <OfficialDiffStat added={state.additions} removed={state.deletions} />
-        </OfficialButton>
-      ) : null}
-      {ciStatus && state.prUrl && state.prVisual !== "merged" ? (
-        <OfficialButton
-          className="gap-g2"
-          onClick={state.prUrl ? () => window.open(`${state.prUrl}/checks`, "_blank", "noopener") : undefined}
-          size="base"
-          variant="contained"
-        >
-          <OfficialCiStatusDot status={ciStatus} />
-          <span>CI</span>
-          <Icon name="ChevronDownSmall" size="xs" className="text-t6 -mr-[2px]" />
-        </OfficialButton>
-      ) : null}
-      {elevation ? (
-        <OfficialButton onClick={state.prUrl ? onOpenPr : onCreatePr} size="base" variant="link">
-          {prLabel}
-        </OfficialButton>
-      ) : prDisabled && prDisabledReason && !state.prUrl ? (
-        <span title={prDisabledReason} className="inline-flex">
-          <OfficialButton disabled size="base" variant="contained">
+      <div className="epitaxy-branch-trailing contents">
+        {state.changedFiles > 0 ? (
+          <OfficialButton
+            ariaLabel={prRowText.viewChanges}
+            className="shrink-0"
+            onClick={onOpenDiff}
+            size="base"
+            variant={elevation ? "uncontained" : "contained"}
+          >
+            <OfficialDiffStat added={state.additions} removed={state.deletions} />
+          </OfficialButton>
+        ) : null}
+        {ciStatus && state.prUrl && state.prVisual !== "merged" ? (
+          <OfficialButton
+            className="gap-g2"
+            onClick={state.prUrl ? () => window.open(`${state.prUrl}/checks`, "_blank", "noopener") : undefined}
+            size="base"
+            variant="contained"
+          >
+            <OfficialCiStatusDot status={ciStatus} />
+            <span>CI</span>
+            <Icon name="ChevronDownSmall" size="xs" className="text-t6 -mr-[2px]" />
+          </OfficialButton>
+        ) : null}
+        {prMode === "view" ? null : elevation ? (
+          <OfficialButton onClick={state.prUrl ? onOpenPr : onCreatePr} size="base" variant="link">
             {prLabel}
           </OfficialButton>
-        </span>
-      ) : prMenuItems && prMenuItems.length > 0 && !state.prUrl ? (
-        <OfficialSplitDropdownButton
-          align="end"
-          ariaLabel={prLabel}
-          busy={prBusy}
-          disabled={prDisabled}
-          items={prMenuItems}
-          label={prLabel}
-          menuLabel={prRowText.morePrOptions}
-          onIconClick={onCreatePr}
-          side="top"
-          size="base"
-          variant="contained"
-        />
-      ) : (
-        <OfficialButton disabled={prDisabled} onClick={state.prUrl ? onOpenPr : onCreatePr} size="base" variant="contained">
-          {prLabel}
-        </OfficialButton>
-      )}
+        ) : prDisabled && prDisabledReason && !state.prUrl ? (
+          <span title={prDisabledReason} className="inline-flex">
+            <OfficialButton disabled size="base" variant="contained">
+              {prLabel}
+            </OfficialButton>
+          </span>
+        ) : prMenuItems && prMenuItems.length > 0 && !state.prUrl ? (
+          <OfficialSplitDropdownButton
+            align="end"
+            ariaLabel={prLabel}
+            busy={prBusy}
+            disabled={prDisabled}
+            items={prMenuItems}
+            label={prLabel}
+            menuLabel={prRowText.morePrOptions}
+            onIconClick={onCreatePr}
+            side="top"
+            size="base"
+            variant="contained"
+          />
+        ) : (
+          <OfficialButton disabled={prDisabled} onClick={state.prUrl ? onOpenPr : onCreatePr} size="base" variant="contained">
+            {prLabel}
+          </OfficialButton>
+        )}
+      </div>
     </div>
   );
 }
@@ -586,52 +601,60 @@ function OfficialCiStatusDot({ status }: { status: OfficialCiStatus }) {
 }
 
 function OfficialBranchNameButton({ branchName }: { branchName: string }) {
-  const [copied, setCopied] = useState(false);
-  const timerRef = useRef<number | null>(null);
-  useEffect(() => () => {
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-  }, []);
+  const errors = useErrorsOptional();
+  const sessionLoadText = useI18nText(SESSION_LOAD_MESSAGES);
   const copy = useCallback(() => {
-    void navigator.clipboard?.writeText(branchName);
-    setCopied(true);
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => setCopied(false), 1200);
-  }, [branchName]);
+    void navigator.clipboard?.writeText(branchName).then(() => {
+      errors?.addSuccess(sessionLoadText.branchNameCopiedToClipboard);
+    });
+  }, [branchName, errors, sessionLoadText.branchNameCopiedToClipboard]);
 
   return (
-    <OfficialButton className="min-w-0" onClick={copy} size="base" variant="uncontained">
-      <span className="truncate">{branchName}</span>
-      <Icon name={copied ? "CheckSelection" : "CopySquareBehind"} size="xs" className={`shrink-0 text-t6 transition-opacity ${copied ? "opacity-100" : "opacity-0 group-hover/btn:opacity-100 group-focus-visible/btn:opacity-100"}`} />
+    <OfficialButton
+      ariaLabel={sessionLoadText.copyBranchName}
+      className="shrink min-w-0 !justify-start *:min-w-0 text-muted hover:text-primary !px-1.25"
+      onClick={copy}
+      size="base"
+      variant="ghost"
+    >
+      <span className="truncate font-mono-ui">{branchName}</span>
     </OfficialButton>
   );
 }
 
 function OfficialDiffStat({ added, removed }: { added: number; removed: number }) {
   return (
-    <span className="contents text-footnote-medium">
+    <span className="contents text-body-medium">
       <span className="text-extended-green">+{added}</span>
       <span className="text-extended-pink">-{removed}</span>
     </span>
   );
 }
 
-/** Official nM busy labels (c11959232). */
-function officialPrActionLabel(mode: OfficialPrMode, busy: boolean) {
+/** Official SLe / PB — `ix[te]` + `_n.creating`. */
+function officialPrActionLabel(
+  mode: OfficialPrMode,
+  busy: boolean,
+  text: Record<keyof typeof PR_ROW_MESSAGES, string>,
+) {
   if (busy) {
-    if (mode === "view") return "View PR";
-    return "Creating PR…";
+    if (mode === "view") return text.view;
+    if (mode === "commit") return text.commit;
+    return text.creating;
   }
   switch (mode) {
     case "view":
-      return "View PR";
+      return text.view;
     case "create":
-      return "Create PR";
+      return text.create;
     case "draft":
-      return "Create draft PR";
+      return text.draft;
     case "compose":
-      return "Manually create PR";
+      return text.compose;
+    case "commit":
+      return text.commit;
     default:
-      return "Create PR";
+      return text.create;
   }
 }
 

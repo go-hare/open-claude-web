@@ -106,9 +106,51 @@ export const RUNNING_TASKS_STATUS_MESSAGES = {
   tasksFinished: { defaultMessage: "{count, plural, one {# task finished} other {# tasks finished}}", id: "qQ8tlkeZbZ" },
 } satisfies MessageDescriptors;
 
-/** Official cd5a `_Le` PR split menuLabel. */
+/**
+ * Official c219 `gn` / `_n` PR action labels + cd5a `_Le` menuLabel + disable reasons.
+ * Band `SLe` reads `ix[te]` (same ids). Do not invent English in the row.
+ */
 export const PR_ROW_MESSAGES = {
   morePrOptions: { defaultMessage: "More PR options", id: "tRloa3+Odj" },
+  view: { defaultMessage: "View PR", id: "OtsPuOcaGS" },
+  create: { defaultMessage: "Create PR", id: "EBcT1W1KuZ" },
+  draft: { defaultMessage: "Create draft PR", id: "LugtSxHcwh" },
+  compose: { defaultMessage: "Manually create PR", id: "rQcYK3TGb8" },
+  merged: { defaultMessage: "Merged", id: "9O0Gdrs9M5" },
+  queued: { defaultMessage: "Queued", id: "Cnm0QAkWnp" },
+  commit: { defaultMessage: "Commit changes", id: "PQy14pRnLi" },
+  creating: { defaultMessage: "Creating PR…", id: "E7tHZPJmaR" },
+  viewChanges: { defaultMessage: "View changes", id: "x1MuR5VeqW" },
+  addGithubRemote: { defaultMessage: "Add a GitHub remote to create a pull request", id: "WvygrXzhax" },
+  alreadyOnBaseBranch: { defaultMessage: "Already on the base branch — check out a feature branch first", id: "7G8vRXjEWS" },
+  branchNotPushed: { defaultMessage: "Branch hasn’t been pushed to GitHub", id: "fxDkZG/wGs" },
+  checkingForPr: { defaultMessage: "Checking for an existing pull request", id: "qKqM/sYaAL" },
+  claudeIsWorking: { defaultMessage: "Claude is working — wait for the turn to finish", id: "K2y4rXHFJK" },
+  noChangesToCommit: { defaultMessage: "No changes to commit", id: "4l3NwSf6mB" },
+  noChangesToCreatePr: { defaultMessage: "No changes to create a PR from", id: "AmB41NR69H" },
+} satisfies MessageDescriptors;
+
+/**
+ * Official cf74 `rS` QueuedMessageBar (`oS` / `sS`) — Code composer column `a2`, not channel-rail Hb.
+ */
+export const QUEUED_MESSAGE_BAR_MESSAGES = {
+  messagesQueued: { defaultMessage: "{count, plural, one {# message queued} other {# messages queued}}", id: "ezsVmYezso" },
+  nextPreview: { defaultMessage: "Next: {preview}", id: "BR1hQiWywY" },
+  removeFromQueue: { defaultMessage: "Remove from queue", id: "pu9H1Nruwc" },
+  sendNow: { defaultMessage: "Send now", id: "drJdjjprFp" },
+  editInComposer: { defaultMessage: "Edit in composer", id: "lWwW3BF7Wa" },
+  collapseQueued: { defaultMessage: "Collapse queued messages", id: "KZVLRZPNPH" },
+  queuedMessages: { defaultMessage: "Queued messages", id: "wytZxjTMDw" },
+  clearAll: { defaultMessage: "Clear all", id: "QW+Q5NHmeF" },
+  image: { defaultMessage: "[Image]", id: "nKQRbs00nP" },
+  removing: { defaultMessage: "Removing…", id: "WUpPCDbJ8g" },
+  sending: { defaultMessage: "Sending…", id: "ff2VGLJm3K" },
+  /** Official cf74 `aS` hidden description when steerHeadOnly. */
+  stopsCurrentResponse: { defaultMessage: "Stops Claude’s current response.", id: "6Wu6VFE8rB" },
+  /** Official cf74 `aS` hidden description when the row is the deferred head. */
+  readsAtNextStep: { defaultMessage: "Claude reads this message at its next step.", id: "2jgJ/J75kk" },
+  /** Official cf74 `nS` drag handle. */
+  reorderQueuedMessage: { defaultMessage: "Reorder queued message", id: "9kugsu9NjU" },
 } satisfies MessageDescriptors;
 
 /**
@@ -286,6 +328,8 @@ export const SESSION_LOAD_MESSAGES = {
   couldntLoadThisSession: { defaultMessage: "Couldn’t load this session.", id: "diHcJ+720f" },
   backToLandingPage: { defaultMessage: "Back to landing page", id: "KGeQPLIrlo" },
   tryAgain: { defaultMessage: "Try again", id: "FazwRldA7z" },
+  /** Official cc432 `pL` / shared-23 Ho fallback — `zr`/`Hc` message. */
+  wentWrongLoadingThisSession: { defaultMessage: "Something went wrong loading this session.", id: "z0PjNhLbSp" },
   /** Official FM (c11959232). */
   reconnectGithub: { defaultMessage: "Reconnect GitHub", id: "GT4+roXeE1" },
   details: { defaultMessage: "Details", id: "Lv0zJuL1jH" },

@@ -121,11 +121,20 @@ export function useOfficialPendingShellCommand(sessionId: string | undefined) {
   );
 }
 
+/**
+ * Stable idle snapshot for OfficialAssistantCodeFence.
+ * Returning a fresh `{ error:null, output:null, running:false }` every select tick
+ * forceStoreRerenders every code fence → Ho Maximum update depth.
+ */
+export const OFFICIAL_IDLE_INLINE_RUN = {
+  error: null as string | null,
+  output: null as string | null,
+  running: false,
+};
+
 export function useOfficialInlineRunForFence(runId: string) {
   return useStore(officialEpitaxyShellRunStore, (state) => {
-    if (state.inlineRun?.id !== runId) {
-      return { error: null, output: null, running: false };
-    }
+    if (state.inlineRun?.id !== runId) return OFFICIAL_IDLE_INLINE_RUN;
     const run = state.inlineRun;
     return {
       error: run.error,

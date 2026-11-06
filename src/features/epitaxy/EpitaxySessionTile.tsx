@@ -343,6 +343,8 @@ function EpitaxyChatPanel({
   const {
     beginLocalUserTurn,
     cancelQueuedMessage,
+    reorderQueuedMessage,
+    steerQueuedMessage,
     entries,
     queuedEntries,
     error,
@@ -1173,6 +1175,25 @@ function EpitaxyChatPanel({
             bridge={bridge}
             queuedEntries={queuedEntries}
             onCancelQueued={cancelQueuedMessage}
+            onReorderQueued={reorderQueuedMessage}
+            onSteerQueued={steerQueuedMessage}
+            onEditQueued={(entryId) => {
+              const entry = queuedEntries.find((row) => row.id === entryId);
+              const preview = entry
+                ? entry.items
+                    .map((item) => {
+                      if (item.kind === "text") return item.text;
+                      if (item.kind === "bash" && item.command) return `! ${item.command}`;
+                      return "";
+                    })
+                    .filter(Boolean)
+                    .join(" ")
+                    .replace(/\s+/g, " ")
+                    .trim()
+                : "";
+              cancelQueuedMessage(entryId);
+              if (preview) setComposerText(preview);
+            }}
             composerApiRef={composerApiRef}
             dropHandlersRef={dropHandlersRef}
             // Residual Qj disabled via residualQjDisabled (Os/J/Ns/Ga/xn). See qjDisabled above.
