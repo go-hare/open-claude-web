@@ -3,8 +3,19 @@
  * Empty Skills `Jl` Add skill → re → F(true) → Ol, not Directory / S7t plugin upload.
  */
 import type { ReactNode } from "react";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { Icon } from "../../../shell/icons";
 import { OfficialModal } from "../../shared/OfficialModal";
+
+const NEW_SKILL_MESSAGES = {
+  title: { defaultMessage: "New skill", id: "CBuichAnps" },
+  createWithClaude: { defaultMessage: "Create with Claude", id: "st9QnC8LFC" },
+  buildComplex: { defaultMessage: "Build complex skills through conversation", id: "kvWQwWF1At" },
+  writeInstructions: { defaultMessage: "Write skill instructions", id: "CCQr8NfpEL" },
+  easyToDescribe: { defaultMessage: "Great for skills that are easy to describe", id: "ZGNJP3WbjE" },
+  uploadSkill: { defaultMessage: "Upload a skill", id: "KgA+vPbgQ2" },
+  importFile: { defaultMessage: "Import a .zip, .skill, or .md file", id: "egjYNvENXk" },
+} as const satisfies MessageDescriptors;
 
 export function NewSkillModal({
   isOpen,
@@ -19,32 +30,33 @@ export function NewSkillModal({
   onWriteInstructions?: () => void;
   onUpload?: () => void;
 }) {
+  const text = useI18nText(NEW_SKILL_MESSAGES);
   return (
     <OfficialModal
       hasCloseButton
       isOpen={isOpen}
       modalSize="md"
       onClose={onClose}
-      title={<div className="text-lg font-medium leading-7">New skill</div>}
+      title={<div className="text-lg font-medium leading-7">{text.title}</div>}
     >
       <div className="flex flex-col gap-3 py-1.5 mt-3">
         <NewSkillChoice
-          description="Build complex skills through conversation"
+          description={text.buildComplex}
           icon={<Icon customSize={24} name="spark" />}
           onClick={onCreateWithClaude}
-          title="Create with Claude"
+          title={text.createWithClaude}
         />
         <NewSkillChoice
-          description="Great for skills that are easy to describe"
+          description={text.easyToDescribe}
           icon={<Icon customSize={24} name="NoteSquareLines" />}
           onClick={onWriteInstructions}
-          title="Write skill instructions"
+          title={text.writeInstructions}
         />
         <NewSkillChoice
-          description="Import a .zip, .skill, or .md file"
+          description={text.importFile}
           icon={<Icon customSize={24} name="ArrowInSquare" />}
           onClick={onUpload}
-          title="Upload a skill"
+          title={text.uploadSkill}
         />
       </div>
     </OfficialModal>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Tabs } from "@base-ui-components/react/tabs";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { Icon } from "../../../shell/icons";
 import { OfficialTextInput } from "../../shared/OfficialTextInput";
 import { ConnectorsPageSidebar } from "../connectors/ConnectorsPageSidebar";
@@ -9,6 +10,24 @@ import { SkillDocumentIcon, SkillIconTile } from "./SkillDocumentIcon";
 import { SkillsCollapsibleSection } from "./SkillsCollapsibleSection";
 import { SkillsListItem } from "./SkillsListItem";
 import type { BuiltInSkill, UserSkill } from "./skillTypes";
+
+const SKILLS_SIDEBAR_MESSAGES = {
+  skills: { defaultMessage: "Skills", id: "EJSVsOA19u" },
+  searchSkillsAndPlugins: { defaultMessage: "Search skills and plugins", id: "n3VpmrDQYa" },
+  yourSkills: { defaultMessage: "Your skills", id: "7Ktj7zC8i7" },
+  addYourFirstSkills: { defaultMessage: "Add your first skills", id: "gcU7Ur/D71" },
+  skillsTeachClaude: { defaultMessage: "Skills teach Claude how you work.", id: "w39ST2SJHc" },
+  addSkillsToExtend: {
+    defaultMessage: "Add skills to extend Claude's capabilities.",
+    id: "h8u1GJ6wFK",
+  },
+  learnMore: { defaultMessage: "Learn more", id: "TdTXXf940t" },
+  addSkill: { defaultMessage: "Add skill", id: "tnEMvwSDlT" },
+  personalSkills: { defaultMessage: "Personal skills", id: "udpoBdUqwm" },
+  sharedSkills: { defaultMessage: "Shared skills", id: "aiCChO0XAI" },
+  organizationSkills: { defaultMessage: "Organization skills", id: "12IeD4rgwv" },
+  builtInSkills: { defaultMessage: "Built-in skills", id: "vjWCD7euEv" },
+} as const satisfies MessageDescriptors;
 
 /**
  * Official CDS Tabs.Tab Pt (shared-10): selected chip is fill-ghost-hover + rounded.
@@ -52,6 +71,7 @@ export function SkillsPageSidebar({
   onAddSkill?: () => void;
   wiggleEnabled: boolean;
 }) {
+  const text = useI18nText(SKILLS_SIDEBAR_MESSAGES);
   const [isSearchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -159,7 +179,7 @@ export function SkillsPageSidebar({
   ) : (
     <div className="flex flex-col gap-px">
       {personalSkills.length > 0 ? (
-        <SkillsCollapsibleSection title="Personal skills" forceExpanded={isSearching}>
+        <SkillsCollapsibleSection title={text.personalSkills} forceExpanded={isSearching}>
           <div className="flex flex-col gap-px">
             {personalSkills.map((skill) => (
               <SkillsListItem
@@ -183,7 +203,7 @@ export function SkillsPageSidebar({
       {sharedSkills.length > 0 ? (
         <>
           {personalSkills.length > 0 ? <SectionDivider /> : null}
-          <SkillsCollapsibleSection title="Shared skills" forceExpanded={isSearching}>
+          <SkillsCollapsibleSection title={text.sharedSkills} forceExpanded={isSearching}>
             <div className="flex flex-col gap-px">
               {sharedSkills.map((skill) => (
                 <SkillsListItem
@@ -208,7 +228,7 @@ export function SkillsPageSidebar({
       {orgSkills.length > 0 ? (
         <>
           {personalSkills.length + sharedSkills.length > 0 ? <SectionDivider /> : null}
-          <SkillsCollapsibleSection title="Organization skills" forceExpanded={isSearching}>
+          <SkillsCollapsibleSection title={text.organizationSkills} forceExpanded={isSearching}>
             <div className="flex flex-col gap-px">
               {orgSkills.map((skill) => (
                 <SkillsListItem
@@ -233,7 +253,7 @@ export function SkillsPageSidebar({
       {hasBuiltIns ? (
         <>
           {hasUserGroups ? <SectionDivider /> : null}
-          <SkillsCollapsibleSection title="Built-in skills" forceExpanded={isSearching}>
+          <SkillsCollapsibleSection title={text.builtInSkills} forceExpanded={isSearching}>
             <div className="flex flex-col gap-px">
               {filteredBuiltIns.map((skill) => (
                 <SkillsListItem
@@ -265,7 +285,7 @@ export function SkillsPageSidebar({
       ) : (
         <div className="flex flex-col gap-px">
           {personalSkills.length > 0 ? (
-            <SkillsCollapsibleSection title="Personal skills" forceExpanded={isSearching}>
+            <SkillsCollapsibleSection title={text.personalSkills} forceExpanded={isSearching}>
               <div className="flex flex-col gap-px">
                 {personalSkills.map((skill) => (
                   <SkillsListItem
@@ -289,7 +309,7 @@ export function SkillsPageSidebar({
           {sharedSkills.length > 0 ? (
             <>
               {personalSkills.length > 0 ? <SectionDivider /> : null}
-              <SkillsCollapsibleSection title="Shared skills" forceExpanded={isSearching}>
+              <SkillsCollapsibleSection title={text.sharedSkills} forceExpanded={isSearching}>
                 <div className="flex flex-col gap-px">
                   {sharedSkills.map((skill) => (
                     <SkillsListItem
@@ -314,7 +334,7 @@ export function SkillsPageSidebar({
           {orgSkills.length > 0 ? (
             <>
               {personalSkills.length + sharedSkills.length > 0 ? <SectionDivider /> : null}
-              <SkillsCollapsibleSection title="Organization skills" forceExpanded={isSearching}>
+              <SkillsCollapsibleSection title={text.organizationSkills} forceExpanded={isSearching}>
                 <div className="flex flex-col gap-px">
                   {orgSkills.map((skill) => (
                     <SkillsListItem
@@ -339,7 +359,7 @@ export function SkillsPageSidebar({
           {hasBuiltIns && userSkills.length > 0 ? (
             <>
               {hasUserGroups ? <SectionDivider /> : null}
-              <SkillsCollapsibleSection title="Built-in skills" forceExpanded={isSearching}>
+              <SkillsCollapsibleSection title={text.builtInSkills} forceExpanded={isSearching}>
                 <div className="flex flex-col gap-px">
                   {filteredBuiltIns.map((skill) => (
                     <SkillsListItem
@@ -369,15 +389,16 @@ export function SkillsPageSidebar({
       >
         <header className="flex min-w-0 shrink-0 items-center gap-x-sm">
           <div className="flex min-w-0 flex-1 items-center">
-            <h2 className="min-w-0 truncate text-title font-semibold text-primary">Skills</h2>
+            <h2 className="min-w-0 truncate text-title font-semibold text-primary">{text.skills}</h2>
           </div>
           <div className="flex w-full max-w-md shrink-0 justify-center px-md">
+            {/* Official c5e558aae n3VpmrDQYa placeholder="Search skills and plugins" */}
             <OfficialTextInput
-              aria-label="Search skills and plugins"
+              aria-label={text.searchSkillsAndPlugins}
               className="w-full"
               data-testid="customize-header-search"
               onValueChange={setSearchQuery}
-              placeholder="Search skills and plugins"
+              placeholder={text.searchSkillsAndPlugins}
               prepend={<Icon className="text-muted" customSize={16} name="Search" />}
               size="sm"
               type="search"
@@ -399,13 +420,13 @@ export function SkillsPageSidebar({
         <div aria-hidden="true" className="h-4 shrink-0" />
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-sm">
           <Tabs.Root value="mine">
-            <Tabs.List aria-label="Skills" className="flex items-center font-sans">
+            <Tabs.List aria-label={text.skills} className="flex items-center font-sans">
               <Tabs.Tab
                 className={OVERLAY_SKILLS_TAB_CLASS}
                 data-testid="skills-tabbed-list-tab-mine"
                 value="mine"
               >
-                Your skills
+                {text.yourSkills}
               </Tabs.Tab>
             </Tabs.List>
           </Tabs.Root>
@@ -433,6 +454,7 @@ function SectionDivider() {
  * onBrowseShared is void in overlay Ar `$t`, so no Discover button (screenshot).
  */
 function SkillsOverlayFirstRun() {
+  const text = useI18nText(SKILLS_SIDEBAR_MESSAGES);
   return (
     <div
       className="group/card relative isolate flex shrink-0 flex-col rounded-card after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-card-ring after:content-['']"
@@ -451,8 +473,8 @@ function SkillsOverlayFirstRun() {
         <div className="flex items-center gap-lg">
           <div className="flex min-w-0 flex-1 flex-col items-start gap-md">
             <div className="flex flex-col gap-xs">
-              <h3 className="m-0 text-heading-semibold text-primary">Add your first skills</h3>
-              <p className="m-0 text-body text-secondary">Skills teach Claude how you work.</p>
+              <h3 className="m-0 text-heading-semibold text-primary">{text.addYourFirstSkills}</h3>
+              <p className="m-0 text-body text-secondary">{text.skillsTeachClaude}</p>
             </div>
           </div>
           <div aria-hidden="true" className="hidden shrink-0 pr-6 text-primary sm:block">
@@ -466,18 +488,20 @@ function SkillsOverlayFirstRun() {
 
 /** Official ql — empty only when both user + built-in lists are empty. */
 function SkillsListEmptyState({ wiggleEnabled, onAddSkill }: { wiggleEnabled: boolean; onAddSkill: () => void }) {
+  const text = useI18nText(SKILLS_SIDEBAR_MESSAGES);
+  const intro = text.addSkillsToExtend.replace(/\s*<link>[\s\S]*?<\/link>\s*/g, "").trim();
   return (
     <div className="h-full w-full flex items-center justify-center">
       <div className="flex flex-col gap-6 items-center">
         <p className="font-small text-text-300 text-center px-6 text-pretty">
-          Add skills to extend Claude&apos;s capabilities.{" "}
+          {intro}{" "}
           <a
             href="https://support.claude.com/en/articles/12512198-creating-custom-skills"
             target="_blank"
             rel="noreferrer"
             className="underline underline-offset-2 hover:text-text-100"
           >
-            Learn more
+            {text.learnMore}
           </a>
         </p>
         {wiggleEnabled ? (
@@ -486,7 +510,7 @@ function SkillsListEmptyState({ wiggleEnabled, onAddSkill }: { wiggleEnabled: bo
             onClick={onAddSkill}
             className="inline-flex h-9 items-center justify-center rounded-lg bg-text-000 px-3 text-sm text-bg-000 hover:opacity-90"
           >
-            Add skill
+            {text.addSkill}
           </button>
         ) : null}
       </div>

@@ -39,7 +39,6 @@ export const CoworkStatusPill = memo(function CoworkStatusPill({
 }: CoworkStatusPillProps) {
   const [localExpanded, setLocalExpanded] = useState(false);
   const expanded = isExpanded ?? localExpanded;
-  const renderChildren = useDelayedCollapsedChildren(expanded);
   const toggle = useCallback(() => onToggle ? onToggle() : setLocalExpanded((value) => !value), [onToggle]);
   const workingWithSpark = showSpark && isWorking;
   const status = buildStatusContent({
@@ -69,8 +68,13 @@ export const CoworkStatusPill = memo(function CoworkStatusPill({
       </div>
       <span aria-live="polite" className="sr-only" role="status">{statusText}</span>
       {children ? (
-        <div className="grid transition-[grid-template-rows] duration-300 ease-out" style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}>
-          <div className="overflow-hidden min-w-0">{expanded || renderChildren ? children : null}</div>
+        <div
+          aria-hidden={!expanded}
+          inert={!expanded || undefined}
+          className="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+          style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
+        >
+          <div className="min-h-0 min-w-0 overflow-hidden">{children}</div>
         </div>
       ) : null}
     </div>

@@ -187,13 +187,21 @@ export function OfficialWorkingStatus({
     />
   ) : null;
 
+  const anyVisible = metaVisible || Boolean(tasksTrailing);
+
   return (
     <div className="flex items-center gap-[16px] h-h3" data-official-source="cd5a31703-B4nKQMBN.js:$8/e5 Gv">
       <OfficialSparkSpinner isWorking={sparkWorking} size="m" />
-      <div className={`flex items-center text-footnote text-muted tabular-nums shrink-0 transition-opacity ${metaVisible ? "opacity-100" : "opacity-0"}`}>
-        {metaContent}
+      <div className={`flex items-center text-footnote text-muted tabular-nums shrink-0 transition-opacity ${anyVisible ? "opacity-100" : "opacity-0"}`}>
+        {metaVisible ? (
+          <>
+            {metaContent}
+            {tasksTrailing ? <>{" · "}{tasksTrailing}</> : null}
+          </>
+        ) : (
+          tasksTrailing ?? metaContent
+        )}
       </div>
-      {tasksTrailing}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { useI18nText } from "../../../../i18n/footerMenuMessages";
 import type { CoworkContentBlock } from "./coworkMessageTypes";
 import type { CoworkAssistantTimelineStore } from "./coworkAssistantTimelineStore";
 import {
@@ -11,7 +12,7 @@ import { useCoworkAssistantRenderContext } from "./CoworkAssistantRenderContext"
 import { CoworkTimeline, type CoworkTimelineRenderMeta } from "./CoworkTimeline";
 import { CoworkTimelineBlock } from "./CoworkTimelineBlock";
 import { useCoworkTimelineStatusVisibility } from "./CoworkTimelineStatusVisibility";
-import { coworkTimelineDisplayText } from "./coworkTimelineLabels";
+import { COWORK_TIMELINE_THINKING_MESSAGES, coworkTimelineDisplayText } from "./coworkTimelineLabels";
 
 export function CoworkTimelineSegment({ showDoneIndicator, store, timelineIndex }: {
   showDoneIndicator: boolean;
@@ -23,13 +24,14 @@ export function CoworkTimelineSegment({ showDoneIndicator, store, timelineIndex 
   const currentStatus = useCoworkTimelineCurrentStatus(store);
   const context = useCoworkAssistantRenderContext();
   const statusVisibility = useCoworkTimelineStatusVisibility();
+  const thinkingText = useI18nText(COWORK_TIMELINE_THINKING_MESSAGES);
   const resultById = useMemo(() => collectResults(context.blocks), [context.blocks]);
   const blocks = item?.segment.blocks ?? [];
   const renderBlock = useTimelineBlockRenderer(context, blocks, item?.liveUpdates ?? false, isThisMessageStreaming);
   if (!item) return null;
 
   const turnIsOver = !isThisMessageStreaming || !item.liveUpdates;
-  const summary = coworkTimelineDisplayText(blocks, (id) => resultById.get(id));
+  const summary = coworkTimelineDisplayText(blocks, (id) => resultById.get(id), thinkingText);
   const statusText = item.liveUpdates ? item.segment.statusText ?? currentStatus : undefined;
   const stepsDisplayText = timelineDisplayText(item.segment.summaryType, item.segment.statusText, summary, statusText, isThisMessageStreaming, item.liveUpdates);
 

@@ -1,4 +1,14 @@
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import type { BuiltInSkill } from "./skillTypes";
+
+const BUILT_IN_SKILL_MESSAGES = {
+  addedBy: { defaultMessage: "Added by", id: "mGXoWbZIBO" },
+  description: { defaultMessage: "Description", id: "Q8Qw5BZ1VA" },
+  descriptionHint: {
+    defaultMessage: "Claude uses these descriptions when deciding which skills to use in chat.",
+    id: "g08yMBD/54",
+  },
+} as const satisfies MessageDescriptors;
 
 /**
  * Official c4b3fcffc BuiltInSkillDetailPanel / CustomizeDetailPanel shell:
@@ -13,6 +23,7 @@ export function BuiltInSkillDetailPanel({
   hideTryButton?: boolean;
   onTryInCowork?: (skillName: string) => void;
 }) {
+  const text = useI18nText(BUILT_IN_SKILL_MESSAGES);
   const hasMeta = true;
   return (
     <div className="flex flex-col h-full px-6 pb-6 gap-2">
@@ -24,7 +35,7 @@ export function BuiltInSkillDetailPanel({
 
       <div className="flex gap-8">
         <div className="flex flex-col gap-1">
-          <span className="font-small text-text-500">Added by</span>
+          <span className="font-small text-text-500">{text.addedBy}</span>
           <span className="font-base text-text-100">Anthropic</span>
         </div>
       </div>
@@ -32,9 +43,9 @@ export function BuiltInSkillDetailPanel({
       {skill.description ? (
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-0.5">
-            <h3 className="font-small text-text-500 leading-4">Description</h3>
+            <h3 className="font-small text-text-500 leading-4">{text.description}</h3>
           </div>
-          <p className="font-base text-text-300 whitespace-pre-wrap" title="Claude uses these descriptions when deciding which skills to use in chat.">
+          <p className="font-base text-text-300 whitespace-pre-wrap" title={text.descriptionHint}>
             {skill.description.replace(/\\n/g, "\n")}
           </p>
         </div>

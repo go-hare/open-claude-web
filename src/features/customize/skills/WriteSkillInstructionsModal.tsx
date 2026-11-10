@@ -1,5 +1,21 @@
 import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent } from "react";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { OfficialButton } from "../../shared/OfficialButton";
+
+const WRITE_SKILL_MESSAGES = {
+  editSkill: { defaultMessage: "Edit skill", id: "__local.skillEditSkill" },
+  createSkill: { defaultMessage: "Create a skill", id: "__local.skillCreateASkill" },
+  editInstructions: { defaultMessage: "Edit skill instructions", id: "ku4bZzqjAs" },
+  writeInstructions: { defaultMessage: "Write skill instructions", id: "CCQr8NfpEL" },
+  skillName: { defaultMessage: "Skill name", id: "5hzrmtFUvG" },
+  description: { defaultMessage: "Description", id: "Q8Qw5BZ1VA" },
+  descriptionTooLong: { defaultMessage: "Description must be under 1024 characters", id: "J04k/BN8KL" },
+  descriptionXml: { defaultMessage: "Description cannot contain XML tags", id: "mMtbgpWMWK" },
+  instructions: { defaultMessage: "Instructions", id: "sV2v5LjRpX" },
+  cancel: { defaultMessage: "Cancel", id: "47FYwba+bI" },
+  save: { defaultMessage: "Save", id: "jvo0vs3nF0" },
+  create: { defaultMessage: "Create", id: "VzzYJkHnLP" },
+} as const satisfies MessageDescriptors;
 import { OfficialModal } from "../../shared/OfficialModal";
 import { OfficialTextInput } from "../../shared/OfficialTextInput";
 import { descriptionHasXmlTags, reservedWordInName, sanitizeSkillName } from "./skillMd";
@@ -27,6 +43,7 @@ export function WriteSkillInstructionsModal({
   /** Overlay Ar W (c0659e756 Sn): title Create a skill / Edit skill. Page Ol keeps Write skill instructions. */
   variant?: "page" | "overlay";
 }) {
+  const text = useI18nText(WRITE_SKILL_MESSAGES);
   const nameId = useId();
   const descriptionId = useId();
   const instructionsId = useId();
@@ -96,11 +113,11 @@ export function WriteSkillInstructionsModal({
       title={
         variant === "overlay"
           ? editing
-            ? "Edit skill"
-            : "Create a skill"
+            ? text.editSkill
+            : text.createSkill
           : editing
-            ? "Edit skill instructions"
-            : "Write skill instructions"
+            ? text.editInstructions
+            : text.writeInstructions
       }
     >
       <div className="flex flex-col gap-4 mt-3">
@@ -111,7 +128,7 @@ export function WriteSkillInstructionsModal({
         ) : null}
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-text-200" htmlFor={nameId}>
-            Skill name
+            {text.skillName}
           </label>
           <OfficialTextInput
             autoFocus={!editing}
@@ -130,7 +147,7 @@ export function WriteSkillInstructionsModal({
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-text-200" htmlFor={descriptionId}>
-              Description
+              {text.description}
             </label>
             {showCount ? (
               <div className={`text-sm ${overMax ? "text-danger-000" : "text-text-500"}`}>
@@ -147,15 +164,15 @@ export function WriteSkillInstructionsModal({
             value={description}
           />
           {overMax ? (
-            <div className="text-danger-000 text-xs -mt-0.5">Description must be under 1024 characters</div>
+            <div className="text-danger-000 text-xs -mt-0.5">{text.descriptionTooLong}</div>
           ) : null}
           {hasXml && !overMax ? (
-            <div className="text-danger-000 text-xs -mt-0.5">Description cannot contain XML tags</div>
+            <div className="text-danger-000 text-xs -mt-0.5">{text.descriptionXml}</div>
           ) : null}
         </div>
         <div className="flex flex-col gap-2 flex-1 min-w-0">
           <label className="text-sm font-medium text-text-200" htmlFor={instructionsId}>
-            Instructions
+            {text.instructions}
           </label>
           <textarea
             className="min-w-0 break-words !text-sm max-h-[50vh] overflow-y-auto bg-bg-000 border border-border-300 hover:border-border-200 rounded-lg px-3 py-2 font-large placeholder:text-text-500 can-focus"
@@ -169,7 +186,7 @@ export function WriteSkillInstructionsModal({
       </div>
       <div className="flex justify-end gap-3 mt-6">
         <OfficialButton disabled={busy} onClick={onClose} variant="secondary">
-          Cancel
+          {text.cancel}
         </OfficialButton>
         <OfficialButton
           disabled={disabled}
@@ -188,7 +205,7 @@ export function WriteSkillInstructionsModal({
           }}
           variant="primary"
         >
-          {editing ? "Save" : "Create"}
+          {editing ? text.save : text.create}
         </OfficialButton>
       </div>
     </OfficialModal>

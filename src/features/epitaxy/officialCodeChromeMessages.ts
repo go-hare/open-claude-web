@@ -929,6 +929,14 @@ export const SIDE_PANE_EMPTY_MESSAGES = {
     id: "lSd9MY+/2m",
   },
   loading: { defaultMessage: "Loading", id: "iFsDVRnIHW" },
+  failed: { defaultMessage: "Failed", id: "vXCeIi67rj" },
+  stopped: { defaultMessage: "Stopped", id: "1LBny5MvRa" },
+  runningTool: { defaultMessage: "Running {tool}", id: "aMB1+6UDAk" },
+  stop: { defaultMessage: "Stop", id: "q/uwLTb3Zf" },
+  stopThisTask: { defaultMessage: "Stop this task", id: "+ZLTl3VMv+" },
+  outputUnavailable: { defaultMessage: "Output unavailable", id: "__local.taskOutputUnavailable" },
+  noOutputYet: { defaultMessage: "No output yet", id: "__local.taskNoOutputYet" },
+  noOutputCaptured: { defaultMessage: "No output captured.", id: "__local.taskNoOutputCaptured" },
 } satisfies MessageDescriptors;
 
 /** Official nI / tI approval actions (c11959232). */

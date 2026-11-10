@@ -5,7 +5,7 @@
  * gYt collapsed filter: tooltipContent=placeholder, keyboardShortcut="cmd+f", side="top".
  * Product uses Base UI Tooltip for the same surface; official vC is Radix-era j/P/M/D/F.
  */
-import { cloneElement, isValidElement, useMemo, type ReactElement, type ReactNode } from "react";
+import { cloneElement, isValidElement, useEffect, useMemo, useState, type ReactElement, type ReactNode } from "react";
 import { Tooltip } from "@base-ui-components/react/tooltip";
 
 const defaultContentClass =
@@ -97,6 +97,10 @@ export function OfficialTooltip({
   sideOffset = 5,
   tooltipContent,
 }: OfficialTooltipProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  useEffect(() => {
+    if (open === false) setInternalOpen(false);
+  }, [open]);
   const shortcutLabel = useMemo(
     () => (keyboardShortcut ? formatKeyboardShortcut(keyboardShortcut) : ""),
     [keyboardShortcut],
@@ -106,8 +110,10 @@ export function OfficialTooltip({
     return children;
   }
 
+  const resolvedOpen = open === undefined ? internalOpen : open;
+
   return (
-    <Tooltip.Root disableHoverablePopup {...(open === false ? { open: false } : {})}>
+    <Tooltip.Root disableHoverablePopup open={resolvedOpen} onOpenChange={setInternalOpen}>
       <Tooltip.Trigger delay={delayDuration} render={children as ReactElement<Record<string, unknown>>} />
       <Tooltip.Portal>
         <Tooltip.Positioner className="z-tooltip" side={side} sideOffset={sideOffset}>

@@ -1,7 +1,26 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { desktopBridge } from "../../../adapters/desktopBridge";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { ConfirmDialog } from "../../../shell/ConfirmDialog";
 import { SKILLS_ENABLED } from "../customizeGates";
+
+const SKILLS_ROUTE_MESSAGES = {
+  yourSkills: { defaultMessage: "Your skills", id: "7Ktj7zC8i7" },
+  addSkillsToExtend: {
+    defaultMessage: "Add skills to extend Claude's capabilities.",
+    id: "h8u1GJ6wFK",
+  },
+  learnMore: { defaultMessage: "Learn more", id: "TdTXXf940t" },
+  addSkill: { defaultMessage: "Add skill", id: "tnEMvwSDlT" },
+  selectSkillToView: { defaultMessage: "Select a skill to view details", id: "ccYDCQ+TEE" },
+  cancel: { defaultMessage: "Cancel", id: "47FYwba+bI" },
+  uninstall: { defaultMessage: "Uninstall", id: "AaJVslgu7i" },
+  uninstallSkill: { defaultMessage: "Uninstall skill?", id: "acgKGUw+st" },
+  uninstallSkillBody: {
+    defaultMessage: "You can always add this skill again later by re-uploading it.",
+    id: "RbzkRfwjk7",
+  },
+} as const satisfies MessageDescriptors;
 import { BuiltInSkillDetailPanel } from "./BuiltInSkillDetailPanel";
 import { NewSkillModal } from "./NewSkillModal";
 import { UserSkillDetailPanel } from "./UserSkillDetailPanel";
@@ -41,6 +60,7 @@ export function SkillsRoute({
   onCreateWithClaude?: () => void;
   onTryInCowork?: (skillName: string) => void;
 }) {
+  const text = useI18nText(SKILLS_ROUTE_MESSAGES);
   const userSkills = useSyncExternalStore(subscribeUserSkills, getUserSkills, getUserSkills);
   const { builtInSkills, isLoading } = useBuiltInSkills();
   const wiggleEnabled = SKILLS_ENABLED;
@@ -171,10 +191,10 @@ export function SkillsRoute({
       />
       ) : null}
       <ConfirmDialog
-        cancelText="Cancel"
-        confirmText="Uninstall"
+        cancelText={text.cancel}
+        confirmText={text.uninstall}
         isOpen={Boolean(uninstallSkillId)}
-        message="You can always add this skill again later by re-uploading it."
+        message={text.uninstallSkillBody}
         onClose={() => setUninstallSkillId(null)}
         onConfirm={() => {
           if (!uninstallSkillId) return;
@@ -186,7 +206,7 @@ export function SkillsRoute({
             setUninstallSkillId(null);
           });
         }}
-        title="Uninstall skill?"
+        title={text.uninstallSkill}
         variant="danger"
       />
     </>
@@ -258,7 +278,7 @@ export function SkillsRoute({
               onClick={() => setSelection(null)}
               type="button"
             >
-              Your skills
+              {text.yourSkills}
             </button>
             {detail}
           </div>
@@ -284,19 +304,20 @@ export function SkillsRoute({
   }
 
   if (isGlobalEmpty) {
+    const emptyIntro = text.addSkillsToExtend.replace(/\s*<link>[\s\S]*?<\/link>\s*/g, "").trim();
     return (
       <div className="flex h-full w-full items-center justify-center">
         {creationChrome}
         <div className="flex flex-col items-center gap-6">
           <p className="font-small text-text-300 text-center px-6 text-pretty max-w-[300px]">
-            Add skills to extend Claude&apos;s capabilities.{" "}
+            {emptyIntro}{" "}
             <a
               href="https://support.claude.com/en/articles/12512198-creating-custom-skills"
               target="_blank"
               rel="noreferrer"
               className="underline underline-offset-2 hover:text-text-100"
             >
-              Learn more
+              {text.learnMore}
             </a>
           </p>
           {wiggleEnabled ? (
@@ -305,7 +326,7 @@ export function SkillsRoute({
               onClick={openCreation}
               className="inline-flex h-9 items-center justify-center rounded-lg bg-text-000 px-3 text-sm text-bg-000 hover:opacity-90"
             >
-              Add skill
+              {text.addSkill}
             </button>
           ) : null}
         </div>
@@ -332,7 +353,7 @@ export function SkillsRoute({
       />
       <div tabIndex={-1} className="flex-1 overflow-y-auto bg-bg-100 focus-visible:outline-none">
         {detail ?? (
-          <div className="flex items-center justify-center h-full text-text-400">Select a skill to view details</div>
+          <div className="flex items-center justify-center h-full text-text-400">{text.selectSkillToView}</div>
         )}
       </div>
     </div>

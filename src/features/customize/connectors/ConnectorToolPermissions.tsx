@@ -1,5 +1,16 @@
 import { useCallback, useId, useMemo, useState, useSyncExternalStore } from "react";
 import { Menu } from "@base-ui-components/react/menu";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
+
+const CONNECTOR_TOOL_MESSAGES = {
+  toolPermissions: { defaultMessage: "Tool permissions", id: "xq9OFmeici" },
+  chooseWhen: {
+    defaultMessage: "Choose when Claude is allowed to use these tools.",
+    id: "Cn/HjwlTuF",
+  },
+  otherTools: { defaultMessage: "Other tools", id: "jGB+F59Nq0" },
+  blanket: { defaultMessage: "Blanket permission for group", id: "CyE/EH26dO" },
+} as const satisfies MessageDescriptors;
 import { BaseMenuItem, BaseMenuPopup } from "../../../shell/BaseMenu";
 import { Icon } from "../../../shell/icons";
 import { officialButtonClass } from "../../shared/buttonClasses";
@@ -24,6 +35,7 @@ import {
  * Direct MCP tools have no annotation groups — unspecified = Other tools.
  */
 export function ConnectorToolPermissions({ item }: { item: ConnectorListItem }) {
+  const text = useI18nText(CONNECTOR_TOOL_MESSAGES);
   const headingId = useId();
   const tools = item.tools ?? [];
   if (tools.length === 0) return null;
@@ -39,11 +51,11 @@ export function ConnectorToolPermissions({ item }: { item: ConnectorListItem }) 
     <section aria-labelledby={headingId} className="flex flex-col">
       <div className="flex items-start justify-between gap-2" id={headingId}>
         <div className="flex flex-col w-full gap-2">
-          <legend className="font-base-bold text-text-100">Tool permissions</legend>
-          <p className="font-base text-text-500">Choose when Claude is allowed to use these tools.</p>
+          <legend className="font-base-bold text-text-100">{text.toolPermissions}</legend>
+          <p className="font-base text-text-500">{text.chooseWhen}</p>
         </div>
       </div>
-      <ConnectorToolGroup title="Other tools" tools={refs} />
+      <ConnectorToolGroup title={text.otherTools} tools={refs} />
     </section>
   );
 }
@@ -111,11 +123,12 @@ function GroupPermissionDropdown({
   current: ToolPermission | "custom";
   onSelect: (value: ToolPermission | "custom") => void;
 }) {
+  const text = useI18nText(CONNECTOR_TOOL_MESSAGES);
   const items: Array<ToolPermission | "custom"> = [...TOOL_PERMISSIONS, "custom"];
   return (
     <Menu.Root>
       <Menu.Trigger
-        aria-label="Blanket permission for group"
+        aria-label={text.blanket}
         className={officialButtonClass({ variant: "secondary", size: "sm" })}
       >
         <span className="inline-flex items-center gap-1.5">

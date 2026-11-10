@@ -1,5 +1,21 @@
+import { type MessageDescriptors } from "../../../../i18n/footerMenuMessages";
+import { formatOfficialIcu } from "../../../../i18n/formatOfficialIcu";
 import { asRecord, stringValue } from "../recordUtils";
 import type { CoworkContentBlock } from "./coworkMessageModel";
+
+/** Official c05b96c7f-DSH7iwX5.js `lm` / `co` thinking duration & Thought process descriptors. */
+export const COWORK_TIMELINE_THINKING_MESSAGES = {
+  thoughtProcess: { defaultMessage: "Thought process", id: "zl6fNbo7RW" },
+  thoughtForSeconds: { defaultMessage: "Thought for {seconds}s", id: "Jj0DasG7Mx" },
+  thoughtForMinutesSeconds: { defaultMessage: "Thought for {minutes}m {seconds}s", id: "4LM6AdGWNg" },
+  thoughtForMinutes: { defaultMessage: "Thought for {minutes}m", id: "vFyvc213kN" },
+  thoughtForHoursMinutes: { defaultMessage: "Thought for {hours}h {minutes}m", id: "voTuOb/ijW" },
+  thoughtForHours: { defaultMessage: "Thought for {hours}h", id: "MFx4UWu2HS" },
+} as const satisfies MessageDescriptors;
+
+export type CoworkTimelineThinkingText = {
+  [K in keyof typeof COWORK_TIMELINE_THINKING_MESSAGES]: string;
+};
 
 const toolCategories: Record<string, string> = {
   agent: "task", bash: "bash", bash_tool: "bash", close_file: "read", conversation_search: "memory",
@@ -16,16 +32,21 @@ const toolCategories: Record<string, string> = {
   update_file: "edit", view: "view", web_fetch: "web", web_search: "web", write: "write",
 };
 
-export function coworkTimelineDisplayText(blocks: CoworkContentBlock[], getResult: (id: string) => CoworkContentBlock | undefined) {
+export function coworkTimelineDisplayText(
+  blocks: CoworkContentBlock[],
+  getResult: (id: string) => CoworkContentBlock | undefined,
+  thinkingText?: Partial<CoworkTimelineThinkingText>,
+) {
   const thinking = blocks.filter((block) => block.type === "thinking");
   const tools = blocks.filter((block) => block.type === "tool_use");
-  if (tools.length === 0 && thinking.length > 0) return thinkingDurationLabel(thinking);
+  if (tools.length === 0 && thinking.length > 0) return thinkingDurationLabel(thinking, thinkingText);
+  if (tools.length === 1) return singleToolLabel(tools[0], getResult(tools[0].id ?? ""));
   if (tools.length === 1) return singleToolLabel(tools[0], getResult(tools[0].id ?? ""));
   if (tools.length > 1) return multipleToolLabel(tools);
   return undefined;
 }
 
-function thinkingDurationLabel(blocks: CoworkContentBlock[]) {
+function thinkingDurationLabel(blocks: CoworkContentBlock[], text?: Partial<CoworkTimelineThinkingText>) {
   let duration = 0;
   let measured = false;
   for (const block of blocks) {
@@ -37,13 +58,35 @@ function thinkingDurationLabel(blocks: CoworkContentBlock[]) {
       measured = true;
     }
   }
-  if (!measured) return "Thought process";
+  if (!measured) return text?.thoughtProcess ?? "Thought process";
   const seconds = Math.round(duration / 1000);
-  if (seconds < 60) return `Thought for ${seconds}s`;
+  if (seconds < 60) {
+    return text?.thoughtForSeconds
+      ? formatOfficialIcu(text.thoughtForSeconds, { seconds })
+      : `Thought for ${seconds}s`;
+  }
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `Thought for ${minutes}m${seconds % 60 ? ` ${seconds % 60}s` : ""}`;
+  const remSeconds = seconds % 60;
+  if (minutes < 60) {
+    if (remSeconds > 0) {
+      return text?.thoughtForMinutesSeconds
+        ? formatOfficialIcu(text.thoughtForMinutesSeconds, { minutes, seconds: remSeconds })
+        : `Thought for ${minutes}m ${remSeconds}s`;
+    }
+    return text?.thoughtForMinutes
+      ? formatOfficialIcu(text.thoughtForMinutes, { minutes })
+      : `Thought for ${minutes}m`;
+  }
   const hours = Math.floor(minutes / 60);
-  return `Thought for ${hours}h${minutes % 60 ? ` ${minutes % 60}m` : ""}`;
+  const remMinutes = minutes % 60;
+  if (remMinutes > 0) {
+    return text?.thoughtForHoursMinutes
+      ? formatOfficialIcu(text.thoughtForHoursMinutes, { hours, minutes: remMinutes })
+      : `Thought for ${hours}h ${remMinutes}m`;
+  }
+  return text?.thoughtForHours
+    ? formatOfficialIcu(text.thoughtForHours, { hours })
+    : `Thought for ${hours}h`;
 }
 
 function singleToolLabel(block: CoworkContentBlock, result?: CoworkContentBlock) {

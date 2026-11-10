@@ -18,7 +18,17 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { Icon } from "../../../shell/icons";
+
+const DIFF_ANNOTATION_MESSAGES = {
+  addComment: { defaultMessage: "Add a comment…", id: "4oif0IPXeY" },
+  saveComment: { defaultMessage: "Save comment", id: "__local.diffSaveComment" },
+  deleteComment: { defaultMessage: "Delete comment", id: "wOZRKWT1/R" },
+  suggestedChange: { defaultMessage: "Suggested change", id: "__local.diffSuggestedChange" },
+  resolved: { defaultMessage: "Resolved", id: "__local.diffResolved" },
+  sent: { defaultMessage: "Sent", id: "gcuDcHiCz7" },
+} as const satisfies MessageDescriptors;
 import {
   parseOfficialPrCommentBody,
   type OfficialPrCommentSegment,
@@ -54,6 +64,7 @@ export function OfficialDiffAnnotationCard({
   onSaved?: (payload: { submit: boolean }) => void;
   sessionId: string;
 }) {
+  const text = useI18nText(DIFF_ANNOTATION_MESSAGES);
   const [body, setBody] = useState(annotation?.body ?? draft?.body ?? "");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -151,7 +162,7 @@ export function OfficialDiffAnnotationCard({
               onBlur={onBlur}
               onChange={(event) => setBody(event.target.value)}
               onKeyDown={onKeyDown}
-              placeholder="Add a comment"
+              placeholder={text.addComment}
               rows={1}
               style={FIELD_SIZING}
               value={body}
@@ -164,7 +175,7 @@ export function OfficialDiffAnnotationCard({
           <div className="shrink-0 w-[24px] h-[24px] flex items-center justify-center">
             {editing ? (
               <button
-                aria-label="Save comment"
+                aria-label={text.saveComment}
                 className="rounded-r3 p-p2 text-t6 hover:bg-t2 hover:text-t8 disabled:opacity-40"
                 disabled={!body.trim()}
                 onClick={() => {
@@ -177,7 +188,7 @@ export function OfficialDiffAnnotationCard({
               </button>
             ) : remove ? (
               <button
-                aria-label="Delete comment"
+                aria-label={text.deleteComment}
                 className="rounded-r3 p-p2 text-t5 opacity-0 transition-opacity hover:bg-t2 hover:text-extended-pink group-hover/card:opacity-100"
                 onClick={(event) => {
                   event.stopPropagation();
@@ -327,13 +338,14 @@ function OfficialEcSuggestion({
     unsafeCSS: EC_SUGGESTION_UNSAFE_CSS,
     onPostRender: pierreTokenPaintOnPostRender,
   }), [theme]);
+  const text = useI18nText(DIFF_ANNOTATION_MESSAGES);
   const fileDiff = useMemo(
     () => (patch ? processFile(patch, { cacheKey: patch }) : null),
     [patch],
   );
   return (
     <div className="epitaxy-diff overflow-clip rounded-r3 text-code">
-      <div className="bg-t1 px-p4 py-p2 text-footnote text-t6">Suggested change</div>
+      <div className="bg-t1 px-p4 py-p2 text-footnote text-t6">{text.suggestedChange}</div>
       {fileDiff ? (
         <FileDiff fileDiff={fileDiff} options={patchOptions} />
       ) : (
@@ -372,6 +384,7 @@ export function OfficialDiffPrCommentCard({
   original?: string;
   sessionId: string;
 }) {
+  const text = useI18nText(DIFF_ANNOTATION_MESSAGES);
   const [forceExpanded, setForceExpanded] = useState(false);
   const isResolved = comment.resolved ?? false;
   const collapsed = (isResolved || isSent) && !isStaged && !forceExpanded;
@@ -408,9 +421,9 @@ export function OfficialDiffPrCommentCard({
           <span className="flex items-baseline gap-g3">
             {comment.author ? <span>{`@${comment.author}`}</span> : null}
             {isResolved ? (
-              <span className="text-t6">Resolved</span>
+              <span className="text-t6">{text.resolved}</span>
             ) : (
-              <span className="text-extended-green">Sent</span>
+              <span className="text-extended-green">{text.sent}</span>
             )}
           </span>
         </button>

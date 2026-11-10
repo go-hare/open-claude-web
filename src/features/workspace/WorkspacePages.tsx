@@ -1,7 +1,51 @@
 import { useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type { RouteViewProps } from "../../app/routes";
+import { type MessageDescriptors, useI18nText } from "../../i18n/footerMenuMessages";
+import { formatOfficialIcu } from "../../i18n/formatOfficialIcu";
 import { primaryButtonClass, secondaryButtonClass } from "../shared/buttonClasses";
+
+const WORKSPACE_PAGE_MESSAGES = {
+  createAProject: { defaultMessage: "Create a project", id: "HR5A+UPiIu" },
+  workingOn: { defaultMessage: "What are you working on?", id: "R2IogQsIBI" },
+  nameYourProject: { defaultMessage: "Name your project", id: "BtIbm/e/WX" },
+  tryingToAchieve: { defaultMessage: "What are you trying to achieve?", id: "RPsTh+NBxY" },
+  describeProject: {
+    defaultMessage: "Describe your project, goals, subject, etc...",
+    id: "WStTnUWlP8",
+  },
+  visibility: { defaultMessage: "Visibility", id: "JAkIqbzRj5" },
+  publicDisabled: {
+    defaultMessage: "Public projects are disabled by your organization",
+    id: "c2HBgZtgDR",
+  },
+  private: { defaultMessage: "Private", id: "viXE3205/2" },
+  invitedOnly: {
+    defaultMessage: "Only invited members can view and use this project",
+    id: "r65HKpZU8I",
+  },
+  cancel: { defaultMessage: "Cancel", id: "47FYwba+bI" },
+  createProject: { defaultMessage: "Create project", id: "VUN1K7kSzC" },
+  projects: { defaultMessage: "Projects", id: "UxTJRaKagI" },
+  newProject: { defaultMessage: "New project", id: "lJMkinm1YS" },
+  searchProjects: { defaultMessage: "Search projects", id: "doPT7U8q21" },
+  searchProjectsPlaceholder: { defaultMessage: "Search projects...", id: "Dw9BaeKr5H" },
+  noProjectsMatching: { defaultMessage: "No projects matching “{search}”", id: "bzYWNlBFMV" },
+  createYourFirst: { defaultMessage: "Create your first project", id: "iRkI8SS6zy" },
+  projectNotFound: { defaultMessage: "Project not found", id: "umf4JIobGv" },
+  projectRemoved: {
+    defaultMessage: "This project may have been removed or doesn't exist.",
+    id: "wuDmoQol2j",
+  },
+  pageNotFound: { defaultMessage: "Page not found", id: "QRccCMoxuD" },
+  pageNotFoundBody: {
+    defaultMessage: "Claude can help with many things, but finding this page isn’t one of them.",
+    id: "k7xSM0388d",
+  },
+  goBackHome: { defaultMessage: "Go back home", id: "DupNoSk4qt" },
+  noProjectAccess: { defaultMessage: "You don’t have access to this project", id: "MkspTFrpnX" },
+  goToAllProjects: { defaultMessage: "Go to all projects", id: "568mZi//4u" },
+} as const satisfies MessageDescriptors;
 
 type Navigate = RouteViewProps["onNavigate"];
 
@@ -71,6 +115,7 @@ export { ChatsPage as RecentsPage } from "./ChatsPage";
 export { ProjectsPage } from "./ProjectsPage";
 
 export function ProjectCreatePage({ onNavigate }: RouteViewProps) {
+  const text = useI18nText(WORKSPACE_PAGE_MESSAGES);
   const [name, setName] = useState("");
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -79,18 +124,18 @@ export function ProjectCreatePage({ onNavigate }: RouteViewProps) {
   return (
     <Surface>
       <div className="mx-auto min-h-full max-w-lg px-4 pb-8 pt-24">
-        <h1 className="font-ui-serif text-text-200 mb-4 text-3xl font-medium">Create a project</h1>
+        <h1 className="font-ui-serif text-text-200 mb-4 text-3xl font-medium">{text.createAProject}</h1>
         <form className="grid grid-cols-1 gap-4" onSubmit={submit}>
-          <FieldInput label="What are you working on?" onChange={setName} placeholder="Name your project" value={name} />
-          <FieldTextArea label="What are you trying to achieve?" placeholder="Describe your project, goals, subject, etc..." />
+          <FieldInput label={text.workingOn} onChange={setName} placeholder={text.nameYourProject} value={name} />
+          <FieldTextArea label={text.tryingToAchieve} placeholder={text.describeProject} />
           <fieldset>
-            <div className="mb-2 text-sm font-medium">Visibility</div>
-            <VisibilityOption disabled label="Workbench Org" note="Public projects are disabled by your organization" />
-            <VisibilityOption checked label="Private" note="Only invited members can view and use this project" />
+            <div className="mb-2 text-sm font-medium">{text.visibility}</div>
+            <VisibilityOption disabled label="Workbench Org" note={text.publicDisabled} />
+            <VisibilityOption checked label={text.private} note={text.invitedOnly} />
           </fieldset>
           <div className="mt-2 flex justify-end"><div className="flex gap-2">
-            <a className={secondaryButtonClass} href="/projects" onClick={(e) => { e.preventDefault(); onNavigate("/projects"); }}>Cancel</a>
-            <button className={primaryButtonClass} type="submit">Create project</button>
+            <a className={secondaryButtonClass} href="/projects" onClick={(e) => { e.preventDefault(); onNavigate("/projects"); }}>{text.cancel}</a>
+            <button className={primaryButtonClass} type="submit">{text.createProject}</button>
           </div></div>
         </form>
       </div>
@@ -112,6 +157,7 @@ function VisibilityOption({ checked, disabled, label, note }: { checked?: boolea
 
 
 export function SpaceIndexPage({ onNavigate }: RouteViewProps) {
+  const text = useI18nText(WORKSPACE_PAGE_MESSAGES);
   const [query, setQuery] = useState("");
   const [isCreateOpen, setCreateOpen] = useState(false);
   const noResults = query.trim().length > 0;
@@ -119,20 +165,20 @@ export function SpaceIndexPage({ onNavigate }: RouteViewProps) {
     <Surface>
       <header className="flex w-full bg-bg-100 !border-0 shadow-[0px_1px_0px_0px_theme(colors.border-300)] shrink-0" style={{ height: 52 }}>
         <div className="w-full h-full flex items-center justify-between px-5">
-          <h1 className="text-text-100 flex items-center gap-2 text-center max-md:hidden min-w-0 font-medium leading-tight">项目</h1>
-          <button className={primaryButtonClass} onClick={() => setCreateOpen(true)} style={{ width: 122 }} type="button">New project</button>
+          <h1 className="text-text-100 flex items-center gap-2 text-center max-md:hidden min-w-0 font-medium leading-tight">{text.projects}</h1>
+          <button className={primaryButtonClass} onClick={() => setCreateOpen(true)} style={{ width: 122 }} type="button">{text.newProject}</button>
         </div>
       </header>
       <main className="mx-auto mt-4 w-full flex-1 px-4 md:px-8 lg:mt-6 max-w-4xl min-h-0 flex flex-col !pb-0">
-        <h1 className="font-heading text-text-200 mb-4 flex gap-1.5 md:hidden">项目</h1>
+        <h1 className="font-heading text-text-200 mb-4 flex gap-1.5 md:hidden">{text.projects}</h1>
         <div className="overflow-auto pb-20 px-1">
           <div className="sticky top-0 z-[5] pt-1 pb-4 md:pb-8 from-bg-100 via-bg-100 to-bg-100/0 bg-gradient-to-b via-80%">
             <div className="cds-reset group/cbx inline-flex min-w-0 items-center gap-1.5 h-control-lg rounded-lg text-body text-primary bg-bg-000 border border-border-300 px-3 w-full">
               <span className="relative inline-flex size-4 text-text-500" aria-hidden="true" />
-              <input aria-label="Search projects" className="w-full h-full pl-1.5 placeholder:text-text-500 m-0 bg-transparent p-0 hide-focus-ring disabled:cursor-not-allowed" style={{ height: 42 }} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Search projects..." value={query} />
+              <input aria-label={text.searchProjects} className="w-full h-full pl-1.5 placeholder:text-text-500 m-0 bg-transparent p-0 hide-focus-ring disabled:cursor-not-allowed" style={{ height: 42 }} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={text.searchProjectsPlaceholder} value={query} />
             </div>
           </div>
-          <div className="mt-10 text-center text-text-300">{noResults ? `No projects matching “${query}”` : "Create your first project"}</div>
+          <div className="mt-10 text-center text-text-300">{noResults ? formatOfficialIcu(text.noProjectsMatching, { search: query }) : text.createYourFirst}</div>
         </div>
       </main>
       {isCreateOpen ? <ProjectCreateOverlay onClose={() => setCreateOpen(false)} onNavigate={onNavigate} /> : null}
@@ -141,19 +187,21 @@ export function SpaceIndexPage({ onNavigate }: RouteViewProps) {
 }
 
 export function SpaceProjectNotFoundPage() {
+  const text = useI18nText(WORKSPACE_PAGE_MESSAGES);
   return (
     <>
       <div className="dframe-header absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-3 pl-4 pr-3" />
       <div className="relative flex flex-col items-center justify-center h-full text-text-500">
         <div className="mb-4 size-12 text-text-400" aria-hidden="true" />
-        <p className="text-lg font-medium">Project not found</p>
-        <p className="text-sm mt-1">This project may have been removed or doesn't exist.</p>
+        <p className="text-lg font-medium">{text.projectNotFound}</p>
+        <p className="text-sm mt-1">{text.projectRemoved}</p>
       </div>
     </>
   );
 }
 
 function ProjectCreateOverlay({ onClose, onNavigate }: { onClose: () => void; onNavigate: Navigate }) {
+  const text = useI18nText(WORKSPACE_PAGE_MESSAGES);
   const [name, setName] = useState("");
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -161,15 +209,15 @@ function ProjectCreateOverlay({ onClose, onNavigate }: { onClose: () => void; on
     if (slug) onNavigate(`/project/${encodeURIComponent(slug)}`);
   };
   return (
-    <div className="fixed inset-0 z-popover flex items-center justify-center bg-black/30" role="dialog" aria-modal="true" aria-label="Create a project">
+    <div className="fixed inset-0 z-popover flex items-center justify-center bg-black/30" role="dialog" aria-modal="true" aria-label={text.createAProject}>
       <form className="cds-root text-primary bg-bg-000 rounded-2xl shadow-2xl border border-border-300 w-full max-w-lg p-6" onSubmit={submit}>
-        <h2 className="font-ui-serif text-text-200 mb-4 text-2xl font-medium">Create a project</h2>
+        <h2 className="font-ui-serif text-text-200 mb-4 text-2xl font-medium">{text.createAProject}</h2>
         <div className="grid grid-cols-1 gap-4">
-          <FieldInput label="What are you working on?" onChange={setName} placeholder="Name your project" value={name} />
-          <FieldTextArea label="What are you trying to achieve?" placeholder="Describe your project, goals, subject, etc..." />
+          <FieldInput label={text.workingOn} onChange={setName} placeholder={text.nameYourProject} value={name} />
+          <FieldTextArea label={text.tryingToAchieve} placeholder={text.describeProject} />
           <div className="flex justify-end gap-2 pt-2">
-            <button className={secondaryButtonClass} onClick={onClose} type="button">Cancel</button>
-            <button className={primaryButtonClass} type="submit">Create project</button>
+            <button className={secondaryButtonClass} onClick={onClose} type="button">{text.cancel}</button>
+            <button className={primaryButtonClass} type="submit">{text.createProject}</button>
           </div>
         </div>
       </form>
@@ -178,11 +226,13 @@ function ProjectCreateOverlay({ onClose, onNavigate }: { onClose: () => void; on
 }
 
 export function DFramePageNotFoundPage({ onNavigate }: RouteViewProps) {
-  return <Surface root={false}><CenteredMessage button="Go back home" description="Claude can help with many things, but finding this page isn’t one of them." headline="Page not found" onClick={() => onNavigate("/new")} /></Surface>;
+  const text = useI18nText(WORKSPACE_PAGE_MESSAGES);
+  return <Surface root={false}><CenteredMessage button={text.goBackHome} description={text.pageNotFoundBody} headline={text.pageNotFound} onClick={() => onNavigate("/new")} /></Surface>;
 }
 
 export function ProjectsNoPermissionPage({ onNavigate }: RouteViewProps) {
-  return <Surface><CenteredMessage button="Go to all projects" headline="You don’t have access to this project" onClick={() => onNavigate("/projects")} /></Surface>;
+  const text = useI18nText(WORKSPACE_PAGE_MESSAGES);
+  return <Surface><CenteredMessage button={text.goToAllProjects} headline={text.noProjectAccess} onClick={() => onNavigate("/projects")} /></Surface>;
 }
 
 /**

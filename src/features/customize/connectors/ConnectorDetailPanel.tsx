@@ -1,5 +1,13 @@
 import { useCallback, useState } from "react";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { Icon } from "../../../shell/icons";
+
+const CONNECTOR_DETAIL_MESSAGES = {
+  disconnect: { defaultMessage: "Disconnect", id: "qj1uhzynub" },
+  connectionIssue: { defaultMessage: "Connection issue", id: "YuGYokTijv" },
+  copyServerUrl: { defaultMessage: "Copy server URL", id: "ybt6Lr5+bx" },
+  noTools: { defaultMessage: "This connector has no tools available.", id: "lHGJ6UxTvw" },
+} as const satisfies MessageDescriptors;
 import { OfficialButton } from "../../shared/OfficialButton";
 import type { ConnectorListItem } from "./connectorTypes";
 import { ConnectorToolPermissions } from "./ConnectorToolPermissions";
@@ -22,6 +30,7 @@ export function ConnectorDetailPanel({
   onAuthorize: () => void;
   onDisconnect: () => void;
 }) {
+  const text = useI18nText(CONNECTOR_DETAIL_MESSAGES);
   const isLocal = item.source === "local-custom";
   const tools = item.tools ?? [];
   const hasTools = tools.length > 0;
@@ -36,7 +45,7 @@ export function ConnectorDetailPanel({
           {item.error ? (
             <div className="flex items-center justify-center gap-1.5 text-warning-100">
               <Icon customSize={16} name="Warning" />
-              <span className="font-large-bold">Connection issue</span>
+              <span className="font-large-bold">{text.connectionIssue}</span>
             </div>
           ) : null}
           <p className="font-large text-text-500">{`You are not connected to ${item.name} yet.`}</p>
@@ -59,7 +68,7 @@ export function ConnectorDetailPanel({
         <div className="flex items-center gap-2">
           {!isLocal ? (
             <OfficialButton disabled={actionBusy} onClick={onDisconnect} variant="secondary">
-              Disconnect
+              {text.disconnect}
             </OfficialButton>
           ) : null}
         </div>
@@ -83,7 +92,7 @@ export function ConnectorDetailPanel({
       ) : item.error ? (
         <p className="mt-6 font-base text-text-400">{item.error}</p>
       ) : (
-        <p className="font-base text-text-400 mt-6">This connector has no tools available.</p>
+        <p className="font-base text-text-400 mt-6">{text.noTools}</p>
       )}
     </div>
   );
@@ -104,6 +113,7 @@ function ConnectorGlyph({ compact, item }: { compact?: boolean; item: ConnectorL
 
 /** Official Et — copy server URL, not a Server URL card. */
 function ConnectorUrlCopy({ className, url }: { className?: string; url?: string }) {
+  const text = useI18nText(CONNECTOR_DETAIL_MESSAGES);
   const [didCopy, setDidCopy] = useState(false);
   const onCopy = useCallback(() => {
     if (!url || !navigator.clipboard?.writeText) return;
@@ -117,7 +127,7 @@ function ConnectorUrlCopy({ className, url }: { className?: string; url?: string
 
   return (
     <button
-      aria-label="Copy server URL"
+      aria-label={text.copyServerUrl}
       className={`inline-flex max-w-full items-center gap-1.5 text-left font-small text-text-400 transition-colors hover:text-text-200 ${className ?? ""}`}
       onClick={onCopy}
       type="button"

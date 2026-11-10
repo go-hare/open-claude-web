@@ -1,7 +1,23 @@
 import { Dialog } from "@base-ui-components/react/dialog";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { LocalEnvironmentVariables, LocalSessionEnvironmentBridge } from "../../adapters/desktopBridge";
+import { type MessageDescriptors, useI18nText } from "../../i18n/footerMenuMessages";
 import { OfficialButton } from "./OfficialEpitaxyComponents";
+
+const LOCAL_ENV_DIALOG_MESSAGES = {
+  title: { defaultMessage: "Update local environment", id: "lc3Sw9MovO" },
+  close: { defaultMessage: "Close", id: "rbrahOGMC3" },
+  variables: { defaultMessage: "Environment variables", id: "4qP7MjrQfC" },
+  help: {
+    defaultMessage: "In <link>.env format</link>. These are stored securely and passed to Claude sessions.",
+    id: "yQufZ/mHZn",
+  },
+  cancel: { defaultMessage: "Cancel", id: "47FYwba+bI" },
+  save: { defaultMessage: "Save changes", id: "X0ha1a+WYV" },
+  loadFailed: { defaultMessage: "Failed to load environment variables.", id: "aKhMMh+fOM" },
+  saveFailed: { defaultMessage: "Failed to save environment variables.", id: "ZKiKG+Tbwj" },
+  apiUnavailable: { defaultMessage: "Environment API not available.", id: "__local.localEnvApiUnavailable" },
+} as const satisfies MessageDescriptors;
 
 type OfficialLocalEnvironmentDialogProps = {
   bridge?: LocalSessionEnvironmentBridge;
@@ -26,6 +42,7 @@ const managedEnvironmentVariables = [
 ];
 
 export function OfficialLocalEnvironmentDialog({ bridge, isOpen, onClose }: OfficialLocalEnvironmentDialogProps) {
+  const text = useI18nText(LOCAL_ENV_DIALOG_MESSAGES);
   const [loaded, setLoaded] = useState(false);
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
@@ -43,7 +60,7 @@ export function OfficialLocalEnvironmentDialog({ bridge, isOpen, onClose }: Offi
     const loadEnvironment = bridge?.get?.();
     if (!loadEnvironment) {
       setValue("");
-      setApiError("Environment API not available.");
+      setApiError(text.apiUnavailable);
       setLoaded(true);
       return;
     }
@@ -56,13 +73,13 @@ export function OfficialLocalEnvironmentDialog({ bridge, isOpen, onClose }: Offi
       .catch(() => {
         if (cancelled) return;
         setValue("");
-        setApiError("Failed to load environment variables.");
+        setApiError(text.loadFailed);
         setLoaded(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [bridge, isOpen]);
+  }, [bridge, isOpen, text.apiUnavailable, text.loadFailed]);
 
   const validationError = useMemo(() => validateEnvironmentText(value, { checkManagedVars: true }), [value]);
   const canSave = !validationError;
@@ -70,7 +87,7 @@ export function OfficialLocalEnvironmentDialog({ bridge, isOpen, onClose }: Offi
   const save = useCallback(async () => {
     if (!canSave || saving) return;
     if (!bridge?.save) {
-      setApiError("Environment API not available.");
+      setApiError(text.apiUnavailable);
       return;
     }
     setSaving(true);
@@ -79,11 +96,11 @@ export function OfficialLocalEnvironmentDialog({ bridge, isOpen, onClose }: Offi
       await bridge.save(parseEnvironmentText(value));
       onClose();
     } catch {
-      setApiError("Failed to save environment variables.");
+      setApiError(text.saveFailed);
     } finally {
       setSaving(false);
     }
-  }, [bridge, canSave, onClose, saving, value]);
+  }, [bridge, canSave, onClose, saving, text.apiUnavailable, text.saveFailed, value]);
 
   if (!isOpen || !loaded) return null;
 
@@ -97,8 +114,8 @@ export function OfficialLocalEnvironmentDialog({ bridge, isOpen, onClose }: Offi
           <div className="relative isolate rounded-r6 flex flex-col max-h-[inherit]">
             <span aria-hidden="true" className="absolute inset-0 -z-[1] rounded-[inherit] pointer-events-none bg-surface-popover effect-hud" />
             <div className="flex items-center justify-between gap-g4 px-[24px] pt-[24px]">
-              <Dialog.Title className="text-heading-semibold text-t9">Update local environment</Dialog.Title>
-              <OfficialButton ariaLabel="Close" icon="XCrossCloseMedium" onClick={onClose} size="small" variant="uncontained" />
+              <Dialog.Title className="text-heading-semibold text-t9">{text.title}</Dialog.Title>
+              <OfficialButton ariaLabel={text.close} icon="XCrossCloseMedium" onClick={onClose} size="small" variant="uncontained" />
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto px-[24px] pb-[24px] pt-[16px]">
               <form
@@ -110,12 +127,8 @@ export function OfficialLocalEnvironmentDialog({ bridge, isOpen, onClose }: Offi
               >
                 <OfficialEnvironmentField
                   error={validationError ?? apiError ?? undefined}
-                  help={(
-                    <>
-                      In <OfficialEnvironmentLink href="https://code.claude.com/docs/en/desktop#environment-configuration">.env format</OfficialEnvironmentLink>. These are stored securely and passed to Claude sessions.
-                    </>
-                  )}
-                  label="Environment variables"
+                  help={<OfficialEnvHelp template={text.help} />}
+                  label={text.variables}
                 >
                   <div className={officialInputWrapperClass}>
                     <textarea
@@ -133,8 +146,8 @@ export function OfficialLocalEnvironmentDialog({ bridge, isOpen, onClose }: Offi
                 </OfficialEnvironmentField>
                 <button aria-hidden="true" disabled={saving} hidden tabIndex={-1} type="submit" />
                 <div className="flex justify-end gap-g4">
-                  <OfficialButton disabled={saving} onClick={onClose} variant="contained">Cancel</OfficialButton>
-                  <OfficialButton disabled={!canSave || saving} onClick={() => void save()} variant="primary">Save changes</OfficialButton>
+                  <OfficialButton disabled={saving} onClick={onClose} variant="contained">{text.cancel}</OfficialButton>
+                  <OfficialButton disabled={!canSave || saving} onClick={() => void save()} variant="primary">{text.save}</OfficialButton>
                 </div>
               </form>
             </div>
@@ -142,6 +155,18 @@ export function OfficialLocalEnvironmentDialog({ bridge, isOpen, onClose }: Offi
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+function OfficialEnvHelp({ template }: { template: string }) {
+  const match = template.match(/^(.*)<link>(.*)<\/link>(.*)$/s);
+  if (!match) return <>{template}</>;
+  return (
+    <>
+      {match[1]}
+      <OfficialEnvironmentLink href="https://code.claude.com/docs/en/desktop#environment-configuration">{match[2]}</OfficialEnvironmentLink>
+      {match[3]}
+    </>
   );
 }
 

@@ -182,10 +182,12 @@ export function CoworkConversation({
                     - observeEpoch: path hydrate / stream id without messageCount change.
                   */}
                   <CoworkConversationBottomSpacer
+                    additionalBuffer={116}
                     autoScrollRef={spacerAutoscrollRef}
                     composerRef={composerRef}
                     extrasRef={extrasRef}
-                    hasDesktopTopBar={false}
+                    hasDesktopTopBar
+                    isStreaming={conversationIsStreaming}
                     lastAssistantMessageRef={lastAssistantMessageRef}
                     lastHumanMessageRef={lastHumanMessageRef}
                     messageCount={messageUuids.length}

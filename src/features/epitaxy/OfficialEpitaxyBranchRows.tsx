@@ -522,8 +522,8 @@ function EpitaxyBranchRow({
               <span className="truncate">{state.repoName}</span>
             </span>
           ) : null}
-          <span className="flex-1 flex items-center gap-0 min-w-0 @container/branch-chip text-body">
-            <OfficialBranchNameButton branchName={state.branchName} />
+          <span className={`flex-1 flex items-center gap-0 min-w-0 @container/branch-chip text-body${!elevation && !commitMode && state.repoName ? " [@container_branch-row_(max-width:320px)]:hidden" : ""}`}>
+            <OfficialBranchNameButton branchName={state.branchName} hasRepoChip={Boolean(state.repoName)} />
           </span>
         </div>
         <span aria-hidden="true" className="min-w-0 shrink-[9999]" />
@@ -600,7 +600,7 @@ function OfficialCiStatusDot({ status }: { status: OfficialCiStatus }) {
   );
 }
 
-function OfficialBranchNameButton({ branchName }: { branchName: string }) {
+function OfficialBranchNameButton({ branchName, hasRepoChip = false }: { branchName: string; hasRepoChip?: boolean }) {
   const errors = useErrorsOptional();
   const sessionLoadText = useI18nText(SESSION_LOAD_MESSAGES);
   const copy = useCallback(() => {
@@ -612,7 +612,7 @@ function OfficialBranchNameButton({ branchName }: { branchName: string }) {
   return (
     <OfficialButton
       ariaLabel={sessionLoadText.copyBranchName}
-      className="shrink min-w-0 !justify-start *:min-w-0 text-muted hover:text-primary !px-1.25"
+      className={`shrink min-w-0 !justify-start *:min-w-0 text-muted hover:text-primary !px-1.25${hasRepoChip ? " @max-[3.25em]/branch-chip:hidden" : ""}`}
       onClick={copy}
       size="base"
       variant="ghost"

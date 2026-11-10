@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { Icon } from "../../../shell/icons";
 import { OfficialTextInput } from "../../shared/OfficialTextInput";
 import { SegmentedControl } from "../../settings/SettingsControls";
@@ -7,6 +8,23 @@ import { AddConnectorMenu } from "./AddConnectorMenu";
 import type { ConnectorListItem } from "./connectorTypes";
 
 type StatusFilter = "all" | "connected" | "notConnected";
+
+const CONNECTORS_OVERLAY_MESSAGES = {
+  connectors: { defaultMessage: "Connectors", id: "2mMJRvsAg1" },
+  searchConnectors: { defaultMessage: "Search connectors", id: "xM1SiMNUGM" },
+  addYourFirstConnectors: { defaultMessage: "Add your first connectors", id: "Ep5aBa3gJK" },
+  connectorsLetClaudeWork: {
+    defaultMessage: "Connectors let Claude work with your team’s tools and data.",
+    id: "PXiJ+nljd4",
+  },
+  filterByStatus: { defaultMessage: "Filter by status", id: "cDDfq0dvi1" },
+  all: { defaultMessage: "All", id: "zQvVDJ+j59" },
+  connected: { defaultMessage: "Connected", id: "IvjoDSPGEQ" },
+  notConnected: { defaultMessage: "Not connected", id: "kldl5VlIaI" },
+  nothingConnected: { defaultMessage: "Nothing connected.", id: "DBFHZXvD6L" },
+  nothingToConnect: { defaultMessage: "Nothing to connect.", id: "NJcu+sLEJB" },
+  noConnectorsMatch: { defaultMessage: "No connectors match your search", id: "xPuGYMU3MT" },
+} as const satisfies MessageDescriptors;
 
 /**
  * Official overlay Go (c40525e86) inside W (c9e81e7b9).
@@ -30,6 +48,7 @@ export function ConnectorsOverlayList({
   onBrowseConnectors: () => void;
   onAddCustomConnector: () => void;
 }) {
+  const text = useI18nText(CONNECTORS_OVERLAY_MESSAGES);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
 
@@ -57,15 +76,15 @@ export function ConnectorsOverlayList({
     <div className="flex h-full min-h-0 flex-1 flex-col pt-1" data-official-source="c40525e86:Go W">
       <header className="flex min-w-0 shrink-0 items-center gap-x-sm">
         <div className="flex min-w-0 flex-1 items-center">
-          <h2 className="min-w-0 truncate text-title font-semibold text-primary">Connectors</h2>
+          <h2 className="min-w-0 truncate text-title font-semibold text-primary">{text.connectors}</h2>
         </div>
         <div className="flex w-full max-w-md shrink-0 justify-center px-md">
           <OfficialTextInput
-            aria-label="Search connectors"
+            aria-label={text.searchConnectors}
             className="w-full"
             data-testid="customize-header-search"
             onValueChange={setQuery}
-            placeholder="Search connectors"
+            placeholder={text.searchConnectors}
             prepend={<Icon className="text-muted" customSize={16} name="Search" />}
             size="sm"
             type="search"
@@ -86,12 +105,12 @@ export function ConnectorsOverlayList({
             {showFilter ? (
               <div className="shrink-0 self-start">
                 <SegmentedControl
-                  ariaLabel="Filter by status"
+                  ariaLabel={text.filterByStatus}
                   onChange={(value) => setStatus(value as StatusFilter)}
                   options={[
-                    { value: "all", label: "All" },
-                    { value: "connected", label: "Connected" },
-                    { value: "notConnected", label: "Not connected" },
+                    { value: "all", label: text.all },
+                    { value: "connected", label: text.connected },
+                    { value: "notConnected", label: text.notConnected },
                   ]}
                   value={status}
                   variant="ghost"
@@ -101,12 +120,12 @@ export function ConnectorsOverlayList({
             {showTable ? <ConnectorsOverlayTable items={filtered} onSelect={onSelect} /> : null}
             {!showTable && status !== "all" && !searching && !firstRun ? (
               <p className="py-lg text-center text-body text-muted">
-                {status === "connected" ? "Nothing connected." : "Nothing to connect."}
+                {status === "connected" ? text.nothingConnected : text.nothingToConnect}
               </p>
             ) : null}
           </div>
           {!showTable && searching ? (
-            <p className="py-lg text-center text-body text-secondary">No connectors match your search</p>
+            <p className="py-lg text-center text-body text-secondary">{text.noConnectorsMatch}</p>
           ) : null}
         </div>
       </div>
@@ -115,6 +134,7 @@ export function ConnectorsOverlayList({
 }
 
 function ConnectorsOverlayFirstRun() {
+  const text = useI18nText(CONNECTORS_OVERLAY_MESSAGES);
   return (
     <div
       className="group/card relative isolate flex shrink-0 flex-col rounded-card after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-card-ring after:content-['']"
@@ -127,8 +147,8 @@ function ConnectorsOverlayFirstRun() {
         <div className="flex items-center gap-lg">
           <div className="flex min-w-0 flex-1 flex-col items-start gap-md">
             <div className="flex flex-col gap-xs">
-              <h3 className="m-0 text-heading-semibold text-primary">Add your first connectors</h3>
-              <p className="m-0 text-body text-secondary">Connectors let Claude work with your team’s tools and data.</p>
+              <h3 className="m-0 text-heading-semibold text-primary">{text.addYourFirstConnectors}</h3>
+              <p className="m-0 text-body text-secondary">{text.connectorsLetClaudeWork}</p>
             </div>
           </div>
           <div aria-hidden="true" className="hidden shrink-0 pr-6 text-primary sm:block">

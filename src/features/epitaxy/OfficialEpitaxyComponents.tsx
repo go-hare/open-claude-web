@@ -906,7 +906,7 @@ export function OfficialSessionHeader({
       <div className="draggable absolute inset-0 -z-[1]" aria-hidden="true" />
       <div className="group/lead relative z-[1] flex items-center min-w-0 gap-xs draggable-none">
         {sessionRef ? (
-          <span className="-ml-[4px] flex min-w-0">
+          <span className="-ml-[4px] flex min-w-0 shrink-0">
             <OfficialSessionSource session={session} sessionRef={sessionRef} />
           </span>
         ) : null}

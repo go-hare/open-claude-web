@@ -1,8 +1,16 @@
 import { Menu } from "@base-ui-components/react/menu";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { BaseMenuItem, BaseMenuPopup } from "../../../shell/BaseMenu";
 import { Icon } from "../../../shell/icons";
 import { OfficialButton } from "../../shared/OfficialButton";
 import { officialButtonClass } from "../../shared/buttonClasses";
+
+const ADD_CONNECTOR_MESSAGES = {
+  add: { defaultMessage: "Add", id: "alWu/MbgXB" },
+  addConnector: { defaultMessage: "Add connector", id: "jdCrxH65Tm" },
+  browseConnectors: { defaultMessage: "Browse connectors", id: "XnB63xJ54M" },
+  addCustomConnector: { defaultMessage: "Add custom connector", id: "5NO7mmK1QL" },
+} as const satisfies MessageDescriptors;
 
 const OVERLAY_ADD_TRIGGER_CLASS =
   "cds-reset group/btn relative isolate inline-flex h-control shrink-0 items-center justify-center gap-1.5 rounded border-0 px-md font-sans text-body font-medium font-control text-on-primary outline-none select-none whitespace-nowrap";
@@ -35,11 +43,12 @@ export function AddConnectorMenu({
   /** Overlay Ko (c40525e86): primary Add + Add custom connector; Discover is a tab. */
   variant?: "page" | "overlay";
 }) {
+  const text = useI18nText(ADD_CONNECTOR_MESSAGES);
   if (variant === "overlay") {
     return (
       <Menu.Root>
         <Menu.Trigger
-          aria-label="Add connector"
+          aria-label={text.addConnector}
           className={OVERLAY_ADD_TRIGGER_CLASS}
           data-cds="Button"
           data-official-source="cd08e92dc:Oe TriggerButton jdCrxH65Tm"
@@ -50,7 +59,7 @@ export function AddConnectorMenu({
             data-cds-part="paint"
           />
           <span className="relative inline-flex min-w-0 items-center gap-1">
-            Add
+            {text.add}
             <Icon className="shrink-0 opacity-60" name="CaretDown" preferFont size="sm" />
           </span>
         </Menu.Trigger>
@@ -60,7 +69,7 @@ export function AddConnectorMenu({
             icon="Add"
             onClick={addCustomDisabled ? undefined : onAddCustom}
           >
-            Add custom connector
+            {text.addCustomConnector}
           </BaseMenuItem>
         </BaseMenuPopup>
       </Menu.Root>
@@ -74,7 +83,7 @@ export function AddConnectorMenu({
     const onClick = showBrowse ? onBrowse : onAddCustom;
     return (
       <OfficialButton
-        aria-label="Add connector"
+        aria-label={text.addConnector}
         disabled={!showBrowse && addCustomDisabled}
         onClick={onClick}
         size="icon_sm"
@@ -89,7 +98,7 @@ export function AddConnectorMenu({
   return (
     <Menu.Root>
       <Menu.Trigger
-        aria-label="Add connector"
+        aria-label={text.addConnector}
         className={officialButtonClass({ variant: "ghost", size: "icon_sm" })}
       >
         <Icon customSize={16} name="Add" />
@@ -97,7 +106,7 @@ export function AddConnectorMenu({
       <BaseMenuPopup align="end" side="bottom" sideOffset={4}>
         {showBrowse ? (
           <BaseMenuItem icon="plugin" onClick={onBrowse}>
-            Browse connectors
+            {text.browseConnectors}
           </BaseMenuItem>
         ) : null}
         {showAddCustom ? (
@@ -106,7 +115,7 @@ export function AddConnectorMenu({
             icon="Add"
             onClick={addCustomDisabled ? undefined : onAddCustom}
           >
-            Add custom connector
+            {text.addCustomConnector}
           </BaseMenuItem>
         ) : null}
       </BaseMenuPopup>

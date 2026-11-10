@@ -1,6 +1,26 @@
 import { Dialog } from "@base-ui-components/react/dialog";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { Icon } from "../../../shell/icons";
+
+const UPLOAD_SKILL_MESSAGES = {
+  uploadSkill: { defaultMessage: "Upload skill", id: "jzGUNdu5Zs" },
+  review: {
+    defaultMessage: "Review the skill contents before adding to your library.",
+    id: "jE0ewcVoC8",
+  },
+  addToLibrary: { defaultMessage: "Add to library", id: "X561tiaU8d" },
+  dropOrClick: { defaultMessage: "Drag and drop or click to upload", id: "e/swXmKhH3" },
+  uploading: { defaultMessage: "Uploading...", id: "JEsxDwhXPG" },
+  readFailed: { defaultMessage: "Failed to read skill file.", id: "xPAePF1bRO" },
+  cancel: { defaultMessage: "Cancel", id: "47FYwba+bI" },
+  dropToUpload: { defaultMessage: "Drag and drop to upload", id: "u+lVETQ8t0" },
+  uploadAndReplace: { defaultMessage: "Upload and replace", id: "TtbWBGHNcO" },
+  replaceWarning: {
+    defaultMessage: "There’s an existing skill with the same name. Uploading this skill will replace the existing one, which can’t be restored.",
+    id: "dRMF/vTgCW",
+  },
+} as const satisfies MessageDescriptors;
 import { OfficialButton } from "../../shared/OfficialButton";
 import {
   readResolvedColorMode,
@@ -48,6 +68,7 @@ export function UploadSkillModal({
     replace?: boolean;
   }) => void;
 }) {
+  const text = useI18nText(UPLOAD_SKILL_MESSAGES);
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
@@ -97,11 +118,11 @@ export function UploadSkillModal({
       pendingParse.current = parsed;
       setPreview({ files: extracted, parsed });
     } catch (error) {
-      setErrors([error instanceof Error ? error.message : "Failed to read skill file."]);
+      setErrors([error instanceof Error ? error.message : text.readFailed]);
     } finally {
       setPending(false);
     }
-  }, []);
+  }, [text.readFailed]);
 
   const commit = useCallback(
     (replace: boolean) => {
@@ -131,8 +152,8 @@ export function UploadSkillModal({
     ? `Add “${preview?.parsed.name}” to your library?`
     : replacing
       ? `Replace “${conflictName}” skill?`
-      : "Upload skill";
-  const subtitle = previewing ? "Review the skill contents before adding to your library." : undefined;
+      : text.uploadSkill;
+  const subtitle = previewing ? text.review : undefined;
   const size = previewing ? "2xl" : "md";
 
   return (
@@ -179,7 +200,7 @@ export function UploadSkillModal({
                   <SkillArchivePreview files={preview.files} />
                   <div className="mt-pad-lg flex flex-wrap justify-end gap-sm">
                     <OfficialButton onClick={handleClose} variant="secondary">
-                      Cancel
+                      {text.cancel}
                     </OfficialButton>
                     <OfficialButton
                       onClick={() => {
@@ -193,7 +214,7 @@ export function UploadSkillModal({
                       }}
                       variant="primary"
                     >
-                      Add to library
+                      {text.addToLibrary}
                     </OfficialButton>
                   </div>
                 </>
@@ -201,8 +222,7 @@ export function UploadSkillModal({
                 <>
                   <div className="mt-1 mb-2">
                     <div className="text-secondary whitespace-pre-line">
-                      There’s an existing skill with the same name. Uploading this skill will replace the
-                      existing one, which can’t be restored.
+                      {text.replaceWarning}
                     </div>
                   </div>
                   <div className="mt-pad-lg flex flex-wrap justify-end gap-sm">
@@ -211,10 +231,10 @@ export function UploadSkillModal({
                       onClick={() => setConflictName(null)}
                       variant="secondary"
                     >
-                      Cancel
+                      {text.cancel}
                     </OfficialButton>
                     <OfficialButton disabled={pending} loading={pending} onClick={() => commit(true)} variant="danger">
-                      Upload and replace
+                      {text.uploadAndReplace}
                     </OfficialButton>
                   </div>
                 </>
@@ -255,12 +275,12 @@ export function UploadSkillModal({
                       ) : (
                         <Icon className="text-secondary" name="FolderPlus" size="xxl" />
                       )}
-                      {pending ? "Uploading..." : "Drag and drop or click to upload"}
+                      {pending ? text.uploading : text.dropOrClick}
                       {dragOver ? (
                         <div className="absolute h-[120px] inset-[-1px] text-accent z-50 pointer-events-none rounded-lg border-[1px] border-dashed border-accent-100 bg-accent">
                           <div className="flex flex-col gap-2 items-center justify-center h-full">
                             <Icon name="FolderPlus" size="xxl" />
-                            <div className="font-normal text-sm">Drag and drop to upload</div>
+                            <div className="font-normal text-sm">{text.dropToUpload}</div>
                           </div>
                         </div>
                       ) : null}

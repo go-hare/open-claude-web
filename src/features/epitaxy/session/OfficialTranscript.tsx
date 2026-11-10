@@ -1969,15 +1969,17 @@ function CodeTaskEventRun({ events, inGroup = false }: { events: OfficialTaskEve
   const asCard = !inGroup && anyRunning;
   return (
     <CodeTaskEventHost asCard={asCard} finished={anySettled && !anyRunning} taskId={events[0]!.taskId}>
-      <span className={`flex min-w-0 items-center gap-1 max-w-full ${asCard ? "text-body text-primary tabular-nums" : "text-body text-secondary group-hover/tool:text-primary"} min-w-0 break-words`} data-official-source="cd5a31703-B4nKQMBN.js:KX hEJp1hFtWd">
-        {parts.map((part, index) => (
-          <Fragment key={part.key}>
-            {index > 0 ? <span>, </span> : null}
-            <span className={`${index > 0 ? "whitespace-nowrap" : ""} ${tint && part.danger ? "text-danger" : ""}`}>
-              {part.text}
-            </span>
-          </Fragment>
-        ))}
+      <span className="flex min-w-0 items-center gap-1 max-w-full" data-official-source="cd5a31703-B4nKQMBN.js:KX hEJp1hFtWd">
+        <span className={asCard ? "min-w-0 break-words text-body text-primary tabular-nums" : "text-body text-secondary group-hover/tool:text-primary min-w-0 break-words"}>
+          {parts.map((part, index) => (
+            <Fragment key={part.key}>
+              {index > 0 ? <span>, </span> : null}
+              <span className={`${index > 0 ? "whitespace-nowrap" : ""} ${tint && part.danger ? "text-danger" : ""}`}>
+                {part.text}
+              </span>
+            </Fragment>
+          ))}
+        </span>
       </span>
     </CodeTaskEventHost>
   );

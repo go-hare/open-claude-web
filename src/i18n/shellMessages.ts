@@ -35,7 +35,7 @@ const SHELL_MESSAGES = {
   editSidebarMenu: { defaultMessage: "Edit sidebar…", id: "VsPyVYphMe", zhCN: "编辑侧边栏…" },
   customizeSidebarDescription: { defaultMessage: "Choose which items appear in your sidebar.", id: "KTKw0eMHnY", zhCN: "选择哪些项目显示在侧边栏中。" },
   /** Official `aY.routines` — Code overflow label when scheduled is not inline (`Dbc6XaCcol`). */
-  routines: { defaultMessage: "Routines", id: "Dbc6XaCcol", zhCN: "Routines" },
+  routines: { defaultMessage: "Routines", id: "Dbc6XaCcol" },
   date: { defaultMessage: "Date", id: "P7PLVjLe4f", zhCN: "日期" },
   delete: { defaultMessage: "Delete", id: "K3r6DQW7h+", zhCN: "删除" },
   /** Official VYt / $Yt — Delete anyway (9w/oawRjHR). */

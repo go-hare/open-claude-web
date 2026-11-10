@@ -16,6 +16,8 @@ import {
 } from "react";
 import { desktopBridge, type SessionSummary } from "../../adapters/desktopBridge";
 import type { RouteViewProps } from "../../app/routes";
+import { type MessageDescriptors, useI18nText } from "../../i18n/footerMenuMessages";
+import { formatOfficialIcu } from "../../i18n/formatOfficialIcu";
 import { useShellText } from "../../i18n/shellMessages";
 import { ConfirmDialog } from "../../shell/ConfirmDialog";
 import { Icon } from "../../shell/icons";
@@ -55,35 +57,41 @@ const SKELETON_OPACITIES = [1, 0.7, 0.4, 0.15] as const;
 const SKELETON_BLOCK_CLASS =
   "relative bg-bg-400 overflow-hidden after:absolute after:inset-0 after:translate-x-[-100%] after:bg-gradient-to-r after:from-bg-000/0 after:from-0% after:via-bg-000/20 after:via-50% after:to-100% after:to-bg-000/0 after:animate-[shimmer_1.5s_infinite]";
 
-const COWORK_COPY = {
-  title: "任务",
-  noun: "task",
-  nouns: "tasks",
-  searchPlaceholder: "Filter tasks",
-  noResults: "No tasks match your search.",
-  empty: {
-    all: "No tasks yet.",
-    active: "No active tasks.",
-    archived: "No archived tasks.",
-  } as Record<SurfaceTab, string>,
-  newLabel: "新任务",
-  newHref: "/task/new",
-};
+const COWORK_NEW_HREF = "/task/new";
+const CHAT_NEW_HREF = "/new";
 
-const CHAT_COPY = {
-  title: "Chats",
-  noun: "chat",
-  nouns: "chats",
-  searchPlaceholder: "Filter chats",
-  noResults: "No chats match your search.",
-  empty: {
-    all: "No chats yet.",
-    active: "No chats yet.",
-    archived: "No chats yet.",
-  } as Record<SurfaceTab, string>,
-  newLabel: "New chat",
-  newHref: "/new",
-};
+const CHATS_SURFACE_MESSAGES = {
+  tasks: { defaultMessage: "Tasks", id: "yhU1etXT1A" },
+  newTask: { defaultMessage: "New task", id: "K4O03zh0vo" },
+  filterTasks: { defaultMessage: "Filter tasks", id: "iDPKM08Z7b" },
+  noTasksYet: { defaultMessage: "No tasks yet", id: "ZXH44sMrF0" },
+  noActiveTasks: { defaultMessage: "No active tasks.", id: "__local.chatsNoActiveTasks" },
+  noArchivedTasks: { defaultMessage: "No archived tasks.", id: "__local.chatsNoArchivedTasks" },
+  noTasksMatch: { defaultMessage: "No tasks match your search.", id: "__local.chatsNoTasksMatch" },
+  chats: { defaultMessage: "Chats", id: "ABAQyoD6zr" },
+  newChat: { defaultMessage: "New chat", id: "ATDyLPIoxz" },
+  filterChats: { defaultMessage: "Filter chats", id: "__local.chatsFilterChats" },
+  noChatsYet: { defaultMessage: "No chats yet.", id: "__local.chatsNoChats" },
+  noChatsMatch: { defaultMessage: "No chats match your search.", id: "__local.chatsNoChatsMatch" },
+  selectAll: { defaultMessage: "Select all", id: "94Fg25VD0N" },
+  selectedCount: { defaultMessage: "{count} selected", id: "NKPfmmHQdx" },
+  archiveSelected: { defaultMessage: "Archive selected", id: "__local.chatsArchiveSelected" },
+  deleteSelected: { defaultMessage: "Delete selected", id: "ELsv+otD6n" },
+  deleteTask: { defaultMessage: "Delete task?", id: "eUpNsKBsYx" },
+  deleteTaskBody: {
+    defaultMessage: "This task will be permanently deleted from your computer and Anthropic's servers, and can't be undone.",
+    id: "SxY4rjRzn8",
+  },
+  deleteTasksTitle: { defaultMessage: "Delete {count} tasks?", id: "__local.chatsDeleteTasksTitle" },
+  deleteTasksBody: {
+    defaultMessage: "These tasks will be permanently deleted from your computer and Anthropic's servers, and can't be undone.",
+    id: "__local.chatsDeleteTasksBody",
+  },
+  archiveBody: {
+    defaultMessage: "Archive {count} selected? You can find them in the Archived tab.",
+    id: "__local.chatsArchiveBody",
+  },
+} as const satisfies MessageDescriptors;
 
 function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -124,9 +132,10 @@ function sessionListType(session: SessionSummary): ListItem["type"] {
 
 export function ChatsPage({ onNavigate }: RouteViewProps) {
   const text = useShellText();
+  const surface = useI18nText(CHATS_SURFACE_MESSAGES);
   const frame = useFrameContext();
   const isCowork = (frame?.mode ?? "cowork") === "cowork";
-  const copy = isCowork ? COWORK_COPY : CHAT_COPY;
+  const newHref = isCowork ? COWORK_NEW_HREF : CHAT_NEW_HREF;
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -204,7 +213,11 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
   const hasRawQuery = query.trim().length > 0;
   const queryPending = query.trim() !== debouncedQuery;
   const isSurfaceBusy = loading || queryPending;
-  const emptyLabel = hasRawQuery ? copy.noResults : isCowork ? copy.empty[tab] : copy.empty.all;
+  const emptyLabel = hasRawQuery
+    ? isCowork ? surface.noTasksMatch : surface.noChatsMatch
+    : isCowork
+      ? tab === "active" ? surface.noActiveTasks : tab === "archived" ? surface.noArchivedTasks : surface.noTasksYet
+      : surface.noChatsYet;
   // Official: H&&B&&0===items → a4t skeleton (r4t); !B&&empty → noResults/empty copy
   // (no skeleton on initial load without query — residual only gates on H)
   const showSearchSkeleton = hasRawQuery && isSurfaceBusy && items.length === 0;
@@ -335,8 +348,8 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
     <ProjectsPageShell
       action={
         selectionMode ? null : (
-          <OfficialButton onClick={() => onNavigate(copy.newHref)} size="sm" variant="primary">
-            {copy.newLabel}
+          <OfficialButton onClick={() => onNavigate(newHref)} size="sm" variant="primary">
+            {isCowork ? surface.newTask : surface.newChat}
           </OfficialButton>
         )
       }
@@ -345,19 +358,19 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
         selectionMode ? null : (
           <ProjectsExpandableSearch
             onChange={setQuery}
-            placeholder={copy.searchPlaceholder}
+            placeholder={isCowork ? surface.filterTasks : surface.filterChats}
             value={query}
           />
         )
       }
-      title={copy.title}
+      title={isCowork ? surface.tasks : surface.chats}
     >
       <div data-official-source="index-D35w9RK9.js:f4t g4t">
         {selectionMode ? (
           <div className="flex items-center h-12 my-1 -ml-[calc(1.5rem+0.5rem)]">
             <div className="group/menu flex items-center rounded-lg w-full gap-2.5">
               <button
-                aria-label="Select all"
+                aria-label={surface.selectAll}
                 className={cn(
                   "inline-flex h-4 w-4 items-center justify-center rounded border transition-colors",
                   selectedCount > 0
@@ -369,13 +382,13 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
               >
                 {selectedCount > 0 ? <Icon customSize={10} name="Check" /> : null}
               </button>
-              <div className="font-base text-text-400 ml-3">
-                <span className="tabular-nums">{selectedCount}</span> selected
+              <div className="font-base text-text-400 ml-3 tabular-nums">
+                {formatOfficialIcu(surface.selectedCount, { count: selectedCount })}
               </div>
               <div className="mr-auto flex gap-1">
                 {isCowork ? (
                   <OfficialButton
-                    aria-label="Archive selected"
+                    aria-label={surface.archiveSelected}
                     disabled={selectedCount === 0}
                     onClick={openBulkArchive}
                     size="icon_sm"
@@ -385,7 +398,7 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
                   </OfficialButton>
                 ) : null}
                 <OfficialButton
-                  aria-label="Delete selected"
+                  aria-label={surface.deleteSelected}
                   disabled={selectedCount === 0}
                   onClick={openBulkDelete}
                   size="icon_sm"
@@ -420,7 +433,7 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
               return (
                 <div key={`${item.type}:${item.uuid}`}>
                   {showActiveHeader ? (
-                    <div className="text-xs text-text-500 mt-4 mb-2">Active</div>
+                    <div className="text-xs text-text-500 mt-4 mb-2">{text.active}</div>
                   ) : null}
                   <TasksListRow
                     isSelected={Boolean(selected[item.uuid])}
@@ -441,8 +454,8 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
         isOpen={deleteOpen}
         message={
           deleteIds.length === 1
-            ? `This ${copy.noun} will be permanently deleted from your computer and Anthropic's servers, and can't be undone.`
-            : `These ${copy.nouns} will be permanently deleted from your computer and Anthropic's servers, and can't be undone.`
+            ? surface.deleteTaskBody
+            : formatOfficialIcu(surface.deleteTasksBody, { count: deleteIds.length })
         }
         onClose={() => {
           setDeleteOpen(false);
@@ -453,15 +466,15 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
         }}
         title={
           deleteIds.length === 1
-            ? `Delete ${copy.noun}?`
-            : `Delete ${deleteIds.length} ${copy.nouns}?`
+            ? surface.deleteTask
+            : formatOfficialIcu(surface.deleteTasksTitle, { count: deleteIds.length })
         }
         variant="danger"
       />
       <ConfirmDialog
         confirmText={text.archive}
         isOpen={archiveOpen}
-        message={`Archive ${archiveIds.length} ${archiveIds.length === 1 ? copy.noun : copy.nouns}? You can find ${archiveIds.length === 1 ? "it" : "them"} in the Archived tab.`}
+        message={formatOfficialIcu(surface.archiveBody, { count: archiveIds.length })}
         onClose={() => {
           setArchiveOpen(false);
           setArchiveIds([]);
@@ -469,7 +482,7 @@ export function ChatsPage({ onNavigate }: RouteViewProps) {
         onConfirm={() => {
           void confirmArchive();
         }}
-        title="Archive selected"
+        title={surface.archiveSelected}
         variant="default"
       />
     </ProjectsPageShell>

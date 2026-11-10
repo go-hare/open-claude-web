@@ -251,7 +251,7 @@ export function OfficialWorkspaceControls({
   }, [branches, onSourceBranchChange, showGitControls, sourceBranch, useWorktree, workspace.branchName]);
 
   return (
-    <div className="flex flex-wrap gap-g5 pb-p3 pr-[96px]">
+    <div className="flex flex-wrap gap-g5 pb-p3 pr-[96px]" data-official-source='className="flex flex-wrap gap-xs pb-xs pr-[96px]"'>
       <LocalEnvironmentPill
         disabled={disabled}
         onSelectLocal={selectLocalEnv}

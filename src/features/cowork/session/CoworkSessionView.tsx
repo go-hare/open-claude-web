@@ -102,10 +102,13 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
     streamingMessageId: data.streamingMessageId,
   });
   useEffect(() => {
-    if (!conversationIsStreaming) return;
-    if (scrollState.showScrollButton) return;
     const handle = autoscrollRef.current;
     if (!handle) return;
+    if (!conversationIsStreaming) {
+      handle.setPinToBottom(false);
+      return;
+    }
+    if (scrollState.showScrollButton) return;
     handle.setPinToBottom(true);
     handle.scrollToBottom("instant");
   }, [conversationIsStreaming, scrollState.showScrollButton, sessionId]);
@@ -129,9 +132,7 @@ function CoworkSessionRenderer({ onNavigate, sessionId }: Pick<RouteViewProps, "
     const frame = requestAnimationFrame(() => {
       const node = document.querySelector("[data-autoscroll-container]");
       if (!(node instanceof HTMLElement)) return;
-      // Measure-era residual: LUt may still grow after this frame; pin first so IYe RO resticks.
       const handle = autoscrollRef.current;
-      handle?.setPinToBottom(true);
       scrollCoworkSessionOpenToBottom(node);
       handle?.scrollToBottom("instant");
       sessionOpenScrolledRef.current = sessionId;
@@ -410,11 +411,11 @@ function CoworkSessionMessage({
 }
 
 /**
- * Official header empty residual (3kbIhS7KZS): Untitled.
- * Numeric-only titles are still placeholders → Untitled (not product 新任务 invent).
+ * Official header empty residual (3kbIhS7KZS): empty → header falls back to chromeText.untitled.
+ * Numeric-only titles are still placeholders → "" so header renders chromeText.untitled ("未命名" in zh-CN).
  */
 function coworkSessionTitle(title?: string) {
-  if (!title?.trim() || title === "Untitled" || /^\d+$/.test(title)) return "Untitled";
+  if (!title?.trim() || title === "Untitled" || /^\d+$/.test(title)) return "";
   return title;
 }
 

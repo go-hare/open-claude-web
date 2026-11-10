@@ -30,7 +30,7 @@ export function OfficialFilesHeaderTabs({
   treeTooltip: string;
 }) {
   return (
-    <div className="relative z-[1] flex min-w-0 flex-1 items-center gap-1 draggable-none">
+    <div className="relative z-[1] flex min-w-0 flex-1 items-center gap-1 overflow-hidden draggable-none">
       <OfficialButton
         ariaLabel={treeTooltip}
         className="shrink-0 rounded text-secondary"

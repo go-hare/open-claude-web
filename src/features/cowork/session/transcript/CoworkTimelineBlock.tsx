@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { type MessageDescriptors, useI18nText } from "../../../../i18n/footerMenuMessages";
 import type { CoworkChatMessage, CoworkContentBlock } from "./coworkMessageModel";
 import { CoworkTimelineClockGlyph } from "../../ui/CoworkOfficialGlyphs";
 import { CoworkAssistantMarkdown } from "./CoworkAssistantMarkdown";
@@ -6,6 +7,11 @@ import { coworkComputerLinkPath } from "./coworkComputerLink";
 import { CoworkTimelineGroupItem } from "./CoworkTimelinePrimitives";
 import { CoworkOfficialToolRenderer } from "./CoworkOfficialToolRenderer";
 import { useCoworkTranscriptActions } from "./CoworkTranscriptActions";
+
+const TIMELINE_TEXT_MESSAGES = {
+  showMore: { defaultMessage: "Show more", id: "aWpBzjCXKS" },
+  showLess: { defaultMessage: "Show less", id: "qyJtWyZ0yt" },
+} as const satisfies MessageDescriptors;
 
 /**
  * Official gst TimelineBlock (c21f11e6d-CxD82rYo.js).
@@ -196,6 +202,7 @@ function CoworkTimelineTextItem({
 
 /** Official jet: collapse long settled bodies past 200px. */
 function CoworkTimelineTextContent({ children, isStreaming = false }: { children: ReactNode; isStreaming?: boolean }) {
+  const text = useI18nText(TIMELINE_TEXT_MESSAGES);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [collapsible, setCollapsible] = useState(false);
@@ -231,7 +238,7 @@ function CoworkTimelineTextContent({ children, isStreaming = false }: { children
           onClick={() => setExpanded((value) => !value)}
           type="button"
         >
-          {expanded ? "Show less" : "Show more"}
+          {expanded ? text.showLess : text.showMore}
         </button>
       ) : null}
     </div>

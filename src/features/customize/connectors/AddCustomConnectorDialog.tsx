@@ -1,5 +1,17 @@
 import { useMemo, useState } from "react";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { Icon } from "../../../shell/icons";
+
+const ADD_CONNECTOR_MESSAGES = {
+  title: { defaultMessage: "Add custom connector", id: "2+VODHagkt" },
+  name: { defaultMessage: "Name", id: "HAlOn1ZsuY" },
+  serverUrl: { defaultMessage: "Remote MCP server URL", id: "BeNH4k5JPv" },
+  advanced: { defaultMessage: "Advanced settings", id: "V72EhnbTFu" },
+  clientId: { defaultMessage: "OAuth Client ID (optional)", id: "rS2iOWRASM" },
+  clientSecret: { defaultMessage: "OAuth Client Secret (optional)", id: "XDbEJBLE7c" },
+  invalidUrl: { defaultMessage: "Invalid URL format", id: "Zx2+7F8Kf5" },
+  httpsRequired: { defaultMessage: "URL must start with 'https'", id: "tLIngV91a5" },
+} as const satisfies MessageDescriptors;
 import { OfficialButton } from "../../shared/OfficialButton";
 import { OfficialModal } from "../../shared/OfficialModal";
 import { OfficialTextInput } from "../../shared/OfficialTextInput";
@@ -31,12 +43,13 @@ export function AddCustomConnectorDialog({
     url: string;
   }) => void;
 }) {
+  const text = useI18nText(ADD_CONNECTOR_MESSAGES);
   const [name, setName] = useState(initialName);
   const [url, setUrl] = useState(initialUrl);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const urlError = useMemo(() => urlHint(url), [url]);
+  const urlError = useMemo(() => urlHint(url, text.invalidUrl, text.httpsRequired), [text.httpsRequired, text.invalidUrl, url]);
   const canSubmit = name.trim().length > 0 && isHttpsUrl(url);
 
   return (
@@ -61,7 +74,7 @@ export function AddCustomConnectorDialog({
       }
       title={
         <div className="flex gap-2 items-center">
-          <span>Add custom connector</span>
+          <span>{text.title}</span>
           <span className="inline-flex items-center rounded-md bg-bg-300 px-1.5 py-0.5 text-xs text-text-300">
             BETA
           </span>
@@ -89,7 +102,7 @@ export function AddCustomConnectorDialog({
                 error={name.trim() === ""}
                 onBlur={() => setName((value) => value.trim())}
                 onValueChange={setName}
-                placeholder="Name"
+                placeholder={text.name}
                 required
                 value={name}
               />
@@ -99,7 +112,7 @@ export function AddCustomConnectorDialog({
                 error={Boolean(url) && !isHttpsUrl(url)}
                 onBlur={() => setUrl((value) => value.trim())}
                 onValueChange={setUrl}
-                placeholder="Remote MCP server URL"
+                placeholder={text.serverUrl}
                 required
                 value={url}
               />
@@ -117,7 +130,7 @@ export function AddCustomConnectorDialog({
                 customSize={14}
                 name="CaretRight"
               />
-              Advanced settings
+              {text.advanced}
             </button>
             <div
               className={
@@ -130,13 +143,13 @@ export function AddCustomConnectorDialog({
                 <OfficialTextInput
                   onBlur={() => setClientId((value) => value.trim())}
                   onValueChange={setClientId}
-                  placeholder="OAuth Client ID (optional)"
+                  placeholder={text.clientId}
                   value={clientId}
                 />
                 <OfficialTextInput
                   onBlur={() => setClientSecret((value) => value.trim())}
                   onValueChange={setClientSecret}
-                  placeholder="OAuth Client Secret (optional)"
+                  placeholder={text.clientSecret}
                   type="password"
                   value={clientSecret}
                 />
@@ -179,12 +192,12 @@ function isHttpsUrl(value: string): boolean {
 }
 
 /** Official X secondaryLabel. */
-function urlHint(value: string): string | null {
+function urlHint(value: string, invalidUrl: string, httpsRequired: string): string | null {
   if (!value) return null;
   const trimmed = value.trim();
   if (trimmed.startsWith("https")) {
-    return URL.canParse(trimmed) ? null : "Invalid URL format";
+    return URL.canParse(trimmed) ? null : invalidUrl;
   }
-  return "URL must start with 'https'";
+  return httpsRequired;
 }
 

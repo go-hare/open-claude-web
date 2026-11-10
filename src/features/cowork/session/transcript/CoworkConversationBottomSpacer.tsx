@@ -54,6 +54,7 @@ export type CoworkConversationBottomSpacerProps = {
   hasDesktopTopBar?: boolean;
   /** Official TUt()/IUt().enabled — currently always false in official; kept for parity. */
   hasPubsecBanner?: boolean;
+  isStreaming?: boolean;
   lastAssistantMessageRef: RefObject<HTMLDivElement | null>;
   initialPrevMessageCount?: number;
   lastHumanMessageRef: RefObject<HTMLDivElement | null>;
@@ -263,6 +264,7 @@ export function CoworkConversationBottomSpacer(props: CoworkConversationBottomSp
   }, [
     props.composerRef,
     props.extrasRef,
+    props.isStreaming,
     props.lastAssistantMessageRef,
     props.lastHumanMessageRef,
     props.messageCount,

@@ -12,12 +12,18 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { type MessageDescriptors, useI18nText } from "../../../../i18n/footerMenuMessages";
 import { Icon } from "../../../../shell/icons";
 import { CoworkTimelineClockGlyph } from "../../ui/CoworkOfficialGlyphs";
 import { CoworkAssistantMarkdown } from "./CoworkAssistantMarkdown";
 import { coworkComputerLinkPath } from "./coworkComputerLink";
 import { useCoworkTranscriptActions } from "./CoworkTranscriptActions";
 import { CoworkToolRow, type CoworkToolRenderMode } from "./CoworkToolRow";
+
+const THINKING_CELL_MESSAGES = {
+  thinking: { defaultMessage: "Thinking", id: "AHQWDTo4+e" },
+  thoughtProcess: { defaultMessage: "Thought process", id: "zl6fNbo7RW" },
+} as const satisfies MessageDescriptors;
 
 /** Official A9e support article for extended-thinking cutoff copy. */
 export const COWORK_THINKING_CUTOFF_SUPPORT_HREF =
@@ -63,6 +69,7 @@ export const CoworkThinkingCell = memo(function CoworkThinkingCell({
   stopTimestamp,
   text,
 }: CoworkThinkingCellProps) {
+  const thinkingText = useI18nText(THINKING_CELL_MESSAGES);
   // ISP UX flag default false (E9e.enabled) — titles Thinking / Thought process.
   const ispThinkingUx = false;
   const { isExpanded, setIsExpanded, snappyTransition } = useExpandableThinking(
@@ -100,9 +107,9 @@ export const CoworkThinkingCell = memo(function CoworkThinkingCell({
   const collapsedTitle = mostRecentSummary
     ?? (ispThinkingUx
       ? (isStreaming ? "Thinking..." : (fallbackSummary ?? "Thinking..."))
-      : (isStreaming ? "Thinking" : "Thought process"));
+      : (isStreaming ? thinkingText.thinking : thinkingText.thoughtProcess));
   const title: ReactNode = isExpanded
-    ? "Thought process"
+    ? thinkingText.thoughtProcess
     : (!isStreaming && !sawStreaming.current)
       ? <span className="text-text-300">{collapsedTitle}</span>
       : (

@@ -1,6 +1,15 @@
 import { Menu } from "@base-ui-components/react/menu";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { BaseMenuItem, BaseMenuPopup } from "../../../shell/BaseMenu";
 import { Icon } from "../../../shell/icons";
+
+const ADD_PLUGIN_MESSAGES = {
+  discover: { defaultMessage: "Discover", id: "6zI3v92cdU" },
+  add: { defaultMessage: "Add", id: "alWu/MbgXB" },
+  addPlugin: { defaultMessage: "Add plugin", id: "9knX1qH3f1" },
+  uploadPlugin: { defaultMessage: "Upload plugin", id: "EtIpiwYn4p" },
+  createWithClaude: { defaultMessage: "Create with Claude", id: "PJOomHaesP" },
+} as const satisfies MessageDescriptors;
 
 const OVERLAY_ADD_TRIGGER_CLASS =
   "cds-reset group/btn relative isolate inline-flex h-control shrink-0 items-center justify-center gap-1.5 rounded border-0 px-md font-sans text-body font-medium font-control text-on-primary outline-none select-none whitespace-nowrap";
@@ -25,10 +34,11 @@ export function AddPluginDropdown({
   onDiscover?: () => void;
   onUpload?: () => void;
 }) {
+  const text = useI18nText(ADD_PLUGIN_MESSAGES);
   const add = canUpload ? (
     <Menu.Root>
       <Menu.Trigger
-        aria-label="Add plugin"
+        aria-label={text.addPlugin}
         className={OVERLAY_ADD_TRIGGER_CLASS}
         data-cds="Button"
         data-official-source="cd08e92dc:Oe TriggerButton 9knX1qH3f1"
@@ -39,17 +49,17 @@ export function AddPluginDropdown({
           data-cds-part="paint"
         />
         <span className="relative inline-flex min-w-0 items-center gap-1">
-          Add
+          {text.add}
           <Icon className="shrink-0 opacity-60" name="CaretDown" preferFont size="sm" />
         </span>
       </Menu.Trigger>
       <BaseMenuPopup align="end" side="bottom" sideOffset={4}>
         <BaseMenuItem icon="Upload" onClick={onUpload}>
-          Upload plugin
+          {text.uploadPlugin}
         </BaseMenuItem>
         {onCreateWithClaude ? (
           <BaseMenuItem icon="Chat" onClick={onCreateWithClaude}>
-            Create with Claude
+            {text.createWithClaude}
           </BaseMenuItem>
         ) : null}
       </BaseMenuPopup>
@@ -73,7 +83,7 @@ export function AddPluginDropdown({
             className="absolute inset-0 rounded-[inherit] bg-fill-secondary transition-[background-color] duration-fast group-hover/btn:bg-fill-ghost-hover"
             data-cds-part="paint"
           />
-          <span className="relative">Discover</span>
+          <span className="relative">{text.discover}</span>
         </button>
       ) : null}
       {add}

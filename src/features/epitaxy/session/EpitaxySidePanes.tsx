@@ -76,7 +76,8 @@ import {
   type OfficialSubagentTarget,
 } from "./epitaxyTranscriptActionContext";
 
-export const sidePaneMinWidth = 100;
+export const sidePaneMinWidth = 280;
+const sidePaneMinHeight = 100;
 const sidePaneResizeStep = 24;
 const sidePaneResizeHandleSize = 12;
 /** Official ur fallback: chat flex 2 vs side flex 1. File/diff/preview first-open uses 3 (c039 `la`). */
@@ -270,37 +271,16 @@ export function EpitaxySidePaneColumn({
   /** Official ca5db `R`/`V` toggleExpandedTile — Files column fills remaining row. */
   const [paneExpanded, setPaneExpanded] = useState(false);
   const columnFlex = paneExpanded ? 100 : (flex ?? sidePaneDefaultFlex);
-  const reduceMotion = useReducedMotion();
-  // Official YI isEntering for the row side tile: one-shot on mount while flex mode (no fixed width).
-  // Fixed width after user resize is flex:0 0 auto — no flexGrow enter.
-  const [isColumnEntering, setIsColumnEntering] = useState(() => sidePaneWidth === undefined);
   const enteringIds = useOfficialSideTileEnteringIds(sideTiles);
   const ariaValueNow = sidePaneWidthToAriaValue(sidePaneWidth);
-  // reduceMotion / fixed width: no enter tween (official S = prefers-reduced-motion).
-  const animateColumnEnter =
-    isColumnEntering && sidePaneWidth === undefined && !reduceMotion;
 
-  useEffect(() => {
-    if (!isColumnEntering) return;
-    if (reduceMotion || sidePaneWidth !== undefined) {
-      setIsColumnEntering(false);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setIsColumnEntering(false);
-    }, officialTileEnterTransition.duration * 1000);
-    return () => window.clearTimeout(timer);
-  }, [isColumnEntering, reduceMotion, sidePaneWidth]);
-
-  // Official YI tile wrap: flexGrow / flexShrink:1 / flexBasis:0 until user resizes to a fixed width.
-  // Column of FI tiles: official stack gap=12 between tasks/subagent (nE.gap).
-  // flexGrow lives on motion animate when flex mode so initial 0 is not clobbered by style.flexGrow.
+  // Official c593f7513 yg + shared-18 qb: initial:!1, flexGrow in style, minTileWidthPx=280.
   const sidePaneStyle = useMemo<CSSProperties>(() => {
     if (sidePaneWidth === undefined || paneExpanded) {
       return {
         height: "100%",
-        // Official YI: minSize 0 while entering so flex can grow from nothing.
-        minWidth: animateColumnEnter ? 0 : sidePaneMinWidth,
+        minWidth: sidePaneMinWidth,
+        flexGrow: columnFlex,
         flexShrink: 1,
         flexBasis: 0,
         display: "flex",
@@ -322,26 +302,7 @@ export function EpitaxySidePaneColumn({
       minHeight: 0,
       position: "relative",
     };
-  }, [animateColumnEnter, paneExpanded, sidePaneWidth]);
-
-  // Official YI shell while entering: absolute fill of growing wrap (data-entering).
-  const columnShellStyle = useMemo<CSSProperties | undefined>(() => {
-    if (!animateColumnEnter) return undefined;
-    return {
-      position: "absolute",
-      top: 0,
-      bottom: 0,
-      left: 0,
-      right: 0,
-      transform: "translateZ(2px)",
-      zIndex: 2,
-      display: "flex",
-      flexDirection: "column",
-      gap: 12,
-      minHeight: 0,
-      minWidth: 0,
-    };
-  }, [animateColumnEnter]);
+  }, [columnFlex, paneExpanded, sidePaneWidth]);
 
   const commitSidePaneWidth = useCallback((width: number, maxWidth?: number) => {
     onSidePaneWidthChange(clampSidePaneWidth(width, maxWidth ?? getSidePaneMaxWidth()));
@@ -470,10 +431,7 @@ export function EpitaxySidePaneColumn({
     <motion.div
       ref={columnRef}
       className="min-w-0 min-h-0 relative"
-      data-entering={animateColumnEnter || undefined}
-      initial={animateColumnEnter ? { flexGrow: 0 } : false}
-      animate={{ flexGrow: columnFlex }}
-      transition={animateColumnEnter ? officialTileEnterTransition : { duration: 0 }}
+      initial={false}
       style={sidePaneStyle}
     >
       <div
@@ -491,11 +449,8 @@ export function EpitaxySidePaneColumn({
       >
         <span aria-hidden="true" className="tiles-handle-affordance" style={sidePaneBoundaryAffordanceStyle} />
       </div>
-      {/* Official YI shell: absolute while entering so chrome fills the growing wrap width. */}
       <div
         className="tiles-shell min-w-0 min-h-0 h-full w-full flex flex-col gap-[12px]"
-        data-entering={animateColumnEnter || undefined}
-        style={columnShellStyle}
       >
         {tiles}
       </div>
@@ -677,58 +632,33 @@ function EpitaxySidePaneTile({
 
   const activeTerminalTab = terminalTabs.tabs.find((tab) => tab.id === terminalTabs.activeId) ?? terminalTabs.tabs[0];
 
-  // Official YI tileWrap: flexGrow motion / flexShrink:1 / flexBasis:0 / minSize; N=enter|exit → min 0.
-  // isEntering: flexGrow animates 0→1 ($I); shell absolute so plan keeps column share while file grows below.
-  // flexGrow lives only on motion animate (not style) so initial 0 is not clobbered by style.flexGrow:1.
+  // Official c593f7513 yg tileWrap: flexGrow:1 / flexShrink:1 / flexBasis:0 / minWidth:280 / minHeight:100.
   const tileWrapStyle = useMemo<CSSProperties>(() => ({
+    flexGrow: 1,
     flexShrink: 1,
     flexBasis: 0,
-    minWidth: isEntering ? 0 : sidePaneMinWidth,
-    minHeight: isEntering ? 0 : sidePaneMinWidth,
+    minWidth: sidePaneMinWidth,
+    minHeight: sidePaneMinHeight,
     position: "relative",
     overflow: "visible",
-  }), [isEntering]);
+  }), []);
 
-  // Official YI shell while entering/exiting: absolute fill of the growing wrap (data-entering).
-  // Official: top/bottom/left + translateZ(2) zIndex 2 (right open so width follows wrap growth).
-  const tileShellStyle = useMemo<CSSProperties | undefined>(() => {
-    if (!isEntering) return undefined;
-    return {
-      position: "absolute",
-      top: 0,
-      bottom: 0,
-      left: 0,
-      transform: "translateZ(2px)",
-      zIndex: 2,
-    };
-  }, [isEntering]);
-
-  // Official split (c119):
-  // - YI tile wrap: flexGrow/Shrink/Basis (column stack sizing) — may animate enter
-  // - iE shell: h-full w-full min-w-0 relative isolate rounded-r6
-  // - FI (DI): "min-w-0 shrink-0 relative isolate flex flex-col rounded-r6" + optional epitaxy-code-surface
-  // - Nn({elevation:"sidebar"}) ≡ bg-surface-primary-elevated effect-primary-elevated (1px ring via box-shadow)
-  // CRITICAL: FI outer must NOT overflow:hidden — that clips effect-primary-elevated outer ring.
-  // Only body uses overflow-hidden rounded-b-r6 (official FI).
   return (
     <motion.div
       className="min-w-0 min-h-0 relative"
       data-entering={isEntering || undefined}
-      initial={reduceMotion || !isEntering ? false : { flexGrow: 0 }}
-      animate={{ flexGrow: 1 }}
-      transition={reduceMotion ? { duration: 0 } : officialTileEnterTransition}
+      initial={false}
       style={tileWrapStyle}
     >
-      {/* Official iE renderTile shell around rE/FI — absolute while YI entering. */}
+      {/* Official iE renderTile shell around rE/FI. */}
       <div
-        className="tiles-shell h-full w-full min-w-0 relative isolate rounded-r6"
+        className="tiles-shell h-full w-full min-w-0 min-h-0 relative isolate rounded-r6"
         data-entering={isEntering || undefined}
         data-tile-host={activeView}
-        style={tileShellStyle}
       >
         {/* Official FI / DI + Nn sidebar elevation */}
         <div
-          className={`min-w-0 shrink-0 relative isolate flex flex-col rounded-r6 h-full${codeSurface ? " epitaxy-code-surface" : ""}`}
+          className={`min-w-0 min-h-0 shrink-0 relative isolate flex flex-col rounded-r6 h-full${codeSurface ? " epitaxy-code-surface" : ""}`}
         >
           <div
             aria-hidden="true"

@@ -1,6 +1,16 @@
 import { AnimatePresence, motion } from "motion/react";
 import { Children, createContext, isValidElement, memo, useContext, useMemo, useState, type ReactNode } from "react";
+import { type MessageDescriptors, useI18nText } from "../../../../i18n/footerMenuMessages";
+import { formatOfficialIcu } from "../../../../i18n/formatOfficialIcu";
 import { CoworkChevronDownGlyph, CoworkCircleCheckGlyph } from "../../ui/CoworkOfficialGlyphs";
+
+const TIMELINE_PRIMITIVES_MESSAGES = {
+  hideSteps: { defaultMessage: "Hide steps", id: "Iufn28MeR1" },
+  stepsCount: {
+    defaultMessage: "{collapsedCount, plural, one {# step} other {# steps}}",
+    id: "dS6ebV+vpY",
+  },
+} as const satisfies MessageDescriptors;
 
 type TimelineContextValue = {
   expandedItemKey?: string;
@@ -85,9 +95,10 @@ export function CoworkTimelineDoneItem() {
 }
 
 function CoworkCollapseHeader({ count, expanded, onToggle }: { count: number; expanded: boolean; onToggle: () => void }) {
+  const text = useI18nText(TIMELINE_PRIMITIVES_MESSAGES);
   return (
     <CoworkTimelineGroupItem icon={<CoworkChevronDownGlyph className={classes("transition-transform text-text-300", expanded ? "rotate-0" : "rotate-180")} size={16} />} isActive={false} isFirstItem isLastItem={false} showDotFallback={false}>
-      <button aria-expanded={expanded} className="px-3 py-2 w-full text-left text-sm text-text-300" onClick={onToggle}>{expanded ? "Hide steps" : `${count} ${count === 1 ? "step" : "steps"}`}</button>
+      <button aria-expanded={expanded} className="px-3 py-2 w-full text-left text-sm text-text-300" onClick={onToggle}>{expanded ? text.hideSteps : formatOfficialIcu(text.stepsCount, { collapsedCount: count })}</button>
     </CoworkTimelineGroupItem>
   );
 }

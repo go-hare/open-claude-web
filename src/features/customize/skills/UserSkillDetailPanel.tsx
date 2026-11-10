@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { OfficialSwitch } from "../../shared/OfficialSwitch";
+
+const USER_SKILL_DETAIL_MESSAGES = {
+  enabled: { defaultMessage: "Enabled", id: "V52jNnY+6M" },
+  disabled: { defaultMessage: "Disabled", id: "4PQSGeQCas" },
+  enableSkill: { defaultMessage: "Enable skill", id: "xNU9rxobQP" },
+  selectSkill: { defaultMessage: "Select a skill to view details", id: "ccYDCQ+TEE" },
+  descriptionHint: {
+    defaultMessage: "Claude uses these descriptions when deciding which skills to use in chat.",
+    id: "g08yMBD/54",
+  },
+} as const satisfies MessageDescriptors;
 import { OfficialTooltip } from "../../shared/OfficialTooltip";
 import { CoworkAssistantMarkdown } from "../../cowork/session/transcript/CoworkAssistantMarkdown";
 import { Icon } from "../../../shell/icons";
@@ -16,9 +28,6 @@ import {
   subscribeUserSkills,
   type LocalSkillFile,
 } from "./userSkillsStore";
-
-const DESCRIPTION_TOOLTIP =
-  "Claude uses these descriptions when deciding which skills to use in chat.";
 
 /**
  * Official c4313ee9e Pe SkillOverviewView + Fe SkillBodyPreview:
@@ -43,6 +52,7 @@ export function UserSkillDetailPanel({
   skillId: string;
   wiggleEnabled: boolean;
 }) {
+  const text = useI18nText(USER_SKILL_DETAIL_MESSAGES);
   useSyncExternalStore(subscribeUserSkills, getUserSkills, getUserSkills);
   useSyncExternalStore(subscribeUserSkillFiles, getUserSkillFilesRevision, getUserSkillFilesRevision);
   const skill = findUserSkill(skillId);
@@ -55,7 +65,7 @@ export function UserSkillDetailPanel({
   if (!skill) {
     return (
       <div className="flex items-center justify-center h-full text-text-400">
-        Select a skill to view details
+        {text.selectSkill}
       </div>
     );
   }
@@ -73,10 +83,10 @@ export function UserSkillDetailPanel({
           {wiggleEnabled ? (
             <label
               className="flex items-center gap-2 cursor-pointer"
-              title={skill.enabled ? "Enabled" : "Disabled"}
+              title={skill.enabled ? text.enabled : text.disabled}
             >
               <OfficialSwitch
-                aria-label="Enable skill"
+                aria-label={text.enableSkill}
                 checked={skill.enabled}
                 onCheckedChange={onEnabledChange}
                 size="small"
@@ -105,7 +115,7 @@ export function UserSkillDetailPanel({
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-0.5">
             <h3 className="font-small text-text-500 leading-4">Description</h3>
-            <OfficialTooltip tooltipContent={DESCRIPTION_TOOLTIP}>
+            <OfficialTooltip tooltipContent={text.descriptionHint}>
               <span className="flex items-center cursor-default">
                 <Icon className="w-4 h-4 text-text-500" name="Info" />
               </span>

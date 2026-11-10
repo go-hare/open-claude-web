@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Tabs } from "@base-ui-components/react/tabs";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { Icon } from "../../../shell/icons";
 import { OfficialTextInput } from "../../shared/OfficialTextInput";
 import { SkillsCollapsibleSection } from "../skills/SkillsCollapsibleSection";
@@ -11,6 +12,20 @@ import { titleCasePluginName } from "../directory/pluginMarketplace";
 
 const OVERLAY_TAB_CLASS =
   "inline-flex h-control shrink-0 items-center justify-center px-md rounded cds-reset whitespace-nowrap select-none outline-none text-body font-medium font-control text-primary bg-fill-ghost-hover";
+
+const PLUGINS_OVERLAY_MESSAGES = {
+  plugins: { defaultMessage: "Plugins", id: "QJAllUAc2k" },
+  searchSkillsAndPlugins: { defaultMessage: "Search skills and plugins", id: "n3VpmrDQYa" },
+  yourPlugins: { defaultMessage: "Your plugins", id: "6qc5nEZtUh" },
+  addYourFirstPlugins: { defaultMessage: "Add your first plugins", id: "zLXPyIM8X/" },
+  giveClaudeRoleExpertise: {
+    defaultMessage: "Give Claude role-level expertise with plugins.",
+    id: "jcaOQvQtmx",
+  },
+  noPluginsMatch: { defaultMessage: "No plugins match your search", id: "PuWnt+KeOh" },
+  personalPlugins: { defaultMessage: "Personal plugins", id: "DDvPN+i/t2" },
+  organizationPlugins: { defaultMessage: "Organization plugins", id: "3WKlYlcDGA" },
+} as const satisfies MessageDescriptors;
 
 /**
  * Official overlay plugins list (c6a2a31c4) inside W (c9e81e7b9).
@@ -39,6 +54,7 @@ export function PluginsOverlayList({
   onDiscover?: () => void;
   canUpload: boolean;
 }) {
+  const text = useI18nText(PLUGINS_OVERLAY_MESSAGES);
   const [query, setQuery] = useState("");
   const searching = query.trim().length > 0;
   const q = query.trim().toLowerCase();
@@ -71,15 +87,15 @@ export function PluginsOverlayList({
     <div className="flex h-full min-h-0 flex-1 flex-col pt-1" data-official-source="c6a2a31c4:W plugins overlay">
       <header className="flex min-w-0 shrink-0 items-center gap-x-sm">
         <div className="flex min-w-0 flex-1 items-center">
-          <h2 className="min-w-0 truncate text-title font-semibold text-primary">Plugins</h2>
+          <h2 className="min-w-0 truncate text-title font-semibold text-primary">{text.plugins}</h2>
         </div>
         <div className="flex w-full max-w-md shrink-0 justify-center px-md">
           <OfficialTextInput
-            aria-label="Search skills and plugins"
+            aria-label={text.searchSkillsAndPlugins}
             className="w-full"
             data-testid="customize-header-search"
             onValueChange={setQuery}
-            placeholder="Search skills and plugins"
+            placeholder={text.searchSkillsAndPlugins}
             prepend={<Icon className="text-muted" customSize={16} name="Search" />}
             size="sm"
             type="search"
@@ -98,13 +114,13 @@ export function PluginsOverlayList({
       <div aria-hidden="true" className="h-4 shrink-0" />
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-sm">
         <Tabs.Root value="mine">
-          <Tabs.List aria-label="Plugins" className="flex items-center font-sans">
+          <Tabs.List aria-label={text.plugins} className="flex items-center font-sans">
             <Tabs.Tab
               className={OVERLAY_TAB_CLASS}
               data-testid="plugins-tabbed-list-tab-mine"
               value="mine"
             >
-              Your plugins
+              {text.yourPlugins}
             </Tabs.Tab>
           </Tabs.List>
         </Tabs.Root>
@@ -113,11 +129,11 @@ export function PluginsOverlayList({
         {firstRun ? (
           <PluginsOverlayFirstRun />
         ) : searching && filtered.length === 0 ? (
-          <p className="py-lg text-center text-body text-secondary">No plugins match your search</p>
+          <p className="py-lg text-center text-body text-secondary">{text.noPluginsMatch}</p>
         ) : (
           <div className="flex flex-col gap-px">
             {personal.length > 0 ? (
-              <SkillsCollapsibleSection forceExpanded={searching} title="Personal plugins">
+              <SkillsCollapsibleSection forceExpanded={searching} title={text.personalPlugins}>
                 <div className="flex flex-col gap-px">
                   {personal.map((plugin) => (
                     <SkillsListItem
@@ -134,7 +150,7 @@ export function PluginsOverlayList({
               </SkillsCollapsibleSection>
             ) : null}
             {org.length > 0 ? (
-              <SkillsCollapsibleSection forceExpanded={searching} title="Organization plugins">
+              <SkillsCollapsibleSection forceExpanded={searching} title={text.organizationPlugins}>
                 <div className="flex flex-col gap-px">
                   {org.map((plugin) => (
                     <SkillsListItem
@@ -158,6 +174,7 @@ export function PluginsOverlayList({
 }
 
 function PluginsOverlayFirstRun() {
+  const text = useI18nText(PLUGINS_OVERLAY_MESSAGES);
   return (
     <div
       className="group/card relative isolate flex shrink-0 flex-col rounded-card after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-card-ring after:content-['']"
@@ -170,8 +187,8 @@ function PluginsOverlayFirstRun() {
         <div className="flex items-center gap-lg">
           <div className="flex min-w-0 flex-1 flex-col items-start gap-md">
             <div className="flex flex-col gap-xs">
-              <h3 className="m-0 text-heading-semibold text-primary">Add your first plugins</h3>
-              <p className="m-0 text-body text-secondary">Give Claude role-level expertise with plugins.</p>
+              <h3 className="m-0 text-heading-semibold text-primary">{text.addYourFirstPlugins}</h3>
+              <p className="m-0 text-body text-secondary">{text.giveClaudeRoleExpertise}</p>
             </div>
           </div>
           <div aria-hidden="true" className="hidden shrink-0 pr-6 text-primary sm:block">

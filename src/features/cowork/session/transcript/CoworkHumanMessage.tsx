@@ -1,5 +1,7 @@
 import { motion } from "motion/react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type MessageDescriptors, useI18nText } from "../../../../i18n/footerMenuMessages";
+import { formatOfficialIcu } from "../../../../i18n/formatOfficialIcu";
 import type { CoworkMessageChain } from "./coworkMessageModel";
 import { CoworkHumanAttachments, CoworkHumanImages } from "./CoworkHumanAttachments";
 import { CoworkHumanMarkdown } from "./CoworkHumanMarkdown";
@@ -7,7 +9,14 @@ import { CoworkMessageActions } from "./CoworkMessageActions";
 import { officialCoworkMessageText } from "./coworkMessageText";
 import { summarizeCoworkText } from "./coworkMessageSummary";
 
+const COWORK_HUMAN_MESSAGE_MESSAGES = {
+  youSaid: { defaultMessage: "You said: {prompt}", id: "x4RlP6c9q1" },
+  showMore: { defaultMessage: "Show more", id: "aWpBzjCXKS" },
+  showLess: { defaultMessage: "Show less", id: "qyJtWyZ0yt" },
+} as const satisfies MessageDescriptors;
+
 export function CoworkHumanMessage({ chain, conversationIsStreaming, isLastMessage }: { chain: CoworkMessageChain; conversationIsStreaming: boolean; isLastMessage: boolean }) {
+  const i18n = useI18nText(COWORK_HUMAN_MESSAGE_MESSAGES);
   const message = chain.displayMessage ?? chain.messages[0];
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -26,7 +35,7 @@ export function CoworkHumanMessage({ chain, conversationIsStreaming, isLastMessa
 
   return (
     <div className="mb-1 mt-6 group">
-      {summary ? <h2 className="sr-only">You said: {summary}</h2> : null}
+      {summary ? <h2 className="sr-only">{formatOfficialIcu(i18n.youSaid, { prompt: summary })}</h2> : null}
       <CoworkHumanAttachments message={message} />
       <div className="flex flex-col items-end gap-1">
         <CoworkHumanImages blocks={message.content} />
@@ -49,7 +58,7 @@ export function CoworkHumanMessage({ chain, conversationIsStreaming, isLastMessa
                   {textBlocks.map((block, index) => <CoworkHumanMarkdown key={`${message.uuid}-text-${index}`} text={block.text} />)}
                   {!expanded && collapsible ? <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-bg-300 to-transparent pointer-events-none" /> : null}
                 </div>
-                {collapsible ? <button className="pb-3 pt-1 text-xs text-text-500/80 hover:text-text-100 transition w-3/4 text-left rounded-lg" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? "Show less" : "Show more"}</button> : null}
+                {collapsible ? <button className="pb-3 pt-1 text-xs text-text-500/80 hover:text-text-100 transition w-3/4 text-left rounded-lg" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? i18n.showLess : i18n.showMore}</button> : null}
               </div>
             </div>
           </motion.div>

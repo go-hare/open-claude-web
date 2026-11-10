@@ -1,8 +1,21 @@
 import { Menu } from "@base-ui-components/react/menu";
 import { useCallback, useRef } from "react";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { BaseMenuItem, BaseMenuPopup, BaseSubmenu } from "../../../shell/BaseMenu";
 import { Icon } from "../../../shell/icons";
 import { CREATE_SKILL_WITH_CLAUDE_ENABLED, SKILL_CREATION_ENABLED } from "../customizeGates";
+
+const ADD_SKILL_MESSAGES = {
+  add: { defaultMessage: "Add", id: "alWu/MbgXB" },
+  addSkill: { defaultMessage: "Add skill", id: "tnEMvwSDlT" },
+  browseSkills: { defaultMessage: "Browse skills", id: "zpHwlExaSz" },
+  createSkill: { defaultMessage: "Create skill", id: "8jD/lLoqJd" },
+  writeSkillInstructions: { defaultMessage: "Write skill instructions", id: "CCQr8NfpEL" },
+  uploadASkill: { defaultMessage: "Upload a skill", id: "KgA+vPbgQ2" },
+  uploadSkill: { defaultMessage: "Upload skill", id: "JqiOyfKupb" },
+  createASkill: { defaultMessage: "Create a skill", id: "oSuR6WVQY6" },
+  createWithClaude: { defaultMessage: "Create with Claude", id: "PJOomHaesP" },
+} as const satisfies MessageDescriptors;
 
 /**
  * Official shared-frame sl/Yc primary TriggerButton (cd08e92dc Oe).
@@ -32,6 +45,7 @@ export function AddSkillDropdown({
   onUpload?: () => void;
   variant?: "page" | "overlay";
 }) {
+  const text = useI18nText(ADD_SKILL_MESSAGES);
   const keepFocusRef = useRef(false);
   const wrap = useCallback((handler?: () => void) => {
     return () => {
@@ -50,7 +64,7 @@ export function AddSkillDropdown({
         }}
       >
         <Menu.Trigger
-          aria-label="Add skill"
+          aria-label={text.addSkill}
           className={OVERLAY_ADD_TRIGGER_CLASS}
           data-cds="Button"
           data-official-source="cd08e92dc:Oe TriggerButton alWu/MbgXB"
@@ -61,22 +75,22 @@ export function AddSkillDropdown({
             data-cds-part="paint"
           />
           <span className="relative inline-flex min-w-0 items-center gap-1">
-            Add
+            {text.add}
             <Icon className="shrink-0 opacity-60" name="CaretDown" preferFont size="sm" />
           </span>
         </Menu.Trigger>
         <BaseMenuPopup align="end" side="bottom" sideOffset={4}>
           <BaseMenuItem icon="Upload" onClick={wrap(onUpload)}>
-            Upload skill
+            {text.uploadSkill}
           </BaseMenuItem>
           {SKILL_CREATION_ENABLED ? (
             <BaseMenuItem icon="Edit" onClick={wrap(onWriteInstructions)}>
-              Create a skill
+              {text.createASkill}
             </BaseMenuItem>
           ) : null}
           {SKILL_CREATION_ENABLED && CREATE_SKILL_WITH_CLAUDE_ENABLED && onCreateWithClaude ? (
             <BaseMenuItem icon="Chat" onClick={wrap(onCreateWithClaude)}>
-              Create with Claude
+              {text.createWithClaude}
             </BaseMenuItem>
           ) : null}
         </BaseMenuPopup>
@@ -93,25 +107,25 @@ export function AddSkillDropdown({
       }}
     >
       <Menu.Trigger
-        aria-label="Add skill"
+        aria-label={text.addSkill}
         className="cds-reset inline-flex size-8 items-center justify-center rounded-lg text-text-300 hover:bg-bg-200 hover:text-text-100 focus-visible:shadow-focus"
       >
         <Icon name="Add" />
       </Menu.Trigger>
       <BaseMenuPopup align="end" side="bottom" sideOffset={4}>
         <BaseMenuItem icon="plugin" onClick={wrap(onBrowseSkills)}>
-          Browse skills
+          {text.browseSkills}
         </BaseMenuItem>
         {SKILL_CREATION_ENABLED ? (
-          <BaseSubmenu icon="plusSmall" label="Create skill" popupAlign="start" popupSide="right">
+          <BaseSubmenu icon="plusSmall" label={text.createSkill} popupAlign="start" popupSide="right">
             <BaseMenuItem icon="spark" onClick={wrap(onCreateWithClaude)}>
-              Create with Claude
+              {text.createWithClaude}
             </BaseMenuItem>
             <BaseMenuItem icon="NoteSquareLines" onClick={wrap(onWriteInstructions)}>
-              Write skill instructions
+              {text.writeSkillInstructions}
             </BaseMenuItem>
             <BaseMenuItem icon="ArrowInSquare" onClick={wrap(onUpload)}>
-              Upload a skill
+              {text.uploadASkill}
             </BaseMenuItem>
           </BaseSubmenu>
         ) : null}

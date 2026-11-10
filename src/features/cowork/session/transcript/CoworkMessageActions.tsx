@@ -6,11 +6,20 @@
  */
 import { useState, type ReactNode } from "react";
 import { micromark } from "micromark";
+import { type MessageDescriptors, useI18nText } from "../../../../i18n/footerMenuMessages";
 import { Icon } from "../../../../shell/icons";
 import { applyCoworkRewindPrompt } from "../../composer/coworkSessionComposerActions";
 import { invalidateCoworkTranscriptCache } from "../coworkTranscriptCache";
 import { CoworkRetryGlyph } from "../../ui/CoworkOfficialGlyphs";
 import { useCoworkTranscriptActions } from "./CoworkTranscriptActions";
+
+const COWORK_MESSAGE_ACTION_MESSAGES = {
+  messageActions: { defaultMessage: "Message actions", id: "8FU11i4S5Z" },
+  copy: { defaultMessage: "Copy", id: "4l6vz1/eZ5" },
+  copied: { defaultMessage: "Copied", id: "p556q3uvbn" },
+  restartFromHere: { defaultMessage: "Restart conversation from here", id: "lHlImYcnSM" },
+  retry: { defaultMessage: "Retry", id: "62nsdyMyIO" },
+} as const satisfies MessageDescriptors;
 
 export function CoworkMessageActions({
   isAssistant = false,
@@ -28,6 +37,7 @@ export function CoworkMessageActions({
   text: string;
 }) {
   const actions = useCoworkTranscriptActions();
+  const actionText = useI18nText(COWORK_MESSAGE_ACTION_MESSAGES);
   const [copied, setCopied] = useState(false);
   // Official: isAgentMode = remote || local_session. Cowork path is always agent mode.
   const isAgentMode = true;
@@ -57,7 +67,7 @@ export function CoworkMessageActions({
   // Official C0e positionMode="flow".
   return (
     <div
-      aria-label="Message actions"
+      aria-label={actionText.messageActions}
       className={classes(
         "flex justify-start",
         assistantStreaming && (isAgentMode ? "hidden" : "invisible"),
@@ -69,7 +79,7 @@ export function CoworkMessageActions({
         {!assistantStreaming ? (
           <div className="text-text-300 flex items-stretch justify-between">
             <MessageActionButton
-              label={copied ? "Copied" : "Copy"}
+              label={copied ? actionText.copied : actionText.copy}
               onClick={() => {
                 void copy();
               }}
@@ -93,7 +103,7 @@ export function CoworkMessageActions({
             </MessageActionButton>
             {canRewind ? (
               <MessageActionButton
-                label="Restart conversation from here"
+                label={actionText.restartFromHere}
                 onClick={() => {
                   void rewind();
                 }}
@@ -103,7 +113,7 @@ export function CoworkMessageActions({
               </MessageActionButton>
             ) : null}
             {canRetryAssistant ? (
-              <MessageActionButton label="Retry" onClick={() => undefined} testId="action-bar-retry">
+              <MessageActionButton label={actionText.retry} onClick={() => undefined} testId="action-bar-retry">
                 <CoworkRetryGlyph className="text-text-500 group-hover/btn:text-text-100" size={16} />
               </MessageActionButton>
             ) : null}

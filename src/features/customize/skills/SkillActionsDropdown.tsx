@@ -1,5 +1,15 @@
 import { Menu } from "@base-ui-components/react/menu";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
 import { BaseMenuItem, BaseMenuPopup, BaseMenuSeparator } from "../../../shell/BaseMenu";
+
+const SKILL_ACTION_MESSAGES = {
+  tryInChat: { defaultMessage: "Try in chat", id: "41t0vyqBot" },
+  enableToTry: { defaultMessage: "Enable skill to try in chat", id: "ApvR3+d8YI" },
+  edit: { defaultMessage: "Edit", id: "wEQDC6Wv3/" },
+  replace: { defaultMessage: "Replace", id: "Hvp+/65raO" },
+  showInFolder: { defaultMessage: "Show in Folder", id: "qJzHPN7NHs" },
+  uninstall: { defaultMessage: "Uninstall", id: "AaJVslgu7i" },
+} as const satisfies MessageDescriptors;
 import { Icon } from "../../../shell/icons";
 import { officialButtonClass } from "../../shared/buttonClasses";
 import { OfficialTooltip } from "../../shared/OfficialTooltip";
@@ -28,9 +38,10 @@ export function SkillActionsDropdown({
   skillName: string;
   wiggleEnabled: boolean;
 }) {
+  const text = useI18nText(SKILL_ACTION_MESSAGES);
   const tryItem = (
     <BaseMenuItem disabled={!enabled} icon="Chat" onClick={onTryInChat}>
-      Try in chat
+      {text.tryInChat}
     </BaseMenuItem>
   );
 
@@ -47,28 +58,28 @@ export function SkillActionsDropdown({
         {enabled ? (
           tryItem
         ) : (
-          <OfficialTooltip tooltipContent="Enable skill to try in chat">
+          <OfficialTooltip tooltipContent={text.enableToTry}>
             <div>{tryItem}</div>
           </OfficialTooltip>
         )}
         <BaseMenuSeparator />
         <BaseMenuItem icon="Edit" onClick={onEdit}>
-          Edit
+          {text.edit}
         </BaseMenuItem>
         <BaseMenuItem icon="Upload" onClick={onReplace}>
-          Replace
+          {text.replace}
         </BaseMenuItem>
         {onShowInFolder ? (
           <>
             <BaseMenuSeparator />
             <BaseMenuItem icon="Folder" onClick={onShowInFolder}>
-              Show in Folder
+              {text.showInFolder}
             </BaseMenuItem>
           </>
         ) : null}
         <BaseMenuSeparator />
         <BaseMenuItem danger icon="Trash" onClick={onUninstall}>
-          Uninstall
+          {text.uninstall}
         </BaseMenuItem>
       </BaseMenuPopup>
     </Menu.Root>

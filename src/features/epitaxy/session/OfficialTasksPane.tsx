@@ -21,6 +21,7 @@ import {
   type OfficialTaskStatus,
 } from "./officialTasksAndPlan";
 import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { formatOfficialIcu } from "../../../i18n/formatOfficialIcu";
 import { SIDE_PANE_EMPTY_MESSAGES } from "../officialCodeChromeMessages";
 import { useOfficialTaskRowExpanded } from "./officialToolGroupExpandedStore";
 
@@ -214,6 +215,7 @@ const OfficialTaskCard = memo(function OfficialTaskCard({
   task: OfficialBackgroundTask;
 }) {
   // Official cccc2cf0a QC `Vu` / `setTaskRowsOpen` — Map keyed by taskId, not per-card useState.
+  const emptyText = useI18nText(SIDE_PANE_EMPTY_MESSAGES);
   const [expanded, setExpanded] = useOfficialTaskRowExpanded(sessionId, task.taskId);
   const kind = officialTaskKind(task.taskType);
   // Official zR: usage.duration_ms or bookend startedAt/completedAt (running elapsed).
@@ -264,8 +266,8 @@ const OfficialTaskCard = memo(function OfficialTaskCard({
           </span>
         </button>
         {canStop ? (
-          <OfficialButton ariaLabel="Stop this task" className="min-w-[44px] justify-center" onClick={() => onStop?.(task.taskId)} size="small" variant="contained">
-            Stop
+          <OfficialButton ariaLabel={emptyText.stopThisTask} className="min-w-[44px] justify-center" onClick={() => onStop?.(task.taskId)} size="small" variant="contained">
+            {emptyText.stop}
           </OfficialButton>
         ) : null}
       </div>
@@ -277,6 +279,7 @@ const OfficialTaskCard = memo(function OfficialTaskCard({
 });
 
 function OfficialTaskExpandedBody({ task }: { task: OfficialBackgroundTask }) {
+  const emptyText = useI18nText(SIDE_PANE_EMPTY_MESSAGES);
   const isBash = task.taskType === "local_bash" || task.taskType === "monitor_mcp";
   const commandLabel = `Command for ${task.description}`;
   const outputLabel = `Output for ${task.description}`;
@@ -310,13 +313,13 @@ function OfficialTaskExpandedBody({ task }: { task: OfficialBackgroundTask }) {
         <div className="text-footnote text-t7 whitespace-pre-wrap break-words">{summary}</div>
       ) : null}
       {!output && !summary && isBash && task.outputFile ? (
-        <div className="text-footnote text-muted">Output unavailable</div>
+        <div className="text-footnote text-muted">{emptyText.outputUnavailable}</div>
       ) : null}
       {!output && !summary && isBash && !task.outputFile && task.status === "running" ? (
-        <div className="text-footnote text-muted">No output yet</div>
+        <div className="text-footnote text-muted">{emptyText.noOutputYet}</div>
       ) : null}
       {!output && !summary && isBash && !task.outputFile && settled ? (
-        <div className="text-footnote text-muted">No output captured.</div>
+        <div className="text-footnote text-muted">{emptyText.noOutputCaptured}</div>
       ) : null}
       {task.workflowProgress?.length ? <OfficialWorkflowProgress progress={task.workflowProgress} /> : null}
     </div>
@@ -331,10 +334,13 @@ function OfficialTaskStatusIcon({ status }: { status: OfficialTaskStatus }) {
 }
 
 function OfficialTaskStatusLabel({ task }: { task: OfficialBackgroundTask }) {
-  if (task.status === "running") return <>{task.lastToolName ? `Running ${task.lastToolName}` : "Running"}</>;
-  if (task.status === "completed") return <>Completed</>;
-  if (task.status === "failed") return <>Failed</>;
-  return <>Stopped</>;
+  const emptyText = useI18nText(SIDE_PANE_EMPTY_MESSAGES);
+  if (task.status === "running") {
+    return <>{task.lastToolName ? formatOfficialIcu(emptyText.runningTool, { tool: task.lastToolName }) : emptyText.running}</>;
+  }
+  if (task.status === "completed") return <>{emptyText.completed}</>;
+  if (task.status === "failed") return <>{emptyText.failed}</>;
+  return <>{emptyText.stopped}</>;
 }
 
 function OfficialWorkflowProgress({ progress }: { progress: NonNullable<OfficialBackgroundTask["workflowProgress"]> }) {

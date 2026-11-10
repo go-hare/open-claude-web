@@ -8,7 +8,20 @@ import {
   officialComposerPillClass,
 } from "../OfficialEpitaxyComponents";
 import { COMPOSER_ORIGIN_MESSAGES } from "../officialCodeChromeMessages";
-import { useI18nText } from "../../../i18n/footerMenuMessages";
+import { type MessageDescriptors, useI18nText } from "../../../i18n/footerMenuMessages";
+
+const LOCAL_ENV_DIALOG_MESSAGES = {
+  title: { defaultMessage: "Update local environment", id: "lc3Sw9MovO" },
+  variables: { defaultMessage: "Environment variables", id: "4qP7MjrQfC" },
+  help: {
+    defaultMessage: "In <link>.env format</link>. These are stored securely and passed to Claude sessions.",
+    id: "yQufZ/mHZn",
+  },
+  cancel: { defaultMessage: "Cancel", id: "47FYwba+bI" },
+  save: { defaultMessage: "Save changes", id: "X0ha1a+WYV" },
+  loadFailed: { defaultMessage: "Failed to load environment variables.", id: "aKhMMh+fOM" },
+  saveFailed: { defaultMessage: "Failed to save environment variables.", id: "ZKiKG+Tbwj" },
+} as const satisfies MessageDescriptors;
 import {
   formatLocalEnvironmentEnv,
   LOCAL_ENV_PLACEHOLDER,
@@ -203,41 +216,51 @@ function LocalEnvironmentMenuItem({
 }
 
 function LocalEnvironmentSettingsDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const text = useI18nText(LOCAL_ENV_DIALOG_MESSAGES);
   const [envInput, setEnvInput] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | undefined>();
 
-  useEffect(() => loadLocalEnvironment({ isOpen, setEnvInput, setIsLoaded, setLoadError }), [isOpen]);
+  useEffect(() => loadLocalEnvironment({ isOpen, loadFailed: text.loadFailed, setEnvInput, setIsLoaded, setLoadError }), [isOpen, text.loadFailed]);
 
   const validationError = validateLocalEnvironmentInput(envInput);
   const submitDisabled = Boolean(validationError) || isSaving;
-  const save = async () => saveLocalEnvironment({ disabled: submitDisabled, envInput, onClose, setIsSaving, setLoadError });
+  const save = async () => saveLocalEnvironment({ disabled: submitDisabled, envInput, onClose, saveFailed: text.saveFailed, setIsSaving, setLoadError });
 
   if (!isOpen || !isLoaded) return null;
 
   return (
-    <OfficialModal isOpen={isOpen} onClose={onClose} title="Update local environment" width="w-[640px]">
+    <OfficialModal isOpen={isOpen} onClose={onClose} title={text.title} width="w-[640px]">
       <form className="flex flex-col gap-[28px]" onSubmit={(event) => submitLocalEnvironmentForm(event, save)}>
-        <LocalEnvironmentField error={validationError ?? loadError}>
+        <LocalEnvironmentField error={validationError ?? loadError} help={text.help} label={text.variables}>
           <textarea autoComplete="off" className="epitaxy-textarea w-full !bg-transparent !shadow-none font-mono text-code" data-1p-ignore="true" data-lpignore="true" disabled={isSaving} onChange={(event) => setEnvInput(event.target.value)} placeholder={LOCAL_ENV_PLACEHOLDER} rows={8} value={envInput} />
         </LocalEnvironmentField>
         <button aria-hidden="true" disabled={isSaving} hidden tabIndex={-1} type="submit" />
         <div className="flex justify-end gap-g4">
-          <OfficialButton disabled={isSaving} onClick={onClose} variant="contained">Cancel</OfficialButton>
-          <OfficialButton disabled={submitDisabled} onClick={() => void save()} variant="primary">Save changes</OfficialButton>
+          <OfficialButton disabled={isSaving} onClick={onClose} variant="contained">{text.cancel}</OfficialButton>
+          <OfficialButton disabled={submitDisabled} onClick={() => void save()} variant="primary">{text.save}</OfficialButton>
         </div>
       </form>
     </OfficialModal>
   );
 }
 
-function LocalEnvironmentField({ children, error }: { children: ReactNode; error?: string }) {
+function LocalEnvironmentField({ children, error, help, label }: { children: ReactNode; error?: string; help: string; label: string }) {
+  const match = help.match(/^(.*)<link>(.*)<\/link>(.*)$/s);
   return (
     <label className="flex flex-col gap-g4">
       <span className="flex flex-col gap-g1">
-        <span className="text-body text-t8">Environment variables</span>
-        <span className="text-footnote text-t6">In <a className="underline underline-offset-2" href="https://code.claude.com/docs/en/desktop#environment-configuration" rel="noreferrer" target="_blank">.env format</a>. These are stored securely and passed to Claude sessions.</span>
+        <span className="text-body text-t8">{label}</span>
+        <span className="text-footnote text-t6">
+          {match ? (
+            <>
+              {match[1]}
+              <a className="underline underline-offset-2" href="https://code.claude.com/docs/en/desktop#environment-configuration" rel="noreferrer" target="_blank">{match[2]}</a>
+              {match[3]}
+            </>
+          ) : help}
+        </span>
       </span>
       <div className="rounded-r4 bg-fill-contained-default effect-contrast-stroke">{children}</div>
       {error ? <span className="text-footnote text-danger-000">{error}</span> : null}
@@ -265,6 +288,7 @@ function stopAndRun(action: () => void) {
 
 type LocalEnvironmentLoadArgs = {
   isOpen: boolean;
+  loadFailed: string;
   setEnvInput: (value: string) => void;
   setIsLoaded: (value: boolean) => void;
   setLoadError: (value: string | undefined) => void;
@@ -274,11 +298,12 @@ type LocalEnvironmentSaveArgs = {
   disabled: boolean;
   envInput: string;
   onClose: () => void;
+  saveFailed: string;
   setIsSaving: (value: boolean) => void;
   setLoadError: (value: string | undefined) => void;
 };
 
-function loadLocalEnvironment({ isOpen, setEnvInput, setIsLoaded, setLoadError }: LocalEnvironmentLoadArgs) {
+function loadLocalEnvironment({ isOpen, loadFailed, setEnvInput, setIsLoaded, setLoadError }: LocalEnvironmentLoadArgs) {
   if (!isOpen) return;
   let alive = true;
   setIsLoaded(false);
@@ -290,7 +315,7 @@ function loadLocalEnvironment({ isOpen, setEnvInput, setIsLoaded, setLoadError }
   }).catch(() => {
     if (!alive) return;
     setEnvInput("");
-    setLoadError("Failed to load environment variables.");
+    setLoadError(loadFailed);
     setIsLoaded(true);
   });
   return () => {
@@ -298,7 +323,7 @@ function loadLocalEnvironment({ isOpen, setEnvInput, setIsLoaded, setLoadError }
   };
 }
 
-async function saveLocalEnvironment({ disabled, envInput, onClose, setIsSaving, setLoadError }: LocalEnvironmentSaveArgs) {
+async function saveLocalEnvironment({ disabled, envInput, onClose, saveFailed, setIsSaving, setLoadError }: LocalEnvironmentSaveArgs) {
   if (disabled) return;
   setIsSaving(true);
   setLoadError(undefined);
@@ -306,7 +331,7 @@ async function saveLocalEnvironment({ disabled, envInput, onClose, setIsSaving, 
     await desktopBridge.LocalSessionEnvironment.save(parseLocalEnvironmentInput(envInput));
     onClose();
   } catch {
-    setLoadError("Failed to save environment variables.");
+    setLoadError(saveFailed);
   } finally {
     setIsSaving(false);
   }
