@@ -36,6 +36,7 @@ import {
 import { ConfirmDialog } from "../../shell/ConfirmDialog";
 import { Icon } from "../../shell/icons";
 import { OfficialButton } from "./OfficialEpitaxyComponents";
+import { OfficialShellOutputText } from "./OfficialShellOutputText";
 import { OfficialSpinner } from "./session/OfficialWorkingStatus";
 import { useI18nText } from "../../i18n/footerMenuMessages";
 import { SIDE_PANE_CHROME_MESSAGES } from "./officialCodeChromeMessages";
@@ -754,7 +755,11 @@ export function OfficialAssistantCodeFence({ language, text }: { language?: stri
       {showInline ? (
         <div className="mt-[var(--p4)] rounded-r6 bg-t1 font-mono text-code max-h-[160px] overflow-y-auto px-[var(--p6)] py-[var(--p4)]">
           <pre className="text-assistant-secondary whitespace-pre-wrap break-all">
-            {inline.error ? <span className="text-destructive-default">{inline.error}</span> : strippedOutput}
+            {inline.error ? (
+              <span className="text-destructive-default">{inline.error}</span>
+            ) : (
+              <OfficialShellOutputText command={withoutBang}>{strippedOutput ?? ""}</OfficialShellOutputText>
+            )}
           </pre>
         </div>
       ) : null}
