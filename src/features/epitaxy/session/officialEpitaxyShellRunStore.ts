@@ -132,16 +132,35 @@ export const OFFICIAL_IDLE_INLINE_RUN = {
   running: false,
 };
 
+type OfficialInlineRunSnapshot = {
+  error: string | null;
+  output: string | null;
+  running: boolean;
+};
+
+/**
+ * Play (`kb/xewgjJn`) sets inlineRun. A fresh object on every getSnapshot
+ * makes useSyncExternalStore re-render forever → Ho "Maximum update depth"
+ * and the chat panel falls through to "加载此会话时出错".
+ * Cache on the store object so an unchanged run returns the same snapshot.
+ */
+let inlineRunSnapshotCache: { run: OfficialInlineRun; snapshot: OfficialInlineRunSnapshot } | null = null;
+
+export function officialInlineRunSnapshot(runId: string): OfficialInlineRunSnapshot {
+  const run = officialEpitaxyShellRunStore.getState().inlineRun;
+  if (!run || run.id !== runId) return OFFICIAL_IDLE_INLINE_RUN;
+  if (inlineRunSnapshotCache?.run === run) return inlineRunSnapshotCache.snapshot;
+  const snapshot: OfficialInlineRunSnapshot = {
+    error: run.error,
+    output: run.prevOutput ?? run.output,
+    running: !run.settled,
+  };
+  inlineRunSnapshotCache = { run, snapshot };
+  return snapshot;
+}
+
 export function useOfficialInlineRunForFence(runId: string) {
-  return useStore(officialEpitaxyShellRunStore, (state) => {
-    if (state.inlineRun?.id !== runId) return OFFICIAL_IDLE_INLINE_RUN;
-    const run = state.inlineRun;
-    return {
-      error: run.error,
-      output: run.prevOutput ?? run.output,
-      running: !run.settled,
-    };
-  });
+  return useStore(officialEpitaxyShellRunStore, () => officialInlineRunSnapshot(runId));
 }
 
 export function officialFlushPendingShellCommand(
@@ -190,6 +209,7 @@ export function officialAsciinemaPlayCommand(absPath: string): string {
 export function resetOfficialEpitaxyShellRunStoreForTests() {
   clearTimeout(officialInlineRunSettleTimer);
   officialInlineRunSettleTimer = undefined;
+  inlineRunSnapshotCache = null;
   officialEpitaxyShellRunStore.setState({
     defaultTabReadySessionId: null,
     inlineRun: null,

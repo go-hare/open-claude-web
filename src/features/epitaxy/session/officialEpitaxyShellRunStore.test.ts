@@ -3,6 +3,7 @@ import {
   officialAsciinemaPlayCommand,
   officialEpitaxyShellRunStore,
   officialFlushPendingShellCommand,
+  officialInlineRunSnapshot,
   officialStripInlineRunTrailingPrompt,
   resetOfficialEpitaxyShellRunStoreForTests,
 } from "./officialEpitaxyShellRunStore";
@@ -54,6 +55,20 @@ describe("officialEpitaxyShellRunStore (Grt queueCommand)", () => {
     const output = officialEpitaxyShellRunStore.getState().inlineRun?.output ?? "";
     expect(output).toContain("hello");
     expect(officialStripInlineRunTrailingPrompt("hello\n$\n$")).toBe("hello");
+  });
+
+  it("active inline snapshot stays referentially stable until the run changes", () => {
+    officialEpitaxyShellRunStore.getState().runInline("run-1", "ses_1", "./bin/server.exe");
+    const first = officialInlineRunSnapshot("run-1");
+    const again = officialInlineRunSnapshot("run-1");
+    expect(again).toBe(first);
+    expect(first).toMatchObject({ error: null, output: "", running: true });
+    expect(officialInlineRunSnapshot("other")).toBe(officialInlineRunSnapshot("other"));
+    officialEpitaxyShellRunStore.getState().appendInlineOutput("ses_1", "booting\n");
+    const next = officialInlineRunSnapshot("run-1");
+    expect(next).not.toBe(first);
+    expect(next.output).toContain("booting");
+    expect(officialInlineRunSnapshot("run-1")).toBe(next);
   });
 
   it("asciinema command quotes the path", () => {
