@@ -401,22 +401,16 @@ export function useEpitaxySessionData(sessionId?: string) {
   }, [sessionId, store]);
 
   /**
-   * Official 2.31226.1 queue bar:
-   * head → promoteQueuedMessage (priority "next");
-   * any other row → sendSteeredNow (priority "now").
-   * Neither drains the rest. Esc does.
+   * Official cc432 `_f` for local code. c5da reorderQueued is false, so `pf`
+   * is false and the button is never `es` / promote. It is `gf` /
+   * `Wc(uuid, false)` whenever it is shown: markInterrupting, then interrupt.
+   * Success drains deferredSends in order. The row stays until result `h`/`g`.
+   * Miss or timeout leaves the row. No promote, no resend.
    */
   const steerQueuedMessage = useCallback((uuid: string) => {
     if (!sessionId || !uuid) return;
-    const queued = store.getState().buckets[sessionId]?.queuedMessages ?? [];
-    const headId = queued[0] ? messageIdentity(queued[0]) : "";
-    const head = headId === uuid;
-    void (async () => {
-      const ok = head
-        ? (await desktopBridge.LocalSessions.promoteQueuedMessage?.(sessionId, uuid).catch(() => false)) === true
-        : (await desktopBridge.LocalSessions.sendSteeredNow?.(sessionId, uuid).catch(() => false)) === true;
-      if (ok) store.getState().dropQueuedMessage(sessionId, uuid);
-    })();
+    store.getState().markInterrupting(sessionId);
+    void desktopBridge.LocalSessions.interrupt?.(sessionId).catch(() => undefined);
   }, [sessionId, store]);
 
   // useLayoutEffect: markLoading / open path must set B before paint so Ja shows

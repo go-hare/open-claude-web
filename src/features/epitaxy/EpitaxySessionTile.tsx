@@ -343,7 +343,6 @@ function EpitaxyChatPanel({
   const {
     beginLocalUserTurn,
     cancelQueuedMessage,
-    reorderQueuedMessage,
     steerQueuedMessage,
     entries,
     queuedEntries,
@@ -1175,8 +1174,8 @@ function EpitaxyChatPanel({
             bridge={bridge}
             queuedEntries={queuedEntries}
             onCancelQueued={cancelQueuedMessage}
-            onReorderQueued={reorderQueuedMessage}
             onSteerQueued={steerQueuedMessage}
+            steerHeadOnly
             onEditQueued={(entryId) => {
               const entry = queuedEntries.find((row) => row.id === entryId);
               const preview = entry

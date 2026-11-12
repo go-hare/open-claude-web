@@ -515,7 +515,7 @@ describe("official Code chrome leftover locks (cd5a / c119)", () => {
     expect(chromeMessages).toContain("6Wu6VFE8rB");
     expect(overrides).toContain("9kugsu9NjU");
     const sessionData = readSrc("useEpitaxySessionData.tsx");
-    expect(sessionData).toContain("sendSteeredNow");
+    expect(sessionData).toContain("LocalSessions.interrupt");
     expect(sessionData).toContain("reorderQueuedMessage");
     const transcript = readSrc("OfficialTranscript.tsx");
     expect(transcript).toContain("TOOL_GROUP_SUMMARY_MESSAGES");

@@ -456,6 +456,16 @@ export function applyOfficialCodeSessionHostEvent(sessionId: string, event: unkn
           },
         });
       }
+    } else if (eventType === "steers_rekeyed") {
+      const pairs = asRecord(event).rekeyedSteers;
+      if (Array.isArray(pairs)) {
+        for (const pair of pairs) {
+          const record = asRecord(pair);
+          const from = stringValue(record.from);
+          const to = stringValue(record.to);
+          if (from && to) store.getState().rekeyQueuedMessage(sessionId, from, to);
+        }
+      }
     } else if (eventType === "permission_mode_changed") {
       const raw = asRecord(event);
       const nextMode =

@@ -140,9 +140,9 @@ type RawLocalSessionsBridge = {
   cancelQueuedMessage?: (id: string, uuid: string) => Promise<unknown>;
   /** Official cef1 reorderQueued(sessionId, uuid, overUuid). */
   reorderQueuedMessage?: (id: string, uuid: string, overUuid: string) => Promise<unknown>;
-  /** Official cef1 promoteQueued — head of deferredSends onto the live input. */
+  /** asar promoteQueuedMessage — priority "next", or park while stdin is discarded. */
   promoteQueuedMessage?: (id: string, uuid: string) => Promise<unknown>;
-  /** Official cef1 sendSteeredNow — non-head queued row, interrupt then drain. */
+  /** asar sendSteeredNow — re-send a pending echo at priority "now". Not an interrupt. */
   sendSteeredNow?: (id: string, uuid: string) => Promise<unknown>;
   forkSession?: (id: string, messageId?: string) => Promise<unknown>;
   setManualKeepAwake?: (id: string, enabled: boolean) => Promise<unknown>;

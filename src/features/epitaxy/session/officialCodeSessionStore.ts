@@ -346,6 +346,8 @@ type OfficialCodeSessionActions = {
   enqueueQueuedMessage: (sessionId: string, message: ChatMessage) => void;
   /** Official dropQueuedMessage — Remove queued message / cancel mid-turn send. */
   dropQueuedMessage: (sessionId: string, uuid: string) => void;
+  /** asar steers_rekeyed — queued row uuid follows the re-sent echo. */
+  rekeyQueuedMessage: (sessionId: string, from: string, to: string) => void;
   /**
    * Official c06 `reorderQueuedMessage(sessionId, uuid, overUuid)`.
    * Place `uuid` just after `overUuid`. Returns false when either id is missing.
@@ -1287,6 +1289,41 @@ function createOfficialCodeSessionStore() {
             pendingQueuedSends: decrementPending
               ? prev.pendingQueuedSends - 1
               : prev.pendingQueuedSends,
+          },
+        },
+      };
+    });
+  },
+
+  rekeyQueuedMessage: (sessionId, from, to) => {
+    if (!from || !to || from === to) return;
+    set((state) => {
+      const raw = state.buckets[sessionId];
+      if (!raw) return state;
+      const prev = withQueueDefaults(raw);
+      const index = prev.queuedMessages.findIndex((message) => messageIdentity(message) === from);
+      if (index < 0) return state;
+      const current = prev.queuedMessages[index]!;
+      const rawRecord = { ...(asRecord(current.raw)), uuid: to };
+      const nextMessage = {
+        ...current,
+        id: current.id === from ? to : current.id,
+        raw: rawRecord,
+      };
+      const queuedMessages = prev.queuedMessages.slice();
+      queuedMessages[index] = nextMessage;
+      const seenUuids = new Set(prev.seenUuids);
+      if (seenUuids.has(from)) {
+        seenUuids.delete(from);
+        seenUuids.add(to);
+      }
+      return {
+        buckets: {
+          ...state.buckets,
+          [sessionId]: {
+            ...prev,
+            queuedMessages,
+            seenUuids,
           },
         },
       };

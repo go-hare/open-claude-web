@@ -4,8 +4,9 @@
  * Do not reuse channel-rail `CodeUserEntryMessage` (c10f Hb) for this slot.
  *
  * Steer: `oS` always offers Send now (`aS` / ArrowReturn) when `onSteer` is set.
- * `sS` offers it only on the deferred head unless `steerHeadOnly` (cc432 `gf`),
- * which is the non-head path that stops the current response (`6Wu6VFE8rB`).
+ * Local code capabilities (c5da) have reorderQueued and sendSteeredNow false, so
+ * cc432 `_f` is `gf` and `steerHeadOnly` is set while a turn is running: Send now
+ * stops the current response (`6Wu6VFE8rB`) instead of priority "next".
  * Reorder: `nS` drag handle. `onReorder(activeId, overId)` is official `$o` —
  * place active just after over (c06 `reorderQueuedMessage`).
  */
@@ -366,8 +367,8 @@ function OfficialQueuedExpandedRows({
       role="list"
     >
       {entries.map((entry, index) => {
-        // Official sS: every steerable row has Send now. Head is promoteQueued
-        // (next step). A later row is sendSteeredNow and stops the current response.
+        // steerHeadOnly (cc432 hf): only the head stops the current response.
+        // Otherwise every row can Send now.
         const showSteer = Boolean(onSteer) && (steerHeadOnly ? index === 0 : true);
         return (
           <div key={entry.id}>

@@ -239,7 +239,7 @@ export function ExistingSessionComposer({
   onEditQueued?: (entryId: string) => void;
   /** Official cc432 `$o` — place activeId just after overId. */
   onReorderQueued?: (activeId: string, overId: string) => void;
-  /** Official cc432 `_f` — head promoteQueued, else sendSteeredNow. */
+  /** Official cc432 `_f` for local — `gf` / interrupt. Not promote or sendSteeredNow. */
   onSteerQueued?: (entryId: string) => void;
   /** Official `steerHeadOnly` — Send now stops the current response. */
   steerHeadOnly?: boolean;

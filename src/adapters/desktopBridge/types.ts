@@ -850,12 +850,13 @@ export type LocalSessionsBridge = {
    */
   reorderQueuedMessage?: (id: string, uuid: string, overUuid: string) => Promise<boolean>;
   /**
-   * Official cef1 promoteQueued — enqueue the deferred head now, current response keeps going.
+   * asar promoteQueuedMessage. Discard window: stay in deferredSends marked
+   * promoted. Otherwise priority "next". Local queue bar does not call this.
    */
   promoteQueuedMessage?: (id: string, uuid: string) => Promise<boolean>;
   /**
-   * Official cef1 sendSteeredNow — move a non-head queued uuid to the front, then interrupt
-   * so drain sends it first (cf74 6Wu6VFE8rB).
+   * asar sendSteeredNow. Re-send a pending echo at priority "now".
+   * Does not interrupt. Local queue bar does not call this.
    */
   sendSteeredNow?: (id: string, uuid: string) => Promise<boolean>;
   forkSession?: (id: string, messageId?: string) => Promise<SessionSummary | null>;
