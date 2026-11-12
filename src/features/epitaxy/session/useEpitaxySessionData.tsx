@@ -401,28 +401,21 @@ export function useEpitaxySessionData(sessionId?: string) {
   }, [sessionId, store]);
 
   /**
-   * Official cc432 `_f`: head → `promoteQueued` (`es`), else `sendSteeredNow` via
-   * the stop-and-send path is host `sendSteeredNow` (non-head, interrupt + drain).
-   * UI order follows the host; do not drop the row here — drain / echo does.
+   * Official 2.31226.1 queue bar:
+   * head → promoteQueuedMessage (priority "next");
+   * any other row → sendSteeredNow (priority "now").
+   * Neither drains the rest. Esc does.
    */
   const steerQueuedMessage = useCallback((uuid: string) => {
     if (!sessionId || !uuid) return;
     const queued = store.getState().buckets[sessionId]?.queuedMessages ?? [];
     const headId = queued[0] ? messageIdentity(queued[0]) : "";
-    const from = queued.findIndex((message) => messageIdentity(message) === uuid);
-    const previous = from > 0 ? messageIdentity(queued[from - 1]!) : null;
     const head = headId === uuid;
     void (async () => {
-      if (head) {
-        // Official promoteQueued enqueues the deferred head onto the live input
-        // now — it is no longer a queued row. Drop only after the host accepts.
-        const ok = (await desktopBridge.LocalSessions.promoteQueuedMessage?.(sessionId, uuid).catch(() => false)) === true;
-        if (ok) store.getState().dropQueuedMessage(sessionId, uuid);
-        return;
-      }
-      const moved = store.getState().placeQueuedMessageAfter(sessionId, uuid, null);
-      const ok = (await desktopBridge.LocalSessions.sendSteeredNow?.(sessionId, uuid).catch(() => false)) === true;
-      if (!ok && moved) store.getState().placeQueuedMessageAfter(sessionId, uuid, previous);
+      const ok = head
+        ? (await desktopBridge.LocalSessions.promoteQueuedMessage?.(sessionId, uuid).catch(() => false)) === true
+        : (await desktopBridge.LocalSessions.sendSteeredNow?.(sessionId, uuid).catch(() => false)) === true;
+      if (ok) store.getState().dropQueuedMessage(sessionId, uuid);
     })();
   }, [sessionId, store]);
 

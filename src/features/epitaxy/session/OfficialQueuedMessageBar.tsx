@@ -17,10 +17,20 @@ import { formatOfficialIcu } from "../../../i18n/formatOfficialIcu";
 import { Icon } from "../../../shell/icons";
 import type { TranscriptEntry, TranscriptEntryItem } from "./officialTranscriptParse";
 
-/** Official `Xh()` / `Zh` band chrome (`shared-6`) + `gm` = `epitaxy-band-enter`. */
-const QUEUED_BAND_CLASS = "flex items-center gap-[5px] w-full min-h-[40px] p-[8px] rounded-[10px] bg-alpha-1 epitaxy-band-enter text-body";
-/** Official `oS` row: `${Kn} px-lg select-none` — Kn is the same band chrome. */
+/**
+ * Official c81ea1931 `fm` on Send now / Edit / Remove.
+ * preventDefault on mousedown so the composer does not blur and swallow the click.
+ */
+function officialQueuedActionMouseDown(event: { preventDefault: () => void }) {
+  event.preventDefault();
+}
+
+/** Official shared-6 `Jh` + neutral `Yh` — `Kn` / `Zh`. Enter animation is the outer `gm`, not the row. */
+const QUEUED_BAND_CLASS = "flex items-center gap-[5px] w-full min-h-[40px] p-[8px] rounded-[10px] bg-alpha-1";
+/** Official `oS` row: `${Kn} px-lg select-none`. */
 const QUEUED_SINGLE_ROW_CLASS = `${QUEUED_BAND_CLASS} px-lg select-none`;
+/** Official cf74 `rS` wrapper — `gm` is `epitaxy-band-enter` (c0b46114c). */
+const QUEUED_BAR_SHELL_CLASS = "epitaxy-band-enter";
 
 type OfficialQueuedMessageBarProps = {
   entries: TranscriptEntry[];
@@ -80,20 +90,19 @@ export function OfficialQueuedMessageBar({
   const text = useI18nText(QUEUED_MESSAGE_BAR_MESSAGES);
   const count = entries.length;
   if (count === 0) return null;
-  if (count === 1) {
-    const [entry] = entries;
-    return (
-      <OfficialQueuedSingleRow
-        entry={entry}
-        onCancel={onCancel}
-        onEdit={onEdit}
-        onSteer={onSteer}
-        steerBusy={steerBusy}
-        text={text}
-      />
-    );
-  }
-  return (
+  // Official cf74 rS: one queued message is oS, not the expanded sS list.
+  // `gm` (`epitaxy-band-enter`) wraps either body.
+  const body = count === 1 ? (
+    <OfficialQueuedSingleRow
+      entry={entries[0]!}
+      onCancel={onCancel}
+      onEdit={onEdit}
+      onSteer={onSteer}
+      steerBusy={steerBusy}
+      steerHeadOnly={steerHeadOnly}
+      text={text}
+    />
+  ) : (
     <OfficialQueuedCollapsedList
       entries={entries}
       onCancel={onCancel}
@@ -105,6 +114,7 @@ export function OfficialQueuedMessageBar({
       text={text}
     />
   );
+  return <div className={QUEUED_BAR_SHELL_CLASS}>{body}</div>;
 }
 
 /** Official cf74 `aS` — ArrowReturn plus the hidden stops / next-step description. */
@@ -131,6 +141,7 @@ function OfficialQueuedSteerButton({
         disabled={busy}
         icon="ArrowReturn"
         onClick={onPress}
+        onMouseDown={officialQueuedActionMouseDown}
         size={size}
         variant="ghost"
       />
@@ -145,6 +156,7 @@ function OfficialQueuedSingleRow({
   onEdit,
   onSteer,
   steerBusy,
+  steerHeadOnly,
   text,
 }: {
   entry: TranscriptEntry;
@@ -152,6 +164,8 @@ function OfficialQueuedSingleRow({
   onEdit?: (entryId: string) => void;
   onSteer?: (entryId: string) => void;
   steerBusy: boolean;
+  /** Official oS `steerStops` — steerHeadOnly uses the stop description. */
+  steerHeadOnly: boolean;
   text: Record<keyof typeof QUEUED_MESSAGE_BAR_MESSAGES, string>;
 }) {
   const preview = officialQueuedEntryPreview(entry, text.image);
@@ -170,7 +184,7 @@ function OfficialQueuedSingleRow({
         {onSteer ? (
           <OfficialQueuedSteerButton
             busy={steerBusy}
-            description={text.readsAtNextStep}
+            description={steerHeadOnly ? text.stopsCurrentResponse : text.readsAtNextStep}
             label={text.sendNow}
             onPress={() => onSteer(entry.id)}
             size="base"
@@ -182,6 +196,7 @@ function OfficialQueuedSingleRow({
             className="text-muted hover:text-primary"
             icon="Edit"
             onClick={() => onEdit(entry.id)}
+            onMouseDown={officialQueuedActionMouseDown}
             size="base"
             variant="ghost"
           />
@@ -192,6 +207,7 @@ function OfficialQueuedSingleRow({
             className="text-muted hover:text-primary"
             icon="X"
             onClick={() => onCancel(entry.id)}
+            onMouseDown={officialQueuedActionMouseDown}
             size="base"
             variant="ghost"
           />
@@ -412,7 +428,7 @@ function OfficialQueuedExpandedRow({
       data-take-back-entry={entry.id}
       role="listitem"
     >
-      <span className="flex-1 min-w-0 text-body line-clamp-2 select-text text-primary">{preview}</span>
+      <span className={`flex-1 min-w-0 text-body line-clamp-2 select-text text-primary ${onDragStart ? "group-hover/row:[mask-image:linear-gradient(to_right,black_calc(100%_-_120px),transparent_calc(100%_-_48px))] pointer-coarse:[mask-image:linear-gradient(to_right,black_calc(100%_-_120px),transparent_calc(100%_-_48px))]" : "group-hover/row:[mask-image:linear-gradient(to_right,black_calc(100%_-_76px),transparent_calc(100%_-_28px))] pointer-coarse:[mask-image:linear-gradient(to_right,black_calc(100%_-_76px),transparent_calc(100%_-_28px))]"}`}>{preview}</span>
       {hasActions ? (
         <span className="absolute right-1.25 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
           {onSteer ? (
@@ -447,6 +463,7 @@ function OfficialQueuedExpandedRow({
                 className="text-muted hover:text-primary"
                 icon="Edit"
                 onClick={() => onEdit(entry.id)}
+                onMouseDown={officialQueuedActionMouseDown}
                 size="small"
                 variant="ghost"
               />
@@ -459,6 +476,7 @@ function OfficialQueuedExpandedRow({
                 className="text-muted hover:text-primary"
                 icon="X"
                 onClick={() => onCancel(entry.id)}
+                onMouseDown={officialQueuedActionMouseDown}
                 size="small"
                 variant="ghost"
               />

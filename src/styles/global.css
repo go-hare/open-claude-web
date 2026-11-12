@@ -550,6 +550,28 @@ html.cds-root {
     pointer-events: auto;
   }
 }
+/* Official c6a992d55 `.group-hover\/row\:opacity-100` — expanded queue row actions (cf74 nS). */
+.group-hover\/row\:opacity-100:is(:where(.group\/row):hover :where(.group-hover\/row\:opacity-100)) {
+  opacity: 1;
+}
+/* Official cf74 nS text fade under the row actions (Yx / Qx / $x). */
+.group-hover\/row\:\[mask-image\:linear-gradient\(to_right\,black_calc\(100\%_-_120px\)\,transparent_calc\(100\%_-_48px\)\)\]:is(:where(.group\/row):hover :where(.group-hover\/row\:\[mask-image\:linear-gradient\(to_right\,black_calc\(100\%_-_120px\)\,transparent_calc\(100\%_-_48px\)\)\])) {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 120px), #0000 calc(100% - 48px));
+}
+.group-hover\/row\:\[mask-image\:linear-gradient\(to_right\,black_calc\(100\%_-_76px\)\,transparent_calc\(100\%_-_28px\)\)\]:is(:where(.group\/row):hover :where(.group-hover\/row\:\[mask-image\:linear-gradient\(to_right\,black_calc\(100\%_-_76px\)\,transparent_calc\(100\%_-_28px\)\)\])) {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 76px), #0000 calc(100% - 28px));
+}
+@media (pointer: coarse) {
+  .pointer-coarse\:\[mask-image\:linear-gradient\(to_right\,black_calc\(100\%_-_120px\)\,transparent_calc\(100\%_-_48px\)\)\] {
+    mask-image: linear-gradient(90deg, #000 calc(100% - 120px), #0000 calc(100% - 48px));
+  }
+  .pointer-coarse\:\[mask-image\:linear-gradient\(to_right\,black_calc\(100\%_-_76px\)\,transparent_calc\(100\%_-_28px\)\)\] {
+    mask-image: linear-gradient(90deg, #000 calc(100% - 76px), #0000 calc(100% - 28px));
+  }
+}
+.focus-visible\:opacity-100:focus-visible {
+  opacity: 1;
+}
 @media (hover: none) {
   .\[\@media\(hover\:none\)\]\:opacity-100 {
     opacity: 1;
